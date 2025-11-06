@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -202,10 +203,15 @@ func TestScanner_Scan_ProgressCallback(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	scanner := NewScanner(nil, logger)
 
-	// Track progress callbacks
-	var progressUpdates []ScanPhase
+	// Track progress callbacks with mutex for thread safety
+	var (
+		progressMu      sync.Mutex
+		progressUpdates []ScanPhase
+	)
 	progressCallback := func(p *Progress) {
+		progressMu.Lock()
 		progressUpdates = append(progressUpdates, p.Phase)
+		progressMu.Unlock()
 	}
 
 	ctx := context.Background()
@@ -220,16 +226,18 @@ func TestScanner_Scan_ProgressCallback(t *testing.T) {
 	}
 
 	// Should have received progress updates
-	if len(progressUpdates) == 0 {
-		t.Error("expected progress updates")
-	}
-
-	// Should have at least walking phase
+	progressMu.Lock()
+	updateCount := len(progressUpdates)
 	hasWalking := false
 	for _, phase := range progressUpdates {
 		if phase == PhaseWalking {
 			hasWalking = true
 		}
+	}
+	progressMu.Unlock()
+
+	if updateCount == 0 {
+		t.Error("expected progress updates")
 	}
 
 	if !hasWalking {
