@@ -18,7 +18,7 @@ type Analyzer struct {
 func NewAnalyzer(logger *slog.Logger) *Analyzer {
 	return &Analyzer{
 		logger: logger,
-		parser: audio.NewFFprobeParser(),
+		parser: audio.NewNativeParser(),
 	}
 }
 
