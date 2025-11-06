@@ -42,5 +42,5 @@ type ExistingItem struct {
 	Path     string
 	Inode    uint64
 	ModTime  time.Time
-	Metadata *ItemMetadata
+	Metadata *BookMetadata
 }

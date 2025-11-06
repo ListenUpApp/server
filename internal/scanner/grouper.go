@@ -18,7 +18,7 @@ func NewGrouper(logger *slog.Logger) *Grouper {
 // GroupOptions configure grouping behavior in case we need it later.
 type GroupOptions struct{}
 
-func (g *Grouper) Group(ctx context.Context, files []WalkResult, opts GroupOptions) {
+func (g *Grouper) Group(ctx context.Context, files []WalkResult, opts GroupOptions) map[string][]WalkResult {
 	grouped := make(map[string][]WalkResult)
 	// TODO: implement
 	//
