@@ -72,8 +72,26 @@ func Parse(path string) (*audiometa.Metadata, error) {
 
 	// Extract metadata from ilst
 	if err := extractIlstMetadata(sr, ilstAtom, meta); err != nil {
-		// Log error but don't fail - return partial metadata
-		// In production, we'd use proper logging here
+		meta.AddWarning("failed to extract metadata: %v", err)
+	}
+
+	// Parse technical info (duration, bitrate, codec, sample rate, channels)
+	if err := parseTechnicalInfo(sr, moovAtom, meta); err != nil {
+		meta.AddWarning("failed to parse technical info: %v", err)
+	}
+
+	// Parse chapters
+	if chapters, err := parseChapters(sr, moovAtom, meta.Duration); err == nil {
+		meta.Chapters = chapters
+	} else if err != nil {
+		meta.AddWarning("failed to parse chapters: %v", err)
+	}
+
+	// Parse audiobook-specific tags (narrator, series, publisher, etc.)
+	if ilstAtom != nil {
+		if err := parseAudiobookTags(sr, ilstAtom, meta); err != nil {
+			meta.AddWarning("failed to parse audiobook tags: %v", err)
+		}
 	}
 
 	return meta, nil

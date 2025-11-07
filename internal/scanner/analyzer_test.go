@@ -12,9 +12,9 @@ func TestAnalyzer_Analyze_SingleFile(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create test audio file
-	testFile := filepath.Join(tmpDir, "test.mp3")
+	testFile := filepath.Join(tmpDir, "test.m4b")
 	// Copy from testdata
-	srcFile := filepath.Join("audio", "testdata", "test.mp3")
+	srcFile := filepath.Join("audio", "testdata", "test.m4b")
 	data, err := os.ReadFile(srcFile)
 	if err != nil {
 		t.Skip("test audio file not found")
@@ -31,9 +31,9 @@ func TestAnalyzer_Analyze_SingleFile(t *testing.T) {
 	files := []AudioFileData{
 		{
 			Path:     testFile,
-			RelPath:  "test.mp3",
-			Filename: "test.mp3",
-			Ext:      ".mp3",
+			RelPath:  "test.m4b",
+			Filename: "test.m4b",
+			Ext:      ".m4b",
 			Size:     info.Size(),
 			ModTime:  info.ModTime(),
 		},
@@ -70,7 +70,7 @@ func TestAnalyzer_Analyze_MultipleFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Copy test file multiple times
-	srcFile := filepath.Join("audio", "testdata", "test.mp3")
+	srcFile := filepath.Join("audio", "testdata", "test.m4b")
 	data, err := os.ReadFile(srcFile)
 	if err != nil {
 		t.Skip("test audio file not found")
@@ -78,7 +78,7 @@ func TestAnalyzer_Analyze_MultipleFiles(t *testing.T) {
 
 	var files []AudioFileData
 	for i := 1; i <= 5; i++ {
-		filename := filepath.Join(tmpDir, "test"+string(rune('0'+i))+".mp3")
+		filename := filepath.Join(tmpDir, "test"+string(rune('0'+i))+".m4b")
 		if err := os.WriteFile(filename, data, 0644); err != nil {
 			t.Fatal(err)
 		}
@@ -92,7 +92,7 @@ func TestAnalyzer_Analyze_MultipleFiles(t *testing.T) {
 			Path:     filename,
 			RelPath:  filepath.Base(filename),
 			Filename: filepath.Base(filename),
-			Ext:      ".mp3",
+			Ext:      ".m4b",
 			Size:     info.Size(),
 			ModTime:  info.ModTime(),
 		})
@@ -127,7 +127,7 @@ func TestAnalyzer_Analyze_ContextCancellation(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Copy test file multiple times
-	srcFile := filepath.Join("audio", "testdata", "test.mp3")
+	srcFile := filepath.Join("audio", "testdata", "test.m4b")
 	data, err := os.ReadFile(srcFile)
 	if err != nil {
 		t.Skip("test audio file not found")
@@ -135,7 +135,7 @@ func TestAnalyzer_Analyze_ContextCancellation(t *testing.T) {
 
 	var files []AudioFileData
 	for i := 1; i <= 10; i++ {
-		filename := filepath.Join(tmpDir, "test"+string(rune('0'+i))+".mp3")
+		filename := filepath.Join(tmpDir, "test"+string(rune('0'+i))+".m4b")
 		if err := os.WriteFile(filename, data, 0644); err != nil {
 			t.Fatal(err)
 		}
@@ -149,7 +149,7 @@ func TestAnalyzer_Analyze_ContextCancellation(t *testing.T) {
 			Path:     filename,
 			RelPath:  filepath.Base(filename),
 			Filename: filepath.Base(filename),
-			Ext:      ".mp3",
+			Ext:      ".m4b",
 			Size:     info.Size(),
 			ModTime:  info.ModTime(),
 		})
@@ -244,13 +244,13 @@ func TestAnalyzer_Analyze_DefaultWorkers(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a test file
-	srcFile := filepath.Join("audio", "testdata", "test.mp3")
+	srcFile := filepath.Join("audio", "testdata", "test.m4b")
 	data, err := os.ReadFile(srcFile)
 	if err != nil {
 		t.Skip("test audio file not found")
 	}
 
-	testFile := filepath.Join(tmpDir, "test.mp3")
+	testFile := filepath.Join(tmpDir, "test.m4b")
 	if err := os.WriteFile(testFile, data, 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -263,9 +263,9 @@ func TestAnalyzer_Analyze_DefaultWorkers(t *testing.T) {
 	files := []AudioFileData{
 		{
 			Path:     testFile,
-			RelPath:  "test.mp3",
-			Filename: "test.mp3",
-			Ext:      ".mp3",
+			RelPath:  "test.m4b",
+			Filename: "test.m4b",
+			Ext:      ".m4b",
 			Size:     info.Size(),
 			ModTime:  info.ModTime(),
 		},
@@ -297,7 +297,7 @@ func TestAnalyzer_Analyze_PreservesOrder(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Copy test file multiple times
-	srcFile := filepath.Join("audio", "testdata", "test.mp3")
+	srcFile := filepath.Join("audio", "testdata", "test.m4b")
 	data, err := os.ReadFile(srcFile)
 	if err != nil {
 		t.Skip("test audio file not found")
@@ -305,7 +305,7 @@ func TestAnalyzer_Analyze_PreservesOrder(t *testing.T) {
 
 	var files []AudioFileData
 	for i := 1; i <= 5; i++ {
-		filename := filepath.Join(tmpDir, "test"+string(rune('0'+i))+".mp3")
+		filename := filepath.Join(tmpDir, "test"+string(rune('0'+i))+".m4b")
 		if err := os.WriteFile(filename, data, 0644); err != nil {
 			t.Fatal(err)
 		}
@@ -319,7 +319,7 @@ func TestAnalyzer_Analyze_PreservesOrder(t *testing.T) {
 			Path:     filename,
 			RelPath:  filepath.Base(filename),
 			Filename: filepath.Base(filename),
-			Ext:      ".mp3",
+			Ext:      ".m4b",
 			Size:     info.Size(),
 			ModTime:  info.ModTime(),
 		})
@@ -352,13 +352,13 @@ func BenchmarkAnalyzer_Analyze(b *testing.B) {
 	tmpDir := b.TempDir()
 
 	// Copy test file
-	srcFile := filepath.Join("audio", "testdata", "test.mp3")
+	srcFile := filepath.Join("audio", "testdata", "test.m4b")
 	data, err := os.ReadFile(srcFile)
 	if err != nil {
 		b.Skip("test audio file not found")
 	}
 
-	testFile := filepath.Join(tmpDir, "test.mp3")
+	testFile := filepath.Join(tmpDir, "test.m4b")
 	if err := os.WriteFile(testFile, data, 0644); err != nil {
 		b.Fatal(err)
 	}
@@ -371,9 +371,9 @@ func BenchmarkAnalyzer_Analyze(b *testing.B) {
 	files := []AudioFileData{
 		{
 			Path:     testFile,
-			RelPath:  "test.mp3",
-			Filename: "test.mp3",
-			Ext:      ".mp3",
+			RelPath:  "test.m4b",
+			Filename: "test.m4b",
+			Ext:      ".m4b",
 			Size:     info.Size(),
 			ModTime:  info.ModTime(),
 		},

@@ -21,7 +21,7 @@ func (p *NativeParser) Parse(ctx context.Context, path string) (*Metadata, error
 
 	// Convert to scanner's Metadata format
 	result := &Metadata{
-		Format:     string(meta.Format),
+		Format:     meta.Format.String(),
 		Duration:   meta.Duration,
 		Bitrate:    meta.BitRate,
 		SampleRate: meta.SampleRate,
@@ -38,11 +38,25 @@ func (p *NativeParser) Parse(ctx context.Context, path string) (*Metadata, error
 		Year:        meta.Year,
 
 		// Audiobook-specific
-		Narrator:    meta.Composer, // Composer field = Narrator in audiobooks
-		Description: meta.Comment,  // Comment often contains description
+		Narrator:   meta.Narrator,
+		Publisher:  meta.Publisher,
+		Series:     meta.Series,
+		SeriesPart: meta.SeriesPart,
+		ISBN:       meta.ISBN,
+		ASIN:       meta.ASIN,
 
-		// TODO: Add when Phase 2 is done
-		// Chapters:    convertChapters(meta.Chapters),
+		// Description from comment
+		Description: meta.Comment,
+	}
+
+	// Convert chapters
+	for _, ch := range meta.Chapters {
+		result.Chapters = append(result.Chapters, Chapter{
+			Index:     ch.Index,
+			Title:     ch.Title,
+			StartTime: ch.StartTime,
+			EndTime:   ch.EndTime,
+		})
 	}
 
 	return result, nil

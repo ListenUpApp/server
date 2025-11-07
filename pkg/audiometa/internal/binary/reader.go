@@ -23,6 +23,11 @@ func NewSafeReader(r io.ReaderAt, size int64, path string) *SafeReader {
 	}
 }
 
+// Path returns the file path associated with this reader
+func (sr *SafeReader) Path() string {
+	return sr.path
+}
+
 // ReadAt reads bytes at the given offset with context for error messages
 func (sr *SafeReader) ReadAt(b []byte, off int64, what string) error {
 	// Check bounds

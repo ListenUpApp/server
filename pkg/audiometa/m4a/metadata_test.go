@@ -156,3 +156,100 @@ func TestMapTagToField(t *testing.T) {
 		}
 	}
 }
+
+// createTrackDataAtom creates a data atom with track number content
+func createTrackDataAtom(trackNum, trackTotal uint16) []byte {
+	buf := &bytes.Buffer{}
+
+	// data atom size: header(8) + version/flags(4) + reserved(4) + track data(8)
+	dataSize := uint32(8 + 4 + 4 + 8)
+	binary.Write(buf, binary.BigEndian, dataSize)
+
+	// data atom type
+	buf.WriteString("data")
+
+	// version (1) + flags (3)
+	binary.Write(buf, binary.BigEndian, uint32(0)) // version=0, flags=0
+
+	// reserved (4)
+	binary.Write(buf, binary.BigEndian, uint32(0))
+
+	// Track number structure:
+	// [2 bytes] reserved
+	// [2 bytes] track number
+	// [2 bytes] track total
+	// [2 bytes] reserved
+	binary.Write(buf, binary.BigEndian, uint16(0))         // reserved
+	binary.Write(buf, binary.BigEndian, trackNum)          // track number
+	binary.Write(buf, binary.BigEndian, trackTotal)        // track total
+	binary.Write(buf, binary.BigEndian, uint16(0))         // reserved
+
+	return buf.Bytes()
+}
+
+func TestParseTrackNumber_Success(t *testing.T) {
+	tests := []struct {
+		name          string
+		trackNum      uint16
+		trackTotal    uint16
+		expectedNum   int
+		expectedTotal int
+	}{
+		{"Book 2 of 4", 2, 4, 2, 4},
+		{"Book 1 of 1", 1, 1, 1, 1},
+		{"Chapter 15 of 69", 15, 69, 15, 69},
+		{"Track 0 of 10", 0, 10, 0, 10},
+		{"Track 5 of 0", 5, 0, 5, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create trkn atom with data atom inside
+			dataAtom := createTrackDataAtom(tt.trackNum, tt.trackTotal)
+
+			// Create trkn container
+			buf := &bytes.Buffer{}
+			trknSize := uint32(8 + len(dataAtom))
+			binary.Write(buf, binary.BigEndian, trknSize)
+			buf.WriteString("trkn")
+			buf.Write(dataAtom)
+
+			trkn := buf.Bytes()
+			sr := audiobinary.NewSafeReader(bytes.NewReader(trkn), int64(len(trkn)), "test.m4b")
+			trknAtom, err := readAtomHeader(sr, 0)
+			if err != nil {
+				t.Fatalf("failed to read trkn atom header: %v", err)
+			}
+
+			result, err := parseTrackNumber(sr, trknAtom)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if result.Number != tt.expectedNum {
+				t.Errorf("expected track number %d, got %d", tt.expectedNum, result.Number)
+			}
+
+			if result.Total != tt.expectedTotal {
+				t.Errorf("expected track total %d, got %d", tt.expectedTotal, result.Total)
+			}
+		})
+	}
+}
+
+func TestParseTrackNumber_NoDataAtom(t *testing.T) {
+	// Create trkn atom with no data atom inside
+	buf := &bytes.Buffer{}
+	trknSize := uint32(8) // just header
+	binary.Write(buf, binary.BigEndian, trknSize)
+	buf.WriteString("trkn")
+
+	trkn := buf.Bytes()
+	sr := audiobinary.NewSafeReader(bytes.NewReader(trkn), int64(len(trkn)), "test.m4b")
+	trknAtom, _ := readAtomHeader(sr, 0)
+
+	_, err := parseTrackNumber(sr, trknAtom)
+	if err == nil {
+		t.Error("expected error for missing data atom, got nil")
+	}
+}

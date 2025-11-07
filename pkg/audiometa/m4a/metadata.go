@@ -1,7 +1,6 @@
 package m4a
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -59,14 +58,23 @@ func extractIlstMetadata(sr *binary.SafeReader, ilstAtom *Atom, meta *audiometa.
 			return err
 		}
 
-		// Parse tag value
-		value, err := parseMetadataTag(sr, tagAtom)
-		if err != nil {
-			// Log error but continue parsing other tags
-			fmt.Printf("warning: failed to parse tag %s: %v\n", tagAtom.Type, err)
+		// Handle special binary tags
+		if tagAtom.Type == "trkn" {
+			// Track number requires special binary parsing
+			trackData, err := parseTrackNumber(sr, tagAtom)
+			if err == nil {
+				meta.TrackNumber = trackData.Number
+				meta.TrackTotal = trackData.Total
+			}
 		} else {
-			// Map tag to metadata field
-			mapTagToField(tagAtom.Type, value, meta)
+			// Parse as text tag
+			value, err := parseMetadataTag(sr, tagAtom)
+			if err != nil {
+				meta.AddWarning("failed to parse tag %s: %v", tagAtom.Type, err)
+			} else {
+				// Map tag to metadata field
+				mapTagToField(tagAtom.Type, value, meta)
+			}
 		}
 
 		// Move to next tag
@@ -97,4 +105,47 @@ func mapTagToField(tag string, value string, meta *audiometa.Metadata) {
 			meta.Year = year
 		}
 	}
+}
+
+// TrackData holds track number information
+type TrackData struct {
+	Number int
+	Total  int
+}
+
+// parseTrackNumber extracts track number and total from trkn atom
+func parseTrackNumber(sr *binary.SafeReader, atom *Atom) (TrackData, error) {
+	result := TrackData{}
+
+	// Find data atom
+	dataAtom, err := findAtom(sr, atom.DataOffset(), atom.DataOffset()+int64(atom.DataSize()), "data")
+	if err != nil {
+		return result, err
+	}
+
+	// Skip version (1) + flags (3) + reserved (4) = 8 bytes
+	offset := dataAtom.DataOffset() + 8
+
+	// Track number structure:
+	// [2 bytes] reserved
+	// [2 bytes] track number
+	// [2 bytes] track total
+	// [2 bytes] reserved
+
+	offset += 2 // skip reserved
+
+	trackNum, err := binary.Read[uint16](sr, offset, "track number")
+	if err != nil {
+		return result, err
+	}
+	result.Number = int(trackNum)
+	offset += 2
+
+	trackTotal, err := binary.Read[uint16](sr, offset, "track total")
+	if err != nil {
+		return result, err
+	}
+	result.Total = int(trackTotal)
+
+	return result, nil
 }
