@@ -115,7 +115,7 @@ func TestIsLikelySeriesPosition(t *testing.T) {
 		{"Discworld book 20 of 41", 20, 41, false}, // Conservative: false
 		{"Horus Heresy book 30 of 54", 30, 54, false},
 		{"Chapter 15 of 47", 15, 47, false},
-		{"Chapter 3 of 50", 3, 50, false},  // Near beginning
+		{"Chapter 3 of 50", 3, 50, false},   // Near beginning
 		{"Chapter 48 of 50", 48, 50, false}, // Near end
 		{"Boundary: 100 books", 50, 100, false},
 

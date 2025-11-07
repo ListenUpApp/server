@@ -81,10 +81,11 @@ func Parse(path string) (*audiometa.Metadata, error) {
 	}
 
 	// Parse chapters
-	if chapters, err := parseChapters(sr, moovAtom, meta.Duration); err == nil {
-		meta.Chapters = chapters
-	} else if err != nil {
+	chapters, err := parseChapters(sr, moovAtom, meta.Duration)
+	if err != nil {
 		meta.AddWarning("failed to parse chapters: %v", err)
+	} else {
+		meta.Chapters = chapters
 	}
 
 	// Parse audiobook-specific tags (narrator, series, publisher, etc.)

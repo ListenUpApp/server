@@ -21,8 +21,8 @@ func createDataAtom(value string) []byte {
 	buf.WriteString("data")
 
 	// version (1) + flags (3) + reserved (4)
-	binary.Write(buf, binary.BigEndian, uint32(1))      // version=0, flags=1 (UTF-8 text)
-	binary.Write(buf, binary.BigEndian, uint32(0))      // reserved
+	binary.Write(buf, binary.BigEndian, uint32(1)) // version=0, flags=1 (UTF-8 text)
+	binary.Write(buf, binary.BigEndian, uint32(0)) // reserved
 
 	// value
 	buf.WriteString(value)
@@ -139,10 +139,10 @@ func TestMapTagToField(t *testing.T) {
 		checkFn  func(*audiometa.Metadata) string
 		expected string
 	}{
-		{"\xA9nam", "Title", func(m *audiometa.Metadata) string { return m.Title }, "Title"},     // ©nam
-		{"\xA9ART", "Artist", func(m *audiometa.Metadata) string { return m.Artist }, "Artist"},  // ©ART
-		{"\xA9alb", "Album", func(m *audiometa.Metadata) string { return m.Album }, "Album"},     // ©alb
-		{"\xA9gen", "Genre", func(m *audiometa.Metadata) string { return m.Genre }, "Genre"},     // ©gen
+		{"\xA9nam", "Title", func(m *audiometa.Metadata) string { return m.Title }, "Title"},       // ©nam
+		{"\xA9ART", "Artist", func(m *audiometa.Metadata) string { return m.Artist }, "Artist"},    // ©ART
+		{"\xA9alb", "Album", func(m *audiometa.Metadata) string { return m.Album }, "Album"},       // ©alb
+		{"\xA9gen", "Genre", func(m *audiometa.Metadata) string { return m.Genre }, "Genre"},       // ©gen
 		{"\xA9cmt", "Comment", func(m *audiometa.Metadata) string { return m.Comment }, "Comment"}, // ©cmt
 	}
 
@@ -179,10 +179,10 @@ func createTrackDataAtom(trackNum, trackTotal uint16) []byte {
 	// [2 bytes] track number
 	// [2 bytes] track total
 	// [2 bytes] reserved
-	binary.Write(buf, binary.BigEndian, uint16(0))         // reserved
-	binary.Write(buf, binary.BigEndian, trackNum)          // track number
-	binary.Write(buf, binary.BigEndian, trackTotal)        // track total
-	binary.Write(buf, binary.BigEndian, uint16(0))         // reserved
+	binary.Write(buf, binary.BigEndian, uint16(0))  // reserved
+	binary.Write(buf, binary.BigEndian, trackNum)   // track number
+	binary.Write(buf, binary.BigEndian, trackTotal) // track total
+	binary.Write(buf, binary.BigEndian, uint16(0))  // reserved
 
 	return buf.Bytes()
 }

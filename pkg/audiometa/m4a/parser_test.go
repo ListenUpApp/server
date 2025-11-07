@@ -15,9 +15,9 @@ func createMinimalM4B(title, artist, album string) []byte {
 
 	// 1. ftyp atom
 	ftypBuf := &bytes.Buffer{}
-	ftypBuf.WriteString("M4B ")                            // major brand
-	binary.Write(ftypBuf, binary.BigEndian, uint32(0))     // minor version
-	ftypBuf.WriteString("M4B ")                            // compatible brand
+	ftypBuf.WriteString("M4B ")                        // major brand
+	binary.Write(ftypBuf, binary.BigEndian, uint32(0)) // minor version
+	ftypBuf.WriteString("M4B ")                        // compatible brand
 	ftypAtom := createMockAtom("ftyp", ftypBuf.Bytes())
 	buf.Write(ftypAtom)
 

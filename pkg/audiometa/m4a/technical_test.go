@@ -15,7 +15,7 @@ func createMvhdAtom(version byte, timescale, duration uint32) []byte {
 	buf := &bytes.Buffer{}
 
 	// mvhd data
-	buf.WriteByte(version)             // version
+	buf.WriteByte(version)              // version
 	buf.Write([]byte{0x00, 0x00, 0x00}) // flags
 
 	if version == 1 {

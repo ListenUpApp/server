@@ -10,7 +10,10 @@ import (
 )
 
 // createChplAtom creates a chapter list atom
-func createChplAtom(chapters []struct{ time int64; title string }) []byte {
+func createChplAtom(chapters []struct {
+	time  int64
+	title string
+}) []byte {
 	buf := &bytes.Buffer{}
 
 	// chpl structure:
@@ -19,10 +22,10 @@ func createChplAtom(chapters []struct{ time int64; title string }) []byte {
 	// [4 bytes] reserved
 	// [1 byte]  chapter count
 
-	buf.WriteByte(1)                                    // version
-	buf.Write([]byte{0x00, 0x00, 0x00})                  // flags
-	binary.Write(buf, binary.BigEndian, uint32(0))       // reserved
-	buf.WriteByte(byte(len(chapters)))                   // count (1 byte)
+	buf.WriteByte(1)                               // version
+	buf.Write([]byte{0x00, 0x00, 0x00})            // flags
+	binary.Write(buf, binary.BigEndian, uint32(0)) // reserved
+	buf.WriteByte(byte(len(chapters)))             // count (1 byte)
 
 	// For each chapter:
 	// [8 bytes] start time (100-nanosecond units)
@@ -39,10 +42,13 @@ func createChplAtom(chapters []struct{ time int64; title string }) []byte {
 
 func TestParseChapters_Success(t *testing.T) {
 	// Create chapters with start times and titles
-	chapterData := []struct{ time int64; title string }{
+	chapterData := []struct {
+		time  int64
+		title string
+	}{
 		{0, "Chapter 1"},
-		{600_000_000, "Chapter 2"},        // 60 seconds * 10^7 (100ns units)
-		{1_200_000_000, "Chapter 3"},      // 120 seconds
+		{600_000_000, "Chapter 2"},   // 60 seconds * 10^7 (100ns units)
+		{1_200_000_000, "Chapter 3"}, // 120 seconds
 	}
 
 	chpl := createChplAtom(chapterData)
@@ -96,7 +102,10 @@ func TestParseChapters_Success(t *testing.T) {
 }
 
 func TestParseChapters_EmptyTitles(t *testing.T) {
-	chapterData := []struct{ time int64; title string }{
+	chapterData := []struct {
+		time  int64
+		title string
+	}{
 		{0, ""},
 		{500_000_000, ""},
 	}
@@ -124,7 +133,10 @@ func TestParseChapters_EmptyTitles(t *testing.T) {
 }
 
 func TestParseChapters_SingleChapter(t *testing.T) {
-	chapterData := []struct{ time int64; title string }{
+	chapterData := []struct {
+		time  int64
+		title string
+	}{
 		{0, "The Book"},
 	}
 

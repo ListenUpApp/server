@@ -105,6 +105,14 @@ func main() {
 	} else {
 		fmt.Printf("No chapters found\n")
 	}
+
+	// === Warnings ===
+	if len(meta.Warnings) > 0 {
+		fmt.Printf("\n=== Warnings ===\n")
+		for i, warning := range meta.Warnings {
+			fmt.Printf("  [%d] %s\n", i+1, warning)
+		}
+	}
 }
 
 // formatDuration formats a duration as HH:MM:SS
