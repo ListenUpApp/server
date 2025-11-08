@@ -18,6 +18,15 @@ func NewFFprobeParser() *FFprobeParser {
 	return &FFprobeParser{}
 }
 
+func (p *FFprobeParser) ParseMultiFile(ctx context.Context, paths []string) (*Metadata, error) {
+	// FFprobe doesn't support multi-file aggregation
+	// Fall back to parsing the first file
+	if len(paths) == 0 {
+		return nil, fmt.Errorf("no files provided")
+	}
+	return p.Parse(ctx, paths[0])
+}
+
 // Parse extracts metadata using ffprobe
 func (p *FFprobeParser) Parse(ctx context.Context, path string) (*Metadata, error) {
 	// Run ffprobe command

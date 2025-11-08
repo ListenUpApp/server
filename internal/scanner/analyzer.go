@@ -3,7 +3,9 @@ package scanner
 import (
 	"context"
 	"log/slog"
+	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/listenupapp/listenup-server/internal/scanner/audio"
 )
@@ -18,7 +20,7 @@ type Analyzer struct {
 func NewAnalyzer(logger *slog.Logger) *Analyzer {
 	return &Analyzer{
 		logger: logger,
-		parser: audio.NewFFprobeParser(),
+		parser: audio.NewNativeParser(),
 	}
 }
 
@@ -59,7 +61,7 @@ func (a *Analyzer) Analyze(ctx context.Context, files []AudioFileData, opts Anal
 	results := make(chan result, len(files))
 
 	// Start workers
-	for i := 0; i < workers; i++ {
+	for range workers {
 		go func() {
 			for j := range jobs {
 				// Check context cancellation
@@ -101,7 +103,7 @@ func (a *Analyzer) Analyze(ctx context.Context, files []AudioFileData, opts Anal
 	parsedFiles := make([]AudioFileData, len(files))
 	var firstErr error
 
-	for i := 0; i < len(files); i++ {
+	for range len(files) {
 		select {
 		case r := <-results:
 			parsedFiles[r.index] = r.file
@@ -118,6 +120,114 @@ func (a *Analyzer) Analyze(ctx context.Context, files []AudioFileData, opts Anal
 	}
 
 	return parsedFiles, firstErr
+}
+
+// ItemType represents the type of library item
+type ItemType int
+
+const (
+	ItemTypeSingleFile ItemType = iota // Single audio file (M4B or single MP3)
+	ItemTypeMultiFile                  // Multiple files (MP3 album/audiobook)
+)
+
+// AnalyzeItems analyzes library items with multi-file classification
+func (a *Analyzer) AnalyzeItems(ctx context.Context, items []LibraryItemData) ([]LibraryItemData, error) {
+	if len(items) == 0 {
+		return []LibraryItemData{}, nil
+	}
+
+	// Process each item
+	results := make([]LibraryItemData, len(items))
+
+	for i, item := range items {
+		// Classify item
+		itemType := classifyItem(item)
+
+		// Analyze based on type
+		switch itemType {
+		case ItemTypeSingleFile:
+			// Single file - parse it
+			if len(item.AudioFiles) > 0 {
+				metadata, parseErr := a.parser.Parse(ctx, item.AudioFiles[0].Path)
+				if parseErr != nil {
+					a.logger.Error("failed to parse single file",
+						"path", item.AudioFiles[0].Path,
+						"error", parseErr)
+				} else {
+					item.AudioFiles[0].Metadata = convertMetadata(metadata)
+				}
+			}
+
+		case ItemTypeMultiFile:
+			// Multiple files - aggregate them
+			paths := make([]string, len(item.AudioFiles))
+			for j, file := range item.AudioFiles {
+				paths[j] = file.Path
+			}
+
+			metadata, parseErr := a.parser.ParseMultiFile(ctx, paths)
+			if parseErr != nil {
+				a.logger.Error("failed to parse multi-file item",
+					"path", item.Path,
+					"files", len(paths),
+					"error", parseErr)
+			} else {
+				// Store aggregated metadata in first file
+				// (The item-level BookMetadata will be built later)
+				if len(item.AudioFiles) > 0 {
+					item.AudioFiles[0].Metadata = convertMetadata(metadata)
+				}
+			}
+		}
+
+		results[i] = item
+
+		// Check for context cancellation
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+	}
+
+	return results, nil
+}
+
+// classifyItem determines if an item is single-file or multi-file
+func classifyItem(item LibraryItemData) ItemType {
+	audioCount := len(item.AudioFiles)
+
+	// No audio files or single file
+	if audioCount <= 1 {
+		return ItemTypeSingleFile
+	}
+
+	// Check file types
+	hasMP3 := false
+	hasM4B := false
+
+	for _, file := range item.AudioFiles {
+		ext := strings.ToLower(filepath.Ext(file.Path))
+		switch ext {
+		case ".mp3":
+			hasMP3 = true
+		case ".m4b", ".m4a":
+			hasM4B = true
+		}
+	}
+
+	// Multiple MP3 files = multi-file audiobook/album
+	if hasMP3 && audioCount > 1 {
+		return ItemTypeMultiFile
+	}
+
+	// Multiple M4B files = error condition, but treat as single file
+	if hasM4B && audioCount > 1 {
+		// Log warning?
+		return ItemTypeSingleFile
+	}
+
+	return ItemTypeSingleFile
 }
 
 // convertMetadata converts audio.Metadata to AudioMetadata
