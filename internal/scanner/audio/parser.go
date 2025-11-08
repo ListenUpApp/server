@@ -10,6 +10,10 @@ type Parser interface {
 
 	// Parse extracts metadata from an audio file
 	Parse(ctx context.Context, path string) (*Metadata, error)
+
+	// ParseMultiFile aggregates metadata from multiple audio files
+	// Used for multi-file audiobooks/albums (e.g., one MP3 per chapter)
+	ParseMultiFile(ctx context.Context, paths []string) (*Metadata, error)
 }
 
 type Metadata struct {

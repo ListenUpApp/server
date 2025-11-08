@@ -13,6 +13,7 @@ const (
 	FormatUnknown Format = iota
 	FormatM4B
 	FormatM4A
+	FormatMP3
 )
 
 func (f Format) String() string {
@@ -21,29 +22,49 @@ func (f Format) String() string {
 		return "M4B"
 	case FormatM4A:
 		return "M4A"
+	case FormatMP3:
+		return "MP3"
 	default:
 		return "Unknown"
 	}
 }
 
-// DetectFormat determines if a file is M4B or M4A by reading the ftyp atom
+// DetectFormat determines the audio file format (M4B, M4A, or MP3)
 func DetectFormat(r io.ReaderAt, size int64, path string) (Format, error) {
-	// File must be at least 8 bytes (ftyp atom header)
+	// File must be at least 8 bytes
 	if size < 8 {
 		return FormatUnknown, &UnsupportedFormatError{
 			Path:   path,
-			Reason: "file too small to be M4B/M4A",
+			Reason: "file too small",
 		}
 	}
 
 	sr := binary.NewSafeReader(r, size, path)
 
+	// Check for ID3v2 tag (MP3)
+	id3Header := make([]byte, 3)
+	if err := sr.ReadAt(id3Header, 0, "file header"); err == nil {
+		if string(id3Header) == "ID3" {
+			return FormatMP3, nil
+		}
+	}
+
+	// Check for MP3 frame sync (0xFFE or 0xFFF)
+	// This catches MP3 files without ID3 tags
+	frameHeader := make([]byte, 2)
+	if err := sr.ReadAt(frameHeader, 0, "frame sync"); err == nil {
+		if frameHeader[0] == 0xFF && (frameHeader[1]&0xE0) == 0xE0 {
+			return FormatMP3, nil
+		}
+	}
+
+	// Check for M4B/M4A ftyp atom
 	// Read ftyp atom size (first 4 bytes)
 	atomSize, err := binary.Read[uint32](sr, 0, "ftyp atom size")
 	if err != nil {
 		return FormatUnknown, &UnsupportedFormatError{
 			Path:   path,
-			Reason: "failed to read ftyp atom size",
+			Reason: "failed to read file header",
 		}
 	}
 
@@ -52,7 +73,7 @@ func DetectFormat(r io.ReaderAt, size int64, path string) (Format, error) {
 	if err != nil {
 		return FormatUnknown, &UnsupportedFormatError{
 			Path:   path,
-			Reason: "failed to read ftyp atom type",
+			Reason: "failed to read file header",
 		}
 	}
 
@@ -61,7 +82,7 @@ func DetectFormat(r io.ReaderAt, size int64, path string) (Format, error) {
 	if atomType != ftypMagic {
 		return FormatUnknown, &UnsupportedFormatError{
 			Path:   path,
-			Reason: "not an M4B/M4A file (missing ftyp atom)",
+			Reason: "unsupported file format",
 		}
 	}
 
