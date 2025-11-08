@@ -29,7 +29,7 @@ type Metadata struct {
 	Channels   int           // Number of audio channels
 	Codec      string        // Audio codec (e.g., "AAC", "ALAC")
 
-	// Audiobook-specific
+	// Extended metadata (commonly used for audiobooks, podcasts, etc.)
 	Narrator   string `json:"narrator,omitempty"`
 	Publisher  string `json:"publisher,omitempty"`
 	Series     string `json:"series,omitempty"`

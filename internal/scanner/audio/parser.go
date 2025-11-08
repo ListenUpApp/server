@@ -38,7 +38,7 @@ type Metadata struct {
 	Disc        int
 	DiscTotal   int
 
-	// Audiobook-specific
+	// Extended metadata
 	Narrator    string
 	Publisher   string
 	Description string

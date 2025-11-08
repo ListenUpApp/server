@@ -41,7 +41,7 @@ func TestExtractChapterTitle(t *testing.T) {
 		{"Chapter 02 - The Vanishing Glass.mp3", "The Vanishing Glass"},
 		{"03-Title.mp3", "Title"},
 		{"Track04.mp3", "Chapter 04"}, // Returns padded number
-		{"05.mp3", "Chapter 05"},       // Returns padded number
+		{"05.mp3", "Chapter 05"},      // Returns padded number
 		{"NoNumber.mp3", "NoNumber"},
 	}
 

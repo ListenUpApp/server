@@ -72,9 +72,9 @@ func createMinimalMP3WithID3() []byte {
 
 	// ID3v2.3 header (10 bytes)
 	data = append(data, []byte{
-		'I', 'D', '3',     // ID3 magic
-		0x03, 0x00,        // Version 2.3.0
-		0x00,              // Flags
+		'I', 'D', '3', // ID3 magic
+		0x03, 0x00, // Version 2.3.0
+		0x00,                   // Flags
 		0x00, 0x00, 0x00, 0x10, // Size (synchsafe) = 16 bytes
 	}...)
 
@@ -82,8 +82,8 @@ func createMinimalMP3WithID3() []byte {
 	data = append(data, []byte{
 		'T', 'I', 'T', '2', // Frame ID
 		0x00, 0x00, 0x00, 0x0B, // Size = 11 bytes
-		0x00, 0x00,        // Flags
-		0x00,              // Encoding (ISO-8859-1)
+		0x00, 0x00, // Flags
+		0x00,                                             // Encoding (ISO-8859-1)
 		'T', 'e', 's', 't', ' ', 'T', 'i', 't', 'l', 'e', // Text
 	}...)
 
@@ -212,7 +212,7 @@ func TestParseTXXXFrame(t *testing.T) {
 	frame := ID3v2Frame{
 		ID: "TXXX",
 		Data: []byte{
-			0x00, // ISO-8859-1 encoding
+			0x00,                                         // ISO-8859-1 encoding
 			'N', 'a', 'r', 'r', 'a', 't', 'o', 'r', 0x00, // "Narrator\0"
 			'J', 'o', 'h', 'n', ' ', 'D', 'o', 'e', // "John Doe"
 		},
@@ -244,9 +244,9 @@ func TestParseChapterFrames(t *testing.T) {
 	frames := []ID3v2Frame{
 		{
 			ID: "CHAP",
-			// [encoding][element_id\0][start(4)][end(4)][start_offset(4)][end_offset(4)]
+			// [element_id\0][start(4)][end(4)][start_offset(4)][end_offset(4)]
+			// Note: CHAP frames do NOT have an encoding byte at the start
 			Data: []byte{
-				0x00, // encoding
 				'c', 'h', '0', '1', 0x00, // element ID "ch01\0"
 				0x00, 0x00, 0x00, 0x00, // start time = 0ms
 				0x00, 0x00, 0x27, 0x10, // end time = 10000ms
@@ -258,12 +258,11 @@ func TestParseChapterFrames(t *testing.T) {
 		{
 			ID: "CHAP",
 			Data: []byte{
-				0x00,
-				'c', 'h', '0', '2', 0x00,
+				'c', 'h', '0', '2', 0x00, // element ID "ch02\0"
 				0x00, 0x00, 0x27, 0x10, // start = 10000ms
 				0x00, 0x00, 0x4E, 0x20, // end = 20000ms
-				0xFF, 0xFF, 0xFF, 0xFF,
-				0xFF, 0xFF, 0xFF, 0xFF,
+				0xFF, 0xFF, 0xFF, 0xFF, // start offset (unused)
+				0xFF, 0xFF, 0xFF, 0xFF, // end offset (unused)
 			},
 		},
 	}

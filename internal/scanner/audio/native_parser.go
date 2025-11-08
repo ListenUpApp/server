@@ -114,7 +114,7 @@ func convertMetadata(meta *audiometa.Metadata) *Metadata {
 		Disc:        meta.DiscNumber,
 		DiscTotal:   meta.DiscTotal,
 
-		// Audiobook-specific
+		// Extended metadata
 		Narrator:   meta.Narrator,
 		Publisher:  meta.Publisher,
 		Series:     meta.Series,

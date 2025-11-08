@@ -1,10 +1,11 @@
 package mp3
 
 import (
+	"cmp"
 	"fmt"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -19,23 +20,23 @@ type filenamePattern struct {
 }
 
 var filenamePatterns = []filenamePattern{
-	{regexp.MustCompile(`^(\d+)\s*[-._]\s*(.+)\.mp3$`)},             // "01 - Title.mp3"
+	{regexp.MustCompile(`^(\d+)\s*[-._]\s*(.+)\.mp3$`)},               // "01 - Title.mp3"
 	{regexp.MustCompile(`^[Cc]hapter\s*(\d+)\s*[-._]?\s*(.*)\.mp3$`)}, // "Chapter 02 - Title.mp3"
 	{regexp.MustCompile(`^[Tt]rack\s*(\d+)\s*[-._]?\s*(.*)\.mp3$`)},   // "Track03.mp3"
 	{regexp.MustCompile(`^[Pp]art\s*(\d+)\s*[-._]?\s*(.*)\.mp3$`)},    // "Part 1.mp3"
-	{regexp.MustCompile(`^(\d+)\s+(.+)\.mp3$`)},                    // "01 Title.mp3"
-	{regexp.MustCompile(`^(\d+)\.mp3$`)},                           // "03.mp3"
+	{regexp.MustCompile(`^(\d+)\s+(.+)\.mp3$`)},                       // "01 Title.mp3"
+	{regexp.MustCompile(`^(\d+)\.mp3$`)},                              // "03.mp3"
 }
 
-// fileMetadata represents metadata for a single file in a multi-file audiobook
+// fileMetadata represents metadata for a single file in a multi-file audio collection
 type fileMetadata struct {
 	Path     string
 	Metadata *audiometa.Metadata
 	Index    int // Derived from track number or filename
 }
 
-// ParseMultiFile parses multiple MP3 files as a single audiobook
-// Aggregates metadata and creates chapters from files
+// ParseMultiFile parses multiple MP3 files as a single audio collection (album, audiobook, etc.)
+// Aggregates metadata and creates chapters from individual files
 func ParseMultiFile(paths []string) (*audiometa.Metadata, error) {
 	if len(paths) == 0 {
 		return nil, fmt.Errorf("no files provided")
@@ -77,22 +78,25 @@ func ParseMultiFile(paths []string) (*audiometa.Metadata, error) {
 
 // sortFiles sorts files by index, falling back to natural filename sort
 func sortFiles(files []fileMetadata) {
-	sort.Slice(files, func(i, j int) bool {
+	slices.SortFunc(files, func(a, b fileMetadata) int {
 		// If both have indices, use them
-		if files[i].Index > 0 && files[j].Index > 0 {
-			return files[i].Index < files[j].Index
+		if a.Index > 0 && b.Index > 0 {
+			return cmp.Compare(a.Index, b.Index)
 		}
 
 		// If only one has an index, it comes first
-		if files[i].Index > 0 {
-			return true
+		if a.Index > 0 {
+			return -1
 		}
-		if files[j].Index > 0 {
-			return false
+		if b.Index > 0 {
+			return 1
 		}
 
 		// Both have no index - use natural string sort
-		return naturalLess(filepath.Base(files[i].Path), filepath.Base(files[j].Path))
+		if naturalLess(filepath.Base(a.Path), filepath.Base(b.Path)) {
+			return -1
+		}
+		return 1
 	})
 
 	// Renumber indices sequentially
@@ -113,20 +117,20 @@ func aggregateMetadata(files []fileMetadata) *audiometa.Metadata {
 	// Start with first file's metadata
 	first := files[0].Metadata
 	aggregated := &audiometa.Metadata{
-		Format:   audiometa.FormatMP3,
-		Title:    first.Title,
-		Artist:   first.Artist,
-		Album:    first.Album,
-		Year:     first.Year,
-		Genre:    first.Genre,
-		Composer: first.Composer,
-		Narrator: first.Narrator,
-		Publisher: first.Publisher,
-		Series:   first.Series,
+		Format:     audiometa.FormatMP3,
+		Title:      first.Title,
+		Artist:     first.Artist,
+		Album:      first.Album,
+		Year:       first.Year,
+		Genre:      first.Genre,
+		Composer:   first.Composer,
+		Narrator:   first.Narrator,
+		Publisher:  first.Publisher,
+		Series:     first.Series,
 		SeriesPart: first.SeriesPart,
-		ISBN:     first.ISBN,
-		ASIN:     first.ASIN,
-		Comment:  first.Comment,
+		ISBN:       first.ISBN,
+		ASIN:       first.ASIN,
+		Comment:    first.Comment,
 
 		// Technical info from first file
 		BitRate:    first.BitRate,

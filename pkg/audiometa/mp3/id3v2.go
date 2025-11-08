@@ -2,8 +2,10 @@ package mp3
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/binary"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf16"
@@ -227,7 +229,7 @@ func parseTXXXFrame(frame ID3v2Frame, meta *audiometa.Metadata) {
 	description := decodeText(data[:nullIdx], encoding)
 	value := decodeText(data[nullIdx+terminatorSize(encoding):], encoding)
 
-	// Map common audiobook fields
+	// Map common extended metadata fields (TXXX custom tags)
 	descLower := strings.ToLower(description)
 	switch descLower {
 	case "narrator":
@@ -348,15 +350,10 @@ func parseChapterFrames(frames []ID3v2Frame, totalDuration time.Duration) []audi
 		})
 	}
 
-	// Sort by start time
-	// (Go doesn't have built-in sort for custom structs, so we'll use a simple bubble sort)
-	for i := 0; i < len(chapters); i++ {
-		for j := i + 1; j < len(chapters); j++ {
-			if chapters[j].StartTime < chapters[i].StartTime {
-				chapters[i], chapters[j] = chapters[j], chapters[i]
-			}
-		}
-	}
+	// Sort by start time using modern Go 1.21+ slices package
+	slices.SortFunc(chapters, func(a, b chapterData) int {
+		return cmp.Compare(a.StartTime, b.StartTime)
+	})
 
 	// Convert to audiometa.Chapter
 	result := make([]audiometa.Chapter, len(chapters))

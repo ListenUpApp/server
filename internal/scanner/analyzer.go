@@ -61,7 +61,7 @@ func (a *Analyzer) Analyze(ctx context.Context, files []AudioFileData, opts Anal
 	results := make(chan result, len(files))
 
 	// Start workers
-	for i := 0; i < workers; i++ {
+	for range workers {
 		go func() {
 			for j := range jobs {
 				// Check context cancellation
@@ -103,7 +103,7 @@ func (a *Analyzer) Analyze(ctx context.Context, files []AudioFileData, opts Anal
 	parsedFiles := make([]AudioFileData, len(files))
 	var firstErr error
 
-	for i := 0; i < len(files); i++ {
+	for range len(files) {
 		select {
 		case r := <-results:
 			parsedFiles[r.index] = r.file
@@ -127,7 +127,7 @@ type ItemType int
 
 const (
 	ItemTypeSingleFile ItemType = iota // Single audio file (M4B or single MP3)
-	ItemTypeMultiFile                   // Multiple files (MP3 album/audiobook)
+	ItemTypeMultiFile                  // Multiple files (MP3 album/audiobook)
 )
 
 // AnalyzeItems analyzes library items with multi-file classification
