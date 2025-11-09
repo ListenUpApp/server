@@ -185,8 +185,8 @@ func (s *Scanner) Scan(ctx context.Context, folderPath string, opts ScanOptions)
 	return result, nil
 }
 
-// isAudioExt checks if a file extension is for an audio file
-func isAudioExt(ext string) bool {
+// IsAudioExt checks if a file extension is for an audio file
+func IsAudioExt(ext string) bool {
 	audioExts := map[string]bool{
 		".mp3":  true,
 		".m4a":  true,
@@ -199,4 +199,10 @@ func isAudioExt(ext string) bool {
 		".wav":  true,
 	}
 	return audioExts[ext]
+}
+
+// isAudioExt is the internal version that calls the exported function
+// Kept for backward compatibility with existing code
+func isAudioExt(ext string) bool {
+	return IsAudioExt(ext)
 }
