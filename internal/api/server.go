@@ -114,7 +114,16 @@ func (s *Server) handleGetInstance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response.Success(w, instance, s.logger)
+	instanceResponse := map[string]interface{}{
+		"id":         instance.ID,
+		"name":       instance.Name,
+		"version":    instance.Version,
+		"local_url":  instance.LocalUrl,
+		"remote_url": instance.RemoteUrl,
+		"created_at": instance.CreatedAt,
+	}
+
+	response.Success(w, instanceResponse, s.logger)
 }
 
 // Placeholder routes, since I haven't thought through our API layer yet. Super basic logic.

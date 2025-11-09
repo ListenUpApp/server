@@ -17,6 +17,7 @@ type Config struct {
 	Logger   LoggerConfig
 	Metadata MetadataConfig
 	Library  LibraryConfig
+	Server   ServerConfig
 }
 
 // AppConfig holds application-level configuration.
@@ -40,6 +41,12 @@ type LibraryConfig struct {
 	AudiobookPath string
 }
 
+type ServerConfig struct {
+	Name      string
+	LocalURL  string // Optional
+	RemoteURL string // Optional
+}
+
 // LoadConfig loads configuration from multiple sources with precedence:
 // 1. Command-line flags (highest priority).
 // 2. Environment variables.
@@ -51,6 +58,10 @@ func LoadConfig() (*Config, error) {
 	logLevel := flag.String("log-level", "", "Log level (debug, info, warn, error)")
 	metadataPath := flag.String("metadata-path", "", "Base path for metadata storage")
 	audiobookPath := flag.String("audiobook-path", "", "Path to audiobook library")
+	serverName := flag.String("server-name", "", "Name for the server")
+	serverLocalURL := flag.String("local-url", "", "Internal server url")
+	serverRemoteURL := flag.String("metadata-path", "", "Remote server url")
+
 	envFile := flag.String("env-file", ".env", "Path to .env file")
 
 	// Parse flags but don't exit on error - we want to handle it gracefully.
@@ -70,8 +81,15 @@ func LoadConfig() (*Config, error) {
 		Metadata: MetadataConfig{
 			BasePath: getConfigValue(*metadataPath, "METADATA_PATH", ""),
 		},
+
 		Library: LibraryConfig{
 			AudiobookPath: getConfigValue(*audiobookPath, "AUDIOBOOK_PATH", ""),
+		}
+
+		Server: ServerConfig{
+			Name:      getConfigValue(*serverName, "SERVER_NAME", "ListenUp Server"),
+			LocalURL:  getConfigValue(*serverLocalURL, "SERVER_LOCAL_URL", ""),
+			RemoteURL: getConfigValue(*serverRemoteURL, "SERVER_REMOTE_URL", ""),
 		},
 	}
 

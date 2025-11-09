@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
+	"github.com/google/uuid"
+	"github.com/listenupapp/listenup-server/internal/config"
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
@@ -14,13 +17,15 @@ import (
 type InstanceService struct {
 	store  *store.Store
 	logger *slog.Logger
+	config *config.Config
 }
 
-// NewInstanceService creates a new instance service.
-func NewInstanceService(store *store.Store, logger *slog.Logger) *InstanceService {
+// NewInstanceService creates a new instance service
+func NewInstanceService(store *store.Store, logger *slog.Logger, config *config.Config) *InstanceService {
 	return &InstanceService{
 		store:  store,
 		logger: logger,
+		config: config,
 	}
 }
 
@@ -43,6 +48,15 @@ func (s *InstanceService) InitializeInstance(ctx context.Context) (*domain.Insta
 	instance, err := s.store.InitializeInstance(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize instance: %w", err)
+	}
+
+	instance = &domain.Instance{
+		ID:        uuid.New().String(),
+		Name:      s.config.Server.Name,
+		Version:   "0.1.0",
+		LocalUrl:  s.config.Server.LocalURL,
+		RemoteUrl: s.config.Server.RemoteURL,
+		CreatedAt: time.Now(),
 	}
 
 	return instance, nil
