@@ -14,6 +14,7 @@ type Config struct {
 	App      AppConfig
 	Logger   LoggerConfig
 	Metadata MetadataConfig
+	Library  LibraryConfig
 }
 
 type AppConfig struct {
@@ -28,6 +29,11 @@ type MetadataConfig struct {
 	BasePath string
 }
 
+type LibraryConfig struct {
+	// Adding an Env variable here so we can properly test E2E without adding in the concept of libraries yet.
+	AudiobookPath string
+}
+
 // LoadConfig loads configuration from multiple sources with precedence:
 // 1. Command-line flags (highest priority)
 // 2. Environment variables
@@ -38,6 +44,7 @@ func LoadConfig() (*Config, error) {
 	env := flag.String("env", "", "Environment (development, staging, production)")
 	logLevel := flag.String("log-level", "", "Log level (debug, info, warn, error)")
 	metadataPath := flag.String("metadata-path", "", "Base path for metadata storage")
+	audiobookPath := flag.String("audiobook-path", "", "Path to audiobook library")
 	envFile := flag.String("env-file", ".env", "Path to .env file")
 
 	// Parse flags but don't exit on error - we want to handle it gracefully
@@ -57,11 +64,19 @@ func LoadConfig() (*Config, error) {
 		Metadata: MetadataConfig{
 			BasePath: getConfigValue(*metadataPath, "METADATA_PATH", ""),
 		},
+		Library: LibraryConfig{
+			AudiobookPath: getConfigValue(*audiobookPath, "AUDIOBOOK_PATH", ""),
+		},
 	}
 
 	// Expand and validate metadata path
 	if err := cfg.expandMetadataPath(); err != nil {
 		return nil, fmt.Errorf("invalid metadata path: %w", err)
+	}
+
+	// Expand and validate audiobook path
+	if err := cfg.expandAudiobookPath(); err != nil {
+		return nil, fmt.Errorf("invalid audiobook path: %w", err)
 	}
 
 	// Validate configuration
@@ -101,6 +116,10 @@ func (c *Config) Validate() error {
 		return errors.New("metadata base path cannot be empty after expansion")
 	}
 
+	if c.Library.AudiobookPath == "" {
+		return errors.New("audiobook path cannot be empty after expansion")
+	}
+
 	return nil
 }
 
@@ -137,6 +156,42 @@ func (c *Config) expandMetadataPath() error {
 	}
 
 	c.Metadata.BasePath = filepath.Clean(path)
+	return nil
+}
+
+// expandAudiobookPath expands ~ and makes the path absolute
+func (c *Config) expandAudiobookPath() error {
+	path := c.Library.AudiobookPath
+
+	// If empty, use default
+	if path == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("failed to get home directory: %w", err)
+		}
+		c.Library.AudiobookPath = filepath.Join(homeDir, "Audiobooks")
+		return nil
+	}
+
+	// Expand tilde
+	if strings.HasPrefix(path, "~/") {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("failed to get home directory: %w", err)
+		}
+		path = filepath.Join(homeDir, path[2:])
+	}
+
+	// Make absolute if needed
+	if !filepath.IsAbs(path) {
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			return fmt.Errorf("failed to get absolute path: %w", err)
+		}
+		path = absPath
+	}
+
+	c.Library.AudiobookPath = filepath.Clean(path)
 	return nil
 }
 

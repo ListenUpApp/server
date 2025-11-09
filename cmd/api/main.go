@@ -15,6 +15,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/logger"
 	"github.com/listenupapp/listenup-server/internal/service"
 	"github.com/listenupapp/listenup-server/internal/store"
+	"github.com/listenupapp/listenup-server/internal/watcher"
 )
 
 func main() {
@@ -36,6 +37,7 @@ func main() {
 		"environment", cfg.App.Environment,
 		"log_level", cfg.Logger.Level,
 		"metadata_path", cfg.Metadata.BasePath,
+		"audiobook_path", cfg.Library.AudiobookPath,
 	)
 
 	// Initialize database
@@ -50,6 +52,54 @@ func main() {
 			log.WithError(err).Error("Failed to close database")
 		}
 	}()
+
+	// Initialize file watcher
+	fileWatcher, err := watcher.New(log.Logger, watcher.Options{
+		IgnoreHidden: true,
+	})
+	if err != nil {
+		log.WithError(err).Error("Failed to create file watcher")
+		os.Exit(1)
+	}
+	defer fileWatcher.Stop()
+
+	// Start watching audiobook library
+	if err := fileWatcher.Watch(cfg.Library.AudiobookPath); err != nil {
+		log.WithError(err).Error("Failed to watch audiobook path")
+		os.Exit(1)
+	}
+
+	// Start watcher in background
+	watcherCtx, watcherCancel := context.WithCancel(context.Background())
+	defer watcherCancel()
+
+	go func() {
+		if err := fileWatcher.Start(watcherCtx); err != nil {
+			log.WithError(err).Error("File watcher error")
+		}
+	}()
+
+	// Process file watcher events in background
+	go func() {
+		for {
+			select {
+			case event := <-fileWatcher.Events():
+				log.Info("File event detected",
+					"type", event.Type,
+					"path", event.Path,
+					"size", event.Size,
+					"inode", event.Inode,
+				)
+				// TODO: Trigger scanner when audio files are detected
+			case err := <-fileWatcher.Errors():
+				log.WithError(err).Warn("File watcher error")
+			case <-watcherCtx.Done():
+				return
+			}
+		}
+	}()
+
+	log.Info("File watcher started", "path", cfg.Library.AudiobookPath)
 
 	// Initialize services
 	instanceService := service.NewInstanceService(db, log.Logger)
@@ -104,6 +154,12 @@ func main() {
 	<-quit
 
 	log.Info("Shutting down server gracefully...")
+
+	// Stop file watcher
+	watcherCancel()
+	if err := fileWatcher.Stop(); err != nil {
+		log.WithError(err).Error("Failed to stop file watcher")
+	}
 
 	// Graceful shutdown with 30s timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
