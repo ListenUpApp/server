@@ -13,6 +13,8 @@ import (
 	"github.com/listenupapp/listenup-server/internal/api"
 	"github.com/listenupapp/listenup-server/internal/config"
 	"github.com/listenupapp/listenup-server/internal/logger"
+	"github.com/listenupapp/listenup-server/internal/processor"
+	"github.com/listenupapp/listenup-server/internal/scanner"
 	"github.com/listenupapp/listenup-server/internal/service"
 	"github.com/listenupapp/listenup-server/internal/store"
 	"github.com/listenupapp/listenup-server/internal/watcher"
@@ -44,12 +46,12 @@ func main() {
 	dbPath := filepath.Join(cfg.Metadata.BasePath, "db")
 	db, err := store.New(dbPath, log.Logger)
 	if err != nil {
-		log.WithError(err).Error("Failed to initialize database")
+		log.Error("Failed to initialize database", "error", err)
 		os.Exit(1)
 	}
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.WithError(err).Error("Failed to close database")
+			log.Error("Failed to close database", "error", err)
 		}
 	}()
 
@@ -58,14 +60,14 @@ func main() {
 		IgnoreHidden: true,
 	})
 	if err != nil {
-		log.WithError(err).Error("Failed to create file watcher")
+		log.Error("Failed to create file watcher", "error", err)
 		os.Exit(1)
 	}
 	defer fileWatcher.Stop()
 
 	// Start watching audiobook library
 	if err := fileWatcher.Watch(cfg.Library.AudiobookPath); err != nil {
-		log.WithError(err).Error("Failed to watch audiobook path")
+		log.Error("Failed to watch audiobook path", "error", err)
 		os.Exit(1)
 	}
 
@@ -75,24 +77,30 @@ func main() {
 
 	go func() {
 		if err := fileWatcher.Start(watcherCtx); err != nil {
-			log.WithError(err).Error("File watcher error")
+			log.Error("File watcher error", "error", err)
 		}
 	}()
+
+	// Initialize scanner
+	fileScanner := scanner.NewScanner(db, log.Logger)
+
+	// Initialize event processor
+	eventProcessor := processor.NewEventProcessor(fileScanner, log.Logger)
 
 	// Process file watcher events in background
 	go func() {
 		for {
 			select {
 			case event := <-fileWatcher.Events():
-				log.Info("File event detected",
-					"type", event.Type,
-					"path", event.Path,
-					"size", event.Size,
-					"inode", event.Inode,
-				)
-				// TODO: Trigger scanner when audio files are detected
+				if err := eventProcessor.ProcessEvent(watcherCtx, event); err != nil {
+					log.Warn("failed to process event",
+						"error", err,
+						"type", event.Type,
+						"path", event.Path,
+					)
+				}
 			case err := <-fileWatcher.Errors():
-				log.WithError(err).Warn("File watcher error")
+				log.Warn("file watcher error", "error", err)
 			case <-watcherCtx.Done():
 				return
 			}
@@ -108,7 +116,7 @@ func main() {
 	ctx := context.Background()
 	instanceConfig, err := instanceService.InitializeInstance(ctx)
 	if err != nil {
-		log.WithError(err).Error("Failed to initialize server instance configuration")
+		log.Error("Failed to initialize server instance configuration", "error", err)
 		os.Exit(1)
 	}
 
@@ -141,7 +149,7 @@ func main() {
 	go func() {
 		log.Info("HTTP server starting", "addr", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.WithError(err).Error("HTTP server error")
+			log.Error("HTTP server error", "error", err)
 			os.Exit(1)
 		}
 	}()
@@ -158,7 +166,7 @@ func main() {
 	// Stop file watcher
 	watcherCancel()
 	if err := fileWatcher.Stop(); err != nil {
-		log.WithError(err).Error("Failed to stop file watcher")
+		log.Error("Failed to stop file watcher", "error", err)
 	}
 
 	// Graceful shutdown with 30s timeout
@@ -166,7 +174,7 @@ func main() {
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.WithError(err).Error("Server forced to shutdown")
+		log.Error("Server forced to shutdown", "error", err)
 		os.Exit(1)
 	}
 

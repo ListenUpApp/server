@@ -53,14 +53,14 @@ func (g *Grouper) Group(ctx context.Context, files []WalkResult, opts GroupOptio
 
 		// Check if this is a disc directory (CD1, CD2, Disc 1, etc.)
 		dirName := filepath.Base(dir)
-		if isDiscDir(dirName) {
+		if IsDiscDir(dirName) {
 			// This is a disc directory - merge with parent
 			parentDir := filepath.Dir(dir)
 
 			// Find all sibling disc directories
 			var allFiles []WalkResult
 			for otherDir, otherFiles := range dirGroups {
-				if otherDir == dir || filepath.Dir(otherDir) == parentDir && isDiscDir(filepath.Base(otherDir)) {
+				if otherDir == dir || filepath.Dir(otherDir) == parentDir && IsDiscDir(filepath.Base(otherDir)) {
 					allFiles = append(allFiles, otherFiles...)
 					processed[otherDir] = true
 				}
@@ -83,8 +83,9 @@ func (g *Grouper) Group(ctx context.Context, files []WalkResult, opts GroupOptio
 	return grouped
 }
 
-// isDiscDir checks if a directory name indicates a disc/CD directory
-func isDiscDir(name string) bool {
+// IsDiscDir checks if a directory name indicates a disc/CD directory
+// Exported so it can be used by other packages (e.g., walker, processor)
+func IsDiscDir(name string) bool {
 	name = strings.ToLower(name)
 
 	// Match patterns like: CD1, CD 1, cd01, Disc 1, Disc1, etc.
