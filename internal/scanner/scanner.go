@@ -185,8 +185,194 @@ func (s *Scanner) Scan(ctx context.Context, folderPath string, opts ScanOptions)
 	return result, nil
 }
 
-// isAudioExt checks if a file extension is for an audio file
-func isAudioExt(ext string) bool {
+// ScanFolder scans a specific folder incrementally
+// Only scans the given folder (and disc subdirectories if present), not the entire library
+// Returns a LibraryItemData structure that can be used to create or update a library item
+func (s *Scanner) ScanFolder(ctx context.Context, folderPath string, opts ScanOptions) (*LibraryItemData, error) {
+	// Verify path exists
+	if _, err := os.Stat(folderPath); err != nil {
+		return nil, fmt.Errorf("folder path not accessible: %w", err)
+	}
+
+	// Default workers if not specified
+	if opts.Workers <= 0 {
+		opts.Workers = runtime.NumCPU()
+	}
+
+	s.logger.Info("scanning folder", "path", folderPath)
+
+	// Phase 1: Walk just this folder (non-recursive, but includes disc subdirs)
+	walkResults := s.walker.WalkFolder(ctx, folderPath)
+
+	var files []WalkResult
+	for wr := range walkResults {
+		if wr.Error != nil {
+			s.logger.Error("walk error", "path", wr.Path, "error", wr.Error)
+			continue
+		}
+		files = append(files, wr)
+	}
+
+	if len(files) == 0 {
+		s.logger.Info("no files found in folder", "path", folderPath)
+		return &LibraryItemData{
+			Path:       folderPath,
+			AudioFiles: []AudioFileData{},
+		}, nil
+	}
+
+	s.logger.Info("walk complete", "files", len(files))
+
+	// Phase 2: For ScanFolder, all files belong to the same item (the folder we're scanning)
+	// We don't need the complex grouper logic here since we're only scanning one folder
+	itemPath := folderPath
+	itemFiles := files
+
+	s.logger.Info("grouping complete", "path", itemPath, "files", len(itemFiles))
+
+	// Phase 3: Extract and classify files
+	var audioFiles []AudioFileData
+	var imageFiles []ImageFileData
+	var metadataFiles []MetadataFileData
+
+	for _, f := range itemFiles {
+		ext := strings.ToLower(filepath.Ext(f.Path))
+
+		// Check if it's an audio file
+		if isAudioExt(ext) {
+			audioFiles = append(audioFiles, AudioFileData{
+				Path:     f.Path,
+				RelPath:  f.RelPath,
+				Filename: filepath.Base(f.Path),
+				Ext:      ext,
+				Size:     f.Size,
+				ModTime:  time.UnixMilli(f.ModTime),
+				Inode:    f.Inode,
+			})
+			continue
+		}
+
+		// Check if it's an image file
+		if isImageExt(ext) {
+			imageFiles = append(imageFiles, ImageFileData{
+				Path:     f.Path,
+				RelPath:  f.RelPath,
+				Filename: filepath.Base(f.Path),
+				Ext:      ext,
+				Size:     f.Size,
+				ModTime:  time.UnixMilli(f.ModTime),
+				Inode:    f.Inode,
+			})
+			continue
+		}
+
+		// Check if it's a metadata file
+		if metadataType := classifyMetadataFile(f.Path); metadataType != MetadataTypeUnknown {
+			metadataFiles = append(metadataFiles, MetadataFileData{
+				Path:     f.Path,
+				RelPath:  f.RelPath,
+				Filename: filepath.Base(f.Path),
+				Ext:      ext,
+				Type:     metadataType,
+				Size:     f.Size,
+				ModTime:  time.UnixMilli(f.ModTime),
+				Inode:    f.Inode,
+			})
+		}
+	}
+
+	s.logger.Info("files classified",
+		"audio", len(audioFiles),
+		"images", len(imageFiles),
+		"metadata", len(metadataFiles),
+	)
+
+	// Phase 4: Analyze audio files
+	var analyzed []AudioFileData
+	if len(audioFiles) > 0 {
+		var err error
+		analyzed, err = s.analyzer.Analyze(ctx, audioFiles, AnalyzeOptions{
+			Workers: opts.Workers,
+		})
+		if err != nil {
+			s.logger.Error("analysis failed", "path", itemPath, "error", err)
+			// Continue with unanalyzed files rather than failing
+			analyzed = audioFiles
+		}
+	}
+
+	s.logger.Info("analysis complete", "path", itemPath, "audioFiles", len(analyzed))
+
+	// Build library item data
+	item := &LibraryItemData{
+		Path:          itemPath,
+		AudioFiles:    analyzed,
+		ImageFiles:    imageFiles,
+		MetadataFiles: metadataFiles,
+	}
+
+	// Determine if this is a file or directory
+	if len(itemFiles) == 1 && itemPath == itemFiles[0].Path {
+		// Single file (e.g., single M4B in library root)
+		item.IsFile = true
+		item.Size = itemFiles[0].Size
+		item.ModTime = time.UnixMilli(itemFiles[0].ModTime)
+		item.Inode = itemFiles[0].Inode
+	} else {
+		// Directory - use directory stats
+		if stat, err := os.Stat(itemPath); err == nil {
+			item.IsFile = false
+			item.ModTime = stat.ModTime()
+			// Note: Size for directories is not meaningful, leave as 0
+		}
+	}
+
+	return item, nil
+}
+
+// isImageExt checks if a file extension is for an image file
+func isImageExt(ext string) bool {
+	imageExts := map[string]bool{
+		".jpg":  true,
+		".jpeg": true,
+		".png":  true,
+		".webp": true,
+		".gif":  true,
+		".bmp":  true,
+	}
+	return imageExts[ext]
+}
+
+// classifyMetadataFile determines the type of metadata file
+func classifyMetadataFile(path string) MetadataFileType {
+	filename := strings.ToLower(filepath.Base(path))
+	ext := strings.ToLower(filepath.Ext(path))
+
+	// Check specific filenames first
+	switch filename {
+	case "metadata.json":
+		return MetadataTypeJSON
+	case "metadata.abs":
+		return MetadataTypeABS
+	case "desc.txt", "description.txt":
+		return MetadataTypeDesc
+	case "reader.txt", "narrator.txt":
+		return MetadataTypeReader
+	}
+
+	// Check extensions
+	switch ext {
+	case ".opf":
+		return MetadataTypeOPF
+	case ".nfo":
+		return MetadataTypeNFO
+	}
+
+	return MetadataTypeUnknown
+}
+
+// IsAudioExt checks if a file extension is for an audio file
+func IsAudioExt(ext string) bool {
 	audioExts := map[string]bool{
 		".mp3":  true,
 		".m4a":  true,
@@ -199,4 +385,10 @@ func isAudioExt(ext string) bool {
 		".wav":  true,
 	}
 	return audioExts[ext]
+}
+
+// isAudioExt is the internal version that calls the exported function
+// Kept for backward compatibility with existing code
+func isAudioExt(ext string) bool {
+	return IsAudioExt(ext)
 }

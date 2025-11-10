@@ -20,6 +20,9 @@ func TestValidate_ValidConfig(t *testing.T) {
 		Metadata: MetadataConfig{
 			BasePath: "/some/path",
 		},
+		Library: LibraryConfig{
+			AudiobookPath: "/audiobooks",
+		},
 	}
 
 	err := cfg.Validate()
@@ -50,6 +53,9 @@ func TestValidate_AllEnvironments(t *testing.T) {
 				},
 				Metadata: MetadataConfig{
 					BasePath: "/some/path",
+				},
+				Library: LibraryConfig{
+					AudiobookPath: "/audiobooks",
 				},
 			}
 
@@ -89,6 +95,9 @@ func TestValidate_AllLogLevels(t *testing.T) {
 				},
 				Metadata: MetadataConfig{
 					BasePath: "/some/path",
+				},
+				Library: LibraryConfig{
+					AudiobookPath: "/audiobooks",
 				},
 			}
 
