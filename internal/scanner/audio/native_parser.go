@@ -3,13 +3,11 @@ package audio
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
-	"github.com/listenupapp/listenup-server/pkg/audiometa"
-	"github.com/listenupapp/listenup-server/pkg/audiometa/m4a"
-	"github.com/listenupapp/listenup-server/pkg/audiometa/mp3"
+	"github.com/simonhull/audiometa"
 )
 
 type NativeParser struct{}
@@ -19,13 +17,14 @@ func NewNativeParser() *NativeParser {
 }
 
 func (p *NativeParser) Parse(ctx context.Context, path string) (*Metadata, error) {
-	// Auto-detect format and parse
-	meta, err := parseAudioFile(path)
+	// Open and parse audio file
+	file, err := audiometa.OpenContext(ctx, path)
 	if err != nil {
 		return nil, err
 	}
+	defer file.Close()
 
-	return convertMetadata(meta), nil
+	return convertMetadata(file), nil
 }
 
 func (p *NativeParser) ParseMultiFile(ctx context.Context, paths []string) (*Metadata, error) {
@@ -36,98 +35,112 @@ func (p *NativeParser) ParseMultiFile(ctx context.Context, paths []string) (*Met
 	// Detect format from first file
 	ext := strings.ToLower(filepath.Ext(paths[0]))
 
-	var meta *audiometa.Metadata
-	var err error
-
 	switch ext {
 	case ".mp3":
-		meta, err = mp3.ParseMultiFile(paths)
+		// For MP3, open all files and combine metadata
+		files, err := audiometa.OpenMany(ctx, paths...)
+		if err != nil {
+			return nil, err
+		}
+		defer func() {
+			for _, f := range files {
+				f.Close()
+			}
+		}()
+
+		// Use metadata from first file, but sum durations
+		if len(files) == 0 {
+			return nil, fmt.Errorf("no files opened")
+		}
+
+		result := convertMetadata(files[0])
+
+		// Create chapters from each file and sum up total duration
+		var totalDuration time.Duration
+		result.Chapters = make([]Chapter, 0, len(files))
+
+		for i, f := range files {
+			startTime := totalDuration
+			totalDuration += f.Audio.Duration
+
+			// Use the file's title if available, otherwise use filename
+			title := f.Tags.Title
+			if title == "" {
+				title = filepath.Base(paths[i])
+			}
+
+			result.Chapters = append(result.Chapters, Chapter{
+				Index:     i + 1,
+				Title:     title,
+				StartTime: startTime,
+				EndTime:   totalDuration,
+			})
+		}
+
+		result.Duration = totalDuration
+
+		return result, nil
+
 	case ".m4b", ".m4a":
 		// M4B/M4A files shouldn't be multi-file audiobooks
 		// If multiple M4B files, just parse the first one
-		meta, err = m4a.Parse(paths[0])
+		file, err := audiometa.OpenContext(ctx, paths[0])
+		if err != nil {
+			return nil, err
+		}
+		defer file.Close()
+
+		return convertMetadata(file), nil
+
 	default:
 		return nil, fmt.Errorf("unsupported format for multi-file: %s", ext)
 	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	return convertMetadata(meta), nil
 }
 
-// parseAudioFile auto-detects format and parses a single audio file
-func parseAudioFile(path string) (*audiometa.Metadata, error) {
-	// Open file to detect format
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	stat, err := file.Stat()
-	if err != nil {
-		return nil, err
-	}
-
-	// Detect format
-	format, err := audiometa.DetectFormat(file, stat.Size(), path)
-	if err != nil {
-		return nil, err
-	}
-
-	// Parse based on format
-	switch format {
-	case audiometa.FormatM4B, audiometa.FormatM4A:
-		return m4a.Parse(path)
-	case audiometa.FormatMP3:
-		return mp3.Parse(path)
-	default:
-		return nil, &audiometa.UnsupportedFormatError{
-			Path:   path,
-			Reason: fmt.Sprintf("unsupported format: %s", format),
-		}
-	}
-}
-
-// convertMetadata converts audiometa.Metadata to scanner's Metadata format
-func convertMetadata(meta *audiometa.Metadata) *Metadata {
+// convertMetadata converts audiometa.File to scanner's Metadata format
+func convertMetadata(file *audiometa.File) *Metadata {
 	result := &Metadata{
-		Format:     meta.Format.String(),
-		Duration:   meta.Duration,
-		Bitrate:    meta.BitRate,
-		SampleRate: meta.SampleRate,
-		Channels:   meta.Channels,
-		Codec:      meta.Codec,
+		Format:     file.Format.String(),
+		Duration:   file.Audio.Duration,
+		Bitrate:    file.Audio.Bitrate,
+		SampleRate: file.Audio.SampleRate,
+		Channels:   file.Audio.Channels,
+		Codec:      file.Audio.Codec,
 
 		// Standard tags
-		Title:       meta.Title,
-		Album:       meta.Album,
-		Artist:      meta.Artist,
-		AlbumArtist: meta.Artist,
-		Composer:    meta.Composer,
-		Genre:       meta.Genre,
-		Year:        meta.Year,
-		Track:       meta.TrackNumber,
-		TrackTotal:  meta.TrackTotal,
-		Disc:        meta.DiscNumber,
-		DiscTotal:   meta.DiscTotal,
+		Title:  file.Tags.Title,
+		Album:  file.Tags.Album,
+		Artist: file.Tags.Artist,
+		// Use AlbumArtist if set, otherwise fall back to Artist
+		AlbumArtist: file.Tags.AlbumArtist,
+		// For multi-value fields, join with comma or use first value
+		Composer:  joinOrFirst(file.Tags.Composers),
+		Genre:     joinOrFirst(file.Tags.Genres),
+		Year:      file.Tags.Year,
+		Track:     file.Tags.TrackNumber,
+		TrackTotal: file.Tags.TrackTotal,
+		Disc:      file.Tags.DiscNumber,
+		DiscTotal: file.Tags.DiscTotal,
 
 		// Extended metadata
-		Narrator:   meta.Narrator,
-		Publisher:  meta.Publisher,
-		Series:     meta.Series,
-		SeriesPart: meta.SeriesPart,
-		ISBN:       meta.ISBN,
-		ASIN:       meta.ASIN,
+		Narrator:   file.Tags.Narrator,
+		Publisher:  file.Tags.Publisher,
+		Series:     file.Tags.Series,
+		SeriesPart: file.Tags.SeriesPart,
+		ISBN:       file.Tags.ISBN,
+		ASIN:       file.Tags.ASIN,
 
 		// Description from comment
-		Description: meta.Comment,
+		Description: file.Tags.Comment,
+	}
+
+	// Fall back to Artist if AlbumArtist is not set
+	if result.AlbumArtist == "" {
+		result.AlbumArtist = file.Tags.Artist
 	}
 
 	// Convert chapters
-	for _, ch := range meta.Chapters {
+	for _, ch := range file.Chapters {
 		result.Chapters = append(result.Chapters, Chapter{
 			Index:     ch.Index,
 			Title:     ch.Title,
@@ -137,4 +150,16 @@ func convertMetadata(meta *audiometa.Metadata) *Metadata {
 	}
 
 	return result
+}
+
+// joinOrFirst joins a string slice with ", " or returns the first element if only one.
+// Returns empty string if slice is empty.
+func joinOrFirst(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	if len(values) == 1 {
+		return values[0]
+	}
+	return strings.Join(values, ", ")
 }
