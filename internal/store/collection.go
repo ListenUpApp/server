@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/id"
 )
 
 // Key prefixes for BadgerDB
@@ -27,6 +29,147 @@ var (
 	ErrDuplicateLibrary    = errors.New("library already exists")
 	ErrDuplicateCollection = errors.New("collection already exists")
 )
+
+// BootstrapResult contains the initialized library and collections
+type BootstrapResult struct {
+	Library           *domain.Library
+	DefaultCollection *domain.Collection
+	InboxCollection   *domain.Collection
+	IsNewLibrary      bool
+}
+
+// EnsureLibrary ensures a library exists with the given scan path.
+// If no library exists, creates one with default and inbox collections.
+// If a library exists, adds the scan path if not already present.
+// Returns the library and its system collections.
+//
+// This function is idempotent - calling it multiple times is safe:
+//   - First call: Creates library + collections
+//   - Subsequent calls: Returns existing library
+//   - New scan path: Adds to existing library
+func (s *Store) EnsureLibrary(ctx context.Context, scanPath string) (*BootstrapResult, error) {
+	result := &BootstrapResult{}
+
+	// Try to get existing library
+	library, err := s.GetDefaultLibrary(ctx)
+
+	if err == ErrLibraryNotFound {
+		// No library exists - create everything from scratch
+		if s.logger != nil {
+			s.logger.Info("no library found, creating new library", "scan_path", scanPath)
+		}
+
+		// Create library
+		library = &domain.Library{
+			ID:        id.Generate("lib"),
+			Name:      "My Library",
+			ScanPaths: []string{scanPath},
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
+
+		if err := s.CreateLibrary(ctx, library); err != nil {
+			return nil, fmt.Errorf("create library: %w", err)
+		}
+
+		result.IsNewLibrary = true
+
+		// Create default collection
+		defaultColl := &domain.Collection{
+			ID:        id.Generate("coll"),
+			LibraryID: library.ID,
+			Name:      "All Books",
+			Type:      domain.CollectionTypeDefault,
+			BookIDs:   []string{},
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
+
+		if err := s.CreateCollection(ctx, defaultColl); err != nil {
+			return nil, fmt.Errorf("create default collection: %w", err)
+		}
+
+		result.DefaultCollection = defaultColl
+
+		// Create inbox collection
+		inboxColl := &domain.Collection{
+			ID:        id.Generate("coll"),
+			LibraryID: library.ID,
+			Name:      "Inbox",
+			Type:      domain.CollectionTypeInbox,
+			BookIDs:   []string{},
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
+
+		if err := s.CreateCollection(ctx, inboxColl); err != nil {
+			return nil, fmt.Errorf("create inbox collection: %w", err)
+		}
+
+		result.InboxCollection = inboxColl
+
+		if s.logger != nil {
+			s.logger.Info("library initialized",
+				"library_id", library.ID,
+				"default_collection_id", defaultColl.ID,
+				"inbox_collection_id", inboxColl.ID,
+			)
+		}
+
+	} else if err != nil {
+		return nil, fmt.Errorf("get default library: %w", err)
+	} else {
+		// Library exists - ensure scan path is included
+		result.IsNewLibrary = false
+
+		hasPath := false
+		for _, p := range library.ScanPaths {
+			if p == scanPath {
+				hasPath = true
+				break
+			}
+		}
+
+		if !hasPath {
+			if s.logger != nil {
+				s.logger.Info("adding scan path to existing library",
+					"library_id", library.ID,
+					"scan_path", scanPath,
+				)
+			}
+
+			library.AddScanPath(scanPath)
+			library.UpdatedAt = time.Now()
+
+			if err := s.UpdateLibrary(ctx, library); err != nil {
+				return nil, fmt.Errorf("update library: %w", err)
+			}
+		}
+
+		// Get existing collections
+		defaultColl, err := s.GetDefaultCollection(ctx, library.ID)
+		if err != nil {
+			return nil, fmt.Errorf("get default collection: %w", err)
+		}
+		result.DefaultCollection = defaultColl
+
+		inboxColl, err := s.GetInboxCollection(ctx, library.ID)
+		if err != nil {
+			return nil, fmt.Errorf("get inbox collection: %w", err)
+		}
+		result.InboxCollection = inboxColl
+
+		if s.logger != nil {
+			s.logger.Info("using existing library",
+				"library_id", library.ID,
+				"scan_paths", len(library.ScanPaths),
+			)
+		}
+	}
+
+	result.Library = library
+	return result, nil
+}
 
 func (s *Store) CreateLibrary(ctx context.Context, lib *domain.Library) error {
 	key := []byte(libraryPrefix + lib.ID)

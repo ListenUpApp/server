@@ -55,6 +55,39 @@ func main() {
 		}
 	}()
 
+	// Bootstrap library and collections (ensures they exist)
+	ctx := context.Background()
+	bootstrap, err := db.EnsureLibrary(ctx, cfg.Library.AudiobookPath)
+	if err != nil {
+		log.Error("Failed to bootstrap library", "error", err)
+		os.Exit(1)
+	}
+
+	log.Info("Library ready",
+		"library_id", bootstrap.Library.ID,
+		"library_name", bootstrap.Library.Name,
+		"scan_paths", len(bootstrap.Library.ScanPaths),
+		"is_new", bootstrap.IsNewLibrary,
+		"default_collection", bootstrap.DefaultCollection.ID,
+		"inbox_collection", bootstrap.InboxCollection.ID,
+	)
+
+	// Initialize scanner
+	fileScanner := scanner.NewScanner(db, log.Logger)
+
+	// If new library, trigger initial full scan
+	if bootstrap.IsNewLibrary {
+		log.Info("New library detected, starting initial scan")
+		go func() {
+			for _, scanPath := range bootstrap.Library.ScanPaths {
+				log.Info("Running initial scan", "path", scanPath)
+				if _, err := fileScanner.Scan(ctx, scanPath, scanner.ScanOptions{}); err != nil {
+					log.Error("Initial scan failed", "path", scanPath, "error", err)
+				}
+			}
+		}()
+	}
+
 	// Initialize file watcher
 	fileWatcher, err := watcher.New(log.Logger, watcher.Options{
 		IgnoreHidden: true,
@@ -65,10 +98,13 @@ func main() {
 	}
 	defer fileWatcher.Stop()
 
-	// Start watching audiobook library
-	if err := fileWatcher.Watch(cfg.Library.AudiobookPath); err != nil {
-		log.Error("Failed to watch audiobook path", "error", err)
-		os.Exit(1)
+	// Watch all library scan paths
+	for _, scanPath := range bootstrap.Library.ScanPaths {
+		if err := fileWatcher.Watch(scanPath); err != nil {
+			log.Error("Failed to watch scan path", "path", scanPath, "error", err)
+			os.Exit(1)
+		}
+		log.Info("Watching scan path", "path", scanPath)
 	}
 
 	// Start watcher in background
@@ -80,9 +116,6 @@ func main() {
 			log.Error("File watcher error", "error", err)
 		}
 	}()
-
-	// Initialize scanner
-	fileScanner := scanner.NewScanner(db, log.Logger)
 
 	// Initialize event processor
 	eventProcessor := processor.NewEventProcessor(fileScanner, log.Logger)
@@ -107,13 +140,12 @@ func main() {
 		}
 	}()
 
-	log.Info("File watcher started", "path", cfg.Library.AudiobookPath)
+	log.Info("File watcher started", "scan_paths", len(bootstrap.Library.ScanPaths))
 
 	// Initialize services
 	instanceService := service.NewInstanceService(db, log.Logger)
 
 	// Check if server instance configuration exists, create if not (first run)
-	ctx := context.Background()
 	instanceConfig, err := instanceService.InitializeInstance(ctx)
 	if err != nil {
 		log.Error("Failed to initialize server instance configuration", "error", err)

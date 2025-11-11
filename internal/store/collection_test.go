@@ -906,3 +906,224 @@ func TestLibrary_Persistence(t *testing.T) {
 	assert.Equal(t, coll.ID, retrievedColl.ID)
 	assert.Len(t, retrievedColl.BookIDs, 2)
 }
+
+// Test EnsureLibrary (Bootstrap)
+
+func TestEnsureLibrary_NewLibrary(t *testing.T) {
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	result, err := store.EnsureLibrary(ctx, "/path/to/audiobooks")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify result structure
+	assert.True(t, result.IsNewLibrary)
+	assert.NotNil(t, result.Library)
+	assert.NotNil(t, result.DefaultCollection)
+	assert.NotNil(t, result.InboxCollection)
+
+	// Verify library details
+	assert.NotEmpty(t, result.Library.ID)
+	assert.Contains(t, result.Library.ID, "lib-")
+	assert.Len(t, result.Library.ID, len("lib-")+21, "Should have NanoID format: prefix + 21 chars")
+	assert.Equal(t, "My Library", result.Library.Name)
+	assert.Len(t, result.Library.ScanPaths, 1)
+	assert.Equal(t, "/path/to/audiobooks", result.Library.ScanPaths[0])
+	assert.False(t, result.Library.CreatedAt.IsZero())
+	assert.False(t, result.Library.UpdatedAt.IsZero())
+
+	// Verify default collection
+	assert.NotEmpty(t, result.DefaultCollection.ID)
+	assert.Contains(t, result.DefaultCollection.ID, "coll-")
+	assert.Len(t, result.DefaultCollection.ID, len("coll-")+21, "Should have NanoID format: prefix + 21 chars")
+	assert.Equal(t, result.Library.ID, result.DefaultCollection.LibraryID)
+	assert.Equal(t, "All Books", result.DefaultCollection.Name)
+	assert.Equal(t, domain.CollectionTypeDefault, result.DefaultCollection.Type)
+	assert.Empty(t, result.DefaultCollection.BookIDs)
+	assert.False(t, result.DefaultCollection.CreatedAt.IsZero())
+	assert.False(t, result.DefaultCollection.UpdatedAt.IsZero())
+
+	// Verify inbox collection
+	assert.NotEmpty(t, result.InboxCollection.ID)
+	assert.Contains(t, result.InboxCollection.ID, "coll-")
+	assert.Len(t, result.InboxCollection.ID, len("coll-")+21, "Should have NanoID format: prefix + 21 chars")
+	assert.Equal(t, result.Library.ID, result.InboxCollection.LibraryID)
+	assert.Equal(t, "Inbox", result.InboxCollection.Name)
+	assert.Equal(t, domain.CollectionTypeInbox, result.InboxCollection.Type)
+	assert.Empty(t, result.InboxCollection.BookIDs)
+	assert.False(t, result.InboxCollection.CreatedAt.IsZero())
+	assert.False(t, result.InboxCollection.UpdatedAt.IsZero())
+
+	// Verify collections have different IDs
+	assert.NotEqual(t, result.DefaultCollection.ID, result.InboxCollection.ID)
+}
+
+func TestEnsureLibrary_ExistingLibrary(t *testing.T) {
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// First call - creates library
+	result1, err := store.EnsureLibrary(ctx, "/path/to/audiobooks")
+	require.NoError(t, err)
+	assert.True(t, result1.IsNewLibrary)
+
+	originalID := result1.Library.ID
+	originalDefaultID := result1.DefaultCollection.ID
+	originalInboxID := result1.InboxCollection.ID
+
+	// Second call - returns existing library
+	result2, err := store.EnsureLibrary(ctx, "/path/to/audiobooks")
+	require.NoError(t, err)
+	assert.False(t, result2.IsNewLibrary)
+
+	// Should be the same library
+	assert.Equal(t, originalID, result2.Library.ID)
+	assert.Equal(t, result1.Library.Name, result2.Library.Name)
+	assert.Len(t, result2.Library.ScanPaths, 1)
+	assert.Equal(t, "/path/to/audiobooks", result2.Library.ScanPaths[0])
+
+	// Should be the same collections
+	assert.Equal(t, originalDefaultID, result2.DefaultCollection.ID)
+	assert.Equal(t, originalInboxID, result2.InboxCollection.ID)
+}
+
+func TestEnsureLibrary_AddsNewScanPath(t *testing.T) {
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// First call
+	result1, err := store.EnsureLibrary(ctx, "/path/one")
+	require.NoError(t, err)
+	assert.True(t, result1.IsNewLibrary)
+	assert.Len(t, result1.Library.ScanPaths, 1)
+	assert.Contains(t, result1.Library.ScanPaths, "/path/one")
+
+	originalID := result1.Library.ID
+
+	// Second call with new path
+	result2, err := store.EnsureLibrary(ctx, "/path/two")
+	require.NoError(t, err)
+	assert.False(t, result2.IsNewLibrary)
+	assert.Equal(t, originalID, result2.Library.ID)
+	assert.Len(t, result2.Library.ScanPaths, 2)
+	assert.Contains(t, result2.Library.ScanPaths, "/path/one")
+	assert.Contains(t, result2.Library.ScanPaths, "/path/two")
+
+	// Third call with another new path
+	result3, err := store.EnsureLibrary(ctx, "/path/three")
+	require.NoError(t, err)
+	assert.False(t, result3.IsNewLibrary)
+	assert.Equal(t, originalID, result3.Library.ID)
+	assert.Len(t, result3.Library.ScanPaths, 3)
+	assert.Contains(t, result3.Library.ScanPaths, "/path/one")
+	assert.Contains(t, result3.Library.ScanPaths, "/path/two")
+	assert.Contains(t, result3.Library.ScanPaths, "/path/three")
+}
+
+func TestEnsureLibrary_DoesNotDuplicatePaths(t *testing.T) {
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	scanPath := "/test/audiobooks"
+
+	// First call
+	result1, err := store.EnsureLibrary(ctx, scanPath)
+	require.NoError(t, err)
+	assert.True(t, result1.IsNewLibrary)
+	assert.Len(t, result1.Library.ScanPaths, 1)
+
+	// Second call with same path should not duplicate
+	result2, err := store.EnsureLibrary(ctx, scanPath)
+	require.NoError(t, err)
+	assert.False(t, result2.IsNewLibrary)
+	assert.Equal(t, result1.Library.ID, result2.Library.ID)
+	assert.Len(t, result2.Library.ScanPaths, 1)
+	assert.Contains(t, result2.Library.ScanPaths, scanPath)
+
+	// Third call with same path again
+	result3, err := store.EnsureLibrary(ctx, scanPath)
+	require.NoError(t, err)
+	assert.False(t, result3.IsNewLibrary)
+	assert.Equal(t, result1.Library.ID, result3.Library.ID)
+	assert.Len(t, result3.Library.ScanPaths, 1)
+}
+
+func TestEnsureLibrary_MultiplePathsSequence(t *testing.T) {
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	paths := []string{
+		"/mnt/nas/audiobooks",
+		"/external/more",
+		"/home/user/audible",
+	}
+
+	var libraryID string
+
+	// Add each path sequentially
+	for i, path := range paths {
+		result, err := store.EnsureLibrary(ctx, path)
+		require.NoError(t, err)
+
+		if i == 0 {
+			// First call creates the library
+			assert.True(t, result.IsNewLibrary)
+			libraryID = result.Library.ID
+		} else {
+			// Subsequent calls should use same library
+			assert.False(t, result.IsNewLibrary)
+			assert.Equal(t, libraryID, result.Library.ID)
+		}
+
+		// Verify correct number of paths
+		assert.Len(t, result.Library.ScanPaths, i+1)
+
+		// Verify all previous paths are present
+		for j := 0; j <= i; j++ {
+			assert.Contains(t, result.Library.ScanPaths, paths[j])
+		}
+	}
+}
+
+func TestEnsureLibrary_Idempotent(t *testing.T) {
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	scanPath := "/test/audiobooks"
+
+	// Call multiple times
+	var results []*BootstrapResult
+
+	for i := 0; i < 5; i++ {
+		result, err := store.EnsureLibrary(ctx, scanPath)
+		require.NoError(t, err)
+		results = append(results, result)
+	}
+
+	// First call should create, rest should return existing
+	assert.True(t, results[0].IsNewLibrary)
+	for i := 1; i < len(results); i++ {
+		assert.False(t, results[i].IsNewLibrary)
+	}
+
+	// All calls should return the same library and collections
+	for i := 1; i < len(results); i++ {
+		assert.Equal(t, results[0].Library.ID, results[i].Library.ID)
+		assert.Equal(t, results[0].DefaultCollection.ID, results[i].DefaultCollection.ID)
+		assert.Equal(t, results[0].InboxCollection.ID, results[i].InboxCollection.ID)
+	}
+
+	// Should still have only one scan path
+	assert.Len(t, results[4].Library.ScanPaths, 1)
+}
