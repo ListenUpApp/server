@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGenerate_Uniqueness(t *testing.T) {
@@ -13,7 +14,8 @@ func TestGenerate_Uniqueness(t *testing.T) {
 	count := 1000
 
 	for i := 0; i < count; i++ {
-		id := Generate("test")
+		id, err := Generate("test")
+		require.NoError(t, err)
 		assert.False(t, ids[id], "ID should be unique: %s", id)
 		ids[id] = true
 	}
@@ -37,7 +39,8 @@ func TestGenerate_Format(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			id := Generate(tt.prefix)
+			id, err := Generate(tt.prefix)
+			require.NoError(t, err)
 
 			// Should start with prefix followed by hyphen
 			assert.True(t, strings.HasPrefix(id, tt.prefix+"-"))
@@ -89,7 +92,7 @@ func TestMustGenerate_Uniqueness(t *testing.T) {
 
 func BenchmarkGenerate(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		Generate("bench")
+		_, _ = Generate("bench")
 	}
 }
 

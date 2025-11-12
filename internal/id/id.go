@@ -1,6 +1,8 @@
 package id
 
 import (
+	"fmt"
+
 	gonanoid "github.com/matoous/go-nanoid/v2"
 )
 
@@ -9,19 +11,24 @@ import (
 //
 // NanoIDs are URL-friendly, compact (21 characters vs UUID's 36),
 // and use a larger alphabet for better entropy per character.
-func Generate(prefix string) string {
+//
+// Returns an error if the system has insufficient entropy for secure random generation.
+func Generate(prefix string) (string, error) {
 	// Use default NanoID (21 characters, URL-safe alphabet)
 	id, err := gonanoid.New()
 	if err != nil {
-		// Fallback to a simpler generation if crypto fails
-		// This should never happen in practice
-		id = gonanoid.Must()
+		return "", fmt.Errorf("generate nanoid: %w", err)
 	}
-	return prefix + "-" + id
+	return prefix + "-" + id, nil
 }
 
 // MustGenerate is like Generate but panics if ID generation fails.
-// Use this only when you're certain the system entropy is available.
+// Use this only when you're certain the system entropy is available,
+// or when failure should crash the program (e.g., during initialization).
 func MustGenerate(prefix string) string {
-	return prefix + "-" + gonanoid.Must()
+	id, err := Generate(prefix)
+	if err != nil {
+		panic(fmt.Sprintf("failed to generate ID: %v", err))
+	}
+	return id
 }
