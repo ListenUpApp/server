@@ -12,10 +12,10 @@ import (
 
 // BatchWriter provides efficient bulk write operations using BadgerDB's WriteBatch
 type BatchWriter struct {
-	store    *Store
-	batch    *badger.WriteBatch
-	maxSize  int
-	count    int
+	store     *Store
+	batch     *badger.WriteBatch
+	maxSize   int
+	count     int
 	autoFlush bool
 }
 

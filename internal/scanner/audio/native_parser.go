@@ -114,13 +114,13 @@ func convertMetadata(file *audiometa.File) *Metadata {
 		// Use AlbumArtist if set, otherwise fall back to Artist
 		AlbumArtist: file.Tags.AlbumArtist,
 		// For multi-value fields, join with comma or use first value
-		Composer:  joinOrFirst(file.Tags.Composers),
-		Genre:     joinOrFirst(file.Tags.Genres),
-		Year:      file.Tags.Year,
-		Track:     file.Tags.TrackNumber,
+		Composer:   joinOrFirst(file.Tags.Composers),
+		Genre:      joinOrFirst(file.Tags.Genres),
+		Year:       file.Tags.Year,
+		Track:      file.Tags.TrackNumber,
 		TrackTotal: file.Tags.TrackTotal,
-		Disc:      file.Tags.DiscNumber,
-		DiscTotal: file.Tags.DiscTotal,
+		Disc:       file.Tags.DiscNumber,
+		DiscTotal:  file.Tags.DiscTotal,
 
 		// Extended metadata
 		Narrator:   file.Tags.Narrator,

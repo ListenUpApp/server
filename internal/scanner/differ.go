@@ -164,11 +164,11 @@ func (d *Differ) buildFieldChanges(scanned *LibraryItemData, existing *ExistingI
 }
 
 type ExistingItem struct {
-	ID       string
-	Path     string
-	Inode    uint64
-	ModTime  time.Time
-	Metadata *BookMetadata
+	ID            string
+	Path          string
+	Inode         uint64
+	ModTime       time.Time
+	Metadata      *BookMetadata
 	NumAudioFiles int
 	NumImageFiles int
 }

@@ -483,11 +483,11 @@ func TestFindAudioFileForChapter(t *testing.T) {
 		expectedID string
 	}{
 		{"start of first file", 0, "af-1"},
-		{"middle of first file", 300000, "af-1"}, // 5 min
-		{"start of second file", 600000, "af-2"}, // 10 min
+		{"middle of first file", 300000, "af-1"},  // 5 min
+		{"start of second file", 600000, "af-2"},  // 10 min
 		{"middle of second file", 900000, "af-2"}, // 15 min
-		{"start of third file", 1500000, "af-3"}, // 25 min
-		{"end of last file", 2700000, "af-3"},    // 45 min (beyond end -> last file)
+		{"start of third file", 1500000, "af-3"},  // 25 min
+		{"end of last file", 2700000, "af-3"},     // 45 min (beyond end -> last file)
 	}
 
 	for _, tt := range tests {
@@ -570,15 +570,15 @@ func TestConvertChapters_MultiFile(t *testing.T) {
 func TestUpdateBookFromScan(t *testing.T) {
 	originalCreatedAt := time.Now().Add(-24 * time.Hour)
 	existingBook := &domain.Book{
-		ID:          "book-existing-id",
-		Title:       "Old Title",
-		Path:        "/old/path",
-		Authors:     []string{"Old Author"},
-		CreatedAt:   originalCreatedAt,
-		UpdatedAt:   originalCreatedAt,
-		ScannedAt:   originalCreatedAt,
-		AudioFiles:  []domain.AudioFileInfo{},
-		CoverImage:  nil,
+		ID:         "book-existing-id",
+		Title:      "Old Title",
+		Path:       "/old/path",
+		Authors:    []string{"Old Author"},
+		CreatedAt:  originalCreatedAt,
+		UpdatedAt:  originalCreatedAt,
+		ScannedAt:  originalCreatedAt,
+		AudioFiles: []domain.AudioFileInfo{},
+		CoverImage: nil,
 	}
 
 	newItem := &LibraryItemData{
