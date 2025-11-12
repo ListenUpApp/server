@@ -59,9 +59,25 @@ func (s *Store) EnsureLibrary(ctx context.Context, scanPath string) (*BootstrapR
 			s.logger.Info("no library found, creating new library", "scan_path", scanPath)
 		}
 
+		// Generate IDs
+		libraryID, err := id.Generate("lib")
+		if err != nil {
+			return nil, fmt.Errorf("generate library ID: %w", err)
+		}
+
+		defaultCollID, err := id.Generate("coll")
+		if err != nil {
+			return nil, fmt.Errorf("generate default collection ID: %w", err)
+		}
+
+		inboxCollID, err := id.Generate("coll")
+		if err != nil {
+			return nil, fmt.Errorf("generate inbox collection ID: %w", err)
+		}
+
 		// Create library
 		library = &domain.Library{
-			ID:        id.Generate("lib"),
+			ID:        libraryID,
 			Name:      "My Library",
 			ScanPaths: []string{scanPath},
 			CreatedAt: time.Now(),
@@ -76,7 +92,7 @@ func (s *Store) EnsureLibrary(ctx context.Context, scanPath string) (*BootstrapR
 
 		// Create default collection
 		defaultColl := &domain.Collection{
-			ID:        id.Generate("coll"),
+			ID:        defaultCollID,
 			LibraryID: library.ID,
 			Name:      "All Books",
 			Type:      domain.CollectionTypeDefault,
@@ -93,7 +109,7 @@ func (s *Store) EnsureLibrary(ctx context.Context, scanPath string) (*BootstrapR
 
 		// Create inbox collection
 		inboxColl := &domain.Collection{
-			ID:        id.Generate("coll"),
+			ID:        inboxCollID,
 			LibraryID: library.ID,
 			Name:      "Inbox",
 			Type:      domain.CollectionTypeInbox,

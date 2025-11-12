@@ -49,9 +49,11 @@ func main() {
 		log.Error("Failed to initialize database", "error", err)
 		os.Exit(1)
 	}
+	// Defer close as safety net (also explicitly closed in shutdown sequence)
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Error("Failed to close database", "error", err)
+			// Only log if not already closed
+			log.Error("Failed to close database (defer)", "error", err)
 		}
 	}()
 
@@ -144,6 +146,7 @@ func main() {
 
 	// Initialize services
 	instanceService := service.NewInstanceService(db, log.Logger)
+	bookService := service.NewBookService(db, fileScanner, log.Logger)
 
 	// Check if server instance configuration exists, create if not (first run)
 	instanceConfig, err := instanceService.InitializeInstance(ctx)
@@ -166,7 +169,9 @@ func main() {
 	}
 
 	// Create HTTP server with service layer
-	httpServer := api.NewServer(instanceService, log.Logger)
+	// TODO: Future note to self: This is going to get old fast depending on how many
+	// services we need to instantiate. Let's look into a better solution
+	httpServer := api.NewServer(instanceService, bookService, log.Logger)
 
 	// Configure HTTP server
 	srv := &http.Server{
@@ -202,12 +207,19 @@ func main() {
 	}
 
 	// Graceful shutdown with 30s timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error("Server forced to shutdown", "error", err)
-		os.Exit(1)
+	}
+
+	// Explicitly close database before exit
+	log.Info("Closing database...")
+	if err := db.Close(); err != nil {
+		log.Error("Failed to close database", "error", err)
+	} else {
+		log.Info("Database closed successfully")
 	}
 
 	log.Info("Server stopped")

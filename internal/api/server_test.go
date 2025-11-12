@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/http/response"
+	"github.com/listenupapp/listenup-server/internal/scanner"
 	"github.com/listenupapp/listenup-server/internal/service"
 	"github.com/listenupapp/listenup-server/internal/store"
 	"github.com/stretchr/testify/assert"
@@ -35,11 +36,15 @@ func setupTestServer(t *testing.T) (*Server, func()) {
 	s, err := store.New(dbPath, logger)
 	require.NoError(t, err)
 
-	// Create service
+	// Create scanner
+	fileScanner := scanner.NewScanner(s, logger)
+
+	// Create services
 	instanceService := service.NewInstanceService(s, logger)
+	bookService := service.NewBookService(s, fileScanner, logger)
 
 	// Create server
-	server := NewServer(instanceService, logger)
+	server := NewServer(instanceService, bookService, logger)
 
 	// Return cleanup function
 	cleanup := func() {

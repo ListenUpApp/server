@@ -60,7 +60,7 @@ const (
 	CollectionTypeInbox
 
 	// CollectionTypeCustom is a catch-all for user created collections. Designed for organization and ACL
-	// Some examples would be: "Kids Books", "Wednesday Book Club", "John's private collection", etc.
+	// Some examples would be: "Kids Books", "Wednesday Book Club", "John's Smutty Monster Romance Books" (I see you John!), etc.
 	// Libraries can have zero or many custom collections.
 	CollectionTypeCustom
 )

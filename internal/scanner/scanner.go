@@ -96,11 +96,12 @@ func (s *Scanner) Scan(ctx context.Context, folderPath string, opts ScanOptions)
 
 	s.logger.Info("grouping complete", "items", len(grouped))
 
-	// Phase 3: Analyze audio files
+	// Phase 3: Build LibraryItemData for each item
 	tracker.SetPhase(PhaseAnalyzing)
 	tracker.SetTotal(len(grouped))
-	s.logger.Info("analyzing items", "count", len(grouped))
+	s.logger.Info("building library items", "count", len(grouped))
 
+	var items []*LibraryItemData
 	for itemPath, itemFiles := range grouped {
 		// Check context
 		select {
@@ -109,11 +110,14 @@ func (s *Scanner) Scan(ctx context.Context, folderPath string, opts ScanOptions)
 		default:
 		}
 
-		// Extract audio files from the group
+		// Classify files by type
 		var audioFiles []AudioFileData
+		var imageFiles []ImageFileData
+		var metadataFiles []MetadataFileData
+
 		for _, f := range itemFiles {
-			// Check if it's an audio file by extension
 			ext := strings.ToLower(filepath.Ext(f.Path))
+
 			if isAudioExt(ext) {
 				audioFiles = append(audioFiles, AudioFileData{
 					Path:     f.Path,
@@ -124,52 +128,147 @@ func (s *Scanner) Scan(ctx context.Context, folderPath string, opts ScanOptions)
 					ModTime:  time.UnixMilli(f.ModTime),
 					Inode:    f.Inode,
 				})
+			} else if isImageExt(ext) {
+				imageFiles = append(imageFiles, ImageFileData{
+					Path:     f.Path,
+					RelPath:  f.RelPath,
+					Filename: filepath.Base(f.Path),
+					Ext:      ext,
+					Size:     f.Size,
+					ModTime:  time.UnixMilli(f.ModTime),
+					Inode:    f.Inode,
+				})
+			} else if metadataType := classifyMetadataFile(f.Path); metadataType != MetadataTypeUnknown {
+				metadataFiles = append(metadataFiles, MetadataFileData{
+					Path:     f.Path,
+					RelPath:  f.RelPath,
+					Filename: filepath.Base(f.Path),
+					Ext:      ext,
+					Type:     metadataType,
+					Size:     f.Size,
+					ModTime:  time.UnixMilli(f.ModTime),
+					Inode:    f.Inode,
+				})
 			}
 		}
 
+		// Skip items with no audio files
+		if len(audioFiles) == 0 {
+			s.logger.Info("skipping item with no audio files", "path", itemPath)
+			tracker.Increment(itemPath)
+			continue
+		}
+
 		// Analyze audio files
-		if len(audioFiles) > 0 {
-			analyzed, err := s.analyzer.Analyze(ctx, audioFiles, AnalyzeOptions{
-				Workers: opts.Workers,
+		analyzed, err := s.analyzer.Analyze(ctx, audioFiles, AnalyzeOptions{
+			Workers: opts.Workers,
+		})
+		if err != nil {
+			tracker.AddError(ScanError{
+				Path:  itemPath,
+				Phase: PhaseAnalyzing,
+				Error: err,
+				Time:  time.Now(),
 			})
+			result.Errors++
+			// Continue with unanalyzed files rather than failing completely
+			analyzed = audioFiles
+		}
+
+		// Build library item data
+		item := &LibraryItemData{
+			Path:          itemPath,
+			AudioFiles:    analyzed,
+			ImageFiles:    imageFiles,
+			MetadataFiles: metadataFiles,
+		}
+
+		// Determine if this is a file or directory
+		if len(itemFiles) == 1 && itemPath == itemFiles[0].Path {
+			item.IsFile = true
+			item.Size = itemFiles[0].Size
+			item.ModTime = time.UnixMilli(itemFiles[0].ModTime)
+			item.Inode = itemFiles[0].Inode
+		} else {
+			if stat, err := os.Stat(itemPath); err == nil {
+				item.IsFile = false
+				item.ModTime = stat.ModTime()
+			}
+		}
+
+		items = append(items, item)
+		tracker.Increment(itemPath)
+	}
+
+	s.logger.Info("library items built", "count", len(items))
+
+	// Phase 4: Convert to domain.Book and save to database
+	if !opts.DryRun && len(items) > 0 {
+		tracker.SetPhase(PhaseApplying)
+		s.logger.Info("saving books to database", "count", len(items))
+
+		// Use batch writer for efficient bulk inserts
+		batchWriter := s.store.NewBatchWriter(100)
+		defer func() {
+			if err := batchWriter.Flush(); err != nil {
+				s.logger.Error("failed to flush final batch", "error", err)
+			}
+		}()
+
+		var errs []error
+
+		for _, item := range items {
+			// Check context
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			default:
+			}
+
+			// Convert to domain.Book
+			book, err := ConvertToBook(item)
 			if err != nil {
+				convertErr := fmt.Errorf("convert %s: %w", item.Path, err)
+				errs = append(errs, convertErr)
 				tracker.AddError(ScanError{
-					Path:  itemPath,
-					Phase: PhaseAnalyzing,
-					Error: err,
+					Path:  item.Path,
+					Phase: PhaseApplying,
+					Error: convertErr,
 					Time:  time.Now(),
 				})
 				result.Errors++
 				continue
 			}
 
-			// For now, just log the analyzed files
-			// TODO: Build LibraryItemData and process further
-			s.logger.Info("analyzed item", "path", itemPath, "audioFiles", len(analyzed))
+			// Try to create the book using batch writer
+			err = batchWriter.CreateBook(ctx, book)
+			if err != nil {
+				createErr := fmt.Errorf("save %s (%s): %w", book.Title, book.Path, err)
+				errs = append(errs, createErr)
+				tracker.AddError(ScanError{
+					Path:  item.Path,
+					Phase: PhaseApplying,
+					Error: createErr,
+					Time:  time.Now(),
+				})
+				result.Errors++
+				continue
+			}
+
+			result.Added++
 		}
 
-		tracker.Increment(itemPath)
-	}
-
-	s.logger.Info("analysis complete")
-
-	// Phase 4: Resolve metadata (TODO: implement resolver)
-	tracker.SetPhase(PhaseResolving)
-	s.logger.Info("resolving metadata")
-	// TODO: Implement metadata resolution from multiple sources
-
-	// Phase 5: Diff (TODO: implement differ)
-	tracker.SetPhase(PhaseDiffing)
-	s.logger.Info("computing diff")
-	// TODO: Implement diff computation
-
-	// Phase 6: Apply changes (TODO: implement database updates)
-	if !opts.DryRun {
-		tracker.SetPhase(PhaseApplying)
-		s.logger.Info("applying changes")
-		// TODO: Implement database updates
-	} else {
+		// Log aggregated errors if any
+		if len(errs) > 0 {
+			s.logger.Warn("scan completed with errors",
+				"error_count", len(errs),
+				"first_error", errs[0],
+			)
+		}
+	} else if opts.DryRun {
 		s.logger.Info("dry run mode - skipping database updates")
+	} else if len(items) == 0 {
+		s.logger.Info("no items to save")
 	}
 
 	// Complete
