@@ -203,7 +203,7 @@ func (s *Scanner) Scan(ctx context.Context, folderPath string, opts ScanOptions)
 	s.logger.Info("library items built", "count", len(items))
 
 	// Phase 4: Convert to domain.Book and save to database
-	if !opts.DryRun {
+	if !opts.DryRun && len(items) > 0 {
 		tracker.SetPhase(PhaseApplying)
 		s.logger.Info("saving books to database", "count", len(items))
 
@@ -265,8 +265,10 @@ func (s *Scanner) Scan(ctx context.Context, folderPath string, opts ScanOptions)
 				"first_error", errs[0],
 			)
 		}
-	} else {
+	} else if opts.DryRun {
 		s.logger.Info("dry run mode - skipping database updates")
+	} else if len(items) == 0 {
+		s.logger.Info("no items to save")
 	}
 
 	// Complete
