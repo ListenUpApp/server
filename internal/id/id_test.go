@@ -13,7 +13,7 @@ func TestGenerate_Uniqueness(t *testing.T) {
 	ids := make(map[string]bool)
 	count := 1000
 
-	for i := 0; i < count; i++ {
+	for range count {
 		id, err := Generate("test")
 		require.NoError(t, err)
 		assert.False(t, ids[id], "ID should be unique: %s", id)
@@ -81,7 +81,7 @@ func TestMustGenerate_Uniqueness(t *testing.T) {
 	ids := make(map[string]bool)
 	count := 100
 
-	for i := 0; i < count; i++ {
+	for range count {
 		id := MustGenerate("test")
 		assert.False(t, ids[id], "ID should be unique: %s", id)
 		ids[id] = true

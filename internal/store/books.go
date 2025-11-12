@@ -5,6 +5,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 
 	"github.com/dgraph-io/badger/v4"
@@ -71,7 +72,12 @@ func (s *Store) CreateBook(ctx context.Context, book *domain.Book) error {
 	}
 
 	if s.logger != nil {
-		s.logger.Info("book created", "id", book.ID, "title", book.Title, "path", book.Path, "audio_files", len(book.AudioFiles))
+		s.logger.LogAttrs(ctx, slog.LevelInfo, "book created",
+			slog.String("id", book.ID),
+			slog.String("title", book.Title),
+			slog.String("path", book.Path),
+			slog.Int("audio_files", len(book.AudioFiles)),
+		)
 	}
 	return nil
 }

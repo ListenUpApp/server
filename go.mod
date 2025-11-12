@@ -9,7 +9,7 @@ require (
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/simonhull/audiometa v0.0.0-20251111215546-26b62ea549cc
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/sys v0.34.0
+	golang.org/x/sys v0.38.0
 )
 
 require (
