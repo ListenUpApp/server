@@ -42,9 +42,10 @@ func setupTestServer(t *testing.T) (*Server, func()) {
 	// Create services
 	instanceService := service.NewInstanceService(s, logger)
 	bookService := service.NewBookService(s, fileScanner, logger)
+	syncService := service.NewSyncService(s, logger)
 
 	// Create server
-	server := NewServer(instanceService, bookService, logger)
+	server := NewServer(instanceService, bookService, syncService, logger)
 
 	// Return cleanup function
 	cleanup := func() {
@@ -260,4 +261,55 @@ func TestServer_JSONResponse(t *testing.T) {
 	// Verify values match
 	assert.Equal(t, instance.ID, data["id"])
 	assert.Equal(t, instance.HasRootUser, data["has_root_user"])
+}
+
+func TestGetManifest_Success(t *testing.T) {
+	server, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// No need to initialize instance for manifest endpoint
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sync/manifest", nil)
+	w := httptest.NewRecorder()
+
+	server.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var result response.Envelope
+	err := json.Unmarshal(w.Body.Bytes(), &result)
+	require.NoError(t, err)
+
+	assert.True(t, result.Success)
+	assert.NotNil(t, result.Data)
+
+	// Verify manifest data structure
+	data, ok := result.Data.(map[string]any)
+	require.True(t, ok)
+	assert.Contains(t, data, "library_version")
+	assert.Contains(t, data, "checkpoint")
+	assert.Contains(t, data, "counts")
+	assert.Contains(t, data, "book_ids")
+
+	// Verify counts structure
+	counts, ok := data["counts"].(map[string]any)
+	require.True(t, ok)
+	assert.Contains(t, counts, "books")
+	assert.Contains(t, counts, "authors")
+	assert.Contains(t, counts, "series")
+
+	// Verify empty library returns 0 books
+	assert.Equal(t, float64(0), counts["books"])
+	assert.Equal(t, float64(0), counts["authors"])
+	assert.Equal(t, float64(0), counts["series"])
+
+	// Verify timestamps are valid RFC3339
+	libraryVersion, ok := data["library_version"].(string)
+	require.True(t, ok)
+	_, err = time.Parse(time.RFC3339, libraryVersion)
+	assert.NoError(t, err)
+
+	checkpoint, ok := data["checkpoint"].(string)
+	require.True(t, ok)
+	_, err = time.Parse(time.RFC3339, checkpoint)
+	assert.NoError(t, err)
 }

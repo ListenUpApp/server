@@ -147,6 +147,7 @@ func main() {
 	// Initialize services
 	instanceService := service.NewInstanceService(db, log.Logger)
 	bookService := service.NewBookService(db, fileScanner, log.Logger)
+	syncService := service.NewSyncService(db, log.Logger)
 
 	// Check if server instance configuration exists, create if not (first run)
 	instanceConfig, err := instanceService.InitializeInstance(ctx)
@@ -171,7 +172,7 @@ func main() {
 	// Create HTTP server with service layer
 	// TODO: Future note to self: This is going to get old fast depending on how many
 	// services we need to instantiate. Let's look into a better solution
-	httpServer := api.NewServer(instanceService, bookService, log.Logger)
+	httpServer := api.NewServer(instanceService, bookService, syncService, log.Logger)
 
 	// Configure HTTP server
 	srv := &http.Server{

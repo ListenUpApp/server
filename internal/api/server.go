@@ -17,15 +17,17 @@ import (
 type Server struct {
 	instanceService *service.InstanceService
 	bookService     *service.BookService
+	syncService     *service.SyncService
 	router          *chi.Mux
 	logger          *slog.Logger
 }
 
 // NewServer creates a new HTTP server with all routes configured
-func NewServer(instanceService *service.InstanceService, bookService *service.BookService, logger *slog.Logger) *Server {
+func NewServer(instanceService *service.InstanceService, bookService *service.BookService, syncService *service.SyncService, logger *slog.Logger) *Server {
 	s := &Server{
 		instanceService: instanceService,
 		bookService:     bookService,
+		syncService:     syncService,
 		router:          chi.NewRouter(),
 		logger:          logger,
 	}
@@ -65,6 +67,9 @@ func (s *Server) setupRoutes() {
 
 		// Libraries (also temp)
 		r.Post("/libraries/{id}/scan", s.handleTriggerScan)
+
+		// Sync endpoints
+		r.Get("/sync/manifest", s.handleGetManifest)
 	})
 }
 
@@ -156,6 +161,20 @@ func (s *Server) handleTriggerScan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.Success(w, result, s.logger)
+}
+
+// handleGetManifest returns the sync manifest
+func (s *Server) handleGetManifest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	manifest, err := s.syncService.GetManifest(ctx)
+	if err != nil {
+		s.logger.Error("Failed to get manifest", "error", err)
+		response.InternalError(w, "Failed to retrieve sync manifest", s.logger)
+		return
+	}
+
+	response.Success(w, manifest, s.logger)
 }
 
 // Helper functions
