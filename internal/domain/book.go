@@ -7,8 +7,7 @@ import (
 
 // Book represents an audiobook in the library
 type Book struct {
-	ID string `json:"id"`
-
+	Syncable
 	// Core metadata
 	Title       string       `json:"title"`
 	Subtitle    string       `json:"subtitle,omitempty"`
@@ -37,8 +36,6 @@ type Book struct {
 	Chapters []Chapter `json:"chapters,omitempty"`
 
 	// Timestamps
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
 	ScannedAt time.Time `json:"scanned_at"` // Last time filesystem was scanned
 }
 

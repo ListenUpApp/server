@@ -144,6 +144,7 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 
 	// Use Transaction to update book and indices atomically
 	err = s.db.Update(func(txn *badger.Txn) error {
+		book.Touch()
 		// Update book
 		data, err := json.Marshal(book)
 		if err != nil {

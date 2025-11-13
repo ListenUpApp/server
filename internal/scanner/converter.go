@@ -21,13 +21,15 @@ func ConvertToBook(item *LibraryItemData) (*domain.Book, error) {
 	now := time.Now()
 
 	book := &domain.Book{
-		ID:            bookID,
+		Syncable: domain.Syncable{
+			ID:        bookID,
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
 		Path:          item.Path,
 		AudioFiles:    make([]domain.AudioFileInfo, 0, len(item.AudioFiles)),
 		TotalDuration: 0,
 		TotalSize:     0,
-		CreatedAt:     now,
-		UpdatedAt:     now,
 		ScannedAt:     now,
 	}
 
