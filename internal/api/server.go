@@ -69,7 +69,10 @@ func (s *Server) setupRoutes() {
 		r.Post("/libraries/{id}/scan", s.handleTriggerScan)
 
 		// Sync endpoints
-		r.Get("/sync/manifest", s.handleGetManifest)
+		r.Route("/sync", func(r chi.Router) {
+			r.Get("/manifest", s.handleGetManifest)
+			r.Get("/books", s.handleSyncBooks)
+		})
 	})
 }
 
@@ -163,7 +166,7 @@ func (s *Server) handleTriggerScan(w http.ResponseWriter, r *http.Request) {
 	response.Success(w, result, s.logger)
 }
 
-// handleGetManifest returns the sync manifest
+// handleGetManifest returns the sync manifest (initial sync phase 1)
 func (s *Server) handleGetManifest(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -175,6 +178,23 @@ func (s *Server) handleGetManifest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.Success(w, manifest, s.logger)
+}
+
+// handleSyncBooks returns paginated books for synching
+func (s *Server) handleSyncBooks(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Parse pagination parameters
+	params := parsePaginationParams(r)
+
+	books, err := s.syncService.GetBooksForSync(ctx, params)
+	if err != nil {
+		s.logger.Error("Failed to get books for sync", "error", err)
+		response.InternalError(w, "Failed to retrieve books", s.logger)
+		return
+	}
+
+	response.Success(w, books, s.logger)
 }
 
 // Helper functions

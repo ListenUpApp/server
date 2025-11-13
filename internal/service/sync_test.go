@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -235,4 +236,97 @@ func TestManifestResponse_Structure(t *testing.T) {
 	assert.NoError(t, err)
 	_, err = time.Parse(time.RFC3339, manifest.Checkpoint)
 	assert.NoError(t, err)
+}
+
+// TestGetBooksForSync_WithPagination tests paginated book fetch
+func TestGetBooksForSync_WithPagination(t *testing.T) {
+	syncService, testStore, cleanup := setupTestSync(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create 5 books
+	baseTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	for i := 1; i <= 5; i++ {
+		book := createTestBook(fmt.Sprintf("book-%03d", i), baseTime.Add(time.Duration(i)*time.Hour))
+		require.NoError(t, testStore.CreateBook(ctx, book))
+	}
+
+	// Get first page
+	response, err := syncService.GetBooksForSync(ctx, store.PaginationParams{
+		Limit:  2,
+		Cursor: "",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, response)
+
+	// Verify first page
+	assert.Len(t, response.Books, 2)
+	assert.True(t, response.HasMore)
+	assert.NotEmpty(t, response.NextCursor)
+
+	// Get second page
+	response2, err := syncService.GetBooksForSync(ctx, store.PaginationParams{
+		Limit:  2,
+		Cursor: response.NextCursor,
+	})
+	require.NoError(t, err)
+	assert.Len(t, response2.Books, 2)
+	assert.True(t, response2.HasMore)
+
+	// Get last page
+	response3, err := syncService.GetBooksForSync(ctx, store.PaginationParams{
+		Limit:  2,
+		Cursor: response2.NextCursor,
+	})
+	require.NoError(t, err)
+	assert.Len(t, response3.Books, 1)
+	assert.False(t, response3.HasMore)
+	assert.Empty(t, response3.NextCursor)
+}
+
+// TestGetBooksForSync_Empty tests with no books
+func TestGetBooksForSync_Empty(t *testing.T) {
+	syncService, _, cleanup := setupTestSync(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	response, err := syncService.GetBooksForSync(ctx, store.PaginationParams{
+		Limit:  50,
+		Cursor: "",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, response)
+
+	assert.Empty(t, response.Books)
+	assert.False(t, response.HasMore)
+	assert.Empty(t, response.NextCursor)
+}
+
+// TestGetBooksForSync_SinglePage tests all books fit on one page
+func TestGetBooksForSync_SinglePage(t *testing.T) {
+	syncService, testStore, cleanup := setupTestSync(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create 3 books
+	baseTime := time.Now()
+	for i := 1; i <= 3; i++ {
+		book := createTestBook(fmt.Sprintf("book-%d", i), baseTime.Add(time.Duration(i)*time.Minute))
+		require.NoError(t, testStore.CreateBook(ctx, book))
+	}
+
+	// Request with limit larger than book count
+	response, err := syncService.GetBooksForSync(ctx, store.PaginationParams{
+		Limit:  50,
+		Cursor: "",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, response)
+
+	assert.Len(t, response.Books, 3)
+	assert.False(t, response.HasMore)
+	assert.Empty(t, response.NextCursor)
 }

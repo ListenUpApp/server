@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
@@ -41,12 +42,8 @@ func NewSyncService(store *store.Store, logger *slog.Logger) *SyncService {
 // This provides a high-level overview of the library state including
 // the current checkpoint and counts of various entities
 func (s *SyncService) GetManifest(ctx context.Context) (*ManifestResponse, error) {
-	// Get all books, we can figure out optimizations for this once we build the client out more.
-	// TODO: Look at optimizing this method once we have a better sense of what we're doing.
-	books, err := s.store.ListBooks(ctx, store.PaginationParams{
-		Limit:  10000, // Basically all books, again, we'll optimize this later.
-		Cursor: "",
-	})
+	// Get all book IDs (efficient - doesn't deserialize full books)
+	bookIDs, err := s.store.GetAllBookIDs(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -62,12 +59,6 @@ func (s *SyncService) GetManifest(ctx context.Context) (*ManifestResponse, error
 		checkpoint = time.Now()
 	}
 
-	// Build book IDs list, we'll just send this back for the time being.
-	bookIDs := make([]string, 0, len(books.Items))
-	for _, book := range books.Items {
-		bookIDs = append(bookIDs, book.ID)
-	}
-
 	// Build response
 	manifest := &ManifestResponse{
 		LibraryVersion: checkpoint.Format(time.RFC3339),
@@ -79,5 +70,41 @@ func (s *SyncService) GetManifest(ctx context.Context) (*ManifestResponse, error
 	manifest.Counts.Authors = 0 // Adding this for the future
 	manifest.Counts.Series = 0  // Adding this for the future
 
+	s.logger.Info("manifest generated",
+		"book_count", len(bookIDs),
+		"checkpoint", checkpoint.Format(time.RFC3339),
+	)
+
 	return manifest, nil
+}
+
+// BooksResponse represents paginated books with related entities
+type BooksResponse struct {
+	Books      []*domain.Book `json:"books"`
+	NextCursor string         `json:"next_cursor,omitempty"`
+	HasMore    bool           `json:"has_more"`
+}
+
+// GetBooksForSync returns paginated books for initial sync
+func (s *SyncService) GetBooksForSync(ctx context.Context, params store.PaginationParams) (*BooksResponse, error) {
+	// Validate and set defaults
+	params.Validate()
+
+	result, err := s.store.ListBooks(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &BooksResponse{
+		Books:      result.Items,
+		NextCursor: result.NextCursor,
+		HasMore:    result.HasMore,
+	}
+
+	s.logger.Info("books fetched for sync",
+		"count", len(result.Items),
+		"has_more", result.HasMore,
+	)
+
+	return response, nil
 }

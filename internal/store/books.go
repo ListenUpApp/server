@@ -417,6 +417,41 @@ func (s *Store) ListAllBooks(ctx context.Context) ([]*domain.Book, error) {
 	return books, nil
 }
 
+// GetAllBookIDs returns all book IDs without deserializing full book objects
+// This is more efficient than ListAllBooks when you only need IDs. Again this
+// is mostly just a test right now to see how it feels. We'll refine this once
+// the client is stood up.
+func (s *Store) GetAllBookIDs(ctx context.Context) ([]string, error) {
+	var bookIDs []string
+
+	prefix := []byte(bookPrefix)
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = prefix
+		opts.PrefetchValues = false // Don't fetch values, we only need keys
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+			key := string(item.Key())
+
+			// Extract book ID from key (format: "book:BOOK_ID")
+			bookID := key[len(bookPrefix):]
+			bookIDs = append(bookIDs, bookID)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get all book IDs: %w", err)
+	}
+
+	return bookIDs, nil
+}
+
 // GetBooksByCollectionPaginated returns paginated books in a collection
 func (s *Store) GetBooksByCollectionPaginated(ctx context.Context, collectionID string, params PaginationParams) (*PaginatedResult[*domain.Book], error) {
 	params.Validate()

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -516,4 +517,69 @@ func TestGetBooksByCollectionPaginated(t *testing.T) {
 	assert.Len(t, result.Items, 2)
 	assert.False(t, result.HasMore)
 	assert.Equal(t, 5, result.Total)
+}
+
+// TestGetAllBookIDs tests getting all book IDs efficiently
+func TestGetAllBookIDs(t *testing.T) {
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create test books
+	book1 := createTestBook("book-001")
+	book2 := createTestBook("book-002")
+	book3 := createTestBook("book-003")
+
+	require.NoError(t, store.CreateBook(ctx, book1))
+	require.NoError(t, store.CreateBook(ctx, book2))
+	require.NoError(t, store.CreateBook(ctx, book3))
+
+	// Get all book IDs
+	bookIDs, err := store.GetAllBookIDs(ctx)
+	require.NoError(t, err)
+	assert.Len(t, bookIDs, 3)
+
+	// Verify IDs are present
+	assert.Contains(t, bookIDs, "book-001")
+	assert.Contains(t, bookIDs, "book-002")
+	assert.Contains(t, bookIDs, "book-003")
+}
+
+// TestGetAllBookIDs_Empty tests getting IDs when no books exist
+func TestGetAllBookIDs_Empty(t *testing.T) {
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	bookIDs, err := store.GetAllBookIDs(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, bookIDs)
+}
+
+// TestGetAllBookIDs_ManyBooks tests getting many book IDs
+func TestGetAllBookIDs_ManyBooks(t *testing.T) {
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create many books
+	for i := 1; i <= 100; i++ {
+		book := createTestBook(fmt.Sprintf("book-%03d", i))
+		require.NoError(t, store.CreateBook(ctx, book))
+	}
+
+	// Get all book IDs
+	bookIDs, err := store.GetAllBookIDs(ctx)
+	require.NoError(t, err)
+	assert.Len(t, bookIDs, 100)
+
+	// Verify all IDs are unique
+	idSet := make(map[string]bool)
+	for _, id := range bookIDs {
+		assert.False(t, idSet[id], "Duplicate ID found: %s", id)
+		idSet[id] = true
+	}
 }

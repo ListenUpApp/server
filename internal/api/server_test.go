@@ -313,3 +313,34 @@ func TestGetManifest_Success(t *testing.T) {
 	_, err = time.Parse(time.RFC3339, checkpoint)
 	assert.NoError(t, err)
 }
+
+func TestGetSyncBooks_Success(t *testing.T) {
+	server, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sync/books?limit=50", nil)
+	w := httptest.NewRecorder()
+
+	server.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var result response.Envelope
+	err := json.Unmarshal(w.Body.Bytes(), &result)
+	require.NoError(t, err)
+
+	assert.True(t, result.Success)
+	assert.NotNil(t, result.Data)
+
+	// Verify books response structure
+	data, ok := result.Data.(map[string]any)
+	require.True(t, ok)
+	assert.Contains(t, data, "books")
+	assert.Contains(t, data, "has_more")
+
+	// Verify empty library returns empty books array
+	books, ok := data["books"].([]any)
+	require.True(t, ok)
+	assert.Empty(t, books)
+	assert.Equal(t, false, data["has_more"])
+}
