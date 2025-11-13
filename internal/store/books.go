@@ -142,6 +142,8 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 		return err
 	}
 
+	book.Touch()
+
 	// Use Transaction to update book and indices atomically
 	err = s.db.Update(func(txn *badger.Txn) error {
 		book.Touch()
@@ -208,6 +210,13 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 	})
 	if err != nil {
 		return fmt.Errorf("update book: %w", err)
+	}
+
+	if err := domain.CascadeBookUpdate(ctx, s, book.ID); err != nil {
+		// Log but don't fail the update
+		if s.logger != nil {
+			s.logger.Error("cascaed uodate failed", "book_id", book.ID, "error", err)
+		}
 	}
 
 	if s.logger != nil {
@@ -467,4 +476,51 @@ func (s *Store) GetBooksByCollectionPaginated(ctx context.Context, collectionID 
 	}
 
 	return result, nil
+}
+
+// TouchEntity updated the Updated timestamp for an entity.
+// This implements our CascadeUpdater interface.
+func (s *Store) TouchEntity(ctx context.Context, entityType string, id string) error {
+	switch entityType {
+	case "book":
+		return s.touchBook(ctx, id)
+	// TODO: add authors etc when they're here.
+	default:
+		return fmt.Errorf("unknown entity type: %s", entityType)
+	}
+}
+
+// touchBook updates just the UpdatedAt timestampe for a book without rewriting all data
+func (s *Store) touchBook(ctx context.Context, id string) error {
+	key := []byte(bookPrefix + id)
+
+	return s.db.Update(func(txn *badger.Txn) error {
+		// Get existing book
+		item, err := txn.Get(key)
+		if err != nil {
+			if err == badger.ErrKeyNotFound {
+				return ErrBookNotFound
+			}
+			return err
+		}
+
+		var book domain.Book
+		err = item.Value(func(val []byte) error {
+			return json.Unmarshal(val, &book)
+		})
+		if err != nil {
+			return fmt.Errorf("unmarshal book: %w", err)
+		}
+
+		// Update timestamp
+		book.Touch()
+
+		// Marshal and Save
+		data, err := json.Marshal(&book)
+		if err != nil {
+			return fmt.Errorf("marshal book: %w", err)
+		}
+
+		return txn.Set(key, data)
+	})
 }

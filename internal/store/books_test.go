@@ -12,8 +12,13 @@ import (
 
 // Helper function to create a test book
 func createTestBook(id string) *domain.Book {
+	now := time.Now()
 	return &domain.Book{
-		ID:          id,
+		Syncable: domain.Syncable{
+			ID:        id,
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
 		Title:       "Test Book",
 		Subtitle:    "A Test Subtitle",
 		Authors:     []string{"Test Author"},
@@ -44,9 +49,7 @@ func createTestBook(id string) *domain.Book {
 		},
 		TotalDuration: 900000,
 		TotalSize:     3072000,
-		CreatedAt:     time.Now(),
-		UpdatedAt:     time.Now(),
-		ScannedAt:     time.Now(),
+		ScannedAt:     now,
 	}
 }
 

@@ -570,12 +570,14 @@ func TestConvertChapters_MultiFile(t *testing.T) {
 func TestUpdateBookFromScan(t *testing.T) {
 	originalCreatedAt := time.Now().Add(-24 * time.Hour)
 	existingBook := &domain.Book{
-		ID:         "book-existing-id",
+		Syncable: domain.Syncable{
+			ID:        "book-existing-id",
+			CreatedAt: originalCreatedAt,
+			UpdatedAt: originalCreatedAt,
+		},
 		Title:      "Old Title",
 		Path:       "/old/path",
 		Authors:    []string{"Old Author"},
-		CreatedAt:  originalCreatedAt,
-		UpdatedAt:  originalCreatedAt,
 		ScannedAt:  originalCreatedAt,
 		AudioFiles: []domain.AudioFileInfo{},
 		CoverImage: nil,
@@ -622,9 +624,11 @@ func TestUpdateBookFromScan(t *testing.T) {
 // TestUpdateBookFromScan_PreservesID tests that book ID is never changed
 func TestUpdateBookFromScan_PreservesID(t *testing.T) {
 	existingBook := &domain.Book{
-		ID:        "book-preserve-this-id",
-		Title:     "Old",
-		CreatedAt: time.Now().Add(-1 * time.Hour),
+		Syncable: domain.Syncable{
+			ID:        "book-preserve-this-id",
+			CreatedAt: time.Now().Add(-1 * time.Hour),
+		},
+		Title: "Old",
 	}
 
 	newItem := &LibraryItemData{
