@@ -583,3 +583,282 @@ func TestGetAllBookIDs_ManyBooks(t *testing.T) {
 		idSet[id] = true
 	}
 }
+
+// Soft Delete Tests
+
+// TestSoftDelete verifies that DeleteBook soft-deletes instead of hard-deleting
+func TestSoftDelete(t *testing.T) {
+	ctx := context.Background()
+	s, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	// Create a book
+	book := createTestBook("test-book-001")
+	require.NoError(t, s.CreateBook(ctx, book))
+
+	// Verify book exists
+	retrieved, err := s.GetBook(ctx, book.ID)
+	require.NoError(t, err)
+	require.False(t, retrieved.IsDeleted())
+
+	// Set checkpoint before deletion
+	checkpoint := time.Now()
+	time.Sleep(10 * time.Millisecond)
+
+	// Delete the book
+	err = s.DeleteBook(ctx, book.ID)
+	require.NoError(t, err)
+
+	// GetBook should return not found for deleted books
+	_, err = s.GetBook(ctx, book.ID)
+	assert.ErrorIs(t, err, ErrBookNotFound, "GetBook should return not found for deleted books")
+
+	// But the book should appear in deleted books query
+	deletedIDs, err := s.GetBooksDeletedAfter(ctx, checkpoint)
+	require.NoError(t, err)
+	assert.Contains(t, deletedIDs, book.ID, "Deleted book should appear in GetBooksDeletedAfter")
+}
+
+// TestGetBooksDeletedAfter verifies querying deleted books by timestamp
+func TestGetBooksDeletedAfter(t *testing.T) {
+	ctx := context.Background()
+	s, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	// Create books
+	book1 := createTestBook("book-001")
+	book2 := createTestBook("book-002")
+	book3 := createTestBook("book-003")
+
+	require.NoError(t, s.CreateBook(ctx, book1))
+	require.NoError(t, s.CreateBook(ctx, book2))
+	require.NoError(t, s.CreateBook(ctx, book3))
+
+	// Set checkpoint
+	checkpoint := time.Now()
+	time.Sleep(10 * time.Millisecond)
+
+	// Delete book2 and book3 after checkpoint
+	require.NoError(t, s.DeleteBook(ctx, book2.ID))
+	require.NoError(t, s.DeleteBook(ctx, book3.ID))
+
+	// Query deleted books after checkpoint
+	deletedIDs, err := s.GetBooksDeletedAfter(ctx, checkpoint)
+	require.NoError(t, err)
+
+	// Should return book2 and book3
+	assert.Len(t, deletedIDs, 2, "Should find 2 deleted books")
+
+	expectedDeleted := map[string]bool{
+		book2.ID: true,
+		book3.ID: true,
+	}
+
+	for _, id := range deletedIDs {
+		assert.True(t, expectedDeleted[id], "Unexpected deleted book ID: %s", id)
+		delete(expectedDeleted, id)
+	}
+
+	assert.Empty(t, expectedDeleted, "All expected deleted books should be found")
+}
+
+// TestGetBooksDeletedAfter_Empty verifies empty result when no books deleted
+func TestGetBooksDeletedAfter_Empty(t *testing.T) {
+	ctx := context.Background()
+	s, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	// Create books but don't delete any
+	book1 := createTestBook("book-001")
+	require.NoError(t, s.CreateBook(ctx, book1))
+
+	checkpoint := time.Now()
+
+	// Query deleted books
+	deletedIDs, err := s.GetBooksDeletedAfter(ctx, checkpoint)
+	require.NoError(t, err)
+	assert.Empty(t, deletedIDs, "Should find no deleted books")
+}
+
+// TestGetBooksDeletedAfter_BeforeCheckpoint verifies books deleted before checkpoint are excluded
+func TestGetBooksDeletedAfter_BeforeCheckpoint(t *testing.T) {
+	ctx := context.Background()
+	s, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	// Create books
+	book1 := createTestBook("book-001")
+	book2 := createTestBook("book-002")
+	require.NoError(t, s.CreateBook(ctx, book1))
+	require.NoError(t, s.CreateBook(ctx, book2))
+
+	// Delete book1 before checkpoint
+	require.NoError(t, s.DeleteBook(ctx, book1.ID))
+
+	time.Sleep(10 * time.Millisecond)
+	checkpoint := time.Now()
+	time.Sleep(10 * time.Millisecond)
+
+	// Delete book2 after checkpoint
+	require.NoError(t, s.DeleteBook(ctx, book2.ID))
+
+	// Query deleted books after checkpoint
+	deletedIDs, err := s.GetBooksDeletedAfter(ctx, checkpoint)
+	require.NoError(t, err)
+
+	// Should only return book2
+	assert.Len(t, deletedIDs, 1, "Should find only 1 deleted book")
+	assert.Equal(t, book2.ID, deletedIDs[0], "Should find book2")
+}
+
+// TestListBooksExcludesDeleted verifies ListBooks excludes soft-deleted books
+func TestListBooksExcludesDeleted(t *testing.T) {
+	ctx := context.Background()
+	s, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	// Create books
+	book1 := createTestBook("book-001")
+	book2 := createTestBook("book-002")
+	book3 := createTestBook("book-003")
+
+	require.NoError(t, s.CreateBook(ctx, book1))
+	require.NoError(t, s.CreateBook(ctx, book2))
+	require.NoError(t, s.CreateBook(ctx, book3))
+
+	// Delete book2
+	require.NoError(t, s.DeleteBook(ctx, book2.ID))
+
+	// List books should only return book1 and book3
+	result, err := s.ListBooks(ctx, PaginationParams{Limit: 10})
+	require.NoError(t, err)
+
+	assert.Len(t, result.Items, 2, "Should return 2 non-deleted books")
+
+	returnedIDs := make(map[string]bool)
+	for _, book := range result.Items {
+		returnedIDs[book.ID] = true
+		assert.False(t, book.IsDeleted(), "Returned book should not be deleted")
+	}
+
+	assert.True(t, returnedIDs[book1.ID], "Should include book1")
+	assert.False(t, returnedIDs[book2.ID], "Should not include deleted book2")
+	assert.True(t, returnedIDs[book3.ID], "Should include book3")
+}
+
+// TestListBooksExcludesDeleted_Pagination verifies pagination works correctly with deleted books
+func TestListBooksExcludesDeleted_Pagination(t *testing.T) {
+	ctx := context.Background()
+	s, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	// Create 5 books
+	for i := 1; i <= 5; i++ {
+		book := createTestBook(fmt.Sprintf("book-%03d", i))
+		require.NoError(t, s.CreateBook(ctx, book))
+	}
+
+	// Delete book-002 and book-004
+	require.NoError(t, s.DeleteBook(ctx, "book-002"))
+	require.NoError(t, s.DeleteBook(ctx, "book-004"))
+
+	// List books with limit of 2 (should get book-001 and book-003)
+	result, err := s.ListBooks(ctx, PaginationParams{Limit: 2})
+	require.NoError(t, err)
+
+	assert.Len(t, result.Items, 2, "Should return 2 non-deleted books")
+	assert.True(t, result.HasMore, "Should have more books")
+
+	// Get next page (should get book-005)
+	result2, err := s.ListBooks(ctx, PaginationParams{Limit: 2, Cursor: result.NextCursor})
+	require.NoError(t, err)
+
+	assert.Len(t, result2.Items, 1, "Should return 1 remaining book")
+	assert.False(t, result2.HasMore, "Should have no more books")
+}
+
+// TestGetAllBookIDsExcludesDeleted verifies GetAllBookIDs excludes soft-deleted books
+func TestGetAllBookIDsExcludesDeleted(t *testing.T) {
+	ctx := context.Background()
+	s, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	// Create books
+	book1 := createTestBook("book-001")
+	book2 := createTestBook("book-002")
+	book3 := createTestBook("book-003")
+
+	require.NoError(t, s.CreateBook(ctx, book1))
+	require.NoError(t, s.CreateBook(ctx, book2))
+	require.NoError(t, s.CreateBook(ctx, book3))
+
+	// Delete book2
+	require.NoError(t, s.DeleteBook(ctx, book2.ID))
+
+	// Get all book IDs
+	bookIDs, err := s.GetAllBookIDs(ctx)
+	require.NoError(t, err)
+
+	assert.Len(t, bookIDs, 2, "Should return 2 non-deleted book IDs")
+	assert.Contains(t, bookIDs, book1.ID, "Should include book1")
+	assert.NotContains(t, bookIDs, book2.ID, "Should not include deleted book2")
+	assert.Contains(t, bookIDs, book3.ID, "Should include book3")
+}
+
+// TestSoftDelete_RemovedFromCollections verifies soft delete removes book from collections
+func TestSoftDelete_RemovedFromCollections(t *testing.T) {
+	ctx := context.Background()
+	s, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	// Bootstrap library (creates default collections)
+	bootstrap, err := s.EnsureLibrary(ctx, "/test/audiobooks")
+	require.NoError(t, err)
+
+	// Create book
+	book := createTestBook("book-001")
+	require.NoError(t, s.CreateBook(ctx, book))
+
+	// Add book to default collection
+	require.NoError(t, s.AddBookToCollection(ctx, book.ID, bootstrap.DefaultCollection.ID))
+
+	// Verify book is in collection
+	result, err := s.GetBooksByCollectionPaginated(ctx, bootstrap.DefaultCollection.ID, PaginationParams{Limit: 10})
+	require.NoError(t, err)
+	assert.Len(t, result.Items, 1)
+
+	// Delete book
+	require.NoError(t, s.DeleteBook(ctx, book.ID))
+
+	// Book should be removed from collection
+	result, err = s.GetBooksByCollectionPaginated(ctx, bootstrap.DefaultCollection.ID, PaginationParams{Limit: 10})
+	require.NoError(t, err)
+	assert.Empty(t, result.Items, "Deleted book should be removed from collection")
+}
+
+// TestSoftDelete_UpdatedAtIndexMaintained verifies updated_at index is maintained
+// This is important for delta sync - deleted books must appear in "updated after X" queries
+func TestSoftDelete_UpdatedAtIndexMaintained(t *testing.T) {
+	ctx := context.Background()
+	s, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	// Create book
+	book := createTestBook("book-001")
+	require.NoError(t, s.CreateBook(ctx, book))
+
+	// Wait and set checkpoint
+	time.Sleep(10 * time.Millisecond)
+	checkpoint := time.Now()
+	time.Sleep(10 * time.Millisecond)
+
+	// Delete book
+	require.NoError(t, s.DeleteBook(ctx, book.ID))
+
+	// Verify the book appears in deleted books query
+	// This implicitly verifies the updated_at index was maintained during deletion
+	deletedIDs, err := s.GetBooksDeletedAfter(ctx, checkpoint)
+	require.NoError(t, err)
+	assert.Contains(t, deletedIDs, book.ID,
+		"Deleted book should appear in GetBooksDeletedAfter, proving updated_at index is maintained")
+}
