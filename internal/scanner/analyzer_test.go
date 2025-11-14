@@ -11,15 +11,15 @@ import (
 func TestAnalyzer_Analyze_SingleFile(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create test audio file
+	// Create test audio file.
 	testFile := filepath.Join(tmpDir, "test.m4b")
-	// Copy from testdata
+	// Copy from testdata.
 	srcFile := filepath.Join("audio", "testdata", "test.m4b")
 	data, err := os.ReadFile(srcFile)
 	if err != nil {
 		t.Skip("test audio file not found")
 	}
-	if err := os.WriteFile(testFile, data, 0644); err != nil {
+	if err := os.WriteFile(testFile, data, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -56,7 +56,7 @@ func TestAnalyzer_Analyze_SingleFile(t *testing.T) {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
 
-	// Verify metadata was populated
+	// Verify metadata was populated.
 	if result[0].Metadata == nil {
 		t.Error("expected metadata to be populated")
 	}
@@ -69,7 +69,7 @@ func TestAnalyzer_Analyze_SingleFile(t *testing.T) {
 func TestAnalyzer_Analyze_MultipleFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Copy test file multiple times
+	// Copy test file multiple times.
 	srcFile := filepath.Join("audio", "testdata", "test.m4b")
 	data, err := os.ReadFile(srcFile)
 	if err != nil {
@@ -79,7 +79,7 @@ func TestAnalyzer_Analyze_MultipleFiles(t *testing.T) {
 	var files []AudioFileData
 	for i := 1; i <= 5; i++ {
 		filename := filepath.Join(tmpDir, "test"+string(rune('0'+i))+".m4b")
-		if err := os.WriteFile(filename, data, 0644); err != nil {
+		if err := os.WriteFile(filename, data, 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -115,7 +115,7 @@ func TestAnalyzer_Analyze_MultipleFiles(t *testing.T) {
 		t.Fatalf("expected 5 results, got %d", len(result))
 	}
 
-	// Verify all have metadata
+	// Verify all have metadata.
 	for i, r := range result {
 		if r.Metadata == nil {
 			t.Errorf("file %d: expected metadata to be populated", i)
@@ -126,7 +126,7 @@ func TestAnalyzer_Analyze_MultipleFiles(t *testing.T) {
 func TestAnalyzer_Analyze_ContextCancellation(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Copy test file multiple times
+	// Copy test file multiple times.
 	srcFile := filepath.Join("audio", "testdata", "test.m4b")
 	data, err := os.ReadFile(srcFile)
 	if err != nil {
@@ -136,7 +136,7 @@ func TestAnalyzer_Analyze_ContextCancellation(t *testing.T) {
 	var files []AudioFileData
 	for i := 1; i <= 10; i++ {
 		filename := filepath.Join(tmpDir, "test"+string(rune('0'+i))+".m4b")
-		if err := os.WriteFile(filename, data, 0644); err != nil {
+		if err := os.WriteFile(filename, data, 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -158,7 +158,7 @@ func TestAnalyzer_Analyze_ContextCancellation(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	analyzer := NewAnalyzer(logger)
 
-	// Cancel context immediately
+	// Cancel context immediately.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -168,16 +168,16 @@ func TestAnalyzer_Analyze_ContextCancellation(t *testing.T) {
 
 	_, err = analyzer.Analyze(ctx, files, opts)
 	if err == nil {
-		t.Error("expected error for cancelled context, got nil")
+		t.Error("expected error for canceled context, got nil")
 	}
 }
 
 func TestAnalyzer_Analyze_InvalidFile(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create invalid audio file
+	// Create invalid audio file.
 	invalidFile := filepath.Join(tmpDir, "invalid.mp3")
-	if err := os.WriteFile(invalidFile, []byte("not audio"), 0644); err != nil {
+	if err := os.WriteFile(invalidFile, []byte("not audio"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -210,12 +210,12 @@ func TestAnalyzer_Analyze_InvalidFile(t *testing.T) {
 		t.Fatalf("Analyze should not fail on invalid file: %v", err)
 	}
 
-	// Should return the file but without metadata
+	// Should return the file but without metadata.
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
 
-	// Metadata should be nil for invalid file
+	// Metadata should be nil for invalid file.
 	if result[0].Metadata != nil {
 		t.Error("expected metadata to be nil for invalid file")
 	}
@@ -243,7 +243,7 @@ func TestAnalyzer_Analyze_EmptyList(t *testing.T) {
 func TestAnalyzer_Analyze_DefaultWorkers(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create a test file
+	// Create a test file.
 	srcFile := filepath.Join("audio", "testdata", "test.m4b")
 	data, err := os.ReadFile(srcFile)
 	if err != nil {
@@ -251,7 +251,7 @@ func TestAnalyzer_Analyze_DefaultWorkers(t *testing.T) {
 	}
 
 	testFile := filepath.Join(tmpDir, "test.m4b")
-	if err := os.WriteFile(testFile, data, 0644); err != nil {
+	if err := os.WriteFile(testFile, data, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -296,7 +296,7 @@ func TestAnalyzer_Analyze_DefaultWorkers(t *testing.T) {
 func TestAnalyzer_Analyze_PreservesOrder(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Copy test file multiple times
+	// Copy test file multiple times.
 	srcFile := filepath.Join("audio", "testdata", "test.m4b")
 	data, err := os.ReadFile(srcFile)
 	if err != nil {
@@ -306,7 +306,7 @@ func TestAnalyzer_Analyze_PreservesOrder(t *testing.T) {
 	var files []AudioFileData
 	for i := 1; i <= 5; i++ {
 		filename := filepath.Join(tmpDir, "test"+string(rune('0'+i))+".m4b")
-		if err := os.WriteFile(filename, data, 0644); err != nil {
+		if err := os.WriteFile(filename, data, 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -338,7 +338,7 @@ func TestAnalyzer_Analyze_PreservesOrder(t *testing.T) {
 		t.Fatalf("Analyze failed: %v", err)
 	}
 
-	// Verify order is preserved
+	// Verify order is preserved.
 	for i, r := range result {
 		if r.Path != files[i].Path {
 			t.Errorf("order not preserved: expected %s at position %d, got %s",
@@ -347,11 +347,11 @@ func TestAnalyzer_Analyze_PreservesOrder(t *testing.T) {
 	}
 }
 
-// Benchmark to test performance
+// Benchmark to test performance.
 func BenchmarkAnalyzer_Analyze(b *testing.B) {
 	tmpDir := b.TempDir()
 
-	// Copy test file
+	// Copy test file.
 	srcFile := filepath.Join("audio", "testdata", "test.m4b")
 	data, err := os.ReadFile(srcFile)
 	if err != nil {
@@ -359,7 +359,7 @@ func BenchmarkAnalyzer_Analyze(b *testing.B) {
 	}
 
 	testFile := filepath.Join(tmpDir, "test.m4b")
-	if err := os.WriteFile(testFile, data, 0644); err != nil {
+	if err := os.WriteFile(testFile, data, 0o644); err != nil {
 		b.Fatal(err)
 	}
 

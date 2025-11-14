@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestConvertToBook_WithFullMetadata tests converting a library item with complete metadata
+// TestConvertToBook_WithFullMetadata tests converting a library item with complete metadata.
 func TestConvertToBook_WithFullMetadata(t *testing.T) {
 	now := time.Now()
 	item := &LibraryItemData{
@@ -80,7 +80,7 @@ func TestConvertToBook_WithFullMetadata(t *testing.T) {
 	assert.False(t, book.Explicit)
 	assert.False(t, book.Abridged)
 
-	// Check audio file conversion
+	// Check audio file conversion.
 	require.Len(t, book.AudioFiles, 1)
 	assert.Equal(t, domain.GenerateAudioFileID(1001), book.AudioFiles[0].ID)
 	assert.Equal(t, "/audiobooks/test-book/track01.mp3", book.AudioFiles[0].Path)
@@ -92,11 +92,11 @@ func TestConvertToBook_WithFullMetadata(t *testing.T) {
 	assert.Equal(t, 128000, book.AudioFiles[0].Bitrate)
 	assert.Equal(t, "mp3", book.AudioFiles[0].Codec)
 
-	// Check totals
+	// Check totals.
 	assert.Equal(t, int64(300000), book.TotalDuration)
 	assert.Equal(t, int64(1024000), book.TotalSize)
 
-	// Check cover image
+	// Check cover image.
 	require.NotNil(t, book.CoverImage)
 	assert.Equal(t, "/audiobooks/test-book/cover.jpg", book.CoverImage.Path)
 	assert.Equal(t, "cover.jpg", book.CoverImage.Filename)
@@ -104,13 +104,13 @@ func TestConvertToBook_WithFullMetadata(t *testing.T) {
 	assert.Equal(t, "jpg", book.CoverImage.Format)
 	assert.Equal(t, uint64(1002), book.CoverImage.Inode)
 
-	// Check timestamps
+	// Check timestamps.
 	assert.False(t, book.CreatedAt.IsZero())
 	assert.False(t, book.UpdatedAt.IsZero())
 	assert.False(t, book.ScannedAt.IsZero())
 }
 
-// TestConvertToBook_WithoutMetadata tests converting without metadata (uses folder name)
+// TestConvertToBook_WithoutMetadata tests converting without metadata (uses folder name).
 func TestConvertToBook_WithoutMetadata(t *testing.T) {
 	now := time.Now()
 	item := &LibraryItemData{
@@ -139,7 +139,7 @@ func TestConvertToBook_WithoutMetadata(t *testing.T) {
 	assert.Empty(t, book.Narrators)
 }
 
-// TestConvertToBook_MultipleAudioFiles tests converting with multiple audio files
+// TestConvertToBook_MultipleAudioFiles tests converting with multiple audio files.
 func TestConvertToBook_MultipleAudioFiles(t *testing.T) {
 	now := time.Now()
 	item := &LibraryItemData{
@@ -180,18 +180,18 @@ func TestConvertToBook_MultipleAudioFiles(t *testing.T) {
 	book, err := ConvertToBook(item)
 	require.NoError(t, err)
 
-	// Should be sorted by filename
+	// Should be sorted by filename.
 	require.Len(t, book.AudioFiles, 3)
 	assert.Equal(t, "track01.mp3", book.AudioFiles[0].Filename)
 	assert.Equal(t, "track02.mp3", book.AudioFiles[1].Filename)
 	assert.Equal(t, "track03.mp3", book.AudioFiles[2].Filename)
 
-	// Total duration should be sum of all files
+	// Total duration should be sum of all files.
 	assert.Equal(t, int64(1800000), book.TotalDuration) // 30 minutes in ms
 	assert.Equal(t, int64(6000000), book.TotalSize)
 }
 
-// TestConvertToBook_WithSeries tests converting with series information
+// TestConvertToBook_WithSeries tests converting with series information.
 func TestConvertToBook_WithSeries(t *testing.T) {
 	item := &LibraryItemData{
 		Path: "/audiobooks/test",
@@ -222,7 +222,7 @@ func TestConvertToBook_WithSeries(t *testing.T) {
 	assert.Equal(t, "1", book.Series[1].Sequence)
 }
 
-// TestConvertToBook_WithChapters_SingleFile tests chapter conversion for single-file audiobook
+// TestConvertToBook_WithChapters_SingleFile tests chapter conversion for single-file audiobook.
 func TestConvertToBook_WithChapters_SingleFile(t *testing.T) {
 	item := &LibraryItemData{
 		Path: "/audiobooks/test",
@@ -250,7 +250,7 @@ func TestConvertToBook_WithChapters_SingleFile(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, book.Chapters, 3)
 
-	// All chapters should reference the single audio file
+	// All chapters should reference the single audio file.
 	audioFileID := book.AudioFiles[0].ID
 	assert.Equal(t, 0, book.Chapters[0].Index)
 	assert.Equal(t, "Chapter 1", book.Chapters[0].Title)
@@ -265,7 +265,7 @@ func TestConvertToBook_WithChapters_SingleFile(t *testing.T) {
 	assert.Equal(t, audioFileID, book.Chapters[2].AudioFileID)
 }
 
-// TestConvertToBook_WithChapters_MultiFile tests chapter conversion for multi-file audiobook
+// TestConvertToBook_WithChapters_MultiFile tests chapter conversion for multi-file audiobook.
 func TestConvertToBook_WithChapters_MultiFile(t *testing.T) {
 	item := &LibraryItemData{
 		Path: "/audiobooks/test",
@@ -305,16 +305,16 @@ func TestConvertToBook_WithChapters_MultiFile(t *testing.T) {
 	file1ID := book.AudioFiles[0].ID
 	file2ID := book.AudioFiles[1].ID
 
-	// Chapters 1 & 2 in first file (0-20 minutes)
+	// Chapters 1 & 2 in first file (0-20 minutes).
 	assert.Equal(t, file1ID, book.Chapters[0].AudioFileID)
 	assert.Equal(t, file1ID, book.Chapters[1].AudioFileID)
 
-	// Chapters 3 & 4 in second file (20-50 minutes)
+	// Chapters 3 & 4 in second file (20-50 minutes).
 	assert.Equal(t, file2ID, book.Chapters[2].AudioFileID)
 	assert.Equal(t, file2ID, book.Chapters[3].AudioFileID)
 }
 
-// TestConvertToBook_NoCoverImage tests conversion without cover image
+// TestConvertToBook_NoCoverImage tests conversion without cover image.
 func TestConvertToBook_NoCoverImage(t *testing.T) {
 	item := &LibraryItemData{
 		Path: "/audiobooks/test",
@@ -335,7 +335,7 @@ func TestConvertToBook_NoCoverImage(t *testing.T) {
 	assert.Nil(t, book.CoverImage)
 }
 
-// TestConvertToBook_MultipleCoverImages tests that only first image is used
+// TestConvertToBook_MultipleCoverImages tests that only first image is used.
 func TestConvertToBook_MultipleCoverImages(t *testing.T) {
 	now := time.Now()
 	item := &LibraryItemData{
@@ -375,7 +375,7 @@ func TestConvertToBook_MultipleCoverImages(t *testing.T) {
 	assert.Equal(t, "cover.jpg", book.CoverImage.Filename) // Only first image used
 }
 
-// TestConvertToBook_FileExtensions tests various file extension handling
+// TestConvertToBook_FileExtensions tests various file extension handling.
 func TestConvertToBook_FileExtensions(t *testing.T) {
 	tests := []struct {
 		ext      string
@@ -412,7 +412,7 @@ func TestConvertToBook_FileExtensions(t *testing.T) {
 	}
 }
 
-// TestSortAudioFilesByFilename tests the sorting function
+// TestSortAudioFilesByFilename tests the sorting function.
 func TestSortAudioFilesByFilename(t *testing.T) {
 	files := []domain.AudioFileInfo{
 		{Filename: "track10.mp3"},
@@ -423,21 +423,21 @@ func TestSortAudioFilesByFilename(t *testing.T) {
 
 	sortAudioFilesByFilename(files)
 
-	// Simple string comparison (not natural sort yet)
+	// Simple string comparison (not natural sort yet).
 	assert.Equal(t, "track03.mp3", files[0].Filename)
 	assert.Equal(t, "track1.mp3", files[1].Filename)
 	assert.Equal(t, "track10.mp3", files[2].Filename)
 	assert.Equal(t, "track2.mp3", files[3].Filename)
 }
 
-// TestSortAudioFilesByFilename_Empty tests sorting empty slice
+// TestSortAudioFilesByFilename_Empty tests sorting empty slice.
 func TestSortAudioFilesByFilename_Empty(t *testing.T) {
 	files := []domain.AudioFileInfo{}
 	sortAudioFilesByFilename(files)
 	assert.Empty(t, files)
 }
 
-// TestSortAudioFilesByFilename_Single tests sorting single file
+// TestSortAudioFilesByFilename_Single tests sorting single file.
 func TestSortAudioFilesByFilename_Single(t *testing.T) {
 	files := []domain.AudioFileInfo{
 		{Filename: "track1.mp3"},
@@ -447,7 +447,7 @@ func TestSortAudioFilesByFilename_Single(t *testing.T) {
 	assert.Equal(t, "track1.mp3", files[0].Filename)
 }
 
-// TestCompareFilenames tests filename comparison
+// TestCompareFilenames tests filename comparison.
 func TestCompareFilenames(t *testing.T) {
 	tests := []struct {
 		a        string
@@ -469,7 +469,7 @@ func TestCompareFilenames(t *testing.T) {
 	}
 }
 
-// TestFindAudioFileForChapter tests chapter-to-file matching
+// TestFindAudioFileForChapter tests chapter-to-file matching.
 func TestFindAudioFileForChapter(t *testing.T) {
 	files := []domain.AudioFileInfo{
 		{ID: "af-1", Duration: 600000},  // 10 minutes (0-10)
@@ -479,15 +479,15 @@ func TestFindAudioFileForChapter(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		startMs    int64
 		expectedID string
+		startMs    int64
 	}{
-		{"start of first file", 0, "af-1"},
-		{"middle of first file", 300000, "af-1"},  // 5 min
-		{"start of second file", 600000, "af-2"},  // 10 min
-		{"middle of second file", 900000, "af-2"}, // 15 min
-		{"start of third file", 1500000, "af-3"},  // 25 min
-		{"end of last file", 2700000, "af-3"},     // 45 min (beyond end -> last file)
+		{name: "start of first file", startMs: 0, expectedID: "af-1"},
+		{name: "middle of first file", startMs: 300000, expectedID: "af-1"},  // 5 min
+		{name: "start of second file", startMs: 600000, expectedID: "af-2"},  // 10 min
+		{name: "middle of second file", startMs: 900000, expectedID: "af-2"}, // 15 min
+		{name: "start of third file", startMs: 1500000, expectedID: "af-3"},  // 25 min
+		{name: "end of last file", startMs: 2700000, expectedID: "af-3"},     // 45 min (beyond end -> last file)
 	}
 
 	for _, tt := range tests {
@@ -498,13 +498,13 @@ func TestFindAudioFileForChapter(t *testing.T) {
 	}
 }
 
-// TestFindAudioFileForChapter_EmptyFiles tests with no audio files
+// TestFindAudioFileForChapter_EmptyFiles tests with no audio files.
 func TestFindAudioFileForChapter_EmptyFiles(t *testing.T) {
 	result := findAudioFileForChapter(1000, []domain.AudioFileInfo{})
 	assert.Empty(t, result)
 }
 
-// TestConvertChapters_Empty tests converting empty chapters
+// TestConvertChapters_Empty tests converting empty chapters.
 func TestConvertChapters_Empty(t *testing.T) {
 	audioFiles := []domain.AudioFileInfo{
 		{ID: "af-1", Duration: 600000},
@@ -514,7 +514,7 @@ func TestConvertChapters_Empty(t *testing.T) {
 	assert.Nil(t, result)
 }
 
-// TestConvertChapters_SingleFile tests chapter conversion for single file
+// TestConvertChapters_SingleFile tests chapter conversion for single file.
 func TestConvertChapters_SingleFile(t *testing.T) {
 	audioFiles := []domain.AudioFileInfo{
 		{ID: "af-1", Duration: 3600000}, // 60 minutes
@@ -529,7 +529,7 @@ func TestConvertChapters_SingleFile(t *testing.T) {
 	result := convertChapters(chapters, audioFiles)
 	require.Len(t, result, 3)
 
-	// All should reference the same file
+	// All should reference the same file.
 	for i, ch := range result {
 		assert.Equal(t, i, ch.Index)
 		assert.Equal(t, "af-1", ch.AudioFileID)
@@ -540,7 +540,7 @@ func TestConvertChapters_SingleFile(t *testing.T) {
 	assert.Equal(t, int64(300000), result[0].EndTime)
 }
 
-// TestConvertChapters_MultiFile tests chapter conversion for multiple files
+// TestConvertChapters_MultiFile tests chapter conversion for multiple files.
 func TestConvertChapters_MultiFile(t *testing.T) {
 	audioFiles := []domain.AudioFileInfo{
 		{ID: "af-1", Duration: 1200000}, // 20 minutes
@@ -557,16 +557,16 @@ func TestConvertChapters_MultiFile(t *testing.T) {
 	result := convertChapters(chapters, audioFiles)
 	require.Len(t, result, 4)
 
-	// First two chapters in first file
+	// First two chapters in first file.
 	assert.Equal(t, "af-1", result[0].AudioFileID)
 	assert.Equal(t, "af-1", result[1].AudioFileID)
 
-	// Last two chapters in second file
+	// Last two chapters in second file.
 	assert.Equal(t, "af-2", result[2].AudioFileID)
 	assert.Equal(t, "af-2", result[3].AudioFileID)
 }
 
-// TestUpdateBookFromScan tests updating existing book with new scan data
+// TestUpdateBookFromScan tests updating existing book with new scan data.
 func TestUpdateBookFromScan(t *testing.T) {
 	originalCreatedAt := time.Now().Add(-24 * time.Hour)
 	existingBook := &domain.Book{
@@ -606,22 +606,22 @@ func TestUpdateBookFromScan(t *testing.T) {
 	err := UpdateBookFromScan(existingBook, newItem)
 	require.NoError(t, err)
 
-	// ID and CreatedAt should be preserved
+	// ID and CreatedAt should be preserved.
 	assert.Equal(t, "book-existing-id", existingBook.ID)
 	assert.Equal(t, originalCreatedAt, existingBook.CreatedAt)
 
-	// Everything else should be updated
+	// Everything else should be updated.
 	assert.Equal(t, "New Title", existingBook.Title)
 	assert.Equal(t, "/new/path", existingBook.Path)
 	assert.Equal(t, []string{"New Author"}, existingBook.Authors)
 	assert.Len(t, existingBook.AudioFiles, 1)
 
-	// UpdatedAt and ScannedAt should be refreshed
+	// UpdatedAt and ScannedAt should be refreshed.
 	assert.True(t, existingBook.UpdatedAt.After(originalCreatedAt))
 	assert.True(t, existingBook.ScannedAt.After(originalCreatedAt))
 }
 
-// TestUpdateBookFromScan_PreservesID tests that book ID is never changed
+// TestUpdateBookFromScan_PreservesID tests that book ID is never changed.
 func TestUpdateBookFromScan_PreservesID(t *testing.T) {
 	existingBook := &domain.Book{
 		Syncable: domain.Syncable{
@@ -648,11 +648,11 @@ func TestUpdateBookFromScan_PreservesID(t *testing.T) {
 	err := UpdateBookFromScan(existingBook, newItem)
 	require.NoError(t, err)
 
-	// ID must never change
+	// ID must never change.
 	assert.Equal(t, "book-preserve-this-id", existingBook.ID)
 }
 
-// TestConvertToBook_AudioFileWithoutMetadata tests audio file without metadata
+// TestConvertToBook_AudioFileWithoutMetadata tests audio file without metadata.
 func TestConvertToBook_AudioFileWithoutMetadata(t *testing.T) {
 	item := &LibraryItemData{
 		Path: "/audiobooks/test",
@@ -672,14 +672,14 @@ func TestConvertToBook_AudioFileWithoutMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, book.AudioFiles, 1)
 
-	// Duration should be 0 if no metadata
+	// Duration should be 0 if no metadata.
 	assert.Equal(t, int64(0), book.AudioFiles[0].Duration)
 	assert.Equal(t, 0, book.AudioFiles[0].Bitrate)
 	assert.Empty(t, book.AudioFiles[0].Codec)
 
-	// TotalDuration should be 0
+	// TotalDuration should be 0.
 	assert.Equal(t, int64(0), book.TotalDuration)
 
-	// TotalSize should still be set
+	// TotalSize should still be set.
 	assert.Equal(t, int64(1024000), book.TotalSize)
 }

@@ -1,7 +1,9 @@
+// Package scanner provides functionality for discovering, analyzing, and cataloging audiobook files.
 package scanner
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"path/filepath"
 	"runtime"
@@ -10,13 +12,13 @@ import (
 	"github.com/listenupapp/listenup-server/internal/scanner/audio"
 )
 
-// Analyzer analyzes audio files and extracts metadata
+// Analyzer analyzes audio files and extracts metadata.
 type Analyzer struct {
 	logger *slog.Logger
 	parser audio.Parser
 }
 
-// NewAnalyzer creates a new analyzer
+// NewAnalyzer creates a new analyzer.
 func NewAnalyzer(logger *slog.Logger) *Analyzer {
 	return &Analyzer{
 		logger: logger,
@@ -24,47 +26,50 @@ func NewAnalyzer(logger *slog.Logger) *Analyzer {
 	}
 }
 
-// AnalyzeOptions configures analysis behavior
+// AnalyzeOptions configures analysis behavior.
 type AnalyzeOptions struct {
-	// Number of concurrent workers
+	// Number of concurrent workers.
 	Workers int
 
-	// Skip files that haven't changed (based on modtime/size
+	// Skip files that haven't changed (based on modtime/size.
 	UseCache bool
 }
 
+// Analyze analyzes audio files and extracts metadata concurrently.
+//
+//nolint:gocyclo // Acceptable complexity for concurrent worker pool coordination
 func (a *Analyzer) Analyze(ctx context.Context, files []AudioFileData, opts AnalyzeOptions) ([]AudioFileData, error) {
-	// Handle empty input
+	// Handle empty input.
 	if len(files) == 0 {
 		return []AudioFileData{}, nil
 	}
 
-	// Default workers to runtime.NumCPU() if not specified
+	// Default workers to runtime.NumCPU() if not specified.
 	workers := opts.Workers
 	if workers <= 0 {
 		workers = runtime.NumCPU()
 	}
 
-	// Create job and result channels
+	// Create job and result channels.
 	type job struct {
 		file  AudioFileData
 		index int
 	}
 
 	type result struct {
+		err   error
 		file  AudioFileData
 		index int
-		err   error
 	}
 
 	jobs := make(chan job, len(files))
 	results := make(chan result, len(files))
 
-	// Start workers
+	// Start workers.
 	for range workers {
 		go func() {
 			for j := range jobs {
-				// Check context cancellation
+				// Check context cancellation.
 				select {
 				case <-ctx.Done():
 					results <- result{file: j.file, index: j.index, err: ctx.Err()}
@@ -72,23 +77,23 @@ func (a *Analyzer) Analyze(ctx context.Context, files []AudioFileData, opts Anal
 				default:
 				}
 
-				// Parse metadata
+				// Parse metadata.
 				metadata, err := a.parser.Parse(ctx, j.file.Path)
 				if err != nil {
 					a.logger.Error("failed to parse file", "path", j.file.Path, "error", err)
-					// Continue without metadata rather than failing
+					// Continue without metadata rather than failing.
 					results <- result{file: j.file, index: j.index, err: err}
 					continue
 				}
 
-				// Convert audio.Metadata to AudioMetadata
+				// Convert audio.Metadata to AudioMetadata.
 				j.file.Metadata = convertMetadata(metadata)
 				results <- result{file: j.file, index: j.index}
 			}
 		}()
 	}
 
-	// Send jobs
+	// Send jobs.
 	for i, file := range files {
 		select {
 		case jobs <- job{file: file, index: i}:
@@ -99,54 +104,55 @@ func (a *Analyzer) Analyze(ctx context.Context, files []AudioFileData, opts Anal
 	}
 	close(jobs)
 
-	// Collect results
+	// Collect results.
 	parsedFiles := make([]AudioFileData, len(files))
-	var firstErr error
 
 	for range len(files) {
 		select {
 		case r := <-results:
 			parsedFiles[r.index] = r.file
-			if r.err != nil && firstErr == nil {
-				// Check if it's a context error (should fail fast)
-				if r.err == context.Canceled || r.err == context.DeadlineExceeded {
-					return nil, r.err
-				}
-				// Otherwise just log and continue
+			// Check if it's a context error (should fail fast).
+			if r.err != nil && (errors.Is(r.err, context.Canceled) || errors.Is(r.err, context.DeadlineExceeded)) {
+				return nil, r.err
 			}
+			// Otherwise individual file errors are logged by workers and gracefully ignored.
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
 	}
 
-	return parsedFiles, firstErr
+	return parsedFiles, nil
 }
 
-// ItemType represents the type of library item
+// ItemType represents the type of library item.
 type ItemType int
 
+// ItemType constants define the different types of audiobook items.
 const (
-	ItemTypeSingleFile ItemType = iota // Single audio file (M4B or single MP3)
-	ItemTypeMultiFile                  // Multiple files (MP3 album/audiobook)
+	// ItemTypeSingleFile represents a single audio file (M4B or single MP3).
+	ItemTypeSingleFile ItemType = iota
+	// ItemTypeMultiFile represents multiple files (MP3 album/audiobook).
+	ItemTypeMultiFile
 )
 
-// AnalyzeItems analyzes library items with multi-file classification
+// AnalyzeItems analyzes library items with multi-file classification.
 func (a *Analyzer) AnalyzeItems(ctx context.Context, items []LibraryItemData) ([]LibraryItemData, error) {
 	if len(items) == 0 {
 		return []LibraryItemData{}, nil
 	}
 
-	// Process each item
+	// Process each item.
 	results := make([]LibraryItemData, len(items))
 
-	for i, item := range items {
-		// Classify item
-		itemType := classifyItem(item)
+	for i := range items {
+		item := &items[i]
+		// Classify item.
+		itemType := classifyItem(*item)
 
-		// Analyze based on type
+		// Analyze based on type.
 		switch itemType {
 		case ItemTypeSingleFile:
-			// Single file - parse it
+			// Single file - parse it.
 			if len(item.AudioFiles) > 0 {
 				metadata, parseErr := a.parser.Parse(ctx, item.AudioFiles[0].Path)
 				if parseErr != nil {
@@ -159,7 +165,7 @@ func (a *Analyzer) AnalyzeItems(ctx context.Context, items []LibraryItemData) ([
 			}
 
 		case ItemTypeMultiFile:
-			// Multiple files - aggregate them
+			// Multiple files - aggregate them.
 			paths := make([]string, len(item.AudioFiles))
 			for j, file := range item.AudioFiles {
 				paths[j] = file.Path
@@ -171,18 +177,16 @@ func (a *Analyzer) AnalyzeItems(ctx context.Context, items []LibraryItemData) ([
 					"path", item.Path,
 					"files", len(paths),
 					"error", parseErr)
-			} else {
-				// Store aggregated metadata in first file
-				// (The item-level BookMetadata will be built later)
-				if len(item.AudioFiles) > 0 {
-					item.AudioFiles[0].Metadata = convertMetadata(metadata)
-				}
+			} else if len(item.AudioFiles) > 0 {
+				// Store aggregated metadata in first file.
+				// (The item-level BookMetadata will be built later).
+				item.AudioFiles[0].Metadata = convertMetadata(metadata)
 			}
 		}
 
-		results[i] = item
+		results[i] = *item
 
-		// Check for context cancellation
+		// Check for context cancellation.
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -193,16 +197,16 @@ func (a *Analyzer) AnalyzeItems(ctx context.Context, items []LibraryItemData) ([
 	return results, nil
 }
 
-// classifyItem determines if an item is single-file or multi-file
+// classifyItem determines if an item is single-file or multi-file.
 func classifyItem(item LibraryItemData) ItemType {
 	audioCount := len(item.AudioFiles)
 
-	// No audio files or single file
+	// No audio files or single file.
 	if audioCount <= 1 {
 		return ItemTypeSingleFile
 	}
 
-	// Check file types
+	// Check file types.
 	hasMP3 := false
 	hasM4B := false
 
@@ -216,12 +220,12 @@ func classifyItem(item LibraryItemData) ItemType {
 		}
 	}
 
-	// Multiple MP3 files = multi-file audiobook/album
+	// Multiple MP3 files = multi-file audiobook/album.
 	if hasMP3 && audioCount > 1 {
 		return ItemTypeMultiFile
 	}
 
-	// Multiple M4B files = error condition, but treat as single file
+	// Multiple M4B files = error condition, but treat as single file.
 	if hasM4B && audioCount > 1 {
 		// Log warning?
 		return ItemTypeSingleFile
@@ -230,7 +234,7 @@ func classifyItem(item LibraryItemData) ItemType {
 	return ItemTypeSingleFile
 }
 
-// convertMetadata converts audio.Metadata to AudioMetadata
+// convertMetadata converts audio.Metadata to AudioMetadata.
 func convertMetadata(src *audio.Metadata) *AudioMetadata {
 	if src == nil {
 		return nil
@@ -267,7 +271,7 @@ func convertMetadata(src *audio.Metadata) *AudioMetadata {
 		CoverMIME:   src.CoverMIME,
 	}
 
-	// Convert chapters
+	// Convert chapters.
 	for _, ch := range src.Chapters {
 		dst.Chapters = append(dst.Chapters, Chapter{
 			ID:        ch.Index,

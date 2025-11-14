@@ -78,9 +78,9 @@ func TestNew_FormatAutoDetection(t *testing.T) {
 			if tt.wantFormat == "json" {
 				assert.Contains(t, output, `"msg":"test"`)
 			} else {
-				// Pretty format should contain ANSI codes
+				// Pretty format should contain ANSI codes.
 				assert.Contains(t, output, "test")
-				// Should have some color codes (though exact format may vary)
+				// Should have some color codes (though exact format may vary).
 				assert.True(t, len(output) > len("test\n"))
 			}
 		})
@@ -99,7 +99,7 @@ func TestNew_ExplicitFormat(t *testing.T) {
 	logger := New(cfg)
 	logger.Info("test")
 
-	// Should use JSON despite development environment
+	// Should use JSON despite development environment.
 	assert.Contains(t, buf.String(), `"msg":"test"`)
 }
 
@@ -195,13 +195,13 @@ func TestPrettyHandler_Handle(t *testing.T) {
 
 func TestPrettyHandler_LevelFormatting(t *testing.T) {
 	tests := []struct {
-		level      slog.Level
 		wantString string
+		level      slog.Level
 	}{
-		{slog.LevelDebug, "DBG"},
-		{slog.LevelInfo, "INF"},
-		{slog.LevelWarn, "WRN"},
-		{slog.LevelError, "ERR"},
+		{level: slog.LevelDebug, wantString: "DBG"},
+		{level: slog.LevelInfo, wantString: "INF"},
+		{level: slog.LevelWarn, wantString: "WRN"},
+		{level: slog.LevelError, wantString: "ERR"},
 	}
 
 	for _, tt := range tests {
@@ -225,7 +225,7 @@ func TestPrettyHandler_WithAttrs(t *testing.T) {
 		Level: slog.LevelInfo,
 	})
 
-	// Add attributes to handler
+	// Add attributes to handler.
 	handlerWithAttrs := handler.WithAttrs([]slog.Attr{
 		slog.String("service", "test-service"),
 		slog.Int("version", 1),
@@ -246,18 +246,18 @@ func TestPrettyHandler_WithGroup(t *testing.T) {
 		Level: slog.LevelInfo,
 	})
 
-	// Add group (empty group should return same handler)
+	// Add group (empty group should return same handler).
 	handlerWithEmptyGroup := handler.WithGroup("")
 	assert.Equal(t, handler, handlerWithEmptyGroup)
 
-	// Add actual group
+	// Add actual group.
 	handlerWithGroup := handler.WithGroup("request")
 	assert.NotEqual(t, handler, handlerWithGroup)
 
 	logger := slog.New(handlerWithGroup)
 	logger.Info("test message")
 
-	// Should still log the message
+	// Should still log the message.
 	assert.Contains(t, buf.String(), "test message")
 }
 
@@ -272,20 +272,20 @@ func TestPrettyHandler_WithSource(t *testing.T) {
 	logger.Info("test message")
 
 	output := buf.String()
-	// Should contain source info (filename:line)
+	// Should contain source info (filename:line).
 	assert.Contains(t, output, "logger_test.go:")
 }
 
 func TestFormatLevel(t *testing.T) {
 	tests := []struct {
-		level     slog.Level
 		wantStr   string
 		wantColor string
+		level     slog.Level
 	}{
-		{slog.LevelDebug, "DBG", colorMagenta},
-		{slog.LevelInfo, "INF", colorGreen},
-		{slog.LevelWarn, "WRN", colorYellow},
-		{slog.LevelError, "ERR", colorRed},
+		{level: slog.LevelDebug, wantStr: "DBG", wantColor: colorMagenta},
+		{level: slog.LevelInfo, wantStr: "INF", wantColor: colorGreen},
+		{level: slog.LevelWarn, wantStr: "WRN", wantColor: colorYellow},
+		{level: slog.LevelError, wantStr: "ERR", wantColor: colorRed},
 	}
 
 	for _, tt := range tests {
@@ -421,7 +421,7 @@ func TestLogger_AllLevels(t *testing.T) {
 	assert.Contains(t, output, "warn message")
 	assert.Contains(t, output, "error message")
 
-	// Check level indicators
+	// Check level indicators.
 	assert.Contains(t, output, "DBG")
 	assert.Contains(t, output, "INF")
 	assert.Contains(t, output, "WRN")
@@ -444,10 +444,10 @@ func TestLogger_LevelFiltering(t *testing.T) {
 	logger.Error("error message")
 
 	output := buf.String()
-	// Should not contain debug or info
+	// Should not contain debug or info.
 	assert.NotContains(t, output, "debug message")
 	assert.NotContains(t, output, "info message")
-	// Should contain warn and error
+	// Should contain warn and error.
 	assert.Contains(t, output, "warn message")
 	assert.Contains(t, output, "error message")
 }
@@ -496,9 +496,9 @@ func TestPrettyHandler_TimeFormatting(t *testing.T) {
 	logger.Info("test message")
 
 	output := buf.String()
-	// Should contain time in HH:MM:SS format
+	// Should contain time in HH:MM:SS format.
 	timePattern := strings.Split(output, " ")[0]
-	// Basic check that time format is there (e.g., "15:04:05")
+	// Basic check that time format is there (e.g., "15:04:05").
 	assert.True(t, len(timePattern) >= 8, "Should contain time prefix")
 }
 
@@ -512,7 +512,7 @@ func TestLogger_ChainedWithMethods(t *testing.T) {
 
 	logger := New(cfg)
 
-	// Chain multiple With* methods
+	// Chain multiple With* methods.
 	logger.
 		WithField("request_id", "req-123").
 		WithError(errors.New("something failed")).
@@ -543,9 +543,9 @@ func TestPrettyHandler_EmptyMessage(t *testing.T) {
 	logger.Info("")
 
 	output := buf.String()
-	// Should still produce output with time and level
+	// Should still produce output with time and level.
 	assert.Contains(t, output, "INF")
-	assert.True(t, len(output) > 0)
+	assert.True(t, output != "")
 }
 
 func TestPrettyHandler_NoAttributes(t *testing.T) {
@@ -560,11 +560,11 @@ func TestPrettyHandler_NoAttributes(t *testing.T) {
 	output := buf.String()
 	assert.Contains(t, output, "simple message")
 	assert.Contains(t, output, "INF")
-	// Should not have '=' characters indicating attributes
+	// Should not have '=' characters indicating attributes.
 	parts := strings.Split(output, "simple message")
 	if len(parts) > 1 {
 		afterMessage := parts[1]
-		// After message, should not have any attributes (no '=' signs)
+		// After message, should not have any attributes (no '=' signs).
 		assert.NotContains(t, afterMessage, "=")
 	}
 }

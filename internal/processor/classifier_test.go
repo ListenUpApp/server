@@ -10,7 +10,7 @@ func TestClassifyFile(t *testing.T) {
 		path     string
 		expected FileType
 	}{
-		// Audio files - all supported extensions
+		// Audio files - all supported extensions.
 		{
 			name:     "MP3 audio file",
 			path:     "/library/book.mp3",
@@ -72,7 +72,7 @@ func TestClassifyFile(t *testing.T) {
 			expected: FileTypeAudio,
 		},
 
-		// Cover art files
+		// Cover art files.
 		{
 			name:     "JPG cover file",
 			path:     "/library/cover.jpg",
@@ -104,7 +104,7 @@ func TestClassifyFile(t *testing.T) {
 			expected: FileTypeCover,
 		},
 
-		// Metadata files
+		// Metadata files.
 		{
 			name:     "NFO metadata file",
 			path:     "/library/info.nfo",
@@ -126,7 +126,7 @@ func TestClassifyFile(t *testing.T) {
 			expected: FileTypeMetadata,
 		},
 
-		// Ignored files
+		// Ignored files.
 		{
 			name:     "CUE file (ignored)",
 			path:     "/library/tracks.cue",
@@ -182,13 +182,13 @@ func TestClassifyFile(t *testing.T) {
 
 func TestFileType_String(t *testing.T) {
 	tests := []struct {
-		fileType FileType
 		expected string
+		fileType FileType
 	}{
-		{FileTypeAudio, "audio"},
-		{FileTypeCover, "cover"},
-		{FileTypeMetadata, "metadata"},
-		{FileTypeIgnored, "ignored"},
+		{fileType: FileTypeAudio, expected: "audio"},
+		{fileType: FileTypeCover, expected: "cover"},
+		{fileType: FileTypeMetadata, expected: "metadata"},
+		{fileType: FileTypeIgnored, expected: "ignored"},
 	}
 
 	for _, tt := range tests {
@@ -251,7 +251,7 @@ func TestClassifyFile_EdgeCases(t *testing.T) {
 	}
 }
 
-// Benchmark to ensure classification is fast (critical for event processing)
+// Benchmark to ensure classification is fast (critical for event processing).
 func BenchmarkClassifyFile(b *testing.B) {
 	paths := []string{
 		"/library/book.mp3",

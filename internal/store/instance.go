@@ -11,19 +11,19 @@ import (
 )
 
 var (
-	// serverKey is the singleton key for the server record
+	// serverKey is the singleton key for the server record.
 	serverKey = []byte("server:config")
 
-	// ErrServerNotFound is returned when no server config exists
+	// ErrServerNotFound is returned when no server config exists.
 	ErrServerNotFound = errors.New("server not found")
 
-	// ErrServerAlreadyExists is returned when trying to create a server that already exists
+	// ErrServerAlreadyExists is returned when trying to create a server that already exists.
 	ErrServerAlreadyExists = errors.New("server already exists")
 )
 
-// GetInstance retrieves the singleton server instance configuration
-// Returns ErrServerNotFound if no instance exists
-func (s *Store) GetInstance(ctx context.Context) (*domain.Instance, error) {
+// GetInstance retrieves the singleton server instance configuration.
+// Returns ErrServerNotFound if no instance exists.
+func (s *Store) GetInstance(_ context.Context) (*domain.Instance, error) {
 	var instance domain.Instance
 
 	err := s.get(serverKey, &instance)
@@ -37,10 +37,10 @@ func (s *Store) GetInstance(ctx context.Context) (*domain.Instance, error) {
 	return &instance, nil
 }
 
-// CreateInstance creates a new singleton server instance configuration
-// Returns ErrServerAlreadyExists if an instance already exists
-func (s *Store) CreateInstance(ctx context.Context) (*domain.Instance, error) {
-	// Check if instance already exists
+// CreateInstance creates a new singleton server instance configuration.
+// Returns ErrServerAlreadyExists if an instance already exists.
+func (s *Store) CreateInstance(_ context.Context) (*domain.Instance, error) {
+	// Check if instance already exists.
 	exists, err := s.exists(serverKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check instance existence: %w", err)
@@ -50,7 +50,7 @@ func (s *Store) CreateInstance(ctx context.Context) (*domain.Instance, error) {
 		return nil, ErrServerAlreadyExists
 	}
 
-	// Create new instance
+	// Create new instance.
 	now := time.Now()
 	instance := &domain.Instance{
 		ID:          "server-001", // Single server ID
@@ -73,9 +73,9 @@ func (s *Store) CreateInstance(ctx context.Context) (*domain.Instance, error) {
 	return instance, nil
 }
 
-// UpdateInstance updates the server instance configuration
+// UpdateInstance updates the server instance configuration.
 func (s *Store) UpdateInstance(ctx context.Context, instance *domain.Instance) error {
-	// Verify instance exists
+	// Verify instance exists.
 	_, err := s.GetInstance(ctx)
 	if err != nil {
 		return err
@@ -97,10 +97,10 @@ func (s *Store) UpdateInstance(ctx context.Context, instance *domain.Instance) e
 	return nil
 }
 
-// InitializeInstance ensures a server instance configuration exists
+// InitializeInstance ensures a server instance configuration exists.
 // If no instance exists, it creates one. Returns the instance config.
 func (s *Store) InitializeInstance(ctx context.Context) (*domain.Instance, error) {
-	// Try to get existing instance
+	// Try to get existing instance.
 	instance, err := s.GetInstance(ctx)
 	if err == nil {
 		if s.logger != nil {
@@ -113,7 +113,7 @@ func (s *Store) InitializeInstance(ctx context.Context) (*domain.Instance, error
 		return instance, nil
 	}
 
-	// If instance doesn't exist, create it
+	// If instance doesn't exist, create it.
 	if errors.Is(err, ErrServerNotFound) {
 		if s.logger != nil {
 			s.logger.Info("No server instance configuration found, creating new instance")
@@ -121,6 +121,6 @@ func (s *Store) InitializeInstance(ctx context.Context) (*domain.Instance, error
 		return s.CreateInstance(ctx)
 	}
 
-	// Other errors
+	// Other errors.
 	return nil, fmt.Errorf("failed to initialize instance: %w", err)
 }

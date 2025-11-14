@@ -9,7 +9,7 @@ import (
 )
 
 func TestGenerate_Uniqueness(t *testing.T) {
-	// Generate many IDs and verify they're unique
+	// Generate many IDs and verify they're unique.
 	ids := make(map[string]bool)
 	count := 1000
 
@@ -42,22 +42,22 @@ func TestGenerate_Format(t *testing.T) {
 			id, err := Generate(tt.prefix)
 			require.NoError(t, err)
 
-			// Should start with prefix followed by hyphen
+			// Should start with prefix followed by hyphen.
 			assert.True(t, strings.HasPrefix(id, tt.prefix+"-"))
 
-			// Should not be empty
+			// Should not be empty.
 			assert.NotEmpty(t, id)
 
-			// NanoID default is 21 characters
-			// Total should be len(prefix) + 1 (hyphen) + 21
+			// NanoID default is 21 characters.
+			// Total should be len(prefix) + 1 (hyphen) + 21.
 			expectedLen := len(tt.prefix) + 1 + 21
 			assert.Equal(t, expectedLen, len(id), "ID: %s", id)
 
-			// Extract the NanoID part (everything after the prefix and hyphen)
+			// Extract the NanoID part (everything after the prefix and hyphen).
 			nanoidPart := strings.TrimPrefix(id, tt.prefix+"-")
 			assert.Len(t, nanoidPart, 21, "NanoID part should be 21 characters")
 
-			// Check all characters are URL-safe (NanoID uses: A-Za-z0-9_-)
+			// Check all characters are URL-safe (NanoID uses: A-Za-z0-9_-).
 			for _, char := range nanoidPart {
 				assert.True(t,
 					(char >= 'A' && char <= 'Z') ||
@@ -92,7 +92,7 @@ func TestMustGenerate_Uniqueness(t *testing.T) {
 
 func BenchmarkGenerate(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		_, _ = Generate("bench")
+		_, _ = Generate("bench") //nolint:errcheck // Benchmark, errors not relevant
 	}
 }
 

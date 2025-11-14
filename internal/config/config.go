@@ -1,3 +1,4 @@
+// Package config provides application configuration management with support for environment variables, command-line flags, and .env files.
 package config
 
 import (
@@ -10,6 +11,7 @@ import (
 	"strings"
 )
 
+// Config holds the application configuration.
 type Config struct {
 	App      AppConfig
 	Logger   LoggerConfig
@@ -17,43 +19,47 @@ type Config struct {
 	Library  LibraryConfig
 }
 
+// AppConfig holds application-level configuration.
 type AppConfig struct {
 	Environment string
 }
 
+// LoggerConfig holds logging configuration.
 type LoggerConfig struct {
 	Level string
 }
 
+// MetadataConfig holds metadata storage configuration.
 type MetadataConfig struct {
 	BasePath string
 }
 
+// LibraryConfig holds audiobook library configuration.
 type LibraryConfig struct {
 	// Adding an Env variable here so we can properly test E2E without adding in the concept of libraries yet.
 	AudiobookPath string
 }
 
 // LoadConfig loads configuration from multiple sources with precedence:
-// 1. Command-line flags (highest priority)
-// 2. Environment variables
-// 3. .env file
-// 4. Default values (lowest priority)
+// 1. Command-line flags (highest priority).
+// 2. Environment variables.
+// 3. .env file.
+// 4. Default values (lowest priority).
 func LoadConfig() (*Config, error) {
-	// Define command-line flags
+	// Define command-line flags.
 	env := flag.String("env", "", "Environment (development, staging, production)")
 	logLevel := flag.String("log-level", "", "Log level (debug, info, warn, error)")
 	metadataPath := flag.String("metadata-path", "", "Base path for metadata storage")
 	audiobookPath := flag.String("audiobook-path", "", "Path to audiobook library")
 	envFile := flag.String("env-file", ".env", "Path to .env file")
 
-	// Parse flags but don't exit on error - we want to handle it gracefully
+	// Parse flags but don't exit on error - we want to handle it gracefully.
 	flag.Parse()
 
-	// Load .env file if it exists (silently ignore if not found)
-	_ = loadEnvFile(*envFile)
+	// Load .env file if it exists (silently ignore if not found).
+	_ = loadEnvFile(*envFile) //nolint:errcheck // Intentionally ignoring error, .env file is optional
 
-	// Build config with proper precedence
+	// Build config with proper precedence.
 	cfg := &Config{
 		App: AppConfig{
 			Environment: getConfigValue(*env, "ENV", "development"),
@@ -69,17 +75,17 @@ func LoadConfig() (*Config, error) {
 		},
 	}
 
-	// Expand and validate metadata path
+	// Expand and validate metadata path.
 	if err := cfg.expandMetadataPath(); err != nil {
 		return nil, fmt.Errorf("invalid metadata path: %w", err)
 	}
 
-	// Expand and validate audiobook path
+	// Expand and validate audiobook path.
 	if err := cfg.expandAudiobookPath(); err != nil {
 		return nil, fmt.Errorf("invalid audiobook path: %w", err)
 	}
 
-	// Validate configuration
+	// Validate configuration.
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
 	}
@@ -87,7 +93,7 @@ func LoadConfig() (*Config, error) {
 	return cfg, nil
 }
 
-// Validate checks that all required config values are present and valid
+// Validate checks that all required config values are present and valid.
 func (c *Config) Validate() error {
 	if c.App.Environment == "" {
 		return errors.New("ENV is required")
@@ -123,11 +129,11 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// expandMetadataPath expands ~ and makes the path absolute
+// expandMetadataPath expands ~ and makes the path absolute.
 func (c *Config) expandMetadataPath() error {
 	path := c.Metadata.BasePath
 
-	// If empty, use default
+	// If empty, use default.
 	if path == "" {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
@@ -137,7 +143,7 @@ func (c *Config) expandMetadataPath() error {
 		return nil
 	}
 
-	// Expand tilde
+	// Expand tilde.
 	if strings.HasPrefix(path, "~/") {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
@@ -146,7 +152,7 @@ func (c *Config) expandMetadataPath() error {
 		path = filepath.Join(homeDir, path[2:])
 	}
 
-	// Make absolute if needed
+	// Make absolute if needed.
 	if !filepath.IsAbs(path) {
 		absPath, err := filepath.Abs(path)
 		if err != nil {
@@ -159,11 +165,11 @@ func (c *Config) expandMetadataPath() error {
 	return nil
 }
 
-// expandAudiobookPath expands ~ and makes the path absolute
+// expandAudiobookPath expands ~ and makes the path absolute.
 func (c *Config) expandAudiobookPath() error {
 	path := c.Library.AudiobookPath
 
-	// If empty, use default
+	// If empty, use default.
 	if path == "" {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
@@ -173,7 +179,7 @@ func (c *Config) expandAudiobookPath() error {
 		return nil
 	}
 
-	// Expand tilde
+	// Expand tilde.
 	if strings.HasPrefix(path, "~/") {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
@@ -182,7 +188,7 @@ func (c *Config) expandAudiobookPath() error {
 		path = filepath.Join(homeDir, path[2:])
 	}
 
-	// Make absolute if needed
+	// Make absolute if needed.
 	if !filepath.IsAbs(path) {
 		absPath, err := filepath.Abs(path)
 		if err != nil {
@@ -195,30 +201,30 @@ func (c *Config) expandAudiobookPath() error {
 	return nil
 }
 
-// getConfigValue returns the first non-empty value from flag, env var, or default
+// getConfigValue returns the first non-empty value from flag, env var, or default.
 func getConfigValue(flagValue, envKey, defaultValue string) string {
-	// Priority 1: Command-line flag
+	// Priority 1: Command-line flag.
 	if flagValue != "" {
 		return flagValue
 	}
 
-	// Priority 2: Environment variable
+	// Priority 2: Environment variable.
 	if envValue := os.Getenv(envKey); envValue != "" {
 		return envValue
 	}
 
-	// Priority 3: Default value
+	// Priority 3: Default value.
 	return defaultValue
 }
 
-// loadEnvFile loads environment variables from a .env file
-// Format: KEY=value (one per line, # for comments)
+// loadEnvFile loads environment variables from a .env file.
+// Format: KEY=value (one per line, # for comments).
 func loadEnvFile(path string) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer file.Close() //nolint:errcheck // Defer close, nothing we can do about errors here
 
 	scanner := bufio.NewScanner(file)
 	lineNum := 0
@@ -227,12 +233,12 @@ func loadEnvFile(path string) error {
 		lineNum++
 		line := strings.TrimSpace(scanner.Text())
 
-		// Skip empty lines and comments
+		// Skip empty lines and comments.
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
 
-		// Parse KEY=value
+		// Parse KEY=value.
 		parts := strings.SplitN(line, "=", 2)
 		if len(parts) != 2 {
 			return fmt.Errorf("invalid format at line %d: %s", lineNum, line)
@@ -241,10 +247,10 @@ func loadEnvFile(path string) error {
 		key := strings.TrimSpace(parts[0])
 		value := strings.TrimSpace(parts[1])
 
-		// Remove quotes if present
+		// Remove quotes if present.
 		value = strings.Trim(value, `"'`)
 
-		// Only set if not already set (env vars take precedence over .env file)
+		// Only set if not already set (env vars take precedence over .env file).
 		if os.Getenv(key) == "" {
 			if err := os.Setenv(key, value); err != nil {
 				return fmt.Errorf("failed to set env var %s: %w", key, err)

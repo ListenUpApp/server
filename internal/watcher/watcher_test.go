@@ -27,7 +27,7 @@ func TestWatcher_Watch(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	w, err := New(logger, Options{})
 	require.NoError(t, err)
-	defer w.Stop()
+	defer w.Stop() //nolint:errcheck // Test cleanup
 
 	tmpDir := t.TempDir()
 	err = w.Watch(tmpDir)
@@ -43,7 +43,7 @@ func TestWatcher_FileCreation(t *testing.T) {
 
 	w, err := New(logger, opts)
 	require.NoError(t, err)
-	defer w.Stop()
+	defer w.Stop() //nolint:errcheck // Test cleanup
 
 	tmpDir := t.TempDir()
 	err = w.Watch(tmpDir)
@@ -52,14 +52,14 @@ func TestWatcher_FileCreation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go w.Start(ctx)
+	go w.Start(ctx) //nolint:errcheck // Test goroutine
 
-	// Create a test file
+	// Create a test file.
 	testFile := filepath.Join(tmpDir, "test.m4b")
-	err = os.WriteFile(testFile, []byte("test audiobook content"), 0644)
+	err = os.WriteFile(testFile, []byte("test audiobook content"), 0o644)
 	require.NoError(t, err)
 
-	// Wait for event
+	// Wait for event.
 	select {
 	case event := <-w.Events():
 		assert.Equal(t, testFile, event.Path)
@@ -76,13 +76,13 @@ func TestWatcher_FileDeletion(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	w, err := New(logger, Options{})
 	require.NoError(t, err)
-	defer w.Stop()
+	defer w.Stop() //nolint:errcheck // Test cleanup
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
 
-	// Create file first
-	err = os.WriteFile(testFile, []byte("content"), 0644)
+	// Create file first.
+	err = os.WriteFile(testFile, []byte("content"), 0o644)
 	require.NoError(t, err)
 
 	err = w.Watch(tmpDir)
@@ -91,13 +91,13 @@ func TestWatcher_FileDeletion(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go w.Start(ctx)
+	go w.Start(ctx) //nolint:errcheck // Test goroutine
 
-	// Delete the file
+	// Delete the file.
 	err = os.Remove(testFile)
 	require.NoError(t, err)
 
-	// Wait for event
+	// Wait for event.
 	select {
 	case event := <-w.Events():
 		assert.Equal(t, EventRemoved, event.Type)
@@ -117,7 +117,7 @@ func TestWatcher_IgnoreHidden(t *testing.T) {
 
 	w, err := New(logger, opts)
 	require.NoError(t, err)
-	defer w.Stop()
+	defer w.Stop() //nolint:errcheck // Test cleanup
 
 	tmpDir := t.TempDir()
 	err = w.Watch(tmpDir)
@@ -126,19 +126,19 @@ func TestWatcher_IgnoreHidden(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go w.Start(ctx)
+	go w.Start(ctx) //nolint:errcheck // Test goroutine
 
-	// Create hidden file
+	// Create hidden file.
 	hiddenFile := filepath.Join(tmpDir, ".hidden")
-	err = os.WriteFile(hiddenFile, []byte("secret"), 0644)
+	err = os.WriteFile(hiddenFile, []byte("secret"), 0o644)
 	require.NoError(t, err)
 
-	// Create normal file
+	// Create normal file.
 	normalFile := filepath.Join(tmpDir, "normal.txt")
-	err = os.WriteFile(normalFile, []byte("content"), 0644)
+	err = os.WriteFile(normalFile, []byte("content"), 0o644)
 	require.NoError(t, err)
 
-	// Should only get event for normal file
+	// Should only get event for normal file.
 	select {
 	case event := <-w.Events():
 		assert.Equal(t, normalFile, event.Path)
@@ -146,11 +146,11 @@ func TestWatcher_IgnoreHidden(t *testing.T) {
 		t.Fatal("timeout waiting for event")
 	}
 
-	// Should not get event for hidden file
+	// Should not get event for hidden file.
 	select {
 	case event := <-w.Events():
 		t.Fatalf("unexpected event for hidden file: %+v", event)
 	case <-time.After(200 * time.Millisecond):
-		// Good, no event for hidden file
+		// Good, no event for hidden file.
 	}
 }

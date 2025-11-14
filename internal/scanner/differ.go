@@ -7,17 +7,19 @@ import (
 	"context"
 )
 
+// Differ computes differences between scanned and existing library items.
 type Differ struct {
 	logger *slog.Logger
 }
 
+// NewDiffer creates a new Differ instance.
 func NewDiffer(logger *slog.Logger) *Differ {
 	return &Differ{
 		logger: logger,
 	}
 }
 
-// ComputeDiff compares scanned items against existing items to determine what changed
+// ComputeDiff compares scanned items against existing items to determine what changed.
 func (d *Differ) ComputeDiff(ctx context.Context, scanned []LibraryItemData, existing []ExistingItem) (*ScanDiff, error) {
 	diff := &ScanDiff{
 		Added:   make([]LibraryItemData, 0),
@@ -25,7 +27,7 @@ func (d *Differ) ComputeDiff(ctx context.Context, scanned []LibraryItemData, exi
 		Removed: make([]string, 0),
 	}
 
-	// Create lookup maps for efficient matching
+	// Create lookup maps for efficient matching.
 	existingByPath := make(map[string]*ExistingItem)
 	existingByInode := make(map[uint64]*ExistingItem)
 	matchedExisting := make(map[string]bool)
@@ -38,11 +40,11 @@ func (d *Differ) ComputeDiff(ctx context.Context, scanned []LibraryItemData, exi
 		}
 	}
 
-	// Process scanned items
+	// Process scanned items.
 	for i := range scanned {
 		scannedItem := &scanned[i]
 
-		// Check context cancellation
+		// Check context cancellation.
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -51,12 +53,12 @@ func (d *Differ) ComputeDiff(ctx context.Context, scanned []LibraryItemData, exi
 
 		var matchedItem *ExistingItem
 
-		// 1. Try exact path match (most common case)
+		// 1. Try exact path match (most common case).
 		if existing, ok := existingByPath[scannedItem.Path]; ok {
 			matchedItem = existing
 		}
 
-		// 2. Try inode match (handles moves/renames)
+		// 2. Try inode match (handles moves/renames).
 		if matchedItem == nil && scannedItem.Inode > 0 {
 			if existing, ok := existingByInode[scannedItem.Inode]; ok {
 				matchedItem = existing
@@ -64,10 +66,10 @@ func (d *Differ) ComputeDiff(ctx context.Context, scanned []LibraryItemData, exi
 		}
 
 		if matchedItem != nil {
-			// Mark as matched
+			// Mark as matched.
 			matchedExisting[matchedItem.ID] = true
 
-			// Check if item has changed
+			// Check if item has changed.
 			if d.hasChanged(scannedItem, matchedItem) {
 				changes := d.buildFieldChanges(scannedItem, matchedItem)
 				diff.Updated = append(diff.Updated, ItemUpdate{
@@ -75,14 +77,14 @@ func (d *Differ) ComputeDiff(ctx context.Context, scanned []LibraryItemData, exi
 					Changes: changes,
 				})
 			}
-			// else: unchanged, no action needed
+			// else: unchanged, no action needed.
 		} else {
-			// New item
+			// New item.
 			diff.Added = append(diff.Added, *scannedItem)
 		}
 	}
 
-	// Find removed items (in existing but not scanned)
+	// Find removed items (in existing but not scanned).
 	for i := range existing {
 		item := &existing[i]
 		if !matchedExisting[item.ID] {
@@ -99,24 +101,24 @@ func (d *Differ) ComputeDiff(ctx context.Context, scanned []LibraryItemData, exi
 	return diff, nil
 }
 
-// hasChanged determines if a scanned item differs from an existing item
+// hasChanged determines if a scanned item differs from an existing item.
 func (d *Differ) hasChanged(scanned *LibraryItemData, existing *ExistingItem) bool {
-	// Check if path changed (file/folder moved)
+	// Check if path changed (file/folder moved).
 	if scanned.Path != existing.Path {
 		return true
 	}
 
-	// Check if modification time changed
+	// Check if modification time changed.
 	if !scanned.ModTime.Equal(existing.ModTime) {
 		return true
 	}
 
-	// Check if number of audio files changed
+	// Check if number of audio files changed.
 	if len(scanned.AudioFiles) != existing.NumAudioFiles {
 		return true
 	}
 
-	// Check if number of image files changed
+	// Check if number of image files changed.
 	if len(scanned.ImageFiles) != existing.NumImageFiles {
 		return true
 	}
@@ -124,7 +126,7 @@ func (d *Differ) hasChanged(scanned *LibraryItemData, existing *ExistingItem) bo
 	return false
 }
 
-// buildFieldChanges creates a map of field-level changes
+// buildFieldChanges creates a map of field-level changes.
 func (d *Differ) buildFieldChanges(scanned *LibraryItemData, existing *ExistingItem) map[string]FieldChange {
 	changes := make(map[string]FieldChange)
 
@@ -163,12 +165,13 @@ func (d *Differ) buildFieldChanges(scanned *LibraryItemData, existing *ExistingI
 	return changes
 }
 
+// ExistingItem represents an existing library item for diff comparison.
 type ExistingItem struct {
+	ModTime       time.Time
+	Metadata      *BookMetadata
 	ID            string
 	Path          string
 	Inode         uint64
-	ModTime       time.Time
-	Metadata      *BookMetadata
 	NumAudioFiles int
 	NumImageFiles int
 }

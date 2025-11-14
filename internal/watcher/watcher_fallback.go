@@ -14,7 +14,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-// fallbackBackend implements WatcherBackend using fsnotify with debouncing
+// fallbackBackend implements Backend using fsnotify with debouncing.
 type fallbackBackend struct {
 	logger  *slog.Logger
 	opts    Options
@@ -29,7 +29,7 @@ type fallbackBackend struct {
 	wg     sync.WaitGroup
 }
 
-// pendingEvent tracks a file that may still be changing
+// pendingEvent tracks a file that may still be changing.
 type pendingEvent struct {
 	path    string
 	size    int64
@@ -37,7 +37,7 @@ type pendingEvent struct {
 	timer   *time.Timer
 }
 
-// newFallbackBackend creates a fallback backend using fsnotify
+// newFallbackBackend creates a fallback backend using fsnotify.
 func newFallbackBackend(logger *slog.Logger, opts Options) (*fallbackBackend, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -55,7 +55,7 @@ func newFallbackBackend(logger *slog.Logger, opts Options) (*fallbackBackend, er
 	}, nil
 }
 
-// Watch adds a path to be monitored
+// Watch adds a path to be monitored.
 func (b *fallbackBackend) Watch(path string) error {
 	path = filepath.Clean(path)
 
@@ -70,7 +70,7 @@ func (b *fallbackBackend) Watch(path string) error {
 	return b.watchFile(path)
 }
 
-// watchDir recursively watches a directory
+// watchDir recursively watches a directory.
 func (b *fallbackBackend) watchDir(path string) error {
 	return filepath.Walk(path, func(p string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -99,13 +99,13 @@ func (b *fallbackBackend) watchDir(path string) error {
 	})
 }
 
-// watchFile watches a single file by watching its parent directory
+// watchFile watches a single file by watching its parent directory.
 func (b *fallbackBackend) watchFile(path string) error {
 	dir := filepath.Dir(path)
 	return b.watcher.Add(dir)
 }
 
-// Start begins watching for events
+// Start begins watching for events.
 func (b *fallbackBackend) Start(ctx context.Context) error {
 	b.wg.Add(1)
 	go b.processEvents(ctx)
@@ -114,7 +114,7 @@ func (b *fallbackBackend) Start(ctx context.Context) error {
 	return nil
 }
 
-// processEvents processes fsnotify events
+// processEvents processes fsnotify events.
 func (b *fallbackBackend) processEvents(ctx context.Context) {
 	defer b.wg.Done()
 
@@ -138,16 +138,16 @@ func (b *fallbackBackend) processEvents(ctx context.Context) {
 	}
 }
 
-// handleFsnotifyEvent handles an fsnotify event with debouncing
+// handleFsnotifyEvent handles an fsnotify event with debouncing.
 func (b *fallbackBackend) handleFsnotifyEvent(event fsnotify.Event) {
 	path := event.Name
 
-	// Skip ignored paths
+	// Skip ignored paths.
 	if b.opts.shouldIgnore(path) {
 		return
 	}
 
-	// Handle directory creation
+	// Handle directory creation.
 	if event.Op&fsnotify.Create != 0 {
 		info, err := os.Stat(path)
 		if err == nil && info.IsDir() {
@@ -156,7 +156,7 @@ func (b *fallbackBackend) handleFsnotifyEvent(event fsnotify.Event) {
 		}
 	}
 
-	// Handle deletion
+	// Handle deletion.
 	if event.Op&fsnotify.Remove != 0 {
 		b.cancelPending(path)
 		b.emitEvent(Event{
@@ -166,23 +166,23 @@ func (b *fallbackBackend) handleFsnotifyEvent(event fsnotify.Event) {
 		return
 	}
 
-	// Handle write/create events (need debouncing)
+	// Handle write/create events (need debouncing).
 	if event.Op&(fsnotify.Write|fsnotify.Create) != 0 {
 		b.startSettling(path)
 	}
 }
 
-// startSettling begins the settling process for a file
+// startSettling begins the settling process for a file.
 func (b *fallbackBackend) startSettling(path string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	// Cancel existing timer if any
+	// Cancel existing timer if any.
 	if pending, exists := b.pending[path]; exists {
 		pending.timer.Stop()
 	}
 
-	// Get current file info
+	// Get current file info.
 	info, err := os.Stat(path)
 	if err != nil {
 		b.logger.Warn("failed to stat file", "path", path, "error", err)
@@ -190,19 +190,19 @@ func (b *fallbackBackend) startSettling(path string) {
 		return
 	}
 
-	// Skip directories
+	// Skip directories.
 	if info.IsDir() {
 		return
 	}
 
-	// Create pending event
+	// Create pending event.
 	pending := &pendingEvent{
 		path:    path,
 		size:    info.Size(),
 		modTime: info.ModTime(),
 	}
 
-	// Start settle timer
+	// Start settle timer.
 	pending.timer = time.AfterFunc(b.opts.SettleDelay, func() {
 		b.checkSettled(path)
 	})
@@ -210,7 +210,7 @@ func (b *fallbackBackend) startSettling(path string) {
 	b.pending[path] = pending
 }
 
-// checkSettled checks if a file has finished settling
+// checkSettled checks if a file has finished settling.
 func (b *fallbackBackend) checkSettled(path string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -220,10 +220,10 @@ func (b *fallbackBackend) checkSettled(path string) {
 		return
 	}
 
-	// Check current file state
+	// Check current file state.
 	info, err := os.Stat(path)
 	if err != nil {
-		// File was deleted
+		// File was deleted.
 		delete(b.pending, path)
 		b.emitEvent(Event{
 			Type: EventRemoved,
@@ -232,9 +232,9 @@ func (b *fallbackBackend) checkSettled(path string) {
 		return
 	}
 
-	// Check if size/mtime changed
+	// Check if size/mtime changed.
 	if info.Size() != pending.size || info.ModTime() != pending.modTime {
-		// Still changing, restart timer
+		// Still changing, restart timer.
 		pending.size = info.Size()
 		pending.modTime = info.ModTime()
 		pending.timer = time.AfterFunc(b.opts.SettleDelay, func() {
@@ -243,7 +243,7 @@ func (b *fallbackBackend) checkSettled(path string) {
 		return
 	}
 
-	// File has settled, emit event
+	// File has settled, emit event.
 	delete(b.pending, path)
 
 	event := Event{
@@ -257,7 +257,7 @@ func (b *fallbackBackend) checkSettled(path string) {
 	b.emitEvent(event)
 }
 
-// cancelPending cancels a pending event
+// cancelPending cancels a pending event.
 func (b *fallbackBackend) cancelPending(path string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -268,7 +268,7 @@ func (b *fallbackBackend) cancelPending(path string) {
 	}
 }
 
-// emitEvent sends an event to the events channel
+// emitEvent sends an event to the events channel.
 func (b *fallbackBackend) emitEvent(event Event) {
 	select {
 	case b.events <- event:
@@ -276,21 +276,21 @@ func (b *fallbackBackend) emitEvent(event Event) {
 	}
 }
 
-// Events returns the events channel
+// Events returns the events channel.
 func (b *fallbackBackend) Events() <-chan Event {
 	return b.events
 }
 
-// Errors returns the errors channel
+// Errors returns the errors channel.
 func (b *fallbackBackend) Errors() <-chan error {
 	return b.errors
 }
 
-// Stop stops the watcher
+// Stop stops the watcher.
 func (b *fallbackBackend) Stop() error {
 	close(b.done)
 
-	// Cancel all pending timers
+	// Cancel all pending timers.
 	b.mu.Lock()
 	for _, pending := range b.pending {
 		pending.timer.Stop()
@@ -298,10 +298,10 @@ func (b *fallbackBackend) Stop() error {
 	clear(b.pending) // Go 1.21+ - more idiomatic than make()
 	b.mu.Unlock()
 
-	// Close fsnotify watcher
+	// Close fsnotify watcher.
 	b.watcher.Close()
 
-	// Wait for goroutines
+	// Wait for goroutines.
 	b.wg.Wait()
 
 	close(b.events)
@@ -310,8 +310,8 @@ func (b *fallbackBackend) Stop() error {
 	return nil
 }
 
-// newLinuxBackend is a stub that should never be called on non-Linux platforms
-// It exists only to satisfy the compiler when watcher.go references it
-func newLinuxBackend(logger *slog.Logger, opts Options) (WatcherBackend, error) {
+// newLinuxBackend is a stub that should never be called on non-Linux platforms.
+// It exists only to satisfy the compiler when watcher.go references it.
+func newLinuxBackend(logger *slog.Logger, opts Options) (Backend, error) {
 	return nil, fmt.Errorf("Linux backend not available on this platform")
 }

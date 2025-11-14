@@ -20,7 +20,7 @@ func TestNewLinuxBackend(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, backend)
 
-	// Clean up
+	// Clean up.
 	err = backend.Stop()
 	assert.NoError(t, err)
 }
@@ -32,7 +32,7 @@ func TestLinuxBackend_Channels(t *testing.T) {
 
 	backend, err := newLinuxBackend(logger, opts)
 	require.NoError(t, err)
-	defer backend.Stop()
+	defer backend.Stop() //nolint:errcheck // Test cleanup
 
 	assert.NotNil(t, backend.Events(), "Events channel should not be nil")
 	assert.NotNil(t, backend.Errors(), "Errors channel should not be nil")

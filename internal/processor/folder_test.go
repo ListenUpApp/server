@@ -10,7 +10,7 @@ func TestDetermineBookFolder(t *testing.T) {
 		filePath string
 		expected string
 	}{
-		// Regular folders - file in directory becomes book
+		// Regular folders - file in directory becomes book.
 		{
 			name:     "Single file in root",
 			filePath: "/library/book.m4b",
@@ -32,7 +32,7 @@ func TestDetermineBookFolder(t *testing.T) {
 			expected: "/media/audiobooks/Fiction/Author/Book",
 		},
 
-		// Disc folders - CD patterns (lowercase)
+		// Disc folders - CD patterns (lowercase).
 		{
 			name:     "CD1 folder",
 			filePath: "/library/Author/Book/cd1/01.mp3",
@@ -59,7 +59,7 @@ func TestDetermineBookFolder(t *testing.T) {
 			expected: "/library/Author/Book",
 		},
 
-		// Disc folders - CD patterns (uppercase)
+		// Disc folders - CD patterns (uppercase).
 		{
 			name:     "CD1 folder uppercase",
 			filePath: "/library/Author/Book/CD1/01.mp3",
@@ -76,7 +76,7 @@ func TestDetermineBookFolder(t *testing.T) {
 			expected: "/library/Author/Book",
 		},
 
-		// Disc folders - Disc patterns
+		// Disc folders - Disc patterns.
 		{
 			name:     "Disc 1 folder",
 			filePath: "/library/Author/Book/Disc 1/01.mp3",
@@ -103,7 +103,7 @@ func TestDetermineBookFolder(t *testing.T) {
 			expected: "/library/Author/Book",
 		},
 
-		// Disc folders - Disk patterns (alternate spelling)
+		// Disc folders - Disk patterns (alternate spelling).
 		{
 			name:     "Disk 1 folder",
 			filePath: "/library/Author/Book/Disk 1/01.mp3",
@@ -125,7 +125,7 @@ func TestDetermineBookFolder(t *testing.T) {
 			expected: "/library/Author/Book",
 		},
 
-		// Mixed case disc folders
+		// Mixed case disc folders.
 		{
 			name:     "Mixed case CD",
 			filePath: "/library/Author/Book/Cd1/file.mp3",
@@ -137,7 +137,7 @@ func TestDetermineBookFolder(t *testing.T) {
 			expected: "/library/Author/Book",
 		},
 
-		// Edge cases - NOT disc folders (should use as-is)
+		// Edge cases - NOT disc folders (should use as-is).
 		{
 			name:     "Folder starting with CD but no number",
 			filePath: "/library/Author/CDBook/01.mp3",
@@ -164,7 +164,7 @@ func TestDetermineBookFolder(t *testing.T) {
 			expected: "/library/Author/Book/Discs",
 		},
 
-		// Real-world patterns
+		// Real-world patterns.
 		{
 			name:     "Typical multi-disc structure CD1",
 			filePath: "/audiobooks/Stephen King/The Stand/CD1/Track01.mp3",
@@ -181,7 +181,7 @@ func TestDetermineBookFolder(t *testing.T) {
 			expected: "/audiobooks/Brandon Sanderson",
 		},
 
-		// Cover art and metadata in disc folders
+		// Cover art and metadata in disc folders.
 		{
 			name:     "Cover art in disc folder",
 			filePath: "/library/Author/Book/CD1/cover.jpg",
@@ -193,11 +193,11 @@ func TestDetermineBookFolder(t *testing.T) {
 			expected: "/library/Author/Book",
 		},
 
-		// Note: Windows paths are not tested as this is a Linux-first system
-		// filepath.Dir() behavior is platform-specific and will work correctly
-		// on the target platform (Linux)
+		// Note: Windows paths are not tested as this is a Linux-first system.
+		// filepath.Dir() behavior is platform-specific and will work correctly.
+		// on the target platform (Linux).
 
-		// Files with special characters
+		// Files with special characters.
 		{
 			name:     "Book with spaces and special chars",
 			filePath: "/library/Author Name/Book Title (2023)/CD1/01 - Chapter.mp3",
@@ -260,15 +260,15 @@ func TestDetermineBookFolder_EdgeCases(t *testing.T) {
 	}
 }
 
-// TestIsDiscDir tests the disc directory detection logic
-// This should match the behavior from internal/scanner/grouper.go
+// TestIsDiscDir tests the disc directory detection logic.
+// This should match the behavior from internal/scanner/grouper.go.
 func TestIsDiscDir(t *testing.T) {
 	tests := []struct {
 		name     string
 		dirName  string
 		expected bool
 	}{
-		// Positive cases - should be detected as disc dirs
+		// Positive cases - should be detected as disc dirs.
 		{
 			name:     "cd1 lowercase",
 			dirName:  "cd1",
@@ -360,7 +360,7 @@ func TestIsDiscDir(t *testing.T) {
 			expected: true,
 		},
 
-		// Negative cases - should NOT be detected as disc dirs
+		// Negative cases - should NOT be detected as disc dirs.
 		{
 			name:     "CD without number",
 			dirName:  "CD",
@@ -424,7 +424,7 @@ func TestIsDiscDir(t *testing.T) {
 	}
 }
 
-// Benchmark folder determination (should be extremely fast)
+// Benchmark folder determination (should be extremely fast).
 func BenchmarkDetermineBookFolder(b *testing.B) {
 	paths := []string{
 		"/library/Author/Book/01.mp3",

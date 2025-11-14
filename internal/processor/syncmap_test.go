@@ -5,11 +5,11 @@ import (
 	"testing"
 )
 
-// TestSyncMap_BasicOperations tests basic Load, Store operations
+// TestSyncMap_BasicOperations tests basic Load, Store operations.
 func TestSyncMap_BasicOperations(t *testing.T) {
 	sm := NewSyncMap[string, int]()
 
-	// Test Store and Load
+	// Test Store and Load.
 	sm.Store("one", 1)
 	sm.Store("two", 2)
 
@@ -21,35 +21,35 @@ func TestSyncMap_BasicOperations(t *testing.T) {
 		t.Errorf("Load(two) = %v, %v; want 2, true", val, ok)
 	}
 
-	// Test Load for non-existent key
+	// Test Load for non-existent key.
 	if val, ok := sm.Load("three"); ok {
 		t.Errorf("Load(three) = %v, %v; want 0, false", val, ok)
 	}
 }
 
-// TestSyncMap_LoadOrStore tests LoadOrStore functionality
+// TestSyncMap_LoadOrStore tests LoadOrStore functionality.
 func TestSyncMap_LoadOrStore(t *testing.T) {
 	sm := NewSyncMap[string, int]()
 
-	// First store - should return the stored value with loaded=false
+	// First store - should return the stored value with loaded=false.
 	actual, loaded := sm.LoadOrStore("key1", 100)
 	if actual != 100 || loaded {
 		t.Errorf("LoadOrStore(key1, 100) = %v, %v; want 100, false", actual, loaded)
 	}
 
-	// Second store with same key - should return existing value with loaded=true
+	// Second store with same key - should return existing value with loaded=true.
 	actual, loaded = sm.LoadOrStore("key1", 200)
 	if actual != 100 || !loaded {
 		t.Errorf("LoadOrStore(key1, 200) = %v, %v; want 100, true", actual, loaded)
 	}
 
-	// Verify the value wasn't overwritten
+	// Verify the value wasn't overwritten.
 	if val, _ := sm.Load("key1"); val != 100 {
 		t.Errorf("Load(key1) = %v; want 100", val)
 	}
 }
 
-// TestSyncMap_Delete tests Delete functionality
+// TestSyncMap_Delete tests Delete functionality.
 func TestSyncMap_Delete(t *testing.T) {
 	sm := NewSyncMap[string, int]()
 
@@ -70,11 +70,11 @@ func TestSyncMap_Delete(t *testing.T) {
 		t.Errorf("Len() = %v; want 1", sm.Len())
 	}
 
-	// Delete non-existent key should not panic
+	// Delete non-existent key should not panic.
 	sm.Delete("nonexistent")
 }
 
-// TestSyncMap_Len tests Len functionality
+// TestSyncMap_Len tests Len functionality.
 func TestSyncMap_Len(t *testing.T) {
 	sm := NewSyncMap[string, int]()
 
@@ -97,7 +97,7 @@ func TestSyncMap_Len(t *testing.T) {
 	}
 }
 
-// TestSyncMap_ConcurrentAccess tests concurrent access safety
+// TestSyncMap_ConcurrentAccess tests concurrent access safety.
 func TestSyncMap_ConcurrentAccess(t *testing.T) {
 	sm := NewSyncMap[int, int]()
 	numGoroutines := 100
@@ -105,7 +105,7 @@ func TestSyncMap_ConcurrentAccess(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	// Concurrent writes
+	// Concurrent writes.
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
 		go func(id int) {
@@ -117,7 +117,7 @@ func TestSyncMap_ConcurrentAccess(t *testing.T) {
 		}(i)
 	}
 
-	// Concurrent reads
+	// Concurrent reads.
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
 		go func(id int) {
@@ -129,7 +129,7 @@ func TestSyncMap_ConcurrentAccess(t *testing.T) {
 		}(i)
 	}
 
-	// Concurrent LoadOrStore
+	// Concurrent LoadOrStore.
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
 		go func(id int) {
@@ -143,20 +143,20 @@ func TestSyncMap_ConcurrentAccess(t *testing.T) {
 
 	wg.Wait()
 
-	// Verify map is in a valid state
+	// Verify map is in a valid state.
 	expectedLen := numGoroutines * numOperations
 	if sm.Len() != expectedLen {
 		t.Errorf("Len() = %v; want %v", sm.Len(), expectedLen)
 	}
 }
 
-// TestSyncMap_LoadOrStore_Concurrent tests LoadOrStore under concurrent access
+// TestSyncMap_LoadOrStore_Concurrent tests LoadOrStore under concurrent access.
 func TestSyncMap_LoadOrStore_Concurrent(t *testing.T) {
 	sm := NewSyncMap[string, *sync.Mutex]()
 	numGoroutines := 100
 	key := "shared-key"
 
-	// All goroutines try to LoadOrStore the same key
+	// All goroutines try to LoadOrStore the same key.
 	results := make([]*sync.Mutex, numGoroutines)
 	var wg sync.WaitGroup
 
@@ -172,7 +172,7 @@ func TestSyncMap_LoadOrStore_Concurrent(t *testing.T) {
 
 	wg.Wait()
 
-	// All goroutines should have received the same mutex instance
+	// All goroutines should have received the same mutex instance.
 	firstMutex := results[0]
 	for i := 1; i < numGoroutines; i++ {
 		if results[i] != firstMutex {
@@ -180,29 +180,29 @@ func TestSyncMap_LoadOrStore_Concurrent(t *testing.T) {
 		}
 	}
 
-	// Verify only one entry in the map
+	// Verify only one entry in the map.
 	if sm.Len() != 1 {
 		t.Errorf("Len() = %v; want 1", sm.Len())
 	}
 }
 
-// TestSyncMap_TypeSafety demonstrates type safety with different types
+// TestSyncMap_TypeSafety demonstrates type safety with different types.
 func TestSyncMap_TypeSafety(t *testing.T) {
-	// String -> Int
+	// String -> Int.
 	intMap := NewSyncMap[string, int]()
 	intMap.Store("count", 42)
 	if val, _ := intMap.Load("count"); val != 42 {
 		t.Errorf("int map: got %v, want 42", val)
 	}
 
-	// String -> String
+	// String -> String.
 	stringMap := NewSyncMap[string, string]()
 	stringMap.Store("name", "ListenUp")
 	if val, _ := stringMap.Load("name"); val != "ListenUp" {
 		t.Errorf("string map: got %v, want ListenUp", val)
 	}
 
-	// String -> *sync.Mutex (like our use case)
+	// String -> *sync.Mutex (like our use case).
 	mutexMap := NewSyncMap[string, *sync.Mutex]()
 	mutex := &sync.Mutex{}
 	mutexMap.Store("lock", mutex)
@@ -211,7 +211,7 @@ func TestSyncMap_TypeSafety(t *testing.T) {
 	}
 }
 
-// TestSyncMap_ZeroValue tests that Load returns zero value for missing keys
+// TestSyncMap_ZeroValue tests that Load returns zero value for missing keys.
 func TestSyncMap_ZeroValue(t *testing.T) {
 	intMap := NewSyncMap[string, int]()
 	if val, ok := intMap.Load("missing"); ok || val != 0 {

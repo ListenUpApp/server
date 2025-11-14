@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockCascadeUpdater is a mock implementation of CascadeUpdater for testing
+// mockCascadeUpdater is a mock implementation of CascadeUpdater for testing.
 type mockCascadeUpdater struct {
-	touchedEntities []touchedEntity
 	returnError     error
+	touchedEntities []touchedEntity
 }
 
 type touchedEntity struct {
@@ -21,7 +21,7 @@ type touchedEntity struct {
 	id         string
 }
 
-func (m *mockCascadeUpdater) TouchEntity(ctx context.Context, entityType string, id string) error {
+func (m *mockCascadeUpdater) TouchEntity(_ context.Context, entityType, id string) error {
 	if m.returnError != nil {
 		return m.returnError
 	}
@@ -168,7 +168,7 @@ func TestGetCurrentCheckpoint(t *testing.T) {
 			},
 		}
 
-		// This will panic if we don't handle nil books, but the current
+		// This will panic if we don't handle nil books, but the current.
 		// implementation doesn't check for nil. This test documents the behavior.
 		assert.Panics(t, func() {
 			GetCurrentCheckpoint(books)

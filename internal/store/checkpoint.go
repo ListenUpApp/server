@@ -10,16 +10,12 @@ import (
 	"github.com/listenupapp/listenup-server/internal/domain"
 )
 
-const (
-	checkpointKey = "sync:checkpoint"
-)
-
-// GetLibraryCheckpoint returns the most recent UpdatedAt time stamp
+// GetLibraryCheckpoint returns the most recent UpdatedAt time stamp.
 // across ALL books. this represents when the library was last changed.
-func (s *Store) GetLibraryCheckpoint(ctx context.Context) (time.Time, error) {
-	// Fow now iterate all books and find the latest UpdatedAt
+func (s *Store) GetLibraryCheckpoint(_ context.Context) (time.Time, error) {
+	// Fow now iterate all books and find the latest UpdatedAt.
 	// TODO: Optimize by caching checkpoint in Library.SyncCheckpoint field
-	// and updating it on every entity change (save crystals exist for a reason)
+	// and updating it on every entity change (save crystals exist for a reason).
 	var latest time.Time
 
 	err := s.db.View(func(txn *badger.Txn) error {
@@ -53,12 +49,13 @@ func (s *Store) GetLibraryCheckpoint(ctx context.Context) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("get library checkpoint: %w", err)
 	}
 
-	// if no books exist, return zero time
+	// if no books exist, return zero time.
 	return latest, nil
 }
 
-func (s *Store) SetLibraryCheckppint(ctx context.Context, t time.Time) error {
-	// for now, this is a no op since we computer checkpoint dynamically
+// SetLibraryCheckppint sets the library checkpoint timestamp.
+func (s *Store) SetLibraryCheckppint(_ context.Context, _ time.Time) error {
+	// for now, this is a no op since we computer checkpoint dynamically.
 
 	return nil
 }

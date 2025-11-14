@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestIntegration_LargeFileDetection tests detection of large files
+// TestIntegration_LargeFileDetection tests detection of large files.
 func TestIntegration_LargeFileDetection(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -24,7 +24,7 @@ func TestIntegration_LargeFileDetection(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	w, err := New(logger, Options{})
 	require.NoError(t, err)
-	defer w.Stop()
+	defer w.Stop() //nolint:errcheck // Test cleanup
 
 	tmpDir := t.TempDir()
 	err = w.Watch(tmpDir)
@@ -33,13 +33,13 @@ func TestIntegration_LargeFileDetection(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	go w.Start(ctx)
+	go w.Start(ctx) //nolint:errcheck // Test goroutine
 
-	// Create a "large" file (10MB)
+	// Create a "large" file (10MB).
 	testFile := filepath.Join(tmpDir, "large.m4b")
 	largeContent := make([]byte, 10*1024*1024) // 10MB
 
-	// Write in chunks to simulate real file transfer
+	// Write in chunks to simulate real file transfer.
 	f, err := os.Create(testFile)
 	require.NoError(t, err)
 
@@ -55,7 +55,7 @@ func TestIntegration_LargeFileDetection(t *testing.T) {
 	}
 	f.Close()
 
-	// Wait for event
+	// Wait for event.
 	select {
 	case event := <-w.Events():
 		assert.Equal(t, testFile, event.Path)
@@ -66,7 +66,7 @@ func TestIntegration_LargeFileDetection(t *testing.T) {
 	}
 }
 
-// TestIntegration_MultipleRapidChanges tests handling of rapid file changes
+// TestIntegration_MultipleRapidChanges tests handling of rapid file changes.
 func TestIntegration_MultipleRapidChanges(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -80,7 +80,7 @@ func TestIntegration_MultipleRapidChanges(t *testing.T) {
 
 	w, err := New(logger, opts)
 	require.NoError(t, err)
-	defer w.Stop()
+	defer w.Stop() //nolint:errcheck // Test cleanup
 
 	tmpDir := t.TempDir()
 	err = w.Watch(tmpDir)
@@ -89,19 +89,19 @@ func TestIntegration_MultipleRapidChanges(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	go w.Start(ctx)
+	go w.Start(ctx) //nolint:errcheck // Test goroutine
 
 	testFile := filepath.Join(tmpDir, "rapid.txt")
 
-	// Make rapid changes
+	// Make rapid changes.
 	numWrites := 10
 	for i := 0; i < numWrites; i++ {
-		err = os.WriteFile(testFile, []byte(fmt.Sprintf("content %d", i)), 0644)
+		err = os.WriteFile(testFile, []byte(fmt.Sprintf("content %d", i)), 0o644)
 		require.NoError(t, err)
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	// Collect events
+	// Collect events.
 	eventCount := 0
 	timeout := time.After(1 * time.Second)
 
@@ -113,8 +113,8 @@ func TestIntegration_MultipleRapidChanges(t *testing.T) {
 			t.Logf("Event %d received", eventCount)
 		case <-timeout:
 			// Platform-specific expectations:
-			// - Linux (IN_CLOSE_WRITE): Gets all 10 events immediately (no debouncing)
-			// - Fallback (fsnotify): Gets 1 debounced event after settling
+			// - Linux (IN_CLOSE_WRITE): Gets all 10 events immediately (no debouncing).
+			// - Fallback (fsnotify): Gets 1 debounced event after settling.
 			// Both behaviors are correct for their platform!
 			if eventCount == 1 {
 				t.Logf("Fallback backend: received 1 debounced event (expected)")
@@ -128,7 +128,7 @@ func TestIntegration_MultipleRapidChanges(t *testing.T) {
 	}
 }
 
-// TestIntegration_NewDirectoryDetection tests automatic watching of new directories
+// TestIntegration_NewDirectoryDetection tests automatic watching of new directories.
 func TestIntegration_NewDirectoryDetection(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -137,7 +137,7 @@ func TestIntegration_NewDirectoryDetection(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	w, err := New(logger, Options{})
 	require.NoError(t, err)
-	defer w.Stop()
+	defer w.Stop() //nolint:errcheck // Test cleanup
 
 	tmpDir := t.TempDir()
 	err = w.Watch(tmpDir)
@@ -146,22 +146,22 @@ func TestIntegration_NewDirectoryDetection(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	go w.Start(ctx)
+	go w.Start(ctx) //nolint:errcheck // Test goroutine
 
-	// Create new subdirectory
+	// Create new subdirectory.
 	subDir := filepath.Join(tmpDir, "newdir")
-	err = os.Mkdir(subDir, 0755)
+	err = os.Mkdir(subDir, 0o755)
 	require.NoError(t, err)
 
-	// Wait a bit for directory watch to be added
+	// Wait a bit for directory watch to be added.
 	time.Sleep(100 * time.Millisecond)
 
-	// Create file in new subdirectory
+	// Create file in new subdirectory.
 	testFile := filepath.Join(subDir, "file.txt")
-	err = os.WriteFile(testFile, []byte("content"), 0644)
+	err = os.WriteFile(testFile, []byte("content"), 0o644)
 	require.NoError(t, err)
 
-	// Should receive event for file in new directory
+	// Should receive event for file in new directory.
 	select {
 	case event := <-w.Events():
 		assert.Equal(t, testFile, event.Path)

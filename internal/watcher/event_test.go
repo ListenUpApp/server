@@ -9,13 +9,13 @@ import (
 
 func TestEventType_String(t *testing.T) {
 	tests := []struct {
-		eventType EventType
 		want      string
+		eventType EventType
 	}{
-		{EventAdded, "added"},
-		{EventModified, "modified"},
-		{EventRemoved, "removed"},
-		{EventMoved, "moved"},
+		{eventType: EventAdded, want: "added"},
+		{eventType: EventModified, want: "modified"},
+		{eventType: EventRemoved, want: "removed"},
+		{eventType: EventMoved, want: "moved"},
 	}
 
 	for _, tt := range tests {

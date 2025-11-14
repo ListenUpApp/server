@@ -2,14 +2,14 @@ package scanner
 
 import "sync"
 
-// ProgressTracker tracks and reports scan progress
+// ProgressTracker tracks and reports scan progress.
 type ProgressTracker struct {
-	mu       sync.RWMutex
-	progress Progress
 	callback func(*Progress)
+	progress Progress
+	mu       sync.RWMutex
 }
 
-// NewProgressTracker creates a new progress tracker
+// NewProgressTracker creates a new progress tracker.
 func NewProgressTracker(callback func(*Progress)) *ProgressTracker {
 	return &ProgressTracker{
 		callback: callback,
@@ -19,7 +19,7 @@ func NewProgressTracker(callback func(*Progress)) *ProgressTracker {
 	}
 }
 
-// SetPhase updates the current phase
+// SetPhase updates the current phase.
 func (p *ProgressTracker) SetPhase(phase ScanPhase) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -30,7 +30,7 @@ func (p *ProgressTracker) SetPhase(phase ScanPhase) {
 	p.notify()
 }
 
-// SetTotal sets the total items for current phase
+// SetTotal sets the total items for current phase.
 func (p *ProgressTracker) SetTotal(total int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -39,7 +39,7 @@ func (p *ProgressTracker) SetTotal(total int) {
 	p.notify()
 }
 
-// Increment increments the current progress
+// Increment increments the current progress.
 func (p *ProgressTracker) Increment(currentItem string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -49,7 +49,7 @@ func (p *ProgressTracker) Increment(currentItem string) {
 	p.notify()
 }
 
-// AddError records an error
+// AddError records an error.
 func (p *ProgressTracker) AddError(err ScanError) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -58,7 +58,7 @@ func (p *ProgressTracker) AddError(err ScanError) {
 	p.notify()
 }
 
-// Get returns current progress
+// Get returns current progress.
 func (p *ProgressTracker) Get() Progress {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -68,7 +68,7 @@ func (p *ProgressTracker) Get() Progress {
 
 func (p *ProgressTracker) notify() {
 	if p.callback != nil {
-		// Copy to avoid race
+		// Copy to avoid race.
 		progress := p.progress
 		go p.callback(&progress)
 	}

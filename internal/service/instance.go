@@ -10,13 +10,13 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
-// InstanceService handles business logic for server instance configuration
+// InstanceService handles business logic for server instance configuration.
 type InstanceService struct {
 	store  *store.Store
 	logger *slog.Logger
 }
 
-// NewInstanceService creates a new instance service
+// NewInstanceService creates a new instance service.
 func NewInstanceService(store *store.Store, logger *slog.Logger) *InstanceService {
 	return &InstanceService{
 		store:  store,
@@ -24,7 +24,7 @@ func NewInstanceService(store *store.Store, logger *slog.Logger) *InstanceServic
 	}
 }
 
-// GetInstance retrieves the server instance configuration
+// GetInstance retrieves the server instance configuration.
 func (s *InstanceService) GetInstance(ctx context.Context) (*domain.Instance, error) {
 	instance, err := s.store.GetInstance(ctx)
 	if err != nil {
@@ -37,8 +37,8 @@ func (s *InstanceService) GetInstance(ctx context.Context) (*domain.Instance, er
 	return instance, nil
 }
 
-// InitializeInstance ensures a server instance configuration exists
-// This is the main entry point for instance setup on first run
+// InitializeInstance ensures a server instance configuration exists.
+// This is the main entry point for instance setup on first run.
 func (s *InstanceService) InitializeInstance(ctx context.Context) (*domain.Instance, error) {
 	instance, err := s.store.InitializeInstance(ctx)
 	if err != nil {
@@ -48,7 +48,7 @@ func (s *InstanceService) InitializeInstance(ctx context.Context) (*domain.Insta
 	return instance, nil
 }
 
-// IsInstanceSetup checks if the server instance has been fully configured
+// IsInstanceSetup checks if the server instance has been fully configured.
 func (s *InstanceService) IsInstanceSetup(ctx context.Context) (bool, error) {
 	instance, err := s.GetInstance(ctx)
 	if err != nil {
@@ -61,8 +61,8 @@ func (s *InstanceService) IsInstanceSetup(ctx context.Context) (bool, error) {
 	return instance.HasRootUser, nil
 }
 
-// MarkInstanceAsSetup marks the server instance as fully configured with a root user
-// This would typically be called after root user creation
+// MarkInstanceAsSetup marks the server instance as fully configured with a root user.
+// This would typically be called after root user creation.
 func (s *InstanceService) MarkInstanceAsSetup(ctx context.Context) error {
 	instance, err := s.store.GetInstance(ctx)
 	if err != nil {

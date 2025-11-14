@@ -7,14 +7,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDefaultPaginationParams tests the default pagination parameters
+// TestDefaultPaginationParams tests the default pagination parameters.
 func TestDefaultPaginationParams(t *testing.T) {
 	params := DefaultPaginationParms()
 	assert.Equal(t, 100, params.Limit)
 	assert.Empty(t, params.Cursor)
 }
 
-// TestPaginationParams_Validate tests validation of pagination parameters
+// TestPaginationParams_Validate tests validation of pagination parameters.
 func TestPaginationParams_Validate(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -57,7 +57,7 @@ func TestPaginationParams_Validate(t *testing.T) {
 	}
 }
 
-// TestEncodeCursor tests cursor encoding
+// TestEncodeCursor tests cursor encoding.
 func TestEncodeCursor(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -89,7 +89,7 @@ func TestEncodeCursor(t *testing.T) {
 	}
 }
 
-// TestDecodeCursor tests cursor decoding
+// TestDecodeCursor tests cursor decoding.
 func TestDecodeCursor(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -136,7 +136,7 @@ func TestDecodeCursor(t *testing.T) {
 	}
 }
 
-// TestEncodeDecode_RoundTrip tests encoding and decoding round trip
+// TestEncodeDecode_RoundTrip tests encoding and decoding round trip.
 func TestEncodeDecode_RoundTrip(t *testing.T) {
 	tests := []string{
 		"book:001",
@@ -156,7 +156,7 @@ func TestEncodeDecode_RoundTrip(t *testing.T) {
 	}
 }
 
-// TestPaginatedResult_Structure tests the structure of paginated results
+// TestPaginatedResult_Structure tests the structure of paginated results.
 func TestPaginatedResult_Structure(t *testing.T) {
 	result := &PaginatedResult[string]{
 		Items:      []string{"item1", "item2", "item3"},
@@ -171,7 +171,7 @@ func TestPaginatedResult_Structure(t *testing.T) {
 	assert.Equal(t, 10, result.Total)
 }
 
-// TestPaginatedResult_NoMorePages tests paginated result with no more pages
+// TestPaginatedResult_NoMorePages tests paginated result with no more pages.
 func TestPaginatedResult_NoMorePages(t *testing.T) {
 	result := &PaginatedResult[string]{
 		Items:      []string{"item1", "item2"},
@@ -186,7 +186,7 @@ func TestPaginatedResult_NoMorePages(t *testing.T) {
 	assert.Equal(t, 2, result.Total)
 }
 
-// TestPaginatedResult_EmptyResult tests paginated result with no items
+// TestPaginatedResult_EmptyResult tests paginated result with no items.
 func TestPaginatedResult_EmptyResult(t *testing.T) {
 	result := &PaginatedResult[string]{
 		Items:      []string{},

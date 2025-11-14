@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Helper function to create a test book
+// Helper function to create a test book.
 func createTestBook(id string) *domain.Book {
 	now := time.Now()
 	return &domain.Book{
@@ -54,7 +54,7 @@ func createTestBook(id string) *domain.Book {
 	}
 }
 
-// TestCreateBook tests creating a new book
+// TestCreateBook tests creating a new book.
 func TestCreateBook(t *testing.T) {
 	store, cleanup := setupTestStore(t)
 	defer cleanup()
@@ -65,7 +65,7 @@ func TestCreateBook(t *testing.T) {
 	err := store.CreateBook(ctx, book)
 	require.NoError(t, err)
 
-	// Verify book was created
+	// Verify book was created.
 	retrieved, err := store.GetBook(ctx, book.ID)
 	require.NoError(t, err)
 	assert.Equal(t, book.ID, retrieved.ID)
@@ -74,7 +74,7 @@ func TestCreateBook(t *testing.T) {
 	assert.Len(t, retrieved.AudioFiles, 2)
 }
 
-// TestCreateBook_Duplicate tests that creating a duplicate book returns an error
+// TestCreateBook_Duplicate tests that creating a duplicate book returns an error.
 func TestCreateBook_Duplicate(t *testing.T) {
 	store, cleanup := setupTestStore(t)
 	defer cleanup()
@@ -82,17 +82,17 @@ func TestCreateBook_Duplicate(t *testing.T) {
 	ctx := context.Background()
 	book := createTestBook("book-001")
 
-	// Create first time
+	// Create first time.
 	err := store.CreateBook(ctx, book)
 	require.NoError(t, err)
 
-	// Try to create again - should fail
+	// Try to create again - should fail.
 	err = store.CreateBook(ctx, book)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrBookExists)
 }
 
-// TestGetBook tests retrieving a book by ID
+// TestGetBook tests retrieving a book by ID.
 func TestGetBook(t *testing.T) {
 	store, cleanup := setupTestStore(t)
 	defer cleanup()
@@ -103,14 +103,14 @@ func TestGetBook(t *testing.T) {
 	err := store.CreateBook(ctx, book)
 	require.NoError(t, err)
 
-	// Get the book
+	// Get the book.
 	retrieved, err := store.GetBook(ctx, "book-001")
 	require.NoError(t, err)
 	assert.Equal(t, book.ID, retrieved.ID)
 	assert.Equal(t, book.Title, retrieved.Title)
 }
 
-// TestGetBook_NotFound tests getting a nonexistent book
+// TestGetBook_NotFound tests getting a nonexistent book.
 func TestGetBook_NotFound(t *testing.T) {
 	store, cleanup := setupTestStore(t)
 	defer cleanup()
@@ -122,7 +122,7 @@ func TestGetBook_NotFound(t *testing.T) {
 	assert.ErrorIs(t, err, ErrBookNotFound)
 }
 
-// TestGetBookByInode tests retrieving a book by audio file inode
+// TestGetBookByInode tests retrieving a book by audio file inode.
 func TestGetBookByInode(t *testing.T) {
 	store, cleanup := setupTestStore(t)
 	defer cleanup()
@@ -133,19 +133,19 @@ func TestGetBookByInode(t *testing.T) {
 	err := store.CreateBook(ctx, book)
 	require.NoError(t, err)
 
-	// Get book by inode of first audio file
+	// Get book by inode of first audio file.
 	retrieved, err := store.GetBookByInode(ctx, 1001)
 	require.NoError(t, err)
 	assert.Equal(t, book.ID, retrieved.ID)
 	assert.Equal(t, book.Title, retrieved.Title)
 
-	// Get book by inode of second audio file
+	// Get book by inode of second audio file.
 	retrieved, err = store.GetBookByInode(ctx, 1002)
 	require.NoError(t, err)
 	assert.Equal(t, book.ID, retrieved.ID)
 }
 
-// TestGetBookByInode_NotFound tests getting a book by nonexistent inode
+// TestGetBookByInode_NotFound tests getting a book by nonexistent inode.
 func TestGetBookByInode_NotFound(t *testing.T) {
 	store, cleanup := setupTestStore(t)
 	defer cleanup()
@@ -157,7 +157,7 @@ func TestGetBookByInode_NotFound(t *testing.T) {
 	assert.ErrorIs(t, err, ErrBookNotFound)
 }
 
-// TestUpdateBook tests updating an existing book
+// TestUpdateBook tests updating an existing book.
 func TestUpdateBook(t *testing.T) {
 	store, cleanup := setupTestStore(t)
 	defer cleanup()
@@ -168,20 +168,20 @@ func TestUpdateBook(t *testing.T) {
 	err := store.CreateBook(ctx, book)
 	require.NoError(t, err)
 
-	// Update the book
+	// Update the book.
 	book.Title = "Updated Title"
 	book.Description = "Updated Description"
 	err = store.UpdateBook(ctx, book)
 	require.NoError(t, err)
 
-	// Verify update
+	// Verify update.
 	retrieved, err := store.GetBook(ctx, book.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "Updated Title", retrieved.Title)
 	assert.Equal(t, "Updated Description", retrieved.Description)
 }
 
-// TestUpdateBook_PathChange tests updating a book's path and verifying index updates
+// TestUpdateBook_PathChange tests updating a book's path and verifying index updates.
 func TestUpdateBook_PathChange(t *testing.T) {
 	store, cleanup := setupTestStore(t)
 	defer cleanup()
@@ -193,19 +193,19 @@ func TestUpdateBook_PathChange(t *testing.T) {
 	err := store.CreateBook(ctx, book)
 	require.NoError(t, err)
 
-	// Update the path
+	// Update the path.
 	book.Path = "/new/test/path/book-001"
 	err = store.UpdateBook(ctx, book)
 	require.NoError(t, err)
 
-	// Verify path was updated
+	// Verify path was updated.
 	retrieved, err := store.GetBook(ctx, book.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "/new/test/path/book-001", retrieved.Path)
 	assert.NotEqual(t, originalPath, retrieved.Path)
 }
 
-// TestUpdateBook_InodeChanges tests updating book with changed audio files
+// TestUpdateBook_InodeChanges tests updating book with changed audio files.
 func TestUpdateBook_InodeChanges(t *testing.T) {
 	store, cleanup := setupTestStore(t)
 	defer cleanup()
@@ -216,11 +216,11 @@ func TestUpdateBook_InodeChanges(t *testing.T) {
 	err := store.CreateBook(ctx, book)
 	require.NoError(t, err)
 
-	// Verify we can find by original inode
+	// Verify we can find by original inode.
 	_, err = store.GetBookByInode(ctx, 1001)
 	require.NoError(t, err)
 
-	// Update book - remove first audio file, add new one
+	// Update book - remove first audio file, add new one.
 	book.AudioFiles = []domain.AudioFileInfo{
 		book.AudioFiles[1], // Keep second file
 		{
@@ -238,23 +238,23 @@ func TestUpdateBook_InodeChanges(t *testing.T) {
 	err = store.UpdateBook(ctx, book)
 	require.NoError(t, err)
 
-	// Old inode (1001) should no longer find the book
+	// Old inode (1001) should no longer find the book.
 	_, err = store.GetBookByInode(ctx, 1001)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrBookNotFound)
 
-	// Kept inode (1002) should still work
+	// Kept inode (1002) should still work.
 	retrieved, err := store.GetBookByInode(ctx, 1002)
 	require.NoError(t, err)
 	assert.Equal(t, book.ID, retrieved.ID)
 
-	// New inode (1003) should work
+	// New inode (1003) should work.
 	retrieved, err = store.GetBookByInode(ctx, 1003)
 	require.NoError(t, err)
 	assert.Equal(t, book.ID, retrieved.ID)
 }
 
-// TestUpdateBook_NotFound tests updating a nonexistent book
+// TestUpdateBook_NotFound tests updating a nonexistent book.
 func TestUpdateBook_NotFound(t *testing.T) {
 	store, cleanup := setupTestStore(t)
 	defer cleanup()
@@ -266,7 +266,7 @@ func TestUpdateBook_NotFound(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// TestDeleteBook tests deleting a book
+// TestDeleteBook tests deleting a book.
 func TestDeleteBook(t *testing.T) {
 	store, cleanup := setupTestStore(t)
 	defer cleanup()
@@ -277,22 +277,22 @@ func TestDeleteBook(t *testing.T) {
 	err := store.CreateBook(ctx, book)
 	require.NoError(t, err)
 
-	// Delete the book
+	// Delete the book.
 	err = store.DeleteBook(ctx, book.ID)
 	require.NoError(t, err)
 
-	// Verify book is gone
+	// Verify book is gone.
 	_, err = store.GetBook(ctx, book.ID)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrBookNotFound)
 
-	// Verify inode index is gone
+	// Verify inode index is gone.
 	_, err = store.GetBookByInode(ctx, 1001)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrBookNotFound)
 }
 
-// TestDeleteBook_NotFound tests deleting a nonexistent book
+// TestDeleteBook_NotFound tests deleting a nonexistent book.
 func TestDeleteBook_NotFound(t *testing.T) {
 	store, cleanup := setupTestStore(t)
 	defer cleanup()
@@ -303,7 +303,7 @@ func TestDeleteBook_NotFound(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// TestBookExists tests checking if a book exists
+// TestBookExists tests checking if a book exists.
 func TestBookExists(t *testing.T) {
 	store, cleanup := setupTestStore(t)
 	defer cleanup()
@@ -311,45 +311,45 @@ func TestBookExists(t *testing.T) {
 	ctx := context.Background()
 	book := createTestBook("book-001")
 
-	// Should not exist initially
+	// Should not exist initially.
 	exists, err := store.BookExists(ctx, book.ID)
 	require.NoError(t, err)
 	assert.False(t, exists)
 
-	// Create book
+	// Create book.
 	err = store.CreateBook(ctx, book)
 	require.NoError(t, err)
 
-	// Should now exist
+	// Should now exist.
 	exists, err = store.BookExists(ctx, book.ID)
 	require.NoError(t, err)
 	assert.True(t, exists)
 
-	// Delete book
+	// Delete book.
 	err = store.DeleteBook(ctx, book.ID)
 	require.NoError(t, err)
 
-	// Should no longer exist
+	// Should no longer exist.
 	exists, err = store.BookExists(ctx, book.ID)
 	require.NoError(t, err)
 	assert.False(t, exists)
 }
 
-// TestListBooks tests paginated book listing
+// TestListBooks tests paginated book listing.
 func TestListBooks(t *testing.T) {
 	store, cleanup := setupTestStore(t)
 	defer cleanup()
 
 	ctx := context.Background()
 
-	// Create multiple books
+	// Create multiple books.
 	for i := 1; i <= 5; i++ {
 		book := createTestBook(domain.GenerateAudioFileID(uint64(i)))
 		err := store.CreateBook(ctx, book)
 		require.NoError(t, err)
 	}
 
-	// List all books (first page)
+	// List all books (first page).
 	params := PaginationParams{
 		Limit:  10,
 		Cursor: "",
@@ -361,21 +361,21 @@ func TestListBooks(t *testing.T) {
 	assert.Empty(t, result.NextCursor)
 }
 
-// TestListBooks_Pagination tests pagination with multiple pages
+// TestListBooks_Pagination tests pagination with multiple pages.
 func TestListBooks_Pagination(t *testing.T) {
 	store, cleanup := setupTestStore(t)
 	defer cleanup()
 
 	ctx := context.Background()
 
-	// Create 10 books
+	// Create 10 books.
 	for i := 1; i <= 10; i++ {
 		book := createTestBook(domain.GenerateAudioFileID(uint64(i)))
 		err := store.CreateBook(ctx, book)
 		require.NoError(t, err)
 	}
 
-	// Get first page (limit 3)
+	// Get first page (limit 3).
 	params := PaginationParams{
 		Limit:  3,
 		Cursor: "",
@@ -386,21 +386,21 @@ func TestListBooks_Pagination(t *testing.T) {
 	assert.True(t, result.HasMore)
 	assert.NotEmpty(t, result.NextCursor)
 
-	// Get second page
+	// Get second page.
 	params.Cursor = result.NextCursor
 	result, err = store.ListBooks(ctx, params)
 	require.NoError(t, err)
 	assert.Len(t, result.Items, 3)
 	assert.True(t, result.HasMore)
 
-	// Get third page
+	// Get third page.
 	params.Cursor = result.NextCursor
 	result, err = store.ListBooks(ctx, params)
 	require.NoError(t, err)
 	assert.Len(t, result.Items, 3)
 	assert.True(t, result.HasMore)
 
-	// Get fourth page (last page)
+	// Get fourth page (last page).
 	params.Cursor = result.NextCursor
 	result, err = store.ListBooks(ctx, params)
 	require.NoError(t, err)
@@ -409,7 +409,7 @@ func TestListBooks_Pagination(t *testing.T) {
 	assert.Empty(t, result.NextCursor)
 }
 
-// TestListBooks_Empty tests listing when no books exist
+// TestListBooks_Empty tests listing when no books exist.
 func TestListBooks_Empty(t *testing.T) {
 	store, cleanup := setupTestStore(t)
 	defer cleanup()
@@ -426,27 +426,27 @@ func TestListBooks_Empty(t *testing.T) {
 	assert.False(t, result.HasMore)
 }
 
-// TestListAllBooks tests listing all books without pagination
+// TestListAllBooks tests listing all books without pagination.
 func TestListAllBooks(t *testing.T) {
 	store, cleanup := setupTestStore(t)
 	defer cleanup()
 
 	ctx := context.Background()
 
-	// Create multiple books
+	// Create multiple books.
 	for i := 1; i <= 5; i++ {
 		book := createTestBook(domain.GenerateAudioFileID(uint64(i)))
 		err := store.CreateBook(ctx, book)
 		require.NoError(t, err)
 	}
 
-	// List all books
+	// List all books.
 	books, err := store.ListAllBooks(ctx)
 	require.NoError(t, err)
 	assert.Len(t, books, 5)
 }
 
-// TestListAllBooks_Empty tests listing all books when none exist
+// TestListAllBooks_Empty tests listing all books when none exist.
 func TestListAllBooks_Empty(t *testing.T) {
 	store, cleanup := setupTestStore(t)
 	defer cleanup()
@@ -458,14 +458,14 @@ func TestListAllBooks_Empty(t *testing.T) {
 	assert.Empty(t, books)
 }
 
-// TestGetBooksByCollectionPaginated tests paginated book listing by collection
+// TestGetBooksByCollectionPaginated tests paginated book listing by collection.
 func TestGetBooksByCollectionPaginated(t *testing.T) {
 	store, cleanup := setupTestStore(t)
 	defer cleanup()
 
 	ctx := context.Background()
 
-	// Create a library first
+	// Create a library first.
 	lib := &domain.Library{
 		ID:        "lib-001",
 		Name:      "Test Library",
@@ -476,7 +476,7 @@ func TestGetBooksByCollectionPaginated(t *testing.T) {
 	err := store.CreateLibrary(ctx, lib)
 	require.NoError(t, err)
 
-	// Create a collection
+	// Create a collection.
 	coll := &domain.Collection{
 		ID:        "coll-001",
 		LibraryID: lib.ID,
@@ -489,7 +489,7 @@ func TestGetBooksByCollectionPaginated(t *testing.T) {
 	err = store.CreateCollection(ctx, coll)
 	require.NoError(t, err)
 
-	// Create books and add to collection
+	// Create books and add to collection.
 	for i := 1; i <= 5; i++ {
 		book := createTestBook(domain.GenerateAudioFileID(uint64(i)))
 		err := store.CreateBook(ctx, book)
@@ -499,7 +499,7 @@ func TestGetBooksByCollectionPaginated(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Get first page
+	// Get first page.
 	params := PaginationParams{
 		Limit:  3,
 		Cursor: "",
@@ -510,7 +510,7 @@ func TestGetBooksByCollectionPaginated(t *testing.T) {
 	assert.True(t, result.HasMore)
 	assert.Equal(t, 5, result.Total)
 
-	// Get second page
+	// Get second page.
 	params.Cursor = result.NextCursor
 	result, err = store.GetBooksByCollectionPaginated(ctx, coll.ID, params)
 	require.NoError(t, err)
@@ -519,14 +519,14 @@ func TestGetBooksByCollectionPaginated(t *testing.T) {
 	assert.Equal(t, 5, result.Total)
 }
 
-// TestGetAllBookIDs tests getting all book IDs efficiently
+// TestGetAllBookIDs tests getting all book IDs efficiently.
 func TestGetAllBookIDs(t *testing.T) {
 	store, cleanup := setupTestStore(t)
 	defer cleanup()
 
 	ctx := context.Background()
 
-	// Create test books
+	// Create test books.
 	book1 := createTestBook("book-001")
 	book2 := createTestBook("book-002")
 	book3 := createTestBook("book-003")
@@ -535,18 +535,18 @@ func TestGetAllBookIDs(t *testing.T) {
 	require.NoError(t, store.CreateBook(ctx, book2))
 	require.NoError(t, store.CreateBook(ctx, book3))
 
-	// Get all book IDs
+	// Get all book IDs.
 	bookIDs, err := store.GetAllBookIDs(ctx)
 	require.NoError(t, err)
 	assert.Len(t, bookIDs, 3)
 
-	// Verify IDs are present
+	// Verify IDs are present.
 	assert.Contains(t, bookIDs, "book-001")
 	assert.Contains(t, bookIDs, "book-002")
 	assert.Contains(t, bookIDs, "book-003")
 }
 
-// TestGetAllBookIDs_Empty tests getting IDs when no books exist
+// TestGetAllBookIDs_Empty tests getting IDs when no books exist.
 func TestGetAllBookIDs_Empty(t *testing.T) {
 	store, cleanup := setupTestStore(t)
 	defer cleanup()
@@ -558,25 +558,25 @@ func TestGetAllBookIDs_Empty(t *testing.T) {
 	assert.Empty(t, bookIDs)
 }
 
-// TestGetAllBookIDs_ManyBooks tests getting many book IDs
+// TestGetAllBookIDs_ManyBooks tests getting many book IDs.
 func TestGetAllBookIDs_ManyBooks(t *testing.T) {
 	store, cleanup := setupTestStore(t)
 	defer cleanup()
 
 	ctx := context.Background()
 
-	// Create many books
+	// Create many books.
 	for i := 1; i <= 100; i++ {
 		book := createTestBook(fmt.Sprintf("book-%03d", i))
 		require.NoError(t, store.CreateBook(ctx, book))
 	}
 
-	// Get all book IDs
+	// Get all book IDs.
 	bookIDs, err := store.GetAllBookIDs(ctx)
 	require.NoError(t, err)
 	assert.Len(t, bookIDs, 100)
 
-	// Verify all IDs are unique
+	// Verify all IDs are unique.
 	idSet := make(map[string]bool)
 	for _, id := range bookIDs {
 		assert.False(t, idSet[id], "Duplicate ID found: %s", id)
@@ -584,48 +584,48 @@ func TestGetAllBookIDs_ManyBooks(t *testing.T) {
 	}
 }
 
-// Soft Delete Tests
+// Soft Delete Tests.
 
-// TestSoftDelete verifies that DeleteBook soft-deletes instead of hard-deleting
+// TestSoftDelete verifies that DeleteBook soft-deletes instead of hard-deleting.
 func TestSoftDelete(t *testing.T) {
 	ctx := context.Background()
 	s, cleanup := setupTestStore(t)
 	defer cleanup()
 
-	// Create a book
+	// Create a book.
 	book := createTestBook("test-book-001")
 	require.NoError(t, s.CreateBook(ctx, book))
 
-	// Verify book exists
+	// Verify book exists.
 	retrieved, err := s.GetBook(ctx, book.ID)
 	require.NoError(t, err)
 	require.False(t, retrieved.IsDeleted())
 
-	// Set checkpoint before deletion
+	// Set checkpoint before deletion.
 	checkpoint := time.Now()
 	time.Sleep(10 * time.Millisecond)
 
-	// Delete the book
+	// Delete the book.
 	err = s.DeleteBook(ctx, book.ID)
 	require.NoError(t, err)
 
-	// GetBook should return not found for deleted books
+	// GetBook should return not found for deleted books.
 	_, err = s.GetBook(ctx, book.ID)
 	assert.ErrorIs(t, err, ErrBookNotFound, "GetBook should return not found for deleted books")
 
-	// But the book should appear in deleted books query
+	// But the book should appear in deleted books query.
 	deletedIDs, err := s.GetBooksDeletedAfter(ctx, checkpoint)
 	require.NoError(t, err)
 	assert.Contains(t, deletedIDs, book.ID, "Deleted book should appear in GetBooksDeletedAfter")
 }
 
-// TestGetBooksDeletedAfter verifies querying deleted books by timestamp
+// TestGetBooksDeletedAfter verifies querying deleted books by timestamp.
 func TestGetBooksDeletedAfter(t *testing.T) {
 	ctx := context.Background()
 	s, cleanup := setupTestStore(t)
 	defer cleanup()
 
-	// Create books
+	// Create books.
 	book1 := createTestBook("book-001")
 	book2 := createTestBook("book-002")
 	book3 := createTestBook("book-003")
@@ -634,19 +634,19 @@ func TestGetBooksDeletedAfter(t *testing.T) {
 	require.NoError(t, s.CreateBook(ctx, book2))
 	require.NoError(t, s.CreateBook(ctx, book3))
 
-	// Set checkpoint
+	// Set checkpoint.
 	checkpoint := time.Now()
 	time.Sleep(10 * time.Millisecond)
 
-	// Delete book2 and book3 after checkpoint
+	// Delete book2 and book3 after checkpoint.
 	require.NoError(t, s.DeleteBook(ctx, book2.ID))
 	require.NoError(t, s.DeleteBook(ctx, book3.ID))
 
-	// Query deleted books after checkpoint
+	// Query deleted books after checkpoint.
 	deletedIDs, err := s.GetBooksDeletedAfter(ctx, checkpoint)
 	require.NoError(t, err)
 
-	// Should return book2 and book3
+	// Should return book2 and book3.
 	assert.Len(t, deletedIDs, 2, "Should find 2 deleted books")
 
 	expectedDeleted := map[string]bool{
@@ -662,62 +662,62 @@ func TestGetBooksDeletedAfter(t *testing.T) {
 	assert.Empty(t, expectedDeleted, "All expected deleted books should be found")
 }
 
-// TestGetBooksDeletedAfter_Empty verifies empty result when no books deleted
+// TestGetBooksDeletedAfter_Empty verifies empty result when no books deleted.
 func TestGetBooksDeletedAfter_Empty(t *testing.T) {
 	ctx := context.Background()
 	s, cleanup := setupTestStore(t)
 	defer cleanup()
 
-	// Create books but don't delete any
+	// Create books but don't delete any.
 	book1 := createTestBook("book-001")
 	require.NoError(t, s.CreateBook(ctx, book1))
 
 	checkpoint := time.Now()
 
-	// Query deleted books
+	// Query deleted books.
 	deletedIDs, err := s.GetBooksDeletedAfter(ctx, checkpoint)
 	require.NoError(t, err)
 	assert.Empty(t, deletedIDs, "Should find no deleted books")
 }
 
-// TestGetBooksDeletedAfter_BeforeCheckpoint verifies books deleted before checkpoint are excluded
+// TestGetBooksDeletedAfter_BeforeCheckpoint verifies books deleted before checkpoint are excluded.
 func TestGetBooksDeletedAfter_BeforeCheckpoint(t *testing.T) {
 	ctx := context.Background()
 	s, cleanup := setupTestStore(t)
 	defer cleanup()
 
-	// Create books
+	// Create books.
 	book1 := createTestBook("book-001")
 	book2 := createTestBook("book-002")
 	require.NoError(t, s.CreateBook(ctx, book1))
 	require.NoError(t, s.CreateBook(ctx, book2))
 
-	// Delete book1 before checkpoint
+	// Delete book1 before checkpoint.
 	require.NoError(t, s.DeleteBook(ctx, book1.ID))
 
 	time.Sleep(10 * time.Millisecond)
 	checkpoint := time.Now()
 	time.Sleep(10 * time.Millisecond)
 
-	// Delete book2 after checkpoint
+	// Delete book2 after checkpoint.
 	require.NoError(t, s.DeleteBook(ctx, book2.ID))
 
-	// Query deleted books after checkpoint
+	// Query deleted books after checkpoint.
 	deletedIDs, err := s.GetBooksDeletedAfter(ctx, checkpoint)
 	require.NoError(t, err)
 
-	// Should only return book2
+	// Should only return book2.
 	assert.Len(t, deletedIDs, 1, "Should find only 1 deleted book")
 	assert.Equal(t, book2.ID, deletedIDs[0], "Should find book2")
 }
 
-// TestListBooksExcludesDeleted verifies ListBooks excludes soft-deleted books
+// TestListBooksExcludesDeleted verifies ListBooks excludes soft-deleted books.
 func TestListBooksExcludesDeleted(t *testing.T) {
 	ctx := context.Background()
 	s, cleanup := setupTestStore(t)
 	defer cleanup()
 
-	// Create books
+	// Create books.
 	book1 := createTestBook("book-001")
 	book2 := createTestBook("book-002")
 	book3 := createTestBook("book-003")
@@ -726,10 +726,10 @@ func TestListBooksExcludesDeleted(t *testing.T) {
 	require.NoError(t, s.CreateBook(ctx, book2))
 	require.NoError(t, s.CreateBook(ctx, book3))
 
-	// Delete book2
+	// Delete book2.
 	require.NoError(t, s.DeleteBook(ctx, book2.ID))
 
-	// List books should only return book1 and book3
+	// List books should only return book1 and book3.
 	result, err := s.ListBooks(ctx, PaginationParams{Limit: 10})
 	require.NoError(t, err)
 
@@ -746,30 +746,30 @@ func TestListBooksExcludesDeleted(t *testing.T) {
 	assert.True(t, returnedIDs[book3.ID], "Should include book3")
 }
 
-// TestListBooksExcludesDeleted_Pagination verifies pagination works correctly with deleted books
+// TestListBooksExcludesDeleted_Pagination verifies pagination works correctly with deleted books.
 func TestListBooksExcludesDeleted_Pagination(t *testing.T) {
 	ctx := context.Background()
 	s, cleanup := setupTestStore(t)
 	defer cleanup()
 
-	// Create 5 books
+	// Create 5 books.
 	for i := 1; i <= 5; i++ {
 		book := createTestBook(fmt.Sprintf("book-%03d", i))
 		require.NoError(t, s.CreateBook(ctx, book))
 	}
 
-	// Delete book-002 and book-004
+	// Delete book-002 and book-004.
 	require.NoError(t, s.DeleteBook(ctx, "book-002"))
 	require.NoError(t, s.DeleteBook(ctx, "book-004"))
 
-	// List books with limit of 2 (should get book-001 and book-003)
+	// List books with limit of 2 (should get book-001 and book-003).
 	result, err := s.ListBooks(ctx, PaginationParams{Limit: 2})
 	require.NoError(t, err)
 
 	assert.Len(t, result.Items, 2, "Should return 2 non-deleted books")
 	assert.True(t, result.HasMore, "Should have more books")
 
-	// Get next page (should get book-005)
+	// Get next page (should get book-005).
 	result2, err := s.ListBooks(ctx, PaginationParams{Limit: 2, Cursor: result.NextCursor})
 	require.NoError(t, err)
 
@@ -777,13 +777,13 @@ func TestListBooksExcludesDeleted_Pagination(t *testing.T) {
 	assert.False(t, result2.HasMore, "Should have no more books")
 }
 
-// TestGetAllBookIDsExcludesDeleted verifies GetAllBookIDs excludes soft-deleted books
+// TestGetAllBookIDsExcludesDeleted verifies GetAllBookIDs excludes soft-deleted books.
 func TestGetAllBookIDsExcludesDeleted(t *testing.T) {
 	ctx := context.Background()
 	s, cleanup := setupTestStore(t)
 	defer cleanup()
 
-	// Create books
+	// Create books.
 	book1 := createTestBook("book-001")
 	book2 := createTestBook("book-002")
 	book3 := createTestBook("book-003")
@@ -792,10 +792,10 @@ func TestGetAllBookIDsExcludesDeleted(t *testing.T) {
 	require.NoError(t, s.CreateBook(ctx, book2))
 	require.NoError(t, s.CreateBook(ctx, book3))
 
-	// Delete book2
+	// Delete book2.
 	require.NoError(t, s.DeleteBook(ctx, book2.ID))
 
-	// Get all book IDs
+	// Get all book IDs.
 	bookIDs, err := s.GetAllBookIDs(ctx)
 	require.NoError(t, err)
 
@@ -805,58 +805,58 @@ func TestGetAllBookIDsExcludesDeleted(t *testing.T) {
 	assert.Contains(t, bookIDs, book3.ID, "Should include book3")
 }
 
-// TestSoftDelete_RemovedFromCollections verifies soft delete removes book from collections
+// TestSoftDelete_RemovedFromCollections verifies soft delete removes book from collections.
 func TestSoftDelete_RemovedFromCollections(t *testing.T) {
 	ctx := context.Background()
 	s, cleanup := setupTestStore(t)
 	defer cleanup()
 
-	// Bootstrap library (creates default collections)
+	// Bootstrap library (creates default collections).
 	bootstrap, err := s.EnsureLibrary(ctx, "/test/audiobooks")
 	require.NoError(t, err)
 
-	// Create book
+	// Create book.
 	book := createTestBook("book-001")
 	require.NoError(t, s.CreateBook(ctx, book))
 
-	// Add book to default collection
+	// Add book to default collection.
 	require.NoError(t, s.AddBookToCollection(ctx, book.ID, bootstrap.DefaultCollection.ID))
 
-	// Verify book is in collection
+	// Verify book is in collection.
 	result, err := s.GetBooksByCollectionPaginated(ctx, bootstrap.DefaultCollection.ID, PaginationParams{Limit: 10})
 	require.NoError(t, err)
 	assert.Len(t, result.Items, 1)
 
-	// Delete book
+	// Delete book.
 	require.NoError(t, s.DeleteBook(ctx, book.ID))
 
-	// Book should be removed from collection
+	// Book should be removed from collection.
 	result, err = s.GetBooksByCollectionPaginated(ctx, bootstrap.DefaultCollection.ID, PaginationParams{Limit: 10})
 	require.NoError(t, err)
 	assert.Empty(t, result.Items, "Deleted book should be removed from collection")
 }
 
-// TestSoftDelete_UpdatedAtIndexMaintained verifies updated_at index is maintained
-// This is important for delta sync - deleted books must appear in "updated after X" queries
+// TestSoftDelete_UpdatedAtIndexMaintained verifies updated_at index is maintained.
+// This is important for delta sync - deleted books must appear in "updated after X" queries.
 func TestSoftDelete_UpdatedAtIndexMaintained(t *testing.T) {
 	ctx := context.Background()
 	s, cleanup := setupTestStore(t)
 	defer cleanup()
 
-	// Create book
+	// Create book.
 	book := createTestBook("book-001")
 	require.NoError(t, s.CreateBook(ctx, book))
 
-	// Wait and set checkpoint
+	// Wait and set checkpoint.
 	time.Sleep(10 * time.Millisecond)
 	checkpoint := time.Now()
 	time.Sleep(10 * time.Millisecond)
 
-	// Delete book
+	// Delete book.
 	require.NoError(t, s.DeleteBook(ctx, book.ID))
 
-	// Verify the book appears in deleted books query
-	// This implicitly verifies the updated_at index was maintained during deletion
+	// Verify the book appears in deleted books query.
+	// This implicitly verifies the updated_at index was maintained during deletion.
 	deletedIDs, err := s.GetBooksDeletedAfter(ctx, checkpoint)
 	require.NoError(t, err)
 	assert.Contains(t, deletedIDs, book.ID,

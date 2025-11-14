@@ -16,20 +16,20 @@ import (
 // We protect the library through vigilance.
 //
 // Key design principles:
-//   - Processes each event immediately (no batching)
-//   - Uses per-folder locking to deduplicate concurrent events
-//   - All file types trigger a rescan of the affected folder (simple, idempotent)
-//   - Non-blocking (TryLock prevents queueing)
+//   - Processes each event immediately (no batching).
+//   - Uses per-folder locking to deduplicate concurrent events.
+//   - All file types trigger a rescan of the affected folder (simple, idempotent).
+//   - Non-blocking (TryLock prevents queueing).
 type EventProcessor struct {
 	scanner *scanner.Scanner
 	logger  *slog.Logger
 
-	// folderLocks provides per-folder mutexes to prevent concurrent scans
+	// folderLocks provides per-folder mutexes to prevent concurrent scans.
 	// of the same folder. Type-safe concurrent map using generics.
 	folderLocks *SyncMap[string, *sync.Mutex]
 }
 
-// NewEventProcessor creates a new EventProcessor instance
+// NewEventProcessor creates a new EventProcessor instance.
 func NewEventProcessor(scanner *scanner.Scanner, logger *slog.Logger) *EventProcessor {
 	return &EventProcessor{
 		scanner:     scanner,
@@ -41,24 +41,24 @@ func NewEventProcessor(scanner *scanner.Scanner, logger *slog.Logger) *EventProc
 // ProcessEvent processes a file system event.
 //
 // Processing flow:
-//  1. Classify the file (audio, cover, metadata, or ignored)
-//  2. Determine which folder (book) the file belongs to
-//  3. Acquire per-folder lock with TryLock (deduplicate concurrent events)
-//  4. Call appropriate handler based on file type
+//  1. Classify the file (audio, cover, metadata, or ignored).
+//  2. Determine which folder (book) the file belongs to.
+//  3. Acquire per-folder lock with TryLock (deduplicate concurrent events).
+//  4. Call appropriate handler based on file type.
 //
 // If the folder is already being scanned, the event is skipped (non-blocking).
 // The next event for that folder will catch any changes.
 func (ep *EventProcessor) ProcessEvent(ctx context.Context, event watcher.Event) error {
-	// Log the event
+	// Log the event.
 	ep.logger.Debug("processing event",
 		"type", event.Type.String(),
 		"path", event.Path,
 	)
 
-	// Classify file type
+	// Classify file type.
 	fileType := classifyFile(event.Path)
 
-	// Skip ignored files
+	// Skip ignored files.
 	if fileType == FileTypeIgnored {
 		ep.logger.Debug("ignoring file",
 			"path", event.Path,
@@ -67,13 +67,13 @@ func (ep *EventProcessor) ProcessEvent(ctx context.Context, event watcher.Event)
 		return nil
 	}
 
-	// Determine which book folder this file belongs to
+	// Determine which book folder this file belongs to.
 	bookFolder := determineBookFolder(event.Path)
 
-	// Acquire folder lock (deduplicate concurrent events)
+	// Acquire folder lock (deduplicate concurrent events).
 	lock := ep.getFolderLock(bookFolder)
 	if !lock.TryLock() {
-		// Already scanning this folder, skip
+		// Already scanning this folder, skip.
 		ep.logger.Debug("folder already being scanned, skipping",
 			"folder", bookFolder,
 			"path", event.Path,
@@ -82,9 +82,9 @@ func (ep *EventProcessor) ProcessEvent(ctx context.Context, event watcher.Event)
 	}
 	defer lock.Unlock()
 
-	// Process based on event type and file type
+	// Process based on event type and file type.
 	switch event.Type {
-	case watcher.EventAdded, watcher.EventModified:
+	case watcher.EventAdded, watcher.EventModified, watcher.EventMoved:
 		return ep.handleFileChange(ctx, bookFolder, event.Path, fileType)
 	case watcher.EventRemoved:
 		return ep.handleRemovedFile(ctx, bookFolder, event.Path, fileType)
@@ -106,7 +106,7 @@ func (ep *EventProcessor) handleFileChange(ctx context.Context, bookFolder, file
 		"type", fileType.String(),
 	)
 
-	// Delegate to specific handlers based on file type
+	// Delegate to specific handlers based on file type.
 	switch fileType {
 	case FileTypeAudio:
 		return ep.handleAudioFile(ctx, bookFolder, filePath)
@@ -114,6 +114,8 @@ func (ep *EventProcessor) handleFileChange(ctx context.Context, bookFolder, file
 		return ep.handleCoverFile(ctx, bookFolder, filePath)
 	case FileTypeMetadata:
 		return ep.handleMetadataFile(ctx, bookFolder, filePath)
+	case FileTypeIgnored:
+		return nil // Ignored files are skipped
 	default:
 		return nil
 	}
@@ -127,7 +129,7 @@ func (ep *EventProcessor) handleAudioFile(ctx context.Context, bookFolder, fileP
 		"file", filePath,
 	)
 
-	// Scan the folder to get the current state
+	// Scan the folder to get the current state.
 	item, err := ep.scanner.ScanFolder(ctx, bookFolder, scanner.ScanOptions{
 		Workers: 0, // Use default (runtime.NumCPU)
 	})
@@ -139,7 +141,7 @@ func (ep *EventProcessor) handleAudioFile(ctx context.Context, bookFolder, fileP
 		return fmt.Errorf("scan folder: %w", err)
 	}
 
-	// For now, just log the results
+	// For now, just log the results.
 	// TODO: Database integration - create or update book
 	ep.logger.Info("scanned audio file folder",
 		"folder", bookFolder,
@@ -159,7 +161,7 @@ func (ep *EventProcessor) handleCoverFile(ctx context.Context, bookFolder, fileP
 		"file", filePath,
 	)
 
-	// Scan the folder to get the current state (including the new cover)
+	// Scan the folder to get the current state (including the new cover).
 	item, err := ep.scanner.ScanFolder(ctx, bookFolder, scanner.ScanOptions{
 		Workers: 0, // Use default (runtime.NumCPU)
 	})
@@ -171,7 +173,7 @@ func (ep *EventProcessor) handleCoverFile(ctx context.Context, bookFolder, fileP
 		return fmt.Errorf("scan folder: %w", err)
 	}
 
-	// For now, just log the results
+	// For now, just log the results.
 	// TODO: Database integration - update book cover
 	ep.logger.Info("scanned cover file folder",
 		"folder", bookFolder,
@@ -191,7 +193,7 @@ func (ep *EventProcessor) handleMetadataFile(ctx context.Context, bookFolder, fi
 		"file", filePath,
 	)
 
-	// Scan the folder to get the current state (including the new metadata)
+	// Scan the folder to get the current state (including the new metadata).
 	item, err := ep.scanner.ScanFolder(ctx, bookFolder, scanner.ScanOptions{
 		Workers: 0, // Use default (runtime.NumCPU)
 	})
@@ -203,7 +205,7 @@ func (ep *EventProcessor) handleMetadataFile(ctx context.Context, bookFolder, fi
 		return fmt.Errorf("scan folder: %w", err)
 	}
 
-	// For now, just log the results
+	// For now, just log the results.
 	// TODO: Database integration - update book metadata
 	ep.logger.Info("scanned metadata file folder",
 		"folder", bookFolder,
@@ -216,7 +218,7 @@ func (ep *EventProcessor) handleMetadataFile(ctx context.Context, bookFolder, fi
 }
 
 // handleRemovedFile handles removed files.
-// Rescans the folder to see what remains. If no audio files remain,
+// Rescans the folder to see what remains. If no audio files remain,.
 // the book should be marked as missing.
 func (ep *EventProcessor) handleRemovedFile(ctx context.Context, bookFolder, filePath string, fileType FileType) error {
 	ep.logger.Info("handling removed file",
@@ -225,7 +227,7 @@ func (ep *EventProcessor) handleRemovedFile(ctx context.Context, bookFolder, fil
 		"type", fileType.String(),
 	)
 
-	// Rescan folder to see what remains
+	// Rescan folder to see what remains.
 	item, err := ep.scanner.ScanFolder(ctx, bookFolder, scanner.ScanOptions{
 		Workers: 0, // Use default (runtime.NumCPU)
 	})
@@ -237,17 +239,17 @@ func (ep *EventProcessor) handleRemovedFile(ctx context.Context, bookFolder, fil
 		return fmt.Errorf("scan folder: %w", err)
 	}
 
-	// Check if any audio files remain
+	// Check if any audio files remain.
 	if len(item.AudioFiles) == 0 {
-		// No audio files left - book should be marked as missing
-		// For now, just log
+		// No audio files left - book should be marked as missing.
+		// For now, just log.
 		// TODO: Database integration - mark book as missing
 		ep.logger.Info("no audio files remain, book should be marked missing",
 			"folder", bookFolder,
 		)
 	} else {
-		// Some files remain - update book
-		// For now, just log
+		// Some files remain - update book.
+		// For now, just log.
 		// TODO: Database integration - update book
 		ep.logger.Info("audio files remain after removal",
 			"folder", bookFolder,
@@ -263,16 +265,16 @@ func (ep *EventProcessor) handleRemovedFile(ctx context.Context, bookFolder, fil
 // getFolderLock gets or creates a mutex for the given folder.
 // This enables per-folder locking to prevent concurrent scans of the same folder.
 func (ep *EventProcessor) getFolderLock(folderPath string) *sync.Mutex {
-	// Try to load existing lock
+	// Try to load existing lock.
 	if lock, ok := ep.folderLocks.Load(folderPath); ok {
 		return lock
 	}
 
-	// Create new lock
+	// Create new lock.
 	newLock := &sync.Mutex{}
 
-	// Store it (LoadOrStore handles race condition if multiple goroutines
-	// try to create a lock for the same folder simultaneously)
+	// Store it (LoadOrStore handles race condition if multiple goroutines.
+	// try to create a lock for the same folder simultaneously).
 	actual, _ := ep.folderLocks.LoadOrStore(folderPath, newLock)
 
 	return actual

@@ -4,217 +4,216 @@ import (
 	"time"
 )
 
-// ScanResult represents the outcome of scanning a library
+// ScanResult represents the outcome of scanning a library.
 type ScanResult struct {
-	LibraryID   string
 	StartedAt   time.Time
 	CompletedAt time.Time
-
-	Added     int
-	Updated   int
-	Removed   int
-	Unchanged int
-	Errors    int
-
-	Progress *Progress
+	Progress    *Progress
+	LibraryID   string
+	Added       int
+	Updated     int
+	Removed     int
+	Unchanged   int
+	Errors      int
 }
 
-// LibraryItemData represents a discovered library item
+// LibraryItemData represents a discovered library item.
 type LibraryItemData struct {
-	Path    string
-	RelPath string
-	IsFile  bool // true if single audio file, false if directory
-	ModTime time.Time
-	Inode   uint64
-	Size    int64
-
+	ModTime       time.Time
+	Metadata      *BookMetadata
+	Path          string
+	RelPath       string
 	AudioFiles    []AudioFileData
 	ImageFiles    []ImageFileData
 	MetadataFiles []MetadataFileData
-
-	Metadata *BookMetadata
+	Inode         uint64
+	Size          int64
+	IsFile        bool
 }
 
-// AudioFileData represents a discovered audio file
+// AudioFileData represents a discovered audio file.
 type AudioFileData struct {
+	ModTime  time.Time
+	Metadata *AudioMetadata
 	Path     string
 	RelPath  string
 	Filename string
 	Ext      string
 	Size     int64
-	ModTime  time.Time
 	Inode    uint64
-
-	Metadata *AudioMetadata
 }
 
-// BookMetadata is the metadata for an audiobook
+// BookMetadata is the metadata for an audiobook.
 type BookMetadata struct {
-	Title       string
+	Sources     map[string]string
+	ASIN        string
+	ISBN        string
 	Subtitle    string
-	Authors     []string
-	Narrators   []string
-	Series      []SeriesInfo
+	Title       string
 	Description string
 	Publisher   string
 	PublishYear string
 	Language    string
 	Genres      []string
 	Tags        []string
-	ISBN        string
-	ASIN        string
+	Authors     []string
+	Series      []SeriesInfo
+	Chapters    []Chapter
+	Narrators   []string
 	Explicit    bool
 	Abridged    bool
-	Chapters    []Chapter
-
-	// Source tracking (for debugging)
-	Sources map[string]string // field -> source
 }
 
-// SeriesInfo represents series metadata
+// SeriesInfo represents series metadata.
 type SeriesInfo struct {
 	Name     string
 	Sequence string
 }
 
-// Chapter represents a chapter marker
+// Chapter represents a chapter marker.
 type Chapter struct {
-	ID        int
 	Title     string
+	ID        int
 	StartTime time.Duration
 	EndTime   time.Duration
 }
 
-// ImageFileData represents a discovered image file (cover art)
+// ImageFileData represents a discovered image file (cover art).
 type ImageFileData struct {
+	ModTime  time.Time
 	Path     string
 	RelPath  string
 	Filename string
 	Ext      string
 	Size     int64
-	ModTime  time.Time
 	Inode    uint64
 }
 
-// MetadataFileData represents a discovered metadata file
-// (metadata.json, metadata.abs, .opf, .nfo, desc.txt, reader.txt)
+// MetadataFileData represents a discovered metadata file.
+// (metadata.json, metadata.abs, .opf, .nfo, desc.txt, reader.txt).
 type MetadataFileData struct {
+	ModTime  time.Time
 	Path     string
 	RelPath  string
 	Filename string
 	Ext      string
 	Type     MetadataFileType
 	Size     int64
-	ModTime  time.Time
 	Inode    uint64
 }
 
-// MetadataFileType identifies the type of metadata file
+// MetadataFileType identifies the type of metadata file.
 type MetadataFileType string
 
+// MetadataFileType constants define the different types of metadata files.
 const (
-	MetadataTypeJSON    MetadataFileType = "metadata.json"
-	MetadataTypeABS     MetadataFileType = "metadata.abs"
-	MetadataTypeOPF     MetadataFileType = "opf"
-	MetadataTypeNFO     MetadataFileType = "nfo"
-	MetadataTypeDesc    MetadataFileType = "desc.txt"
-	MetadataTypeReader  MetadataFileType = "reader.txt"
+	// MetadataTypeJSON represents JSON metadata files.
+	MetadataTypeJSON MetadataFileType = "metadata.json"
+	// MetadataTypeABS represents AudioBookShelf metadata files.
+	MetadataTypeABS MetadataFileType = "metadata.abs"
+	// MetadataTypeOPF represents OPF (Open Packaging Format) metadata files.
+	MetadataTypeOPF MetadataFileType = "opf"
+	// MetadataTypeNFO represents NFO metadata files.
+	MetadataTypeNFO MetadataFileType = "nfo"
+	// MetadataTypeDesc represents description text files.
+	MetadataTypeDesc MetadataFileType = "desc.txt"
+	// MetadataTypeReader represents reader text files.
+	MetadataTypeReader MetadataFileType = "reader.txt"
+	// MetadataTypeUnknown represents unknown metadata file types.
 	MetadataTypeUnknown MetadataFileType = "unknown"
 )
 
-// AudioMetadata represents parsed metadata from an audio file
-// This is populated by the analyzer after parsing with ffprobe/native parser
+// AudioMetadata represents parsed metadata from an audio file.
+// This is populated by the analyzer after parsing with ffprobe/native parser.
 type AudioMetadata struct {
-	// Format info
-	Format     string
-	Duration   time.Duration
-	Bitrate    int // bits per second
-	SampleRate int // Hz
-	Channels   int
-	Codec      string
-
-	// Standard tags
+	Series      string
+	Description string
+	CoverMIME   string
+	Language    string
+	ASIN        string
+	Codec       string
 	Title       string
 	Album       string
 	Artist      string
 	AlbumArtist string
-	Composer    string // Often narrator
+	Composer    string
 	Genre       string
-	Year        int
-	Track       int
+	ISBN        string
+	SeriesPart  string
+	Format      string
+	Subtitle    string
+	Publisher   string
+	Narrator    string
+	Chapters    []Chapter
 	TrackTotal  int
 	Disc        int
 	DiscTotal   int
-
-	// Audiobook-specific tags
-	Narrator    string
-	Publisher   string
-	Description string
-	Subtitle    string
-	Series      string
-	SeriesPart  string
-	ISBN        string
-	ASIN        string
-	Language    string
-
-	// Chapters (if embedded in file)
-	Chapters []Chapter
-
-	// Embedded artwork
-	HasCover  bool
-	CoverMIME string
+	Duration    time.Duration
+	Track       int
+	Year        int
+	Channels    int
+	SampleRate  int
+	Bitrate     int
+	HasCover    bool
 }
 
-// Progress tracks scan progress
+// Progress tracks scan progress.
 type Progress struct {
 	Phase       ScanPhase
+	CurrentItem string
+	Errors      []ScanError
 	Current     int
 	Total       int
-	CurrentItem string
-
-	Added   int
-	Updated int
-	Removed int
-	Errors  []ScanError
+	Added       int
+	Updated     int
+	Removed     int
 }
 
-// ScanPhase represents the current scan phase
+// ScanPhase represents the current scan phase.
 type ScanPhase string
 
+// ScanPhase constants define the different phases of a library scan.
 const (
-	PhaseWalking   ScanPhase = "walking"
-	PhaseGrouping  ScanPhase = "grouping"
+	// PhaseWalking represents the file system walking phase.
+	PhaseWalking ScanPhase = "walking"
+	// PhaseGrouping represents the file grouping phase.
+	PhaseGrouping ScanPhase = "grouping"
+	// PhaseAnalyzing represents the metadata analysis phase.
 	PhaseAnalyzing ScanPhase = "analyzing"
+	// PhaseResolving represents the dependency resolution phase.
 	PhaseResolving ScanPhase = "resolving"
-	PhaseDiffing   ScanPhase = "diffing"
-	PhaseApplying  ScanPhase = "applying"
-	PhaseComplete  ScanPhase = "complete"
+	// PhaseDiffing represents the diff computation phase.
+	PhaseDiffing ScanPhase = "diffing"
+	// PhaseApplying represents the database update phase.
+	PhaseApplying ScanPhase = "applying"
+	// PhaseComplete represents the completion phase.
+	PhaseComplete ScanPhase = "complete"
 )
 
-// ScanError represents an error during scanning
+// ScanError represents an error during scanning.
 type ScanError struct {
+	Time  time.Time
+	Error error
 	Path  string
 	Phase ScanPhase
-	Error error
-	Time  time.Time
 }
 
-// ScanDiff  represents changes detected during scanning
+// ScanDiff  represents changes detected during scanning.
 type ScanDiff struct {
 	Added   []LibraryItemData
 	Updated []ItemUpdate
-	Removed []string //item id
+	Removed []string // item id
 }
 
-// ItemUpdate represents an update to an existing item
+// ItemUpdate represents an update to an existing item.
 type ItemUpdate struct {
-	ID      string
 	Changes map[string]FieldChange
+	ID      string
 }
 
-// FieldChange represents a field changescan
+// FieldChange represents a field changescan.
 type FieldChange struct {
-	Field    string
 	OldValue any
 	NewValue any
+	Field    string
 }

@@ -13,24 +13,28 @@ import (
 	"github.com/listenupapp/listenup-server/internal/id"
 )
 
-// Key prefixes for BadgerDB
+// Key prefixes for BadgerDB.
 const (
 	libraryPrefix    = "library:"
 	collectionPrefix = "collection:"
 
-	// Index Key
+	// Index Key.
 	collectionsByLibraryPrefix = "idx:collections:library:"
 	collectionsByTypePrefix    = "idx:collections:type:"
 )
 
 var (
-	ErrLibraryNotFound     = errors.New("library not found")
-	ErrCollectionNotFound  = errors.New("collection not found")
-	ErrDuplicateLibrary    = errors.New("library already exists")
+	// ErrLibraryNotFound is returned when a library is not found in the store.
+	ErrLibraryNotFound = errors.New("library not found")
+	// ErrCollectionNotFound is returned when a collection is not found in the store.
+	ErrCollectionNotFound = errors.New("collection not found")
+	// ErrDuplicateLibrary is returned when trying to create a library that already exists.
+	ErrDuplicateLibrary = errors.New("library already exists")
+	// ErrDuplicateCollection is returned when trying to create a collection that already exists.
 	ErrDuplicateCollection = errors.New("collection already exists")
 )
 
-// BootstrapResult contains the initialized library and collections
+// BootstrapResult contains the initialized library and collections.
 type BootstrapResult struct {
 	Library           *domain.Library
 	DefaultCollection *domain.Collection
@@ -44,22 +48,23 @@ type BootstrapResult struct {
 // Returns the library and its system collections.
 //
 // This function is idempotent - calling it multiple times is safe:
-//   - First call: Creates library + collections
-//   - Subsequent calls: Returns existing library
-//   - New scan path: Adds to existing library
+//   - First call: Creates library + collections.
+//   - Subsequent calls: Returns existing library.
+//   - New scan path: Adds to existing library.
 func (s *Store) EnsureLibrary(ctx context.Context, scanPath string) (*BootstrapResult, error) {
 	result := &BootstrapResult{}
 
-	// Try to get existing library
+	// Try to get existing library.
 	library, err := s.GetDefaultLibrary(ctx)
 
-	if err == ErrLibraryNotFound {
-		// No library exists - create everything from scratch
+	switch {
+	case errors.Is(err, ErrLibraryNotFound):
+		// No library exists - create everything from scratch.
 		if s.logger != nil {
 			s.logger.Info("no library found, creating new library", "scan_path", scanPath)
 		}
 
-		// Generate IDs
+		// Generate IDs.
 		libraryID, err := id.Generate("lib")
 		if err != nil {
 			return nil, fmt.Errorf("generate library ID: %w", err)
@@ -75,7 +80,7 @@ func (s *Store) EnsureLibrary(ctx context.Context, scanPath string) (*BootstrapR
 			return nil, fmt.Errorf("generate inbox collection ID: %w", err)
 		}
 
-		// Create library
+		// Create library.
 		library = &domain.Library{
 			ID:        libraryID,
 			Name:      "My Library",
@@ -90,7 +95,7 @@ func (s *Store) EnsureLibrary(ctx context.Context, scanPath string) (*BootstrapR
 
 		result.IsNewLibrary = true
 
-		// Create default collection
+		// Create default collection.
 		defaultColl := &domain.Collection{
 			ID:        defaultCollID,
 			LibraryID: library.ID,
@@ -107,7 +112,7 @@ func (s *Store) EnsureLibrary(ctx context.Context, scanPath string) (*BootstrapR
 
 		result.DefaultCollection = defaultColl
 
-		// Create inbox collection
+		// Create inbox collection.
 		inboxColl := &domain.Collection{
 			ID:        inboxCollID,
 			LibraryID: library.ID,
@@ -131,11 +136,10 @@ func (s *Store) EnsureLibrary(ctx context.Context, scanPath string) (*BootstrapR
 				"inbox_collection_id", inboxColl.ID,
 			)
 		}
-
-	} else if err != nil {
+	case err != nil:
 		return nil, fmt.Errorf("get default library: %w", err)
-	} else {
-		// Library exists - ensure scan path is included
+	default:
+		// Library exists - ensure scan path is included.
 		result.IsNewLibrary = false
 
 		hasPath := false
@@ -162,7 +166,7 @@ func (s *Store) EnsureLibrary(ctx context.Context, scanPath string) (*BootstrapR
 			}
 		}
 
-		// Get existing collections
+		// Get existing collections.
 		defaultColl, err := s.GetDefaultCollection(ctx, library.ID)
 		if err != nil {
 			return nil, fmt.Errorf("get default collection: %w", err)
@@ -187,10 +191,11 @@ func (s *Store) EnsureLibrary(ctx context.Context, scanPath string) (*BootstrapR
 	return result, nil
 }
 
-func (s *Store) CreateLibrary(ctx context.Context, lib *domain.Library) error {
+// CreateLibrary creates a new library in the store.
+func (s *Store) CreateLibrary(_ context.Context, lib *domain.Library) error {
 	key := []byte(libraryPrefix + lib.ID)
 
-	// Check if already exists
+	// Check if already exists.
 	exists, err := s.exists(key)
 	if err != nil {
 		return fmt.Errorf("check library exists: %w", err)
@@ -209,7 +214,8 @@ func (s *Store) CreateLibrary(ctx context.Context, lib *domain.Library) error {
 	return nil
 }
 
-func (s *Store) GetLibrary(ctx context.Context, id string) (*domain.Library, error) {
+// GetLibrary retrieves a library by ID.
+func (s *Store) GetLibrary(_ context.Context, id string) (*domain.Library, error) {
 	key := []byte(libraryPrefix + id)
 
 	var lib domain.Library
@@ -223,10 +229,11 @@ func (s *Store) GetLibrary(ctx context.Context, id string) (*domain.Library, err
 	return &lib, nil
 }
 
-func (s *Store) UpdateLibrary(ctx context.Context, lib *domain.Library) error {
+// UpdateLibrary updates an existing library in the store.
+func (s *Store) UpdateLibrary(_ context.Context, lib *domain.Library) error {
 	key := []byte(libraryPrefix + lib.ID)
 
-	// Verify exists
+	// Verify exists.
 	exists, err := s.exists(key)
 	if err != nil {
 		return fmt.Errorf("check library exists: %w", err)
@@ -246,14 +253,15 @@ func (s *Store) UpdateLibrary(ctx context.Context, lib *domain.Library) error {
 	return nil
 }
 
+// DeleteLibrary deletes a library and all its collections.
 func (s *Store) DeleteLibrary(ctx context.Context, id string) error {
-	// Get all collections for this library
+	// Get all collections for this library.
 	collections, err := s.ListCollectionsByLibrary(ctx, id)
 	if err != nil {
 		return fmt.Errorf("list collections: %w", err)
 	}
 
-	// Delete all collections first
+	// Delete all collections first.
 	for _, coll := range collections {
 		if err := s.DeleteCollection(ctx, coll.ID); err != nil {
 			return fmt.Errorf("delete collection %s: %w", coll.ID, err)
@@ -307,6 +315,7 @@ func (s *Store) ListLibraries(ctx context.Context) ([]*domain.Library, error) {
 	return libraries, nil
 }
 
+// GetDefaultLibrary returns the first library in the store.
 func (s *Store) GetDefaultLibrary(ctx context.Context) (*domain.Library, error) {
 	libraries, err := s.ListLibraries(ctx)
 	if err != nil {
@@ -320,7 +329,8 @@ func (s *Store) GetDefaultLibrary(ctx context.Context) (*domain.Library, error) 
 	return libraries[0], nil
 }
 
-func (s *Store) CreateCollection(ctx context.Context, coll *domain.Collection) error {
+// CreateCollection creates a new collection in the store.
+func (s *Store) CreateCollection(_ context.Context, coll *domain.Collection) error {
 	key := []byte(collectionPrefix + coll.ID)
 
 	exists, err := s.exists(key)
@@ -380,7 +390,8 @@ func (s *Store) CreateCollection(ctx context.Context, coll *domain.Collection) e
 	return nil
 }
 
-func (s *Store) GetCollection(ctx context.Context, id string) (*domain.Collection, error) {
+// GetCollection retrieves a collection by ID.
+func (s *Store) GetCollection(_ context.Context, id string) (*domain.Collection, error) {
 	key := []byte(collectionPrefix + id)
 
 	var coll domain.Collection
@@ -394,7 +405,8 @@ func (s *Store) GetCollection(ctx context.Context, id string) (*domain.Collectio
 	return &coll, nil
 }
 
-func (s *Store) UpdateCollection(ctx context.Context, coll *domain.Collection) error {
+// UpdateCollection updates an existing collection in the store.
+func (s *Store) UpdateCollection(_ context.Context, coll *domain.Collection) error {
 	key := []byte(collectionPrefix + coll.ID)
 
 	exists, err := s.exists(key)
@@ -416,6 +428,7 @@ func (s *Store) UpdateCollection(ctx context.Context, coll *domain.Collection) e
 	return nil
 }
 
+// DeleteCollection deletes a collection from the store.
 func (s *Store) DeleteCollection(ctx context.Context, id string) error {
 	coll, err := s.GetCollection(ctx, id)
 	if err != nil {
@@ -469,6 +482,7 @@ func (s *Store) DeleteCollection(ctx context.Context, id string) error {
 	return nil
 }
 
+// ListCollectionsByLibrary returns all collections for a given library.
 func (s *Store) ListCollectionsByLibrary(ctx context.Context, libraryID string) ([]*domain.Collection, error) {
 	indexKey := []byte(collectionsByLibraryPrefix + libraryID)
 
@@ -495,8 +509,9 @@ func (s *Store) ListCollectionsByLibrary(ctx context.Context, libraryID string) 
 	return collections, nil
 }
 
+// GetCollectionByType returns a collection of a specific type for a library.
 func (s *Store) GetCollectionByType(ctx context.Context, libraryID string, collType domain.CollectionType) (*domain.Collection, error) {
-	// Use type index for fast lookup
+	// Use type index for fast lookup.
 	typeKey := []byte(collectionsByTypePrefix + libraryID + ":" + collType.String())
 
 	var collectionID string
@@ -520,15 +535,17 @@ func (s *Store) GetCollectionByType(ctx context.Context, libraryID string, collT
 	return s.GetCollection(ctx, collectionID)
 }
 
-// GetDefaultCollection returns the default collection for a library
+// GetDefaultCollection returns the default collection for a library.
 func (s *Store) GetDefaultCollection(ctx context.Context, libraryID string) (*domain.Collection, error) {
 	return s.GetCollectionByType(ctx, libraryID, domain.CollectionTypeDefault)
 }
 
+// GetInboxCollection returns the inbox collection for a library.
 func (s *Store) GetInboxCollection(ctx context.Context, libraryID string) (*domain.Collection, error) {
 	return s.GetCollectionByType(ctx, libraryID, domain.CollectionTypeInbox)
 }
 
+// AddBookToCollection adds a book to a collection.
 func (s *Store) AddBookToCollection(ctx context.Context, bookID, collectionID string) error {
 	coll, err := s.GetCollection(ctx, collectionID)
 	if err != nil {
@@ -536,7 +553,7 @@ func (s *Store) AddBookToCollection(ctx context.Context, bookID, collectionID st
 	}
 
 	if slices.Contains(coll.BookIDs, bookID) {
-		// Collection already contains book, return nil
+		// Collection already contains book, return nil.
 		return nil
 	}
 
@@ -545,7 +562,7 @@ func (s *Store) AddBookToCollection(ctx context.Context, bookID, collectionID st
 	return s.UpdateCollection(ctx, coll)
 }
 
-// RemoveBookFromCollection removes a book ID from a collection
+// RemoveBookFromCollection removes a book ID from a collection.
 func (s *Store) RemoveBookFromCollection(ctx context.Context, bookID, collectionID string) error {
 	coll, err := s.GetCollection(ctx, collectionID)
 	if err != nil {
@@ -559,11 +576,12 @@ func (s *Store) RemoveBookFromCollection(ctx context.Context, bookID, collection
 	return s.UpdateCollection(ctx, coll)
 }
 
+// GetCollectionsForBook returns all collections containing a specific book.
 func (s *Store) GetCollectionsForBook(ctx context.Context, bookID string) ([]*domain.Collection, error) {
 	var matchingCollections []*domain.Collection
 
-	// We need to scan all collections (no reverse index yet)
-	// For now, iterate through all libraries and their collections
+	// We need to scan all collections (no reverse index yet).
+	// For now, iterate through all libraries and their collections.
 	libraries, err := s.ListLibraries(ctx)
 	if err != nil {
 		return nil, err

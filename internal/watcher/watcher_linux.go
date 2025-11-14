@@ -14,25 +14,23 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// linuxBackend implements WatcherBackend using Linux inotify with IN_CLOSE_WRITE
+// linuxBackend implements Backend using Linux inotify with IN_CLOSE_WRITE.
 type linuxBackend struct {
-	logger *slog.Logger
-	opts   Options
-
-	fd      int            // inotify file descriptor
-	watches map[string]int // path -> watch descriptor
-	wdPaths map[int]string // watch descriptor -> path
-	mu      sync.RWMutex   // protects watches and wdPaths
-
-	events chan Event
-	errors chan error
-	done   chan struct{}
-	wg     sync.WaitGroup
+	logger  *slog.Logger
+	watches map[string]int
+	wdPaths map[int]string
+	events  chan Event
+	errors  chan error
+	done    chan struct{}
+	opts    Options
+	wg      sync.WaitGroup
+	fd      int
+	mu      sync.RWMutex
 }
 
-// newLinuxBackend creates a new Linux-specific file watcher backend
+// newLinuxBackend creates a new Linux-specific file watcher backend.
 func newLinuxBackend(logger *slog.Logger, opts Options) (*linuxBackend, error) {
-	// Initialize inotify
+	// Initialize inotify.
 	fd, err := unix.InotifyInit1(unix.IN_CLOEXEC | unix.IN_NONBLOCK)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize inotify: %w", err)
@@ -50,34 +48,34 @@ func newLinuxBackend(logger *slog.Logger, opts Options) (*linuxBackend, error) {
 	}, nil
 }
 
-// Watch adds a path to be monitored
+// Watch adds a path to be monitored.
 func (b *linuxBackend) Watch(path string) error {
-	// Clean the path
+	// Clean the path.
 	path = filepath.Clean(path)
 
-	// Check if path exists
+	// Check if path exists.
 	info, err := os.Stat(path)
 	if err != nil {
 		return fmt.Errorf("failed to stat path: %w", err)
 	}
 
-	// Add watch for this path
+	// Add watch for this path.
 	if info.IsDir() {
 		return b.watchDir(path)
 	}
 	return b.watchFile(path)
 }
 
-// watchDir recursively watches a directory
+// watchDir recursively watches a directory.
 func (b *linuxBackend) watchDir(path string) error {
-	// Walk the directory tree
+	// Walk the directory tree.
 	return filepath.Walk(path, func(p string, info os.FileInfo, err error) error {
 		if err != nil {
 			b.logger.Warn("failed to access path", "path", p, "error", err)
 			return nil // Continue walking
 		}
 
-		// Skip ignored paths
+		// Skip ignored paths.
 		if b.opts.shouldIgnore(p) {
 			if info.IsDir() {
 				return filepath.SkipDir
@@ -85,12 +83,12 @@ func (b *linuxBackend) watchDir(path string) error {
 			return nil
 		}
 
-		// Only watch directories
+		// Only watch directories.
 		if !info.IsDir() {
 			return nil
 		}
 
-		// Add inotify watch
+		// Add inotify watch.
 		if err := b.addWatch(p); err != nil {
 			b.logger.Error("failed to add watch", "path", p, "error", err)
 			return nil // Continue walking
@@ -100,28 +98,28 @@ func (b *linuxBackend) watchDir(path string) error {
 	})
 }
 
-// watchFile watches a single file by watching its parent directory
+// watchFile watches a single file by watching its parent directory.
 func (b *linuxBackend) watchFile(path string) error {
 	dir := filepath.Dir(path)
 	return b.addWatch(dir)
 }
 
-// addWatch adds an inotify watch for a path
+// addWatch adds an inotify watch for a path.
 func (b *linuxBackend) addWatch(path string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	// Check if already watching
+	// Check if already watching.
 	if _, exists := b.watches[path]; exists {
 		return nil
 	}
 
-	// Add inotify watch
-	// IN_CLOSE_WRITE: File closed after writing (perfect for our use case!)
-	// IN_MOVED_TO: File moved into watched directory
-	// IN_CREATE: Directory created (we need to watch new directories)
-	// IN_DELETE: File/directory deleted
-	// IN_ONLYDIR: Only watch if path is a directory
+	// Add inotify watch.
+	// IN_CLOSE_WRITE: File closed after writing (perfect for our use case!).
+	// IN_MOVED_TO: File moved into watched directory.
+	// IN_CREATE: Directory created (we need to watch new directories).
+	// IN_DELETE: File/directory deleted.
+	// IN_ONLYDIR: Only watch if path is a directory.
 	mask := unix.IN_CLOSE_WRITE | unix.IN_MOVED_TO | unix.IN_CREATE | unix.IN_DELETE
 
 	wd, err := unix.InotifyAddWatch(b.fd, path, uint32(mask))
@@ -136,17 +134,17 @@ func (b *linuxBackend) addWatch(path string) error {
 	return nil
 }
 
-// Start begins watching for events
+// Start begins watching for events.
 func (b *linuxBackend) Start(ctx context.Context) error {
 	b.wg.Add(1)
 	go b.readEvents(ctx)
 
-	// Wait for context cancellation or done signal
+	// Wait for context cancellation or done signal.
 	<-ctx.Done()
 	return nil
 }
 
-// readEvents reads events from inotify
+// readEvents reads events from inotify.
 func (b *linuxBackend) readEvents(ctx context.Context) {
 	defer b.wg.Done()
 
@@ -159,7 +157,7 @@ func (b *linuxBackend) readEvents(ctx context.Context) {
 		case <-b.done:
 			return
 		default:
-			// Read events (this blocks until events are available)
+			// Read events (this blocks until events are available).
 			n, err := unix.Read(b.fd, buf)
 			if err != nil {
 				if err == unix.EINTR {
@@ -181,14 +179,14 @@ func (b *linuxBackend) readEvents(ctx context.Context) {
 	}
 }
 
-// parseEvents parses raw inotify events
+// parseEvents parses raw inotify events.
 func (b *linuxBackend) parseEvents(buf []byte) {
 	offset := 0
 	for offset < len(buf) {
 		event := (*unix.InotifyEvent)(unsafe.Pointer(&buf[offset]))
 		offset += unix.SizeofInotifyEvent + int(event.Len)
 
-		// Get the path for this watch descriptor
+		// Get the path for this watch descriptor.
 		b.mu.RLock()
 		dir, ok := b.wdPaths[int(event.Wd)]
 		b.mu.RUnlock()
@@ -197,7 +195,7 @@ func (b *linuxBackend) parseEvents(buf []byte) {
 			continue
 		}
 
-		// Get the full path
+		// Get the full path.
 		name := ""
 		if event.Len > 0 {
 			nameBytes := buf[offset-int(event.Len) : offset]
@@ -206,29 +204,31 @@ func (b *linuxBackend) parseEvents(buf []byte) {
 
 		path := filepath.Join(dir, name)
 
-		// Process the event
+		// Process the event.
 		b.processEvent(path, event.Mask)
 	}
 }
 
-// processEvent processes a single inotify event
+// processEvent processes a single inotify event.
 func (b *linuxBackend) processEvent(path string, mask uint32) {
-	// Skip ignored paths
+	// Skip ignored paths.
 	if b.opts.shouldIgnore(path) {
 		return
 	}
 
-	// Handle directory creation
+	// Handle directory creation.
 	if mask&unix.IN_CREATE != 0 {
 		info, err := os.Stat(path)
 		if err == nil && info.IsDir() {
-			// New directory created, watch it
-			b.watchDir(path)
+			// New directory created, watch it.
+			if err := b.watchDir(path); err != nil {
+				b.logger.Warn("failed to watch new directory", "path", path, "error", err)
+			}
 			return
 		}
 	}
 
-	// Handle file deletion
+	// Handle file deletion.
 	if mask&unix.IN_DELETE != 0 {
 		b.emitEvent(Event{
 			Type: EventRemoved,
@@ -237,34 +237,34 @@ func (b *linuxBackend) processEvent(path string, mask uint32) {
 		return
 	}
 
-	// Handle file close after write (file is ready!)
+	// Handle file close after write (file is ready!).
 	if mask&unix.IN_CLOSE_WRITE != 0 {
 		b.handleFileReady(path)
 		return
 	}
 
-	// Handle file moved into directory
+	// Handle file moved into directory.
 	if mask&unix.IN_MOVED_TO != 0 {
 		b.handleFileReady(path)
 		return
 	}
 }
 
-// handleFileReady handles a file that is ready to be processed
+// handleFileReady handles a file that is ready to be processed.
 func (b *linuxBackend) handleFileReady(path string) {
-	// Get file info
+	// Get file info.
 	info, err := os.Stat(path)
 	if err != nil {
 		b.logger.Warn("failed to stat file", "path", path, "error", err)
 		return
 	}
 
-	// Skip directories
+	// Skip directories.
 	if info.IsDir() {
 		return
 	}
 
-	// Create event
+	// Create event.
 	event := Event{
 		Type:    EventAdded, // TODO: Track files to determine if added or modified
 		Path:    path,
@@ -276,7 +276,7 @@ func (b *linuxBackend) handleFileReady(path string) {
 	b.emitEvent(event)
 }
 
-// emitEvent sends an event to the events channel
+// emitEvent sends an event to the events channel.
 func (b *linuxBackend) emitEvent(event Event) {
 	select {
 	case b.events <- event:
@@ -284,35 +284,36 @@ func (b *linuxBackend) emitEvent(event Event) {
 	}
 }
 
-// Events returns the events channel
+// Events returns the events channel.
 func (b *linuxBackend) Events() <-chan Event {
 	return b.events
 }
 
-// Errors returns the errors channel
+// Errors returns the errors channel.
 func (b *linuxBackend) Errors() <-chan error {
 	return b.errors
 }
 
-// Stop stops the watcher
+// Stop stops the watcher.
 func (b *linuxBackend) Stop() error {
 	close(b.done)
 
-	// Wait for goroutines to finish
+	// Wait for goroutines to finish.
 	b.wg.Wait()
 
-	// Close inotify
+	// Close inotify.
+	var closeErr error
 	if b.fd >= 0 {
-		unix.Close(b.fd)
+		closeErr = unix.Close(b.fd)
 	}
 
 	close(b.events)
 	close(b.errors)
 
-	return nil
+	return closeErr
 }
 
-// clen returns the length of a null-terminated byte slice
+// clen returns the length of a null-terminated byte slice.
 func clen(n []byte) int {
 	for i := 0; i < len(n); i++ {
 		if n[i] == 0 {
@@ -322,8 +323,8 @@ func clen(n []byte) int {
 	return len(n)
 }
 
-// newFallbackBackend is a stub that should never be called on Linux
-// It exists only to satisfy the compiler when watcher.go references it
-func newFallbackBackend(logger *slog.Logger, opts Options) (WatcherBackend, error) {
+// newFallbackBackend is a stub that should never be called on Linux.
+// It exists only to satisfy the compiler when watcher.go references it.
+func newFallbackBackend(_ *slog.Logger, _ Options) (Backend, error) {
 	return nil, fmt.Errorf("fallback backend not available on Linux")
 }

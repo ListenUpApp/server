@@ -5,62 +5,54 @@ import (
 	"time"
 )
 
-// Parser parses audio file metadata
+// Parser parses audio file metadata.
 type Parser interface {
 
-	// Parse extracts metadata from an audio file
+	// Parse extracts metadata from an audio file.
 	Parse(ctx context.Context, path string) (*Metadata, error)
 
-	// ParseMultiFile aggregates metadata from multiple audio files
-	// Used for multi-file audiobooks/albums (e.g., one MP3 per chapter)
+	// ParseMultiFile aggregates metadata from multiple audio files.
+	// Used for multi-file audiobooks/albums (e.g., one MP3 per chapter).
 	ParseMultiFile(ctx context.Context, paths []string) (*Metadata, error)
 }
 
+// Metadata contains audio file metadata extracted by parsers.
 type Metadata struct {
-	// Format info
-	Format     string
-	Duration   time.Duration
-	Bitrate    int // bits per second
-	SampleRate int // Hz
-	Channels   int
-	Codec      string
-
-	// Standard tags
+	Series      string
+	Description string
+	CoverMIME   string
+	Language    string
+	ASIN        string
+	Codec       string
 	Title       string
 	Album       string
 	Artist      string
 	AlbumArtist string
-	Composer    string // Often narrator
+	Composer    string
 	Genre       string
-	Year        int
-	Track       int
+	ISBN        string
+	SeriesPart  string
+	Format      string
+	Subtitle    string
+	Publisher   string
+	Narrator    string
+	Chapters    []Chapter
 	TrackTotal  int
 	Disc        int
 	DiscTotal   int
-
-	// Extended metadata
-	Narrator    string
-	Publisher   string
-	Description string
-	Subtitle    string
-	Series      string
-	SeriesPart  string
-	ISBN        string
-	ASIN        string
-	Language    string
-
-	// Chapters
-	Chapters []Chapter
-
-	// Embedded artwork
-	HasCover  bool
-	CoverMIME string
+	Duration    time.Duration
+	Track       int
+	Year        int
+	Channels    int
+	SampleRate  int
+	Bitrate     int
+	HasCover    bool
 }
 
-// Chapter represents a chapter marker
+// Chapter represents a chapter marker.
 type Chapter struct {
-	Index     int
 	Title     string
+	Index     int
 	StartTime time.Duration
 	EndTime   time.Duration
 }

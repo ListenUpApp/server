@@ -1,6 +1,8 @@
+// Package api provides the HTTP API server and handlers for the ListenUp application.
 package api
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -14,7 +16,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
-// Server holds dependencies for HTTP handlers
+// Server holds dependencies for HTTP handlers.
 type Server struct {
 	instanceService *service.InstanceService
 	bookService     *service.BookService
@@ -24,7 +26,7 @@ type Server struct {
 	logger          *slog.Logger
 }
 
-// NewServer creates a new HTTP server with all routes configured
+// NewServer creates a new HTTP server with all routes configured.
 func NewServer(instanceService *service.InstanceService, bookService *service.BookService, syncService *service.SyncService, sseHandler *sse.Handler, logger *slog.Logger) *Server {
 	s := &Server{
 		instanceService: instanceService,
@@ -41,12 +43,12 @@ func NewServer(instanceService *service.InstanceService, bookService *service.Bo
 	return s
 }
 
-// ServeHTTP implements http.Handler
+// ServeHTTP implements http.Handler.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.router.ServeHTTP(w, r)
 }
 
-// setupMiddleware configures middleware stack
+// setupMiddleware configures middleware stack.
 func (s *Server) setupMiddleware() {
 	s.router.Use(middleware.RequestID)
 	s.router.Use(middleware.RealIP)
@@ -55,23 +57,23 @@ func (s *Server) setupMiddleware() {
 	s.router.Use(middleware.Compress(5))
 }
 
-// setupRoutes configures all HTTP routes
+// setupRoutes configures all HTTP routes.
 func (s *Server) setupRoutes() {
-	// Health check
+	// Health check.
 	s.router.Get("/health", s.handleHealthCheck)
 
-	// API v1
+	// API v1.
 	s.router.Route("/api/v1", func(r chi.Router) {
 		r.Get("/instance", s.handleGetInstance)
 
-		// Books (temp)
+		// Books (temp).
 		r.Get("/books", s.handleListBooks)
 		r.Get("/books/{id}", s.handleGetBook)
 
-		// Libraries (also temp)
+		// Libraries (also temp).
 		r.Post("/libraries/{id}/scan", s.handleTriggerScan)
 
-		// Sync endpoints
+		// Sync endpoints.
 		r.Route("/sync", func(r chi.Router) {
 			r.Get("/manifest", s.handleGetManifest)
 			r.Get("/books", s.handleSyncBooks)
@@ -80,14 +82,14 @@ func (s *Server) setupRoutes() {
 	})
 }
 
-// handleHealthCheck returns server health status
-func (s *Server) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
+// handleHealthCheck returns server health status.
+func (s *Server) handleHealthCheck(w http.ResponseWriter, _ *http.Request) {
 	response.Success(w, map[string]string{
 		"status": "healthy",
 	}, s.logger)
 }
 
-// handleGetInstance returns the singleton server instance configuration
+// handleGetInstance returns the singleton server instance configuration.
 func (s *Server) handleGetInstance(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -101,14 +103,14 @@ func (s *Server) handleGetInstance(w http.ResponseWriter, r *http.Request) {
 	response.Success(w, instance, s.logger)
 }
 
-// Placeholder routes, since I haven't throught through our API layer yet.  Super basic logic
-// For the time being.
+// Placeholder routes, since I haven't thought through our API layer yet. Super basic logic.
+// for the time being.
 
-// handleListBooks returns a paginated list of books
+// handleListBooks returns a paginated list of books.
 func (s *Server) handleListBooks(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Parse pagination parameters from query string
+	// Parse pagination parameters from query string.
 	params := parsePaginationParams(r)
 
 	books, err := s.bookService.ListBooks(ctx, params)
@@ -121,7 +123,7 @@ func (s *Server) handleListBooks(w http.ResponseWriter, r *http.Request) {
 	response.Success(w, books, s.logger)
 }
 
-// handleGetBook returns a single book by ID
+// handleGetBook returns a single book by ID.
 func (s *Server) handleGetBook(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := chi.URLParam(r, "id")
@@ -133,7 +135,7 @@ func (s *Server) handleGetBook(w http.ResponseWriter, r *http.Request) {
 
 	book, err := s.bookService.GetBook(ctx, id)
 	if err != nil {
-		if err == store.ErrBookNotFound {
+		if errors.Is(err, store.ErrBookNotFound) {
 			response.NotFound(w, "Book not found", s.logger)
 			return
 		}
@@ -145,7 +147,7 @@ func (s *Server) handleGetBook(w http.ResponseWriter, r *http.Request) {
 	response.Success(w, book, s.logger)
 }
 
-// handleTriggerScan triggers a library scan
+// handleTriggerScan triggers a library scan.
 func (s *Server) handleTriggerScan(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	libraryID := chi.URLParam(r, "id")
@@ -155,7 +157,7 @@ func (s *Server) handleTriggerScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse force parameter
+	// Parse force parameter.
 	force := r.URL.Query().Get("force") == "true"
 
 	result, err := s.bookService.TriggerScan(ctx, libraryID, scanner.ScanOptions{
@@ -170,7 +172,7 @@ func (s *Server) handleTriggerScan(w http.ResponseWriter, r *http.Request) {
 	response.Success(w, result, s.logger)
 }
 
-// handleGetManifest returns the sync manifest (initial sync phase 1)
+// handleGetManifest returns the sync manifest (initial sync phase 1).
 func (s *Server) handleGetManifest(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -184,11 +186,11 @@ func (s *Server) handleGetManifest(w http.ResponseWriter, r *http.Request) {
 	response.Success(w, manifest, s.logger)
 }
 
-// handleSyncBooks returns paginated books for synching
+// handleSyncBooks returns paginated books for synching.
 func (s *Server) handleSyncBooks(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Parse pagination parameters
+	// Parse pagination parameters.
 	params := parsePaginationParams(r)
 
 	books, err := s.syncService.GetBooksForSync(ctx, params)
@@ -201,9 +203,9 @@ func (s *Server) handleSyncBooks(w http.ResponseWriter, r *http.Request) {
 	response.Success(w, books, s.logger)
 }
 
-// Helper functions
+// Helper functions.
 
-// parsePaginationParams parses pagination parameters from query string
+// parsePaginationParams parses pagination parameters from query string.
 func parsePaginationParams(r *http.Request) store.PaginationParams {
 	params := store.DefaultPaginationParms()
 
@@ -217,7 +219,7 @@ func parsePaginationParams(r *http.Request) store.PaginationParams {
 		params.Cursor = cursor
 	}
 
-	// Validate parameters
+	// Validate parameters.
 	params.Validate()
 
 	return params

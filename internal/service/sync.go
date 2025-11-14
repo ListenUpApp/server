@@ -9,28 +9,29 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
-// ManifestResponse is the response for GET /api/v1/sync/manifest
-// This is the first phase of initial sync, the idea is to give the client
-// minimal info to display immediately to the user while we fetch the real
+// ManifestResponse is the response for GET /api/v1/sync/manifest.
+// This is the first phase of initial sync, the idea is to give the client.
+// minimal info to display immediately to the user while we fetch the real.
 // stuff in the background.
 type ManifestResponse struct {
-	LibraryVersion string `json:"library_version"` // RFC3339 timestamp
-	Checkpoint     string `json:"checkpoint"`      // Same as library_version, for clarity
+	LibraryVersion string   `json:"library_version"`
+	Checkpoint     string   `json:"checkpoint"`
+	BookIDs        []string `json:"book_ids"`
 	Counts         struct {
 		Books   int `json:"books"`
-		Authors int `json:"authors"` // Future: will be > 0 when authors implemented
-		Series  int `json:"series"`  // Future: will be > 0 when series implemented
-	} `json:"counts"`
-	BookIDs []string `json:"book_ids"` // All book IDs in library
+		Authors int `json:"authors"`
+		Series  int `json:"series"`
+	} `json:"counts"` // Future: will be > 0 when authors implemented
+	// Future: will be > 0 when series implemented
 }
 
-// SyncService orchestrates sync operations between server and clients
+// SyncService orchestrates sync operations between server and clients.
 type SyncService struct {
 	store  *store.Store
 	logger *slog.Logger
 }
 
-// NewSyncService creates a new sync service
+// NewSyncService creates a new sync service.
 func NewSyncService(store *store.Store, logger *slog.Logger) *SyncService {
 	return &SyncService{
 		store:  store,
@@ -38,28 +39,28 @@ func NewSyncService(store *store.Store, logger *slog.Logger) *SyncService {
 	}
 }
 
-// GetManifest returns the library manifest for sync
-// This provides a high-level overview of the library state including
-// the current checkpoint and counts of various entities
+// GetManifest returns the library manifest for sync.
+// This provides a high-level overview of the library state including.
+// the current checkpoint and counts of various entities.
 func (s *SyncService) GetManifest(ctx context.Context) (*ManifestResponse, error) {
-	// Get all book IDs (efficient - doesn't deserialize full books)
+	// Get all book IDs (efficient - doesn't deserialize full books).
 	bookIDs, err := s.store.GetAllBookIDs(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	// Get library checkpoint (ie. most recent UpdatedAt timestamp across all our entities)
+	// Get library checkpoint (ie. most recent UpdatedAt timestamp across all our entities).
 	checkpoint, err := s.store.GetLibraryCheckpoint(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	// If no books exist, use current time as checkpoint
+	// If no books exist, use current time as checkpoint.
 	if checkpoint.IsZero() {
 		checkpoint = time.Now()
 	}
 
-	// Build response
+	// Build response.
 	manifest := &ManifestResponse{
 		LibraryVersion: checkpoint.Format(time.RFC3339),
 		Checkpoint:     checkpoint.Format(time.RFC3339),
@@ -78,16 +79,16 @@ func (s *SyncService) GetManifest(ctx context.Context) (*ManifestResponse, error
 	return manifest, nil
 }
 
-// BooksResponse represents paginated books with related entities
+// BooksResponse represents paginated books with related entities.
 type BooksResponse struct {
-	Books      []*domain.Book `json:"books"`
 	NextCursor string         `json:"next_cursor,omitempty"`
+	Books      []*domain.Book `json:"books"`
 	HasMore    bool           `json:"has_more"`
 }
 
-// GetBooksForSync returns paginated books for initial sync
+// GetBooksForSync returns paginated books for initial sync.
 func (s *SyncService) GetBooksForSync(ctx context.Context, params store.PaginationParams) (*BooksResponse, error) {
-	// Validate and set defaults
+	// Validate and set defaults.
 	params.Validate()
 
 	result, err := s.store.ListBooks(ctx, params)

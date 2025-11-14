@@ -1,3 +1,4 @@
+// Package main provides the entry point for the ListenUp server application.
 package main
 
 import (
@@ -22,14 +23,14 @@ import (
 )
 
 func main() {
-	// Load configuration
+	// Load configuration.
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Initialize logger
+	// Initialize logger.
 	log := logger.New(logger.Config{
 		Level:       logger.ParseLevel(cfg.Logger.Level),
 		AddSource:   cfg.App.Environment == "development",
@@ -43,32 +44,34 @@ func main() {
 		"audiobook_path", cfg.Library.AudiobookPath,
 	)
 
-	// Initialize SSE manager first (required by store)
+	// Initialize SSE manager first (required by store).
 	sseManager := sse.NewManager(log.Logger)
 	sseCtx, sseCancel := context.WithCancel(context.Background())
 	defer sseCancel()
 	go sseManager.Start(sseCtx)
 
-	// Initialize database with SSE manager for event broadcasting
+	// Initialize database with SSE manager for event broadcasting.
 	dbPath := filepath.Join(cfg.Metadata.BasePath, "db")
 	db, err := store.New(dbPath, log.Logger, sseManager)
 	if err != nil {
 		log.Error("Failed to initialize database", "error", err)
+		sseCancel() // Cancel SSE context before exit
 		os.Exit(1)
 	}
-	// Defer close as safety net (also explicitly closed in shutdown sequence)
+	// Defer close as safety net (also explicitly closed in shutdown sequence).
 	defer func() {
 		if err := db.Close(); err != nil {
-			// Only log if not already closed
+			// Only log if not already closed.
 			log.Error("Failed to close database (defer)", "error", err)
 		}
 	}()
 
-	// Bootstrap library and collections (ensures they exist)
+	// Bootstrap library and collections (ensures they exist).
 	ctx := context.Background()
 	bootstrap, err := db.EnsureLibrary(ctx, cfg.Library.AudiobookPath)
 	if err != nil {
 		log.Error("Failed to bootstrap library", "error", err)
+		sseCancel()
 		os.Exit(1)
 	}
 
@@ -81,10 +84,10 @@ func main() {
 		"inbox_collection", bootstrap.InboxCollection.ID,
 	)
 
-	// Initialize scanner with SSE event emitter
+	// Initialize scanner with SSE event emitter.
 	fileScanner := scanner.NewScanner(db, sseManager, log.Logger)
 
-	// If new library, trigger initial full scan
+	// If new library, trigger initial full scan.
 	if bootstrap.IsNewLibrary {
 		log.Info("New library detected, starting initial scan")
 		go func() {
@@ -99,26 +102,32 @@ func main() {
 		}()
 	}
 
-	// Initialize file watcher
+	// Initialize file watcher.
 	fileWatcher, err := watcher.New(log.Logger, watcher.Options{
 		IgnoreHidden: true,
 	})
 	if err != nil {
 		log.Error("Failed to create file watcher", "error", err)
+		sseCancel()
 		os.Exit(1)
 	}
-	defer fileWatcher.Stop()
+	defer func() {
+		if err := fileWatcher.Stop(); err != nil {
+			log.Error("Failed to stop file watcher (defer)", "error", err)
+		}
+	}()
 
-	// Watch all library scan paths
+	// Watch all library scan paths.
 	for _, scanPath := range bootstrap.Library.ScanPaths {
 		if err := fileWatcher.Watch(scanPath); err != nil {
 			log.Error("Failed to watch scan path", "path", scanPath, "error", err)
+			sseCancel()
 			os.Exit(1)
 		}
 		log.Info("Watching scan path", "path", scanPath)
 	}
 
-	// Start watcher in background
+	// Start watcher in background.
 	watcherCtx, watcherCancel := context.WithCancel(context.Background())
 	defer watcherCancel()
 
@@ -128,10 +137,10 @@ func main() {
 		}
 	}()
 
-	// Initialize event processor
+	// Initialize event processor.
 	eventProcessor := processor.NewEventProcessor(fileScanner, log.Logger)
 
-	// Process file watcher events in background
+	// Process file watcher events in background.
 	go func() {
 		for {
 			select {
@@ -153,21 +162,22 @@ func main() {
 
 	log.Info("File watcher started", "scan_paths", len(bootstrap.Library.ScanPaths))
 
-	// Initialize services
+	// Initialize services.
 	instanceService := service.NewInstanceService(db, log.Logger)
 	bookService := service.NewBookService(db, fileScanner, log.Logger)
 	syncService := service.NewSyncService(db, log.Logger)
 
 	sseHandler := sse.NewHandler(sseManager, log.Logger)
 
-	// Check if server instance configuration exists, create if not (first run)
+	// Check if server instance configuration exists, create if not (first run).
 	instanceConfig, err := instanceService.InitializeInstance(ctx)
 	if err != nil {
 		log.Error("Failed to initialize server instance configuration", "error", err)
+		sseCancel()
 		os.Exit(1)
 	}
 
-	// Log server instance state
+	// Log server instance state.
 	if instanceConfig.HasRootUser {
 		log.Info("Server instance is configured and ready",
 			"instance_id", instanceConfig.ID,
@@ -180,12 +190,12 @@ func main() {
 		)
 	}
 
-	// Create HTTP server with service layer
+	// Create HTTP server with service layer.
 	// TODO: Future note to self: This is going to get old fast depending on how many
-	// services we need to instantiate. Let's look into a better solution
+	// services we need to instantiate. Let's look into a better solution.
 	httpServer := api.NewServer(instanceService, bookService, syncService, sseHandler, log.Logger)
 
-	// Configure HTTP server
+	// Configure HTTP server.
 	srv := &http.Server{
 		Addr:         ":8080",
 		Handler:      httpServer,
@@ -194,18 +204,19 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Start server in goroutine
+	// Start server in goroutine.
 	go func() {
 		log.Info("HTTP server starting", "addr", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Error("HTTP server error", "error", err)
+			sseCancel()
 			os.Exit(1)
 		}
 	}()
 
 	log.Info("Server running", "addr", srv.Addr)
 
-	// Wait for interrupt signal
+	// Wait for interrupt signal.
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
@@ -213,18 +224,18 @@ func main() {
 	log.Info("Shutting down server gracefully...")
 
 	// Shutdown sequence (order matters!):
-	// 1. Stop file watcher (no more file events)
-	// 2. Shutdown SSE manager (no more event broadcasts)
-	// 3. Shutdown HTTP server (no more requests)
-	// 4. Close database (no more data access)
+	// 1. Stop file watcher (no more file events).
+	// 2. Shutdown SSE manager (no more event broadcasts).
+	// 3. Shutdown HTTP server (no more requests).
+	// 4. Close database (no more data access).
 
-	// Stop file watcher
+	// Stop file watcher.
 	watcherCancel()
 	if err := fileWatcher.Stop(); err != nil {
 		log.Error("Failed to stop file watcher", "error", err)
 	}
 
-	// Shutdown SSE manager gracefully
+	// Shutdown SSE manager gracefully.
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -233,12 +244,12 @@ func main() {
 		log.Error("Failed to shutdown SSE manager", "error", err)
 	}
 
-	// Shutdown HTTP server
+	// Shutdown HTTP server.
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error("Server forced to shutdown", "error", err)
 	}
 
-	// Explicitly close database before exit
+	// Explicitly close database before exit.
 	log.Info("Closing database...")
 	if err := db.Close(); err != nil {
 		log.Error("Failed to close database", "error", err)

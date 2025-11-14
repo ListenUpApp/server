@@ -139,7 +139,7 @@ func TestExpandMetadataPath_EmptyUsesDefault(t *testing.T) {
 	err := cfg.expandMetadataPath()
 	require.NoError(t, err)
 
-	homeDir, _ := os.UserHomeDir()
+	homeDir, _ := os.UserHomeDir() //nolint:errcheck // Test setup
 	expected := filepath.Join(homeDir, "ListenUp", "metadata")
 	assert.Equal(t, expected, cfg.Metadata.BasePath)
 }
@@ -154,7 +154,7 @@ func TestExpandMetadataPath_TildeExpansion(t *testing.T) {
 	err := cfg.expandMetadataPath()
 	require.NoError(t, err)
 
-	homeDir, _ := os.UserHomeDir()
+	homeDir, _ := os.UserHomeDir() //nolint:errcheck // Test setup
 	expected := filepath.Join(homeDir, "my-data")
 	assert.Equal(t, expected, cfg.Metadata.BasePath)
 }
@@ -182,30 +182,30 @@ func TestExpandMetadataPath_RelativePath(t *testing.T) {
 	err := cfg.expandMetadataPath()
 	require.NoError(t, err)
 
-	// Should be converted to absolute path
+	// Should be converted to absolute path.
 	assert.True(t, filepath.IsAbs(cfg.Metadata.BasePath))
 	assert.Contains(t, cfg.Metadata.BasePath, "relative/path")
 }
 
 func TestGetConfigValue_Precedence(t *testing.T) {
-	// Test flag value takes priority
+	// Test flag value takes priority.
 	result := getConfigValue("flag-value", "ENV_KEY", "default-value")
 	assert.Equal(t, "flag-value", result)
 
-	// Test env var when flag is empty
-	os.Setenv("TEST_ENV_KEY", "env-value")
-	defer os.Unsetenv("TEST_ENV_KEY")
+	// Test env var when flag is empty.
+	os.Setenv("TEST_ENV_KEY", "env-value") //nolint:errcheck // Test setup
+	defer os.Unsetenv("TEST_ENV_KEY")      //nolint:errcheck // Test cleanup
 
 	result = getConfigValue("", "TEST_ENV_KEY", "default-value")
 	assert.Equal(t, "env-value", result)
 
-	// Test default when both are empty
+	// Test default when both are empty.
 	result = getConfigValue("", "NONEXISTENT_KEY", "default-value")
 	assert.Equal(t, "default-value", result)
 }
 
 func TestLoadEnvFile_ValidFile(t *testing.T) {
-	// Create temp .env file
+	// Create temp .env file.
 	tmpDir := t.TempDir()
 	envFile := filepath.Join(tmpDir, ".env")
 
@@ -217,28 +217,28 @@ METADATA_PATH=/test/path
 QUOTED_VALUE="some value"
 SINGLE_QUOTED='another value'
 `
-	err := os.WriteFile(envFile, []byte(content), 0644)
+	err := os.WriteFile(envFile, []byte(content), 0o644)
 	require.NoError(t, err)
 
-	// Clear any existing env vars
-	os.Unsetenv("ENV")
-	os.Unsetenv("LOG_LEVEL")
-	os.Unsetenv("METADATA_PATH")
-	os.Unsetenv("QUOTED_VALUE")
-	os.Unsetenv("SINGLE_QUOTED")
+	// Clear any existing env vars.
+	os.Unsetenv("ENV")           //nolint:errcheck // Test cleanup
+	os.Unsetenv("LOG_LEVEL")     //nolint:errcheck // Test cleanup
+	os.Unsetenv("METADATA_PATH") //nolint:errcheck // Test cleanup
+	os.Unsetenv("QUOTED_VALUE")  //nolint:errcheck // Test cleanup
+	os.Unsetenv("SINGLE_QUOTED") //nolint:errcheck // Test cleanup
 	defer func() {
-		os.Unsetenv("ENV")
-		os.Unsetenv("LOG_LEVEL")
-		os.Unsetenv("METADATA_PATH")
-		os.Unsetenv("QUOTED_VALUE")
-		os.Unsetenv("SINGLE_QUOTED")
+		os.Unsetenv("ENV")           //nolint:errcheck // Test cleanup
+		os.Unsetenv("LOG_LEVEL")     //nolint:errcheck // Test cleanup
+		os.Unsetenv("METADATA_PATH") //nolint:errcheck // Test cleanup
+		os.Unsetenv("QUOTED_VALUE")  //nolint:errcheck // Test cleanup
+		os.Unsetenv("SINGLE_QUOTED") //nolint:errcheck // Test cleanup
 	}()
 
-	// Load the file
+	// Load the file.
 	err = loadEnvFile(envFile)
 	require.NoError(t, err)
 
-	// Verify values were loaded
+	// Verify values were loaded.
 	assert.Equal(t, "staging", os.Getenv("ENV"))
 	assert.Equal(t, "debug", os.Getenv("LOG_LEVEL"))
 	assert.Equal(t, "/test/path", os.Getenv("METADATA_PATH"))
@@ -247,7 +247,7 @@ SINGLE_QUOTED='another value'
 }
 
 func TestLoadEnvFile_InvalidFormat(t *testing.T) {
-	// Create temp .env file with invalid format
+	// Create temp .env file with invalid format.
 	tmpDir := t.TempDir()
 	envFile := filepath.Join(tmpDir, ".env")
 
@@ -255,10 +255,10 @@ func TestLoadEnvFile_InvalidFormat(t *testing.T) {
 INVALID LINE WITHOUT EQUALS
 ANOTHER_VALID=value
 `
-	err := os.WriteFile(envFile, []byte(content), 0644)
+	err := os.WriteFile(envFile, []byte(content), 0o644)
 	require.NoError(t, err)
 
-	// Should return error
+	// Should return error.
 	err = loadEnvFile(envFile)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid format")
@@ -270,23 +270,23 @@ func TestLoadEnvFile_NonExistentFile(t *testing.T) {
 }
 
 func TestLoadEnvFile_ExistingEnvVarsNotOverwritten(t *testing.T) {
-	// Set env var first
-	os.Setenv("TEST_VAR", "original-value")
-	defer os.Unsetenv("TEST_VAR")
+	// Set env var first.
+	os.Setenv("TEST_VAR", "original-value") //nolint:errcheck // Test setup
+	defer os.Unsetenv("TEST_VAR")           //nolint:errcheck // Test cleanup
 
-	// Create temp .env file that tries to override it
+	// Create temp .env file that tries to override it.
 	tmpDir := t.TempDir()
 	envFile := filepath.Join(tmpDir, ".env")
 
 	content := `TEST_VAR=new-value`
-	err := os.WriteFile(envFile, []byte(content), 0644)
+	err := os.WriteFile(envFile, []byte(content), 0o644)
 	require.NoError(t, err)
 
-	// Load the file
+	// Load the file.
 	err = loadEnvFile(envFile)
 	require.NoError(t, err)
 
-	// Original value should be preserved
+	// Original value should be preserved.
 	assert.Equal(t, "original-value", os.Getenv("TEST_VAR"))
 }
 
@@ -304,16 +304,16 @@ KEY2=value2
 
 KEY3=value3
 `
-	err := os.WriteFile(envFile, []byte(content), 0644)
+	err := os.WriteFile(envFile, []byte(content), 0o644)
 	require.NoError(t, err)
 
-	os.Unsetenv("KEY1")
-	os.Unsetenv("KEY2")
-	os.Unsetenv("KEY3")
+	os.Unsetenv("KEY1") //nolint:errcheck // Test cleanup
+	os.Unsetenv("KEY2") //nolint:errcheck // Test cleanup
+	os.Unsetenv("KEY3") //nolint:errcheck // Test cleanup
 	defer func() {
-		os.Unsetenv("KEY1")
-		os.Unsetenv("KEY2")
-		os.Unsetenv("KEY3")
+		os.Unsetenv("KEY1") //nolint:errcheck // Test cleanup
+		os.Unsetenv("KEY2") //nolint:errcheck // Test cleanup
+		os.Unsetenv("KEY3") //nolint:errcheck // Test cleanup
 	}()
 
 	err = loadEnvFile(envFile)
@@ -329,15 +329,15 @@ func TestLoadEnvFile_Whitespace(t *testing.T) {
 	envFile := filepath.Join(tmpDir, ".env")
 
 	content := `  KEY_WITH_SPACES  =  value with spaces  `
-	err := os.WriteFile(envFile, []byte(content), 0644)
+	err := os.WriteFile(envFile, []byte(content), 0o644)
 	require.NoError(t, err)
 
-	os.Unsetenv("KEY_WITH_SPACES")
-	defer os.Unsetenv("KEY_WITH_SPACES")
+	os.Unsetenv("KEY_WITH_SPACES")       //nolint:errcheck // Test cleanup
+	defer os.Unsetenv("KEY_WITH_SPACES") //nolint:errcheck // Test cleanup
 
 	err = loadEnvFile(envFile)
 	require.NoError(t, err)
 
-	// Whitespace should be trimmed
+	// Whitespace should be trimmed.
 	assert.Equal(t, "value with spaces", os.Getenv("KEY_WITH_SPACES"))
 }

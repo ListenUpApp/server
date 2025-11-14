@@ -34,12 +34,12 @@ func TestFallbackBackend_Watch(t *testing.T) {
 
 	backend, err := newFallbackBackend(logger, opts)
 	require.NoError(t, err)
-	defer backend.Stop()
+	defer backend.Stop() //nolint:errcheck // Test cleanup
 
-	// Create a temporary directory
+	// Create a temporary directory.
 	tmpDir := t.TempDir()
 
-	// Watch the directory
+	// Watch the directory.
 	err = backend.Watch(tmpDir)
 	assert.NoError(t, err)
 }
@@ -53,7 +53,7 @@ func TestFallbackBackend_Debouncing(t *testing.T) {
 
 	backend, err := newFallbackBackend(logger, opts)
 	require.NoError(t, err)
-	defer backend.Stop()
+	defer backend.Stop() //nolint:errcheck // Test cleanup
 
 	tmpDir := t.TempDir()
 	err = backend.Watch(tmpDir)
@@ -62,14 +62,14 @@ func TestFallbackBackend_Debouncing(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go backend.Start(ctx)
+	go backend.Start(ctx) //nolint:errcheck // Test goroutine
 
-	// Create a test file
+	// Create a test file.
 	testFile := filepath.Join(tmpDir, "test.txt")
-	err = os.WriteFile(testFile, []byte("initial content"), 0644)
+	err = os.WriteFile(testFile, []byte("initial content"), 0o644)
 	require.NoError(t, err)
 
-	// Wait for debounced event
+	// Wait for debounced event.
 	select {
 	case event := <-backend.Events():
 		assert.Equal(t, testFile, event.Path)

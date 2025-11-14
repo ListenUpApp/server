@@ -2,6 +2,7 @@ package store
 
 import (
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -14,22 +15,23 @@ type EventEmitter interface {
 	Emit(event any)
 }
 
-// NoopEmitter is a no-op implementation of EventEmitter for testing
+// NoopEmitter is a no-op implementation of EventEmitter for testing.
 type NoopEmitter struct{}
 
-func (NoopEmitter) Emit(event any) {}
+// Emit implements EventEmitter.Emit as a no-op.
+func (NoopEmitter) Emit(_ any) {}
 
-// NewNoopEmitter creates a new no-op emitter for testing
+// NewNoopEmitter creates a new no-op emitter for testing.
 func NewNoopEmitter() EventEmitter {
 	return NoopEmitter{}
 }
 
-// Store wraps a Badger database instance
+// Store wraps a Badger database instance.
 type Store struct {
 	db     *badger.DB
 	logger *slog.Logger
 
-	// SSE event emitter for broadcasting changes
+	// SSE event emitter for broadcasting changes.
 	eventEmitter EventEmitter
 }
 
@@ -57,7 +59,7 @@ func New(path string, logger *slog.Logger, emitter EventEmitter) (*Store, error)
 	return store, nil
 }
 
-// Close gracefully closes the database connection
+// Close gracefully closes the database connection.
 func (s *Store) Close() error {
 	if s.logger != nil {
 		s.logger.Info("Closing database connection")
@@ -65,9 +67,9 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-// Helper methods for database operations
+// Helper methods for database operations.
 
-// get retrieves a value by key
+// get retrieves a value by key.
 func (s *Store) get(key []byte, dest any) error {
 	return s.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(key)
@@ -81,7 +83,7 @@ func (s *Store) get(key []byte, dest any) error {
 	})
 }
 
-// set stores a value by key
+// set stores a value by key.
 func (s *Store) set(key []byte, value any) error {
 	data, err := json.Marshal(value)
 	if err != nil {
@@ -93,21 +95,21 @@ func (s *Store) set(key []byte, value any) error {
 	})
 }
 
-// delete removes a key from the database
+// delete removes a key from the database.
 func (s *Store) delete(key []byte) error {
 	return s.db.Update(func(txn *badger.Txn) error {
 		return txn.Delete(key)
 	})
 }
 
-// exists checks if a key exists
+// exists checks if a key exists.
 func (s *Store) exists(key []byte) (bool, error) {
 	err := s.db.View(func(txn *badger.Txn) error {
 		_, err := txn.Get(key)
 		return err
 	})
 
-	if err == badger.ErrKeyNotFound {
+	if errors.Is(err, badger.ErrKeyNotFound) {
 		return false, nil
 	}
 	if err != nil {

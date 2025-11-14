@@ -23,7 +23,7 @@ func TestLinuxBackend_FileCreation(t *testing.T) {
 
 	backend, err := newLinuxBackend(logger, opts)
 	require.NoError(t, err)
-	defer backend.Stop()
+	defer backend.Stop() //nolint:errcheck // Test cleanup
 
 	tmpDir := t.TempDir()
 	err = backend.Watch(tmpDir)
@@ -32,17 +32,17 @@ func TestLinuxBackend_FileCreation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go backend.Start(ctx)
+	go backend.Start(ctx) //nolint:errcheck // Test goroutine
 
-	// Give the backend a moment to start
+	// Give the backend a moment to start.
 	time.Sleep(50 * time.Millisecond)
 
-	// Create a test file
+	// Create a test file.
 	testFile := filepath.Join(tmpDir, "test.m4b")
-	err = os.WriteFile(testFile, []byte("test audiobook content"), 0644)
+	err = os.WriteFile(testFile, []byte("test audiobook content"), 0o644)
 	require.NoError(t, err)
 
-	// Wait for event - should be fast on Linux with IN_CLOSE_WRITE
+	// Wait for event - should be fast on Linux with IN_CLOSE_WRITE.
 	select {
 	case event := <-backend.Events():
 		assert.Equal(t, EventAdded, event.Type)
@@ -64,13 +64,13 @@ func TestLinuxBackend_FileDeletion(t *testing.T) {
 
 	backend, err := newLinuxBackend(logger, opts)
 	require.NoError(t, err)
-	defer backend.Stop()
+	defer backend.Stop() //nolint:errcheck // Test cleanup
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
 
-	// Create file first
-	err = os.WriteFile(testFile, []byte("content"), 0644)
+	// Create file first.
+	err = os.WriteFile(testFile, []byte("content"), 0o644)
 	require.NoError(t, err)
 
 	err = backend.Watch(tmpDir)
@@ -79,15 +79,15 @@ func TestLinuxBackend_FileDeletion(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go backend.Start(ctx)
+	go backend.Start(ctx) //nolint:errcheck // Test goroutine
 
 	time.Sleep(50 * time.Millisecond)
 
-	// Delete the file
+	// Delete the file.
 	err = os.Remove(testFile)
 	require.NoError(t, err)
 
-	// Wait for deletion event
+	// Wait for deletion event.
 	select {
 	case event := <-backend.Events():
 		assert.Equal(t, EventRemoved, event.Type)
@@ -105,7 +105,7 @@ func TestLinuxBackend_NewDirectoryWatching(t *testing.T) {
 
 	backend, err := newLinuxBackend(logger, opts)
 	require.NoError(t, err)
-	defer backend.Stop()
+	defer backend.Stop() //nolint:errcheck // Test cleanup
 
 	tmpDir := t.TempDir()
 	err = backend.Watch(tmpDir)
@@ -114,24 +114,24 @@ func TestLinuxBackend_NewDirectoryWatching(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go backend.Start(ctx)
+	go backend.Start(ctx) //nolint:errcheck // Test goroutine
 
 	time.Sleep(50 * time.Millisecond)
 
-	// Create new subdirectory
+	// Create new subdirectory.
 	subDir := filepath.Join(tmpDir, "newdir")
-	err = os.Mkdir(subDir, 0755)
+	err = os.Mkdir(subDir, 0o755)
 	require.NoError(t, err)
 
-	// Give time for the directory to be watched
+	// Give time for the directory to be watched.
 	time.Sleep(100 * time.Millisecond)
 
-	// Create file in new subdirectory
+	// Create file in new subdirectory.
 	testFile := filepath.Join(subDir, "file.txt")
-	err = os.WriteFile(testFile, []byte("content in new dir"), 0644)
+	err = os.WriteFile(testFile, []byte("content in new dir"), 0o644)
 	require.NoError(t, err)
 
-	// Should receive event for file in new directory
+	// Should receive event for file in new directory.
 	select {
 	case event := <-backend.Events():
 		assert.Equal(t, testFile, event.Path)
@@ -150,7 +150,7 @@ func TestLinuxBackend_IgnoreHidden(t *testing.T) {
 
 	backend, err := newLinuxBackend(logger, opts)
 	require.NoError(t, err)
-	defer backend.Stop()
+	defer backend.Stop() //nolint:errcheck // Test cleanup
 
 	tmpDir := t.TempDir()
 	err = backend.Watch(tmpDir)
@@ -159,21 +159,21 @@ func TestLinuxBackend_IgnoreHidden(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go backend.Start(ctx)
+	go backend.Start(ctx) //nolint:errcheck // Test goroutine
 
 	time.Sleep(50 * time.Millisecond)
 
-	// Create hidden file
+	// Create hidden file.
 	hiddenFile := filepath.Join(tmpDir, ".hidden")
-	err = os.WriteFile(hiddenFile, []byte("secret"), 0644)
+	err = os.WriteFile(hiddenFile, []byte("secret"), 0o644)
 	require.NoError(t, err)
 
-	// Create normal file
+	// Create normal file.
 	normalFile := filepath.Join(tmpDir, "normal.txt")
-	err = os.WriteFile(normalFile, []byte("content"), 0644)
+	err = os.WriteFile(normalFile, []byte("content"), 0o644)
 	require.NoError(t, err)
 
-	// Should only get event for normal file
+	// Should only get event for normal file.
 	select {
 	case event := <-backend.Events():
 		assert.Equal(t, normalFile, event.Path)
@@ -182,12 +182,12 @@ func TestLinuxBackend_IgnoreHidden(t *testing.T) {
 		t.Fatal("timeout waiting for event")
 	}
 
-	// Should not get event for hidden file
+	// Should not get event for hidden file.
 	select {
 	case event := <-backend.Events():
 		t.Fatalf("unexpected event for hidden file: %+v", event)
 	case <-time.After(200 * time.Millisecond):
-		// Good, no event for hidden file
+		// Good, no event for hidden file.
 		t.Log("Correctly ignored hidden file")
 	}
 }

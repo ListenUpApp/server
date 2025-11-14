@@ -20,42 +20,42 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// setupTestServer creates a test server with all dependencies
-func setupTestServer(t *testing.T) (*Server, func()) {
+// setupTestServer creates a test server with all dependencies.
+func setupTestServer(t *testing.T) (server *Server, cleanup func()) {
 	t.Helper()
 
-	// Create temp directory for test database
+	// Create temp directory for test database.
 	tmpDir, err := os.MkdirTemp("", "listenup-api-test-*")
 	require.NoError(t, err)
 
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	// Create a no-op logger for tests (discards all logs)
+	// Create a no-op logger for tests (discards all logs).
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	// Create SSE manager for testing
+	// Create SSE manager for testing.
 	sseManager := sse.NewManager(logger)
 	sseHandler := sse.NewHandler(sseManager, logger)
 
-	// Create store with SSE manager
+	// Create store with SSE manager.
 	s, err := store.New(dbPath, logger, sseManager)
 	require.NoError(t, err)
 
-	// Create scanner with SSE manager
+	// Create scanner with SSE manager.
 	fileScanner := scanner.NewScanner(s, sseManager, logger)
 
-	// Create services
+	// Create services.
 	instanceService := service.NewInstanceService(s, logger)
 	bookService := service.NewBookService(s, fileScanner, logger)
 	syncService := service.NewSyncService(s, logger)
 
-	// Create server
-	server := NewServer(instanceService, bookService, syncService, sseHandler, logger)
+	// Create server.
+	server = NewServer(instanceService, bookService, syncService, sseHandler, logger)
 
-	// Return cleanup function
-	cleanup := func() {
-		s.Close()
-		os.RemoveAll(tmpDir)
+	// Return cleanup function.
+	cleanup = func() {
+		_ = s.Close()            //nolint:errcheck // Cleanup function, error already logged
+		_ = os.RemoveAll(tmpDir) //nolint:errcheck // Cleanup function, nothing we can do about errors here
 	}
 
 	return server, cleanup
@@ -65,7 +65,7 @@ func TestHealthCheck(t *testing.T) {
 	server, cleanup := setupTestServer(t)
 	defer cleanup()
 
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req := httptest.NewRequest(http.MethodGet, "/health", http.NoBody)
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -84,14 +84,14 @@ func TestGetInstance_Success(t *testing.T) {
 	server, cleanup := setupTestServer(t)
 	defer cleanup()
 
-	// Initialize instance first
+	// Initialize instance first.
 	instanceService := server.instanceService
-	ctx := httptest.NewRequest(http.MethodGet, "/", nil).Context()
+	ctx := httptest.NewRequest(http.MethodGet, "/", http.NoBody).Context()
 	createdInstance, err := instanceService.InitializeInstance(ctx)
 	require.NoError(t, err)
 
-	// Make request
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/instance", nil)
+	// Make request.
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/instance", http.NoBody)
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -105,7 +105,7 @@ func TestGetInstance_Success(t *testing.T) {
 	assert.True(t, result.Success)
 	assert.NotNil(t, result.Data)
 
-	// Verify instance data
+	// Verify instance data.
 	data, ok := result.Data.(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, createdInstance.ID, data["id"])
@@ -116,9 +116,9 @@ func TestGetInstance_NotFound(t *testing.T) {
 	server, cleanup := setupTestServer(t)
 	defer cleanup()
 
-	// Don't initialize instance - should get 404
+	// Don't initialize instance - should get 404.
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/instance", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/instance", http.NoBody)
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -138,17 +138,17 @@ func TestGetInstance_WithRootUser(t *testing.T) {
 	server, cleanup := setupTestServer(t)
 	defer cleanup()
 
-	// Initialize instance and mark as setup
+	// Initialize instance and mark as setup.
 	instanceService := server.instanceService
-	ctx := httptest.NewRequest(http.MethodGet, "/", nil).Context()
+	ctx := httptest.NewRequest(http.MethodGet, "/", http.NoBody).Context()
 	_, err := instanceService.InitializeInstance(ctx)
 	require.NoError(t, err)
 
 	err = instanceService.MarkInstanceAsSetup(ctx)
 	require.NoError(t, err)
 
-	// Make request
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/instance", nil)
+	// Make request.
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/instance", http.NoBody)
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -161,7 +161,7 @@ func TestGetInstance_WithRootUser(t *testing.T) {
 
 	assert.True(t, result.Success)
 
-	// Verify instance data
+	// Verify instance data.
 	data, ok := result.Data.(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, true, data["has_root_user"])
@@ -171,9 +171,9 @@ func TestServer_Routes(t *testing.T) {
 	server, cleanup := setupTestServer(t)
 	defer cleanup()
 
-	// Initialize instance for successful tests
+	// Initialize instance for successful tests.
 	instanceService := server.instanceService
-	ctx := httptest.NewRequest(http.MethodGet, "/", nil).Context()
+	ctx := httptest.NewRequest(http.MethodGet, "/", http.NoBody).Context()
 	_, err := instanceService.InitializeInstance(ctx)
 	require.NoError(t, err)
 
@@ -211,7 +211,7 @@ func TestServer_Routes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(tt.method, tt.path, nil)
+			req := httptest.NewRequest(tt.method, tt.path, http.NoBody)
 			w := httptest.NewRecorder()
 
 			server.ServeHTTP(w, req)
@@ -225,31 +225,31 @@ func TestServer_JSONResponse(t *testing.T) {
 	server, cleanup := setupTestServer(t)
 	defer cleanup()
 
-	// Initialize instance
+	// Initialize instance.
 	instanceService := server.instanceService
-	ctx := httptest.NewRequest(http.MethodGet, "/", nil).Context()
+	ctx := httptest.NewRequest(http.MethodGet, "/", http.NoBody).Context()
 	instance, err := instanceService.InitializeInstance(ctx)
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/instance", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/instance", http.NoBody)
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
 
-	// Verify content type
+	// Verify content type.
 	assert.Equal(t, "application/json; charset=utf-8", w.Header().Get("Content-Type"))
 
-	// Verify JSON structure
+	// Verify JSON structure.
 	var result response.Envelope
 	err = json.Unmarshal(w.Body.Bytes(), &result)
 	require.NoError(t, err)
 
-	// Verify envelope structure
+	// Verify envelope structure.
 	assert.True(t, result.Success)
 	assert.NotNil(t, result.Data)
 	assert.Empty(t, result.Error)
 
-	// Verify instance fields are present
+	// Verify instance fields are present.
 	data, ok := result.Data.(map[string]any)
 	require.True(t, ok)
 	assert.Contains(t, data, "id")
@@ -257,13 +257,13 @@ func TestServer_JSONResponse(t *testing.T) {
 	assert.Contains(t, data, "created_at")
 	assert.Contains(t, data, "updated_at")
 
-	// Verify timestamp parsing
+	// Verify timestamp parsing.
 	createdAt, ok := data["created_at"].(string)
 	require.True(t, ok)
 	_, err = time.Parse(time.RFC3339Nano, createdAt)
 	assert.NoError(t, err, "created_at should be valid RFC3339 timestamp")
 
-	// Verify values match
+	// Verify values match.
 	assert.Equal(t, instance.ID, data["id"])
 	assert.Equal(t, instance.HasRootUser, data["has_root_user"])
 }
@@ -272,8 +272,8 @@ func TestGetManifest_Success(t *testing.T) {
 	server, cleanup := setupTestServer(t)
 	defer cleanup()
 
-	// No need to initialize instance for manifest endpoint
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/sync/manifest", nil)
+	// No need to initialize instance for manifest endpoint.
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sync/manifest", http.NoBody)
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -287,7 +287,7 @@ func TestGetManifest_Success(t *testing.T) {
 	assert.True(t, result.Success)
 	assert.NotNil(t, result.Data)
 
-	// Verify manifest data structure
+	// Verify manifest data structure.
 	data, ok := result.Data.(map[string]any)
 	require.True(t, ok)
 	assert.Contains(t, data, "library_version")
@@ -295,19 +295,19 @@ func TestGetManifest_Success(t *testing.T) {
 	assert.Contains(t, data, "counts")
 	assert.Contains(t, data, "book_ids")
 
-	// Verify counts structure
+	// Verify counts structure.
 	counts, ok := data["counts"].(map[string]any)
 	require.True(t, ok)
 	assert.Contains(t, counts, "books")
 	assert.Contains(t, counts, "authors")
 	assert.Contains(t, counts, "series")
 
-	// Verify empty library returns 0 books
+	// Verify empty library returns 0 books.
 	assert.Equal(t, float64(0), counts["books"])
 	assert.Equal(t, float64(0), counts["authors"])
 	assert.Equal(t, float64(0), counts["series"])
 
-	// Verify timestamps are valid RFC3339
+	// Verify timestamps are valid RFC3339.
 	libraryVersion, ok := data["library_version"].(string)
 	require.True(t, ok)
 	_, err = time.Parse(time.RFC3339, libraryVersion)
@@ -323,7 +323,7 @@ func TestGetSyncBooks_Success(t *testing.T) {
 	server, cleanup := setupTestServer(t)
 	defer cleanup()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/sync/books?limit=50", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sync/books?limit=50", http.NoBody)
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -337,13 +337,13 @@ func TestGetSyncBooks_Success(t *testing.T) {
 	assert.True(t, result.Success)
 	assert.NotNil(t, result.Data)
 
-	// Verify books response structure
+	// Verify books response structure.
 	data, ok := result.Data.(map[string]any)
 	require.True(t, ok)
 	assert.Contains(t, data, "books")
 	assert.Contains(t, data, "has_more")
 
-	// Verify empty library returns empty books array
+	// Verify empty library returns empty books array.
 	books, ok := data["books"].([]any)
 	require.True(t, ok)
 	assert.Empty(t, books)

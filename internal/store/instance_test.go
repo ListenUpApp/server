@@ -12,25 +12,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// setupTestStore creates a temporary store for testing
-func setupTestStore(t *testing.T) (*Store, func()) {
+// setupTestStore creates a temporary store for testing.
+func setupTestStore(t *testing.T) (*Store, func()) { //nolint:gocritic // Test helper return values are clear from context
 	t.Helper()
 
-	// Create temp directory for test database
+	// Create temp directory for test database.
 	tmpDir, err := os.MkdirTemp("", "listenup-test-*")
 	require.NoError(t, err)
 
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	// Create store with noop emitter for testing
+	// Create store with noop emitter for testing.
 	store, err := New(dbPath, nil, NewNoopEmitter())
 	require.NoError(t, err)
 	require.NotNil(t, store)
 
-	// Return cleanup function
+	// Return cleanup function.
 	cleanup := func() {
-		store.Close()
-		os.RemoveAll(tmpDir)
+		_ = store.Close()        //nolint:errcheck // Test cleanup
+		_ = os.RemoveAll(tmpDir) //nolint:errcheck // Test cleanup
 	}
 
 	return store, cleanup
@@ -42,7 +42,7 @@ func TestCreateInstance(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Test creating instance
+	// Test creating instance.
 	instance, err := store.CreateInstance(ctx)
 	require.NoError(t, err)
 	assert.NotNil(t, instance)
@@ -58,11 +58,11 @@ func TestCreateInstance_AlreadyExists(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create first instance
+	// Create first instance.
 	_, err := store.CreateInstance(ctx)
 	require.NoError(t, err)
 
-	// Try to create second instance - should fail
+	// Try to create second instance - should fail.
 	_, err = store.CreateInstance(ctx)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrServerAlreadyExists)
@@ -74,11 +74,11 @@ func TestGetInstance(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create instance first
+	// Create instance first.
 	created, err := store.CreateInstance(ctx)
 	require.NoError(t, err)
 
-	// Get instance
+	// Get instance.
 	instance, err := store.GetInstance(ctx)
 	require.NoError(t, err)
 	assert.NotNil(t, instance)
@@ -92,7 +92,7 @@ func TestGetInstance_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Try to get instance that doesn't exist
+	// Try to get instance that doesn't exist.
 	_, err := store.GetInstance(ctx)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrServerNotFound)
@@ -104,19 +104,19 @@ func TestUpdateInstance(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create instance
+	// Create instance.
 	instance, err := store.CreateInstance(ctx)
 	require.NoError(t, err)
 
-	// Wait a moment to ensure UpdatedAt will be different
+	// Wait a moment to ensure UpdatedAt will be different.
 	time.Sleep(10 * time.Millisecond)
 
-	// Update instance
+	// Update instance.
 	instance.HasRootUser = true
 	err = store.UpdateInstance(ctx, instance)
 	require.NoError(t, err)
 
-	// Verify update
+	// Verify update.
 	updated, err := store.GetInstance(ctx)
 	require.NoError(t, err)
 	assert.True(t, updated.HasRootUser)
@@ -129,7 +129,7 @@ func TestUpdateInstance_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Try to update instance that doesn't exist
+	// Try to update instance that doesn't exist.
 	instance := &domain.Instance{
 		ID:          "server-001",
 		HasRootUser: true,
@@ -148,7 +148,7 @@ func TestInitializeInstance_Creates(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Initialize should create instance
+	// Initialize should create instance.
 	instance, err := store.InitializeInstance(ctx)
 	require.NoError(t, err)
 	assert.NotNil(t, instance)
@@ -162,16 +162,16 @@ func TestInitializeInstance_ReturnsExisting(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create instance
+	// Create instance.
 	created, err := store.CreateInstance(ctx)
 	require.NoError(t, err)
 
-	// Update it
+	// Update it.
 	created.HasRootUser = true
 	err = store.UpdateInstance(ctx, created)
 	require.NoError(t, err)
 
-	// Initialize should return existing instance
+	// Initialize should return existing instance.
 	instance, err := store.InitializeInstance(ctx)
 	require.NoError(t, err)
 	assert.NotNil(t, instance)
@@ -180,15 +180,15 @@ func TestInitializeInstance_ReturnsExisting(t *testing.T) {
 }
 
 func TestStore_Persistence(t *testing.T) {
-	// Create temp directory for test database
+	// Create temp directory for test database.
 	tmpDir, err := os.MkdirTemp("", "listenup-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer os.RemoveAll(tmpDir) //nolint:errcheck // Test cleanup
 
 	dbPath := filepath.Join(tmpDir, "test.db")
 	ctx := context.Background()
 
-	// Create store and instance
+	// Create store and instance.
 	store1, err := New(dbPath, nil, NewNoopEmitter())
 	require.NoError(t, err)
 
@@ -198,16 +198,16 @@ func TestStore_Persistence(t *testing.T) {
 	err = store1.UpdateInstance(ctx, instance)
 	require.NoError(t, err)
 
-	// Close store
+	// Close store.
 	err = store1.Close()
 	require.NoError(t, err)
 
-	// Reopen store
+	// Reopen store.
 	store2, err := New(dbPath, nil, NewNoopEmitter())
 	require.NoError(t, err)
-	defer store2.Close()
+	defer store2.Close() //nolint:errcheck // Test cleanup
 
-	// Verify data persisted
+	// Verify data persisted.
 	loaded, err := store2.GetInstance(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, instance.ID, loaded.ID)

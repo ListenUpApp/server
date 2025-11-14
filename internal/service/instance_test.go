@@ -12,27 +12,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// setupTestService creates a service with a temporary store for testing
-func setupTestService(t *testing.T) (*InstanceService, func()) {
+// setupTestService creates a service with a temporary store for testing.
+func setupTestService(t *testing.T) (*InstanceService, func()) { //nolint:gocritic // Test helper return values are clear from context
 	t.Helper()
 
-	// Create temp directory for test database
+	// Create temp directory for test database.
 	tmpDir, err := os.MkdirTemp("", "listenup-service-test-*")
 	require.NoError(t, err)
 
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	// Create store
+	// Create store.
 	s, err := store.New(dbPath, nil, store.NewNoopEmitter())
 	require.NoError(t, err)
 
-	// Create service
+	// Create service.
 	service := NewInstanceService(s, nil)
 
-	// Return cleanup function
+	// Return cleanup function.
 	cleanup := func() {
-		s.Close()
-		os.RemoveAll(tmpDir)
+		_ = s.Close()            //nolint:errcheck // Test cleanup
+		_ = os.RemoveAll(tmpDir) //nolint:errcheck // Test cleanup
 	}
 
 	return service, cleanup
@@ -44,11 +44,11 @@ func TestInstanceService_GetInstance(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Initialize instance first
+	// Initialize instance first.
 	_, err := service.InitializeInstance(ctx)
 	require.NoError(t, err)
 
-	// Get instance
+	// Get instance.
 	instance, err := service.GetInstance(ctx)
 	require.NoError(t, err)
 	assert.NotNil(t, instance)
@@ -62,7 +62,7 @@ func TestInstanceService_GetInstance_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Try to get instance before it's created
+	// Try to get instance before it's created.
 	_, err := service.GetInstance(ctx)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "instance configuration not found")
@@ -74,7 +74,7 @@ func TestInstanceService_InitializeInstance_Creates(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Initialize should create instance
+	// Initialize should create instance.
 	instance, err := service.InitializeInstance(ctx)
 	require.NoError(t, err)
 	assert.NotNil(t, instance)
@@ -88,11 +88,11 @@ func TestInstanceService_InitializeInstance_ReturnsExisting(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Initialize first time
+	// Initialize first time.
 	instance1, err := service.InitializeInstance(ctx)
 	require.NoError(t, err)
 
-	// Initialize second time - should return existing
+	// Initialize second time - should return existing.
 	instance2, err := service.InitializeInstance(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, instance1.ID, instance2.ID)
@@ -105,20 +105,20 @@ func TestInstanceService_IsInstanceSetup(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Initialize instance (HasRootUser=false)
+	// Initialize instance (HasRootUser=false).
 	_, err := service.InitializeInstance(ctx)
 	require.NoError(t, err)
 
-	// Check setup status
+	// Check setup status.
 	isSetup, err := service.IsInstanceSetup(ctx)
 	require.NoError(t, err)
 	assert.False(t, isSetup)
 
-	// Mark as setup
+	// Mark as setup.
 	err = service.MarkInstanceAsSetup(ctx)
 	require.NoError(t, err)
 
-	// Check setup status again
+	// Check setup status again.
 	isSetup, err = service.IsInstanceSetup(ctx)
 	require.NoError(t, err)
 	assert.True(t, isSetup)
@@ -130,7 +130,7 @@ func TestInstanceService_IsInstanceSetup_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Check setup status before instance exists
+	// Check setup status before instance exists.
 	isSetup, err := service.IsInstanceSetup(ctx)
 	require.NoError(t, err)
 	assert.False(t, isSetup, "Should return false when instance doesn't exist")
@@ -142,19 +142,19 @@ func TestInstanceService_MarkInstanceAsSetup(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Initialize instance
+	// Initialize instance.
 	instance, err := service.InitializeInstance(ctx)
 	require.NoError(t, err)
 	assert.False(t, instance.HasRootUser)
 
-	// Wait a moment to ensure UpdatedAt will be different
+	// Wait a moment to ensure UpdatedAt will be different.
 	time.Sleep(10 * time.Millisecond)
 
-	// Mark as setup
+	// Mark as setup.
 	err = service.MarkInstanceAsSetup(ctx)
 	require.NoError(t, err)
 
-	// Verify it's marked as setup
+	// Verify it's marked as setup.
 	updated, err := service.GetInstance(ctx)
 	require.NoError(t, err)
 	assert.True(t, updated.HasRootUser)
@@ -167,14 +167,14 @@ func TestInstanceService_MarkInstanceAsSetup_AlreadySetup(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Initialize and mark as setup
+	// Initialize and mark as setup.
 	_, err := service.InitializeInstance(ctx)
 	require.NoError(t, err)
 
 	err = service.MarkInstanceAsSetup(ctx)
 	require.NoError(t, err)
 
-	// Try to mark as setup again - should fail
+	// Try to mark as setup again - should fail.
 	err = service.MarkInstanceAsSetup(ctx)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "already set up")
@@ -186,7 +186,7 @@ func TestInstanceService_MarkInstanceAsSetup_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Try to mark as setup before instance exists
+	// Try to mark as setup before instance exists.
 	err := service.MarkInstanceAsSetup(ctx)
 	assert.Error(t, err)
 }

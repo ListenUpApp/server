@@ -5,21 +5,21 @@ import (
 	"fmt"
 )
 
-// PaginationParams contains pagination request paramters
+// PaginationParams contains pagination request parameters.
 type PaginationParams struct {
-	Limit  int    // The number of items per page (defaults to 100 with a maximum of 1000)
-	Cursor string // Opaque cusor for next page (empty for first page)
+	Cursor string
+	Limit  int
 }
 
-// PaginatedResult contains paginated data and metadata
+// PaginatedResult contains paginated data and metadata.
 type PaginatedResult[T any] struct {
+	NextCursor string `json:"next_cursor,omitempty"`
 	Items      []T    `json:"items"`
-	NextCursor string `json:"next_cursor,omitempty"` // Empty if no more pages
+	Total      int    `json:"total,omitempty"`
 	HasMore    bool   `json:"has_more"`
-	Total      int    `json:"total,omitempty"` // Optional: total count (expensive to compute)
 }
 
-// DefaultPaginationParms returns sensible defaults
+// DefaultPaginationParms returns sensible defaults.
 func DefaultPaginationParms() PaginationParams {
 	return PaginationParams{
 		Limit:  100,
@@ -27,7 +27,7 @@ func DefaultPaginationParms() PaginationParams {
 	}
 }
 
-// Validate checks and corrects pagination paramters
+// Validate checks and corrects pagination parameters.
 func (p *PaginationParams) Validate() {
 	if p.Limit <= 0 {
 		p.Limit = 100
@@ -38,8 +38,8 @@ func (p *PaginationParams) Validate() {
 	}
 }
 
-// EncodeCursor creates an opaque cusor from a key
-// for BadgerDB, we use the last time's key as the cursor
+// EncodeCursor creates an opaque cusor from a key.
+// for BadgerDB, we use the last time's key as the cursor.
 func EncodeCursor(key string) string {
 	if key == "" {
 		return ""
@@ -47,7 +47,7 @@ func EncodeCursor(key string) string {
 	return base64.URLEncoding.EncodeToString([]byte(key))
 }
 
-// DecodeCusrsor decodes a cursor back to a key
+// DecodeCursor decodes a cursor back to a key.
 func DecodeCursor(cursor string) (string, error) {
 	if cursor == "" {
 		return "", nil
