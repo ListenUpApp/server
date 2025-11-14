@@ -16,6 +16,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/processor"
 	"github.com/listenupapp/listenup-server/internal/scanner"
 	"github.com/listenupapp/listenup-server/internal/service"
+	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
 	"github.com/listenupapp/listenup-server/internal/watcher"
 )
@@ -42,9 +43,15 @@ func main() {
 		"audiobook_path", cfg.Library.AudiobookPath,
 	)
 
-	// Initialize database
+	// Initialize SSE manager first (required by store)
+	sseManager := sse.NewManager(log.Logger)
+	sseCtx, sseCancel := context.WithCancel(context.Background())
+	defer sseCancel()
+	go sseManager.Start(sseCtx)
+
+	// Initialize database with SSE manager for event broadcasting
 	dbPath := filepath.Join(cfg.Metadata.BasePath, "db")
-	db, err := store.New(dbPath, log.Logger)
+	db, err := store.New(dbPath, log.Logger, sseManager)
 	if err != nil {
 		log.Error("Failed to initialize database", "error", err)
 		os.Exit(1)
@@ -74,8 +81,8 @@ func main() {
 		"inbox_collection", bootstrap.InboxCollection.ID,
 	)
 
-	// Initialize scanner
-	fileScanner := scanner.NewScanner(db, log.Logger)
+	// Initialize scanner with SSE event emitter
+	fileScanner := scanner.NewScanner(db, sseManager, log.Logger)
 
 	// If new library, trigger initial full scan
 	if bootstrap.IsNewLibrary {
@@ -83,7 +90,9 @@ func main() {
 		go func() {
 			for _, scanPath := range bootstrap.Library.ScanPaths {
 				log.Info("Running initial scan", "path", scanPath)
-				if _, err := fileScanner.Scan(ctx, scanPath, scanner.ScanOptions{}); err != nil {
+				if _, err := fileScanner.Scan(ctx, scanPath, scanner.ScanOptions{
+					LibraryID: bootstrap.Library.ID,
+				}); err != nil {
 					log.Error("Initial scan failed", "path", scanPath, "error", err)
 				}
 			}
@@ -147,6 +156,9 @@ func main() {
 	// Initialize services
 	instanceService := service.NewInstanceService(db, log.Logger)
 	bookService := service.NewBookService(db, fileScanner, log.Logger)
+	syncService := service.NewSyncService(db, log.Logger)
+
+	sseHandler := sse.NewHandler(sseManager, log.Logger)
 
 	// Check if server instance configuration exists, create if not (first run)
 	instanceConfig, err := instanceService.InitializeInstance(ctx)
@@ -171,7 +183,7 @@ func main() {
 	// Create HTTP server with service layer
 	// TODO: Future note to self: This is going to get old fast depending on how many
 	// services we need to instantiate. Let's look into a better solution
-	httpServer := api.NewServer(instanceService, bookService, log.Logger)
+	httpServer := api.NewServer(instanceService, bookService, syncService, sseHandler, log.Logger)
 
 	// Configure HTTP server
 	srv := &http.Server{
@@ -200,16 +212,28 @@ func main() {
 
 	log.Info("Shutting down server gracefully...")
 
+	// Shutdown sequence (order matters!):
+	// 1. Stop file watcher (no more file events)
+	// 2. Shutdown SSE manager (no more event broadcasts)
+	// 3. Shutdown HTTP server (no more requests)
+	// 4. Close database (no more data access)
+
 	// Stop file watcher
 	watcherCancel()
 	if err := fileWatcher.Stop(); err != nil {
 		log.Error("Failed to stop file watcher", "error", err)
 	}
 
-	// Graceful shutdown with 30s timeout
+	// Shutdown SSE manager gracefully
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	sseCancel() // Cancel SSE context to stop broadcast loop
+	if err := sseManager.Shutdown(shutdownCtx); err != nil {
+		log.Error("Failed to shutdown SSE manager", "error", err)
+	}
+
+	// Shutdown HTTP server
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error("Server forced to shutdown", "error", err)
 	}
@@ -222,5 +246,5 @@ func main() {
 		log.Info("Database closed successfully")
 	}
 
-	log.Info("Server stopped")
+	log.Info("See you space cowboy...")
 }

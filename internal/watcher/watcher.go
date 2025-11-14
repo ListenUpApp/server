@@ -8,6 +8,7 @@ import (
 )
 
 // Watcher monitors file system changes
+// Life before death - we watch to protect your library
 type Watcher struct {
 	backend WatcherBackend
 	logger  *slog.Logger

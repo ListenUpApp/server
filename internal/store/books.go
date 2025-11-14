@@ -7,15 +7,19 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"time"
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/sse"
 )
 
 const (
-	bookPrefix        = "book:"
-	bookByPathPrefix  = "idx:books:path:"
-	bookByInodePrefix = "idx:books:inode"
+	bookPrefix            = "book:"
+	bookByPathPrefix      = "idx:books:path:"
+	bookByInodePrefix     = "idx:books:inode"
+	bookByUpdatedAtPrefix = "idx:books:updated_at:" // Format: idx:books:updated_at:{RFC3339Nano}:book:{uuid}
+	bookByDeletedAtPrefix = "idx:books:deleted_at:" // Format: idx:books:deleted_at:{RFC3339Nano}:book:{uuid}
 )
 
 var (
@@ -79,6 +83,8 @@ func (s *Store) CreateBook(ctx context.Context, book *domain.Book) error {
 			slog.Int("audio_files", len(book.AudioFiles)),
 		)
 	}
+
+	s.eventEmitter.Emit(sse.NewBookCreatedEvent(book))
 	return nil
 }
 
@@ -103,6 +109,12 @@ func (s *Store) GetBook(ctx context.Context, id string) (*domain.Book, error) {
 		}
 		return nil, fmt.Errorf("get book: %w", err)
 	}
+
+	// Treat soft-deleted books as not found
+	if book.IsDeleted() {
+		return nil, ErrBookNotFound
+	}
+
 	return &book, nil
 }
 
@@ -142,8 +154,11 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 		return err
 	}
 
+	book.Touch()
+
 	// Use Transaction to update book and indices atomically
 	err = s.db.Update(func(txn *badger.Txn) error {
+		book.Touch()
 		// Update book
 		data, err := json.Marshal(book)
 		if err != nil {
@@ -209,10 +224,18 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 		return fmt.Errorf("update book: %w", err)
 	}
 
+	if err := domain.CascadeBookUpdate(ctx, s, book.ID); err != nil {
+		// Log but don't fail the update
+		if s.logger != nil {
+			s.logger.Error("cascaed uodate failed", "book_id", book.ID, "error", err)
+		}
+	}
+
 	if s.logger != nil {
 		s.logger.Info("book updated", "id", book.ID, "title", book.Title)
 	}
 
+	s.eventEmitter.Emit(sse.NewBookUpdatedEvent(book))
 	return nil
 }
 
@@ -223,7 +246,7 @@ func (s *Store) DeleteBook(ctx context.Context, id string) error {
 		return err
 	}
 
-	// Remove from all collections
+	// Remove from all collections first
 	collections, err := s.GetCollectionsForBook(ctx, id)
 	if err != nil {
 		return fmt.Errorf("get collections for book: %w", err)
@@ -235,15 +258,23 @@ func (s *Store) DeleteBook(ctx context.Context, id string) error {
 		}
 	}
 
-	// Delete book and indices
+	// Soft delete the book
 	err = s.db.Update(func(txn *badger.Txn) error {
-		// Delete Book
+		// Mark book as deleted (sets DeletedAt and updates UpdatedAt)
+		oldUpdatedAt := book.UpdatedAt
+		book.MarkDeleted()
+
+		// Save updated book with DeletedAt set
 		key := []byte(bookPrefix + id)
-		if err := txn.Delete(key); err != nil {
+		data, err := json.Marshal(book)
+		if err != nil {
+			return fmt.Errorf("marshal book: %w", err)
+		}
+		if err := txn.Set(key, data); err != nil {
 			return err
 		}
 
-		// Delete Path Index
+		// Delete secondary indexes (path, inode) - deleted books shouldn't be found by these
 		pathKey := []byte(bookByPathPrefix + book.Path)
 		if err := txn.Delete(pathKey); err != nil {
 			return err
@@ -257,23 +288,98 @@ func (s *Store) DeleteBook(ctx context.Context, id string) error {
 				}
 			}
 		}
+
+		// Update updated_at index (deleted books still appear in delta queries)
+		oldUpdatedAtKey := formatTimestampIndexKey(bookByUpdatedAtPrefix, oldUpdatedAt, "book", book.ID)
+		if err := txn.Delete(oldUpdatedAtKey); err != nil && err != badger.ErrKeyNotFound {
+			return err
+		}
+		newUpdatedAtKey := formatTimestampIndexKey(bookByUpdatedAtPrefix, book.UpdatedAt, "book", book.ID)
+		if err := txn.Set(newUpdatedAtKey, []byte{}); err != nil {
+			return err
+		}
+
+		// Create deleted_at index
+		deletedAtKey := formatTimestampIndexKey(bookByDeletedAtPrefix, *book.DeletedAt, "book", book.ID)
+		if err := txn.Set(deletedAtKey, []byte{}); err != nil {
+			return err
+		}
+
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("delete book: %w", err)
+		return fmt.Errorf("soft delete book: %w", err)
 	}
 
 	if s.logger != nil {
-		s.logger.Info("book deleted", "id", id, "title", book.Title)
+		s.logger.Info("book soft deleted", "id", id, "title", book.Title, "deleted_at", book.DeletedAt)
 	}
 
+	s.eventEmitter.Emit(sse.NewBookDeletedEvent(book.ID, *book.DeletedAt))
 	return nil
+}
+
+// GetBooksDeletedAfter efficiently queries all books with DeletedAt > timestamp.
+// This is used for delta sync to inform clients which books were deleted.
+// Returns a list of book IDs that were soft-deleted after the given timestamp.
+func (s *Store) GetBooksDeletedAfter(ctx context.Context, timestamp time.Time) ([]string, error) {
+	var bookIDs []string
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false // Only need keys
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		// Seek to the timestamp
+		seekKey := formatTimestampIndexKey(bookByDeletedAtPrefix, timestamp, "", "")
+		prefix := []byte(bookByDeletedAtPrefix)
+
+		it.Seek(seekKey)
+		for it.ValidForPrefix(prefix) {
+			key := it.Item().Key()
+
+			entityType, entityID, err := parseTimestampIndexKey(key, bookByDeletedAtPrefix)
+			if err != nil {
+				if s.logger != nil {
+					s.logger.Warn("failed to parse deleted_at key", "key", string(key), "error", err)
+				}
+				it.Next()
+				continue
+			}
+
+			if entityType == "book" {
+				bookIDs = append(bookIDs, entityID)
+			}
+			it.Next()
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scan deleted_at index: %w", err)
+	}
+
+	if s.logger != nil {
+		s.logger.Info("deleted books query completed",
+			"timestamp", timestamp.Format(time.RFC3339),
+			"books_deleted", len(bookIDs),
+		)
+	}
+
+	return bookIDs, nil
 }
 
 // BookExists checks if a book exists in our db by ID
 func (s *Store) BookExists(ctx context.Context, id string) (bool, error) {
-	key := []byte(bookPrefix + id)
-	return s.exists(key)
+	book, err := s.GetBook(ctx, id)
+	if err != nil {
+		if errors.Is(err, ErrBookNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	return book != nil, nil
 }
 
 func (s *Store) ListBooks(ctx context.Context, params PaginationParams) (*PaginatedResult[*domain.Book], error) {
@@ -313,16 +419,30 @@ func (s *Store) ListBooks(ctx context.Context, params PaginationParams) (*Pagina
 			it.Seek(seekKey)
 		}
 
-		// Collect items up to limit + 1
+		// Collect items up to limit (excluding deleted books)
 		count := 0
-		for ; it.ValidForPrefix(prefix) && count <= params.Limit; it.Next() {
+		for it.ValidForPrefix(prefix) {
 			item := it.Item()
 			key := string(item.Key())
 
-			// If we've hit limit + 1, we know there are more items
+			// If we've collected enough items, check if there are more non-deleted books
 			if count == params.Limit {
-				// Don't fetch this item, just note that there are more
-				hasMore = true
+				// Check if there's at least one more non-deleted book
+				for it.ValidForPrefix(prefix) {
+					var checkBook domain.Book
+					err := it.Item().Value(func(val []byte) error {
+						return json.Unmarshal(val, &checkBook)
+					})
+					if err != nil {
+						it.Next()
+						continue
+					}
+					if !checkBook.IsDeleted() {
+						hasMore = true
+						break
+					}
+					it.Next()
+				}
 				break
 			}
 
@@ -332,15 +452,20 @@ func (s *Store) ListBooks(ctx context.Context, params PaginationParams) (*Pagina
 					return err
 				}
 
+				// Skip deleted books
+				if book.IsDeleted() {
+					return nil
+				}
+
 				books = append(books, &book)
 				lastKey = key
+				count++
 				return nil
 			})
 			if err != nil {
 				return err
 			}
-
-			count++
+			it.Next()
 		}
 
 		return nil
@@ -407,6 +532,53 @@ func (s *Store) ListAllBooks(ctx context.Context) ([]*domain.Book, error) {
 	return books, nil
 }
 
+// GetAllBookIDs returns all non-deleted book IDs.
+// Note: This now needs to fetch values to check DeletedAt field.
+// TODO: Consider adding an "active books" index for better performance.
+func (s *Store) GetAllBookIDs(ctx context.Context) ([]string, error) {
+	var bookIDs []string
+
+	prefix := []byte(bookPrefix)
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = prefix
+		opts.PrefetchValues = true // Need values to check DeletedAt
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+
+			err := item.Value(func(val []byte) error {
+				var book domain.Book
+				if err := json.Unmarshal(val, &book); err != nil {
+					return err
+				}
+
+				// Skip deleted books
+				if book.IsDeleted() {
+					return nil
+				}
+
+				bookIDs = append(bookIDs, book.ID)
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get all book IDs: %w", err)
+	}
+
+	return bookIDs, nil
+}
+
 // GetBooksByCollectionPaginated returns paginated books in a collection
 func (s *Store) GetBooksByCollectionPaginated(ctx context.Context, collectionID string, params PaginationParams) (*PaginatedResult[*domain.Book], error) {
 	params.Validate()
@@ -466,4 +638,51 @@ func (s *Store) GetBooksByCollectionPaginated(ctx context.Context, collectionID 
 	}
 
 	return result, nil
+}
+
+// TouchEntity updated the Updated timestamp for an entity.
+// This implements our CascadeUpdater interface.
+func (s *Store) TouchEntity(ctx context.Context, entityType string, id string) error {
+	switch entityType {
+	case "book":
+		return s.touchBook(ctx, id)
+	// TODO: add authors etc when they're here.
+	default:
+		return fmt.Errorf("unknown entity type: %s", entityType)
+	}
+}
+
+// touchBook updates just the UpdatedAt timestampe for a book without rewriting all data
+func (s *Store) touchBook(ctx context.Context, id string) error {
+	key := []byte(bookPrefix + id)
+
+	return s.db.Update(func(txn *badger.Txn) error {
+		// Get existing book
+		item, err := txn.Get(key)
+		if err != nil {
+			if err == badger.ErrKeyNotFound {
+				return ErrBookNotFound
+			}
+			return err
+		}
+
+		var book domain.Book
+		err = item.Value(func(val []byte) error {
+			return json.Unmarshal(val, &book)
+		})
+		if err != nil {
+			return fmt.Errorf("unmarshal book: %w", err)
+		}
+
+		// Update timestamp
+		book.Touch()
+
+		// Marshal and Save
+		data, err := json.Marshal(&book)
+		if err != nil {
+			return fmt.Errorf("marshal book: %w", err)
+		}
+
+		return txn.Set(key, data)
+	})
 }

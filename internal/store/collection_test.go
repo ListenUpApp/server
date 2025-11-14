@@ -861,7 +861,7 @@ func TestLibrary_Persistence(t *testing.T) {
 	ctx := context.Background()
 
 	// Create and populate store
-	store1, err := New(tmpDir+"/test.db", nil)
+	store1, err := New(tmpDir+"/test.db", nil, NewNoopEmitter())
 	require.NoError(t, err)
 
 	lib := &domain.Library{
@@ -891,7 +891,7 @@ func TestLibrary_Persistence(t *testing.T) {
 	require.NoError(t, err)
 
 	// Reopen store
-	store2, err := New(tmpDir+"/test.db", nil)
+	store2, err := New(tmpDir+"/test.db", nil, NewNoopEmitter())
 	require.NoError(t, err)
 	defer store2.Close()
 

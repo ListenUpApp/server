@@ -10,6 +10,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/http/response"
 	"github.com/listenupapp/listenup-server/internal/scanner"
 	"github.com/listenupapp/listenup-server/internal/service"
+	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
@@ -17,15 +18,19 @@ import (
 type Server struct {
 	instanceService *service.InstanceService
 	bookService     *service.BookService
+	syncService     *service.SyncService
+	sseHandler      *sse.Handler
 	router          *chi.Mux
 	logger          *slog.Logger
 }
 
 // NewServer creates a new HTTP server with all routes configured
-func NewServer(instanceService *service.InstanceService, bookService *service.BookService, logger *slog.Logger) *Server {
+func NewServer(instanceService *service.InstanceService, bookService *service.BookService, syncService *service.SyncService, sseHandler *sse.Handler, logger *slog.Logger) *Server {
 	s := &Server{
 		instanceService: instanceService,
 		bookService:     bookService,
+		syncService:     syncService,
+		sseHandler:      sseHandler,
 		router:          chi.NewRouter(),
 		logger:          logger,
 	}
@@ -65,6 +70,13 @@ func (s *Server) setupRoutes() {
 
 		// Libraries (also temp)
 		r.Post("/libraries/{id}/scan", s.handleTriggerScan)
+
+		// Sync endpoints
+		r.Route("/sync", func(r chi.Router) {
+			r.Get("/manifest", s.handleGetManifest)
+			r.Get("/books", s.handleSyncBooks)
+			r.Get("/stream", s.sseHandler.ServeHTTP)
+		})
 	})
 }
 
@@ -156,6 +168,37 @@ func (s *Server) handleTriggerScan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.Success(w, result, s.logger)
+}
+
+// handleGetManifest returns the sync manifest (initial sync phase 1)
+func (s *Server) handleGetManifest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	manifest, err := s.syncService.GetManifest(ctx)
+	if err != nil {
+		s.logger.Error("Failed to get manifest", "error", err)
+		response.InternalError(w, "Failed to retrieve sync manifest", s.logger)
+		return
+	}
+
+	response.Success(w, manifest, s.logger)
+}
+
+// handleSyncBooks returns paginated books for synching
+func (s *Server) handleSyncBooks(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Parse pagination parameters
+	params := parsePaginationParams(r)
+
+	books, err := s.syncService.GetBooksForSync(ctx, params)
+	if err != nil {
+		s.logger.Error("Failed to get books for sync", "error", err)
+		response.InternalError(w, "Failed to retrieve books", s.logger)
+		return
+	}
+
+	response.Success(w, books, s.logger)
 }
 
 // Helper functions

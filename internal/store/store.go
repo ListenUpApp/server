@@ -8,14 +8,34 @@ import (
 	"github.com/dgraph-io/badger/v4"
 )
 
+// EventEmitter is the interface for emitting SSE events.
+// Store uses this to broadcast changes without depending on SSE implementation details.
+type EventEmitter interface {
+	Emit(event any)
+}
+
+// NoopEmitter is a no-op implementation of EventEmitter for testing
+type NoopEmitter struct{}
+
+func (NoopEmitter) Emit(event any) {}
+
+// NewNoopEmitter creates a new no-op emitter for testing
+func NewNoopEmitter() EventEmitter {
+	return NoopEmitter{}
+}
+
 // Store wraps a Badger database instance
 type Store struct {
 	db     *badger.DB
 	logger *slog.Logger
+
+	// SSE event emitter for broadcasting changes
+	eventEmitter EventEmitter
 }
 
-// New creates a new Store instance with the given database path
-func New(path string, logger *slog.Logger) (*Store, error) {
+// New creates a new Store instance with the given database path and event emitter.
+// The emitter is required and used to broadcast store changes via SSE.
+func New(path string, logger *slog.Logger, emitter EventEmitter) (*Store, error) {
 	opts := badger.DefaultOptions(path)
 	opts.Logger = nil // Disable Badger's internal logging
 
@@ -25,8 +45,9 @@ func New(path string, logger *slog.Logger) (*Store, error) {
 	}
 
 	store := &Store{
-		db:     db,
-		logger: logger,
+		db:           db,
+		logger:       logger,
+		eventEmitter: emitter,
 	}
 
 	if logger != nil {
@@ -47,7 +68,7 @@ func (s *Store) Close() error {
 // Helper methods for database operations
 
 // get retrieves a value by key
-func (s *Store) get(key []byte, dest interface{}) error {
+func (s *Store) get(key []byte, dest any) error {
 	return s.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(key)
 		if err != nil {
@@ -61,7 +82,7 @@ func (s *Store) get(key []byte, dest interface{}) error {
 }
 
 // set stores a value by key
-func (s *Store) set(key []byte, value interface{}) error {
+func (s *Store) set(key []byte, value any) error {
 	data, err := json.Marshal(value)
 	if err != nil {
 		return fmt.Errorf("failed to marshal value: %w", err)

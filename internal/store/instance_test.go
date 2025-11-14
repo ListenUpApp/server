@@ -22,8 +22,8 @@ func setupTestStore(t *testing.T) (*Store, func()) {
 
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	// Create store
-	store, err := New(dbPath, nil)
+	// Create store with noop emitter for testing
+	store, err := New(dbPath, nil, NewNoopEmitter())
 	require.NoError(t, err)
 	require.NotNil(t, store)
 
@@ -189,7 +189,7 @@ func TestStore_Persistence(t *testing.T) {
 	ctx := context.Background()
 
 	// Create store and instance
-	store1, err := New(dbPath, nil)
+	store1, err := New(dbPath, nil, NewNoopEmitter())
 	require.NoError(t, err)
 
 	instance, err := store1.CreateInstance(ctx)
@@ -203,7 +203,7 @@ func TestStore_Persistence(t *testing.T) {
 	require.NoError(t, err)
 
 	// Reopen store
-	store2, err := New(dbPath, nil)
+	store2, err := New(dbPath, nil, NewNoopEmitter())
 	require.NoError(t, err)
 	defer store2.Close()
 
