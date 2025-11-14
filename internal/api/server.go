@@ -10,6 +10,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/http/response"
 	"github.com/listenupapp/listenup-server/internal/scanner"
 	"github.com/listenupapp/listenup-server/internal/service"
+	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
@@ -18,16 +19,18 @@ type Server struct {
 	instanceService *service.InstanceService
 	bookService     *service.BookService
 	syncService     *service.SyncService
+	sseHandler      *sse.Handler
 	router          *chi.Mux
 	logger          *slog.Logger
 }
 
 // NewServer creates a new HTTP server with all routes configured
-func NewServer(instanceService *service.InstanceService, bookService *service.BookService, syncService *service.SyncService, logger *slog.Logger) *Server {
+func NewServer(instanceService *service.InstanceService, bookService *service.BookService, syncService *service.SyncService, sseHandler *sse.Handler, logger *slog.Logger) *Server {
 	s := &Server{
 		instanceService: instanceService,
 		bookService:     bookService,
 		syncService:     syncService,
+		sseHandler:      sseHandler,
 		router:          chi.NewRouter(),
 		logger:          logger,
 	}
@@ -72,6 +75,7 @@ func (s *Server) setupRoutes() {
 		r.Route("/sync", func(r chi.Router) {
 			r.Get("/manifest", s.handleGetManifest)
 			r.Get("/books", s.handleSyncBooks)
+			r.Get("/stream", s.sseHandler.ServeHTTP)
 		})
 	})
 }

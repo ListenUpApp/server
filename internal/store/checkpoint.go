@@ -19,7 +19,7 @@ const (
 func (s *Store) GetLibraryCheckpoint(ctx context.Context) (time.Time, error) {
 	// Fow now iterate all books and find the latest UpdatedAt
 	// TODO: Optimize by caching checkpoint in Library.SyncCheckpoint field
-	// and updating it on every entity change
+	// and updating it on every entity change (save crystals exist for a reason)
 	var latest time.Time
 
 	err := s.db.View(func(txn *badger.Txn) error {

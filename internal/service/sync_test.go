@@ -26,7 +26,7 @@ func setupTestSync(t *testing.T) (*SyncService, *store.Store, func()) {
 	dbPath := filepath.Join(tmpDir, "test.db")
 
 	// Create store
-	testStore, err := store.New(dbPath, nil)
+	testStore, err := store.New(dbPath, nil, store.NewNoopEmitter())
 	require.NoError(t, err)
 	require.NotNil(t, testStore)
 

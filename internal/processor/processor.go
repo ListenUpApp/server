@@ -12,6 +12,9 @@ import (
 
 // EventProcessor processes file system events and orchestrates incremental scanning.
 //
+// Life before death. Strength before weakness. Journey before destination.
+// We protect the library through vigilance.
+//
 // Key design principles:
 //   - Processes each event immediately (no batching)
 //   - Uses per-folder locking to deduplicate concurrent events

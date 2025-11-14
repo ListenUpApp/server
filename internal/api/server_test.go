@@ -14,6 +14,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/http/response"
 	"github.com/listenupapp/listenup-server/internal/scanner"
 	"github.com/listenupapp/listenup-server/internal/service"
+	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,8 +33,12 @@ func setupTestServer(t *testing.T) (*Server, func()) {
 	// Create a no-op logger for tests (discards all logs)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	// Create store
-	s, err := store.New(dbPath, logger)
+	// Create SSE manager for testing
+	sseManager := sse.NewManager(logger)
+	sseHandler := sse.NewHandler(sseManager, logger)
+
+	// Create store with SSE manager
+	s, err := store.New(dbPath, logger, sseManager)
 	require.NoError(t, err)
 
 	// Create scanner
@@ -45,7 +50,7 @@ func setupTestServer(t *testing.T) (*Server, func()) {
 	syncService := service.NewSyncService(s, logger)
 
 	// Create server
-	server := NewServer(instanceService, bookService, syncService, logger)
+	server := NewServer(instanceService, bookService, syncService, sseHandler, logger)
 
 	// Return cleanup function
 	cleanup := func() {

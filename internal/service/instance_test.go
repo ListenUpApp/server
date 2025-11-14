@@ -23,7 +23,7 @@ func setupTestService(t *testing.T) (*InstanceService, func()) {
 	dbPath := filepath.Join(tmpDir, "test.db")
 
 	// Create store
-	s, err := store.New(dbPath, nil)
+	s, err := store.New(dbPath, nil, store.NewNoopEmitter())
 	require.NoError(t, err)
 
 	// Create service

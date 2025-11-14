@@ -215,6 +215,6 @@ type ItemUpdate struct {
 // FieldChange represents a field changescan
 type FieldChange struct {
 	Field    string
-	OldValue interface{}
-	NewValue interface{}
+	OldValue any
+	NewValue any
 }

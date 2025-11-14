@@ -11,6 +11,7 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/sse"
 )
 
 const (
@@ -82,6 +83,8 @@ func (s *Store) CreateBook(ctx context.Context, book *domain.Book) error {
 			slog.Int("audio_files", len(book.AudioFiles)),
 		)
 	}
+
+	s.eventEmitter.Emit(sse.NewBookCreatedEvent(book))
 	return nil
 }
 
@@ -232,6 +235,7 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 		s.logger.Info("book updated", "id", book.ID, "title", book.Title)
 	}
 
+	s.eventEmitter.Emit(sse.NewBookUpdatedEvent(book))
 	return nil
 }
 
@@ -311,6 +315,7 @@ func (s *Store) DeleteBook(ctx context.Context, id string) error {
 		s.logger.Info("book soft deleted", "id", id, "title", book.Title, "deleted_at", book.DeletedAt)
 	}
 
+	s.eventEmitter.Emit(sse.NewBookDeletedEvent(book.ID, *book.DeletedAt))
 	return nil
 }
 
@@ -351,7 +356,6 @@ func (s *Store) GetBooksDeletedAfter(ctx context.Context, timestamp time.Time) (
 		}
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("scan deleted_at index: %w", err)
 	}
