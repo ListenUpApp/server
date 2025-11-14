@@ -10,13 +10,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
 // Scanner orchestrates the library scanning process
 type Scanner struct {
-	store  *store.Store
-	logger *slog.Logger
+	store        *store.Store
+	eventEmitter store.EventEmitter
+	logger       *slog.Logger
 
 	walker   *Walker
 	grouper  *Grouper
@@ -25,19 +27,21 @@ type Scanner struct {
 }
 
 // NewScanner creates a new scanner instance
-func NewScanner(store *store.Store, logger *slog.Logger) *Scanner {
+func NewScanner(store *store.Store, emitter store.EventEmitter, logger *slog.Logger) *Scanner {
 	return &Scanner{
-		store:    store,
-		logger:   logger,
-		walker:   NewWalker(logger),
-		grouper:  NewGrouper(logger),
-		analyzer: NewAnalyzer(logger),
-		differ:   NewDiffer(logger),
+		store:        store,
+		eventEmitter: emitter,
+		logger:       logger,
+		walker:       NewWalker(logger),
+		grouper:      NewGrouper(logger),
+		analyzer:     NewAnalyzer(logger),
+		differ:       NewDiffer(logger),
 	}
 }
 
 // ScanOptions configures a scan
 type ScanOptions struct {
+	LibraryID  string // The library being scanned (for event emission)
 	Force      bool
 	DryRun     bool
 	Workers    int
@@ -52,7 +56,13 @@ func (s *Scanner) Scan(ctx context.Context, folderPath string, opts ScanOptions)
 
 	// Initialize result
 	result := &ScanResult{
+		LibraryID: opts.LibraryID,
 		StartedAt: time.Now(),
+	}
+
+	// Emit scan started event if library ID is provided
+	if opts.LibraryID != "" {
+		s.eventEmitter.Emit(sse.NewScanStartedEvent(opts.LibraryID))
 	}
 
 	// Setup progress tracking
@@ -280,6 +290,16 @@ func (s *Scanner) Scan(ctx context.Context, folderPath string, opts ScanOptions)
 		"items", len(grouped),
 		"errors", result.Errors,
 	)
+
+	// Emit scan complete event if library ID is provided
+	if opts.LibraryID != "" {
+		s.eventEmitter.Emit(sse.NewScanCompleteEvent(
+			opts.LibraryID,
+			result.Added,
+			result.Updated,
+			result.Removed,
+		))
+	}
 
 	return result, nil
 }

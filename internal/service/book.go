@@ -59,12 +59,13 @@ func (s *BookService) TriggerScan(ctx context.Context, libraryID string, opts sc
 	// TODO: Support scanning multiple paths and aggregating results
 	scanPath := library.ScanPaths[0]
 
+	// Set library ID in options for event emission
+	opts.LibraryID = libraryID
+
 	result, err := s.scanner.Scan(ctx, scanPath, opts)
 	if err != nil {
 		return nil, fmt.Errorf("scan failed: %w", err)
 	}
-
-	result.LibraryID = libraryID
 
 	s.logger.Info("scan complete",
 		"library_id", libraryID,

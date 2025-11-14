@@ -41,8 +41,8 @@ func setupTestServer(t *testing.T) (*Server, func()) {
 	s, err := store.New(dbPath, logger, sseManager)
 	require.NoError(t, err)
 
-	// Create scanner
-	fileScanner := scanner.NewScanner(s, logger)
+	// Create scanner with SSE manager
+	fileScanner := scanner.NewScanner(s, sseManager, logger)
 
 	// Create services
 	instanceService := service.NewInstanceService(s, logger)

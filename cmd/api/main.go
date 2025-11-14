@@ -81,8 +81,8 @@ func main() {
 		"inbox_collection", bootstrap.InboxCollection.ID,
 	)
 
-	// Initialize scanner
-	fileScanner := scanner.NewScanner(db, log.Logger)
+	// Initialize scanner with SSE event emitter
+	fileScanner := scanner.NewScanner(db, sseManager, log.Logger)
 
 	// If new library, trigger initial full scan
 	if bootstrap.IsNewLibrary {
@@ -90,7 +90,9 @@ func main() {
 		go func() {
 			for _, scanPath := range bootstrap.Library.ScanPaths {
 				log.Info("Running initial scan", "path", scanPath)
-				if _, err := fileScanner.Scan(ctx, scanPath, scanner.ScanOptions{}); err != nil {
+				if _, err := fileScanner.Scan(ctx, scanPath, scanner.ScanOptions{
+					LibraryID: bootstrap.Library.ID,
+				}); err != nil {
 					log.Error("Initial scan failed", "path", scanPath, "error", err)
 				}
 			}

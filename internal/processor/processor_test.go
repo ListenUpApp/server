@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/scanner"
+	"github.com/listenupapp/listenup-server/internal/store"
 	"github.com/listenupapp/listenup-server/internal/watcher"
 )
 
@@ -34,7 +35,7 @@ func TestEventProcessor_ProcessEvent_AudioFile(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError, // Reduce noise in tests
 	}))
-	scnr := scanner.NewScanner(nil, logger)
+	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), logger)
 	processor := NewEventProcessor(scnr, logger)
 
 	// Create event
@@ -76,7 +77,7 @@ func TestEventProcessor_ProcessEvent_CoverFile(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError,
 	}))
-	scnr := scanner.NewScanner(nil, logger)
+	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), logger)
 	processor := NewEventProcessor(scnr, logger)
 
 	// Create event
@@ -112,7 +113,7 @@ func TestEventProcessor_ProcessEvent_MetadataFile(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError,
 	}))
-	scnr := scanner.NewScanner(nil, logger)
+	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), logger)
 	processor := NewEventProcessor(scnr, logger)
 
 	// Create event
@@ -148,7 +149,7 @@ func TestEventProcessor_ProcessEvent_IgnoredFile(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError,
 	}))
-	scnr := scanner.NewScanner(nil, logger)
+	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), logger)
 	processor := NewEventProcessor(scnr, logger)
 
 	// Create event
@@ -181,7 +182,7 @@ func TestEventProcessor_ProcessEvent_RemovedFile(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError,
 	}))
-	scnr := scanner.NewScanner(nil, logger)
+	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), logger)
 	processor := NewEventProcessor(scnr, logger)
 
 	// Create event for a removed file (file doesn't need to exist)
@@ -213,7 +214,7 @@ func TestEventProcessor_ProcessEvent_RemovedFile_AllFilesGone(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelInfo, // Enable to verify logging
 	}))
-	scnr := scanner.NewScanner(nil, logger)
+	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), logger)
 	processor := NewEventProcessor(scnr, logger)
 
 	// Simulate removal of last audio file
@@ -257,7 +258,7 @@ func TestEventProcessor_ConcurrentEvents(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError,
 	}))
-	scnr := scanner.NewScanner(nil, logger)
+	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), logger)
 	processor := NewEventProcessor(scnr, logger)
 
 	// Track how many events were actually processed (not skipped due to lock)
@@ -325,7 +326,7 @@ func TestEventProcessor_MultiFileBookEvolution(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError,
 	}))
-	scnr := scanner.NewScanner(nil, logger)
+	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), logger)
 	processor := NewEventProcessor(scnr, logger)
 
 	ctx := context.Background()
@@ -426,7 +427,7 @@ func TestEventProcessor_DiscFolderHandling(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError,
 	}))
-	scnr := scanner.NewScanner(nil, logger)
+	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), logger)
 	processor := NewEventProcessor(scnr, logger)
 
 	ctx := context.Background()
@@ -561,7 +562,7 @@ func TestEventProcessor_ModifiedEvent(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError,
 	}))
-	scnr := scanner.NewScanner(nil, logger)
+	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), logger)
 	processor := NewEventProcessor(scnr, logger)
 
 	// Create modified event
