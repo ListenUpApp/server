@@ -15,13 +15,13 @@ import (
 )
 
 const (
-	bookPrefix            = "book:"
-	bookByPathPrefix      = "idx:books:path:"
-	bookByInodePrefix     = "idx:books:inode"
-	bookByUpdatedAtPrefix = "idx:books:updated_at:"   // Format: idx:books:updated_at:{RFC3339Nano}:book:{uuid}
-	bookByDeletedAtPrefix = "idx:books:deleted_at:"   // Format: idx:books:deleted_at:{RFC3339Nano}:book:{uuid}
+	bookPrefix              = "book:"
+	bookByPathPrefix        = "idx:books:path:"
+	bookByInodePrefix       = "idx:books:inode"
+	bookByUpdatedAtPrefix   = "idx:books:updated_at:"  // Format: idx:books:updated_at:{RFC3339Nano}:book:{uuid}
+	bookByDeletedAtPrefix   = "idx:books:deleted_at:"  // Format: idx:books:deleted_at:{RFC3339Nano}:book:{uuid}
 	bookByContributorPrefix = "idx:books:contributor:" // Format: idx:books:contributor:{contributorID}:{bookID}
-	bookBySeriesPrefix    = "idx:books:series:"       // Format: idx:books:series:{seriesID}:{bookID}
+	bookBySeriesPrefix      = "idx:books:series:"      // Format: idx:books:series:{seriesID}:{bookID}
 )
 
 var (
