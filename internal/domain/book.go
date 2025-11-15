@@ -9,34 +9,28 @@ import (
 // Book represents an audiobook in the library.
 type Book struct {
 	Syncable
-	ScannedAt     time.Time       `json:"scanned_at"`
-	CoverImage    *ImageFileInfo  `json:"cover_image,omitempty"`
-	ISBN          string          `json:"isbn,omitempty"`
-	Title         string          `json:"title"`
-	Subtitle      string          `json:"subtitle,omitempty"`
-	Path          string          `json:"path"`
-	Description   string          `json:"description,omitempty"`
-	Publisher     string          `json:"publisher,omitempty"`
-	PublishYear   string          `json:"publish_year,omitempty"`
-	Language      string          `json:"language,omitempty"`
-	ASIN          string          `json:"asin,omitempty"`
-	Genres        []string        `json:"genres,omitempty"`
-	Tags          []string        `json:"tags,omitempty"`
-	Series        []SeriesInfo    `json:"series,omitempty"`
-	AudioFiles    []AudioFileInfo `json:"audio_files"`
-	Narrators     []string        `json:"narrators,omitempty"`
-	Chapters      []Chapter       `json:"chapters,omitempty"`
-	Authors       []string        `json:"authors,omitempty"`
-	TotalDuration int64           `json:"total_duration"`
-	TotalSize     int64           `json:"total_size"`
-	Explicit      bool            `json:"explicit,omitempty"`
-	Abridged      bool            `json:"abridged,omitempty"`
-}
-
-// SeriesInfo represents series metadata.
-type SeriesInfo struct {
-	Name     string `json:"name"`
-	Sequence string `json:"sequence,omitempty"`
+	ScannedAt     time.Time         `json:"scanned_at"`
+	CoverImage    *ImageFileInfo    `json:"cover_image,omitempty"`
+	ISBN          string            `json:"isbn,omitempty"`
+	Title         string            `json:"title"`
+	Subtitle      string            `json:"subtitle,omitempty"`
+	Path          string            `json:"path"`
+	Description   string            `json:"description,omitempty"`
+	Publisher     string            `json:"publisher,omitempty"`
+	PublishYear   string            `json:"publish_year,omitempty"`
+	Language      string            `json:"language,omitempty"`
+	ASIN          string            `json:"asin,omitempty"`
+	Genres        []string          `json:"genres,omitempty"`
+	Tags          []string          `json:"tags,omitempty"`
+	Contributors  []BookContributor `json:"contributors"`
+	SeriesID      string            `json:"series_id,omitempty"`
+	Sequence      string            `json:"sequence,omitempty"` // "1", "1.5", "Book Zero" - flexible for edge cases
+	AudioFiles    []AudioFileInfo   `json:"audio_files"`
+	Chapters      []Chapter         `json:"chapters,omitempty"`
+	TotalDuration int64             `json:"total_duration"`
+	TotalSize     int64             `json:"total_size"`
+	Explicit      bool              `json:"explicit,omitempty"`
+	Abridged      bool              `json:"abridged,omitempty"`
 }
 
 // AudioFileInfo represents an audio file within a book.
