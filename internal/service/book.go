@@ -90,7 +90,7 @@ func (s *BookService) ScanFolder(ctx context.Context, folderPath string) (*domai
 	}
 
 	// Convert to book.
-	book, err := scanner.ConvertToBook(item)
+	book, err := scanner.ConvertToBook(ctx, item, s.store)
 	if err != nil {
 		return nil, fmt.Errorf("convert to book: %w", err)
 	}

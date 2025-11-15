@@ -4,6 +4,7 @@ package scanner
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"path/filepath"
 	"runtime"
@@ -161,6 +162,8 @@ func (a *Analyzer) AnalyzeItems(ctx context.Context, items []LibraryItemData) ([
 						"error", parseErr)
 				} else {
 					item.AudioFiles[0].Metadata = convertMetadata(metadata)
+					// Build item-level BookMetadata from audio metadata.
+					item.Metadata = buildBookMetadata(item.AudioFiles[0].Metadata)
 				}
 			}
 
@@ -179,8 +182,9 @@ func (a *Analyzer) AnalyzeItems(ctx context.Context, items []LibraryItemData) ([
 					"error", parseErr)
 			} else if len(item.AudioFiles) > 0 {
 				// Store aggregated metadata in first file.
-				// (The item-level BookMetadata will be built later).
 				item.AudioFiles[0].Metadata = convertMetadata(metadata)
+				// Build item-level BookMetadata from aggregated audio metadata.
+				item.Metadata = buildBookMetadata(item.AudioFiles[0].Metadata)
 			}
 		}
 
@@ -282,4 +286,75 @@ func convertMetadata(src *audio.Metadata) *AudioMetadata {
 	}
 
 	return dst
+}
+
+// splitContributors splits a contributor string by semicolons.
+// Handles patterns like "Homer; Emily Wilson - translator".
+func splitContributors(input string) []string {
+	var result []string
+	parts := strings.Split(input, ";")
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
+
+// buildBookMetadata converts AudioMetadata to BookMetadata.
+// This aggregates audio file metadata into item-level metadata for book creation.
+func buildBookMetadata(audioMeta *AudioMetadata) *BookMetadata {
+	if audioMeta == nil {
+		return nil
+	}
+
+	bookMeta := &BookMetadata{
+		Title:       audioMeta.Title,
+		Subtitle:    audioMeta.Subtitle,
+		Description: audioMeta.Description,
+		Publisher:   audioMeta.Publisher,
+		Language:    audioMeta.Language,
+		ISBN:        audioMeta.ISBN,
+		ASIN:        audioMeta.ASIN,
+		Explicit:    false,
+		Abridged:    false,
+		Chapters:    audioMeta.Chapters,
+	}
+
+	// Convert year to string.
+	if audioMeta.Year > 0 {
+		bookMeta.PublishYear = fmt.Sprintf("%d", audioMeta.Year)
+	}
+
+	// Convert Artist to Authors array (split by semicolon for multiple).
+	if audioMeta.Artist != "" {
+		bookMeta.Authors = splitContributors(audioMeta.Artist)
+	}
+
+	// Convert Narrator to Narrators array (split by semicolon for multiple).
+	if audioMeta.Narrator != "" {
+		bookMeta.Narrators = splitContributors(audioMeta.Narrator)
+	}
+
+	// Convert Genre to Genres array (split by semicolon for multiple).
+	if audioMeta.Genre != "" {
+		genres := strings.Split(audioMeta.Genre, ";")
+		for _, genre := range genres {
+			if trimmed := strings.TrimSpace(genre); trimmed != "" {
+				bookMeta.Genres = append(bookMeta.Genres, trimmed)
+			}
+		}
+	}
+
+	// Convert Series to SeriesInfo array.
+	if audioMeta.Series != "" {
+		bookMeta.Series = []SeriesInfo{
+			{
+				Name:     audioMeta.Series,
+				Sequence: audioMeta.SeriesPart,
+			},
+		}
+	}
+
+	return bookMeta
 }

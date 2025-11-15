@@ -299,12 +299,12 @@ func TestGetManifest_Success(t *testing.T) {
 	counts, ok := data["counts"].(map[string]any)
 	require.True(t, ok)
 	assert.Contains(t, counts, "books")
-	assert.Contains(t, counts, "authors")
+	assert.Contains(t, counts, "contributors")
 	assert.Contains(t, counts, "series")
 
 	// Verify empty library returns 0 books.
 	assert.Equal(t, float64(0), counts["books"])
-	assert.Equal(t, float64(0), counts["authors"])
+	assert.Equal(t, float64(0), counts["contributors"])
 	assert.Equal(t, float64(0), counts["series"])
 
 	// Verify timestamps are valid RFC3339.

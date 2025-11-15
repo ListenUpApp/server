@@ -1,8 +1,10 @@
 package scanner
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -10,8 +12,15 @@ import (
 	"github.com/listenupapp/listenup-server/internal/id"
 )
 
-// ConvertToBook converss a LibraryItemData (from scanner) to a domain.Book (for database).
-func ConvertToBook(item *LibraryItemData) (*domain.Book, error) {
+// Storer defines the interface for creating contributors and series during scanning.
+type Storer interface {
+	GetOrCreateContributorByName(ctx context.Context, name string) (*domain.Contributor, error)
+	GetOrCreateSeriesByName(ctx context.Context, name string) (*domain.Series, error)
+}
+
+// ConvertToBook converts a LibraryItemData (from scanner) to a domain.Book (for database).
+// It creates contributor and series entities as needed using the provided store.
+func ConvertToBook(ctx context.Context, item *LibraryItemData, store Storer) (*domain.Book, error) {
 	// Generate book id.
 	bookID, err := id.Generate("book")
 	if err != nil {
@@ -80,8 +89,6 @@ func ConvertToBook(item *LibraryItemData) (*domain.Book, error) {
 	if item.Metadata != nil {
 		book.Title = item.Metadata.Title
 		book.Subtitle = item.Metadata.Subtitle
-		book.Authors = item.Metadata.Authors
-		book.Narrators = item.Metadata.Narrators
 		book.Description = item.Metadata.Description
 		book.Publisher = item.Metadata.Publisher
 		book.PublishYear = item.Metadata.PublishYear
@@ -93,16 +100,21 @@ func ConvertToBook(item *LibraryItemData) (*domain.Book, error) {
 		book.Explicit = item.Metadata.Explicit
 		book.Abridged = item.Metadata.Abridged
 
-		// Conver series.
-		if len(item.Metadata.Series) > 0 {
-			book.Series = make([]domain.SeriesInfo, 0, len(item.Metadata.Series))
-			for _, s := range item.Metadata.Series {
-				book.Series = append(book.Series, domain.SeriesInfo{
-					Name:     s.Name,
-					Sequence: s.Sequence,
-				})
-			}
+		// Extract and create contributors
+		contributors, err := extractContributors(ctx, item.Metadata, store)
+		if err != nil {
+			return nil, fmt.Errorf("extract contributors: %w", err)
 		}
+		book.Contributors = contributors
+
+		// Extract and create series
+		seriesID, sequence, err := extractSeries(ctx, item.Metadata, store)
+		if err != nil {
+			return nil, fmt.Errorf("extract series: %w", err)
+		}
+		book.SeriesID = seriesID
+		book.Sequence = sequence
+
 		// Convert Chapters.
 		if len(item.Metadata.Chapters) > 0 {
 			book.Chapters = convertChapters(item.Metadata.Chapters, book.AudioFiles)
@@ -176,15 +188,9 @@ func findAudioFileForChapter(chapterStartMs int64, audioFiles []domain.AudioFile
 // sortAudioFilesByFilename sorts audio files by filename for consistent ordering.
 // this ensures track01.mp3 comes before track 02.mp3 and whatnot.
 func sortAudioFilesByFilename(files []domain.AudioFileInfo) {
-	// Simple sort, should be adequate for audiobook file counts (sub 100 files, can reevaluate if people complain).
-	n := len(files)
-	for i := 0; i < n-1; i++ {
-		for j := 0; j < n-i-1; j++ {
-			if compareFilenames(files[j].Filename, files[j+1].Filename) > 0 {
-				files[j], files[j+1] = files[j+1], files[j]
-			}
-		}
-	}
+	sort.Slice(files, func(i, j int) bool {
+		return compareFilenames(files[i].Filename, files[j].Filename) < 0
+	})
 }
 
 // compareFilenames compares two filenames, attempting to sort numerically.
@@ -203,9 +209,148 @@ func compareFilenames(a, b string) int {
 	return 0
 }
 
+// parseContributorString parses a contributor string that may contain role information.
+// Handles patterns like:
+//   - "Emily Wilson - translator"
+//   - "Michael Kramer - narrator"
+//   - "Brandon Sanderson" (no role)
+//   - Multiple: "Kate Reading - narrator; Michael Kramer - narrator"
+func parseContributorString(input string, defaultRole domain.ContributorRole) map[string][]domain.ContributorRole {
+	result := make(map[string][]domain.ContributorRole)
+
+	// Split by semicolon or comma for multiple contributors.
+	var entries []string
+	switch {
+	case strings.Contains(input, ";"):
+		entries = strings.Split(input, ";")
+	case strings.Contains(input, ","):
+		entries = strings.Split(input, ",")
+	default:
+		entries = []string{input}
+	}
+
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+
+		var name string
+		var role domain.ContributorRole
+
+		// Check for "Name - Role" pattern.
+		if strings.Contains(entry, " - ") {
+			parts := strings.SplitN(entry, " - ", 2)
+			name = strings.TrimSpace(parts[0])
+			roleStr := strings.ToLower(strings.TrimSpace(parts[1]))
+			role = parseRoleString(roleStr)
+		} else {
+			name = entry
+			role = defaultRole
+		}
+
+		if name != "" && role != "" {
+			result[name] = append(result[name], role)
+		}
+	}
+
+	return result
+}
+
+// roleMap maps common role string variations to standard ContributorRole values.
+var roleMap = map[string]domain.ContributorRole{
+	"author":          domain.RoleAuthor,
+	"writer":          domain.RoleAuthor,
+	"narrator":        domain.RoleNarrator,
+	"reader":          domain.RoleNarrator,
+	"read by":         domain.RoleNarrator,
+	"translator":      domain.RoleTranslator,
+	"translated by":   domain.RoleTranslator,
+	"editor":          domain.RoleEditor,
+	"edited by":       domain.RoleEditor,
+	"foreword":        domain.RoleForeword,
+	"foreword by":     domain.RoleForeword,
+	"introduction":    domain.RoleIntroduction,
+	"introduction by": domain.RoleIntroduction,
+	"intro":           domain.RoleIntroduction,
+	"afterword":       domain.RoleAfterword,
+	"afterword by":    domain.RoleAfterword,
+	"producer":        domain.RoleProducer,
+	"adaptation":      domain.RoleAdapter,
+	"adapted by":      domain.RoleAdapter,
+	"adapter":         domain.RoleAdapter,
+	"illustrator":     domain.RoleIllustrator,
+	"illustrated by":  domain.RoleIllustrator,
+}
+
+// parseRoleString maps common role strings to ContributorRole.
+func parseRoleString(roleStr string) domain.ContributorRole {
+	roleStr = strings.ToLower(strings.TrimSpace(roleStr))
+
+	if role, ok := roleMap[roleStr]; ok {
+		return role
+	}
+
+	return ""
+}
+
+// extractContributors creates or retrieves contributors from metadata.
+func extractContributors(ctx context.Context, metadata *BookMetadata, store Storer) ([]domain.BookContributor, error) {
+	contributorMap := make(map[string][]domain.ContributorRole) // name -> roles
+
+	// Extract authors (with role parsing).
+	for _, author := range metadata.Authors {
+		parsed := parseContributorString(author, domain.RoleAuthor)
+		for name, roles := range parsed {
+			contributorMap[name] = append(contributorMap[name], roles...)
+		}
+	}
+
+	// Extract narrators (with role parsing).
+	for _, narrator := range metadata.Narrators {
+		parsed := parseContributorString(narrator, domain.RoleNarrator)
+		for name, roles := range parsed {
+			contributorMap[name] = append(contributorMap[name], roles...)
+		}
+	}
+
+	// Create or fetch contributors
+	result := make([]domain.BookContributor, 0, len(contributorMap))
+	for name, roles := range contributorMap {
+		contributor, err := store.GetOrCreateContributorByName(ctx, name)
+		if err != nil {
+			return nil, fmt.Errorf("get/create contributor %s: %w", name, err)
+		}
+
+		result = append(result, domain.BookContributor{
+			ContributorID: contributor.ID,
+			Roles:         roles,
+		})
+	}
+
+	return result, nil
+}
+
+// extractSeries creates or retrieves series from metadata.
+func extractSeries(ctx context.Context, metadata *BookMetadata, store Storer) (seriesID, sequence string, err error) {
+	if len(metadata.Series) == 0 {
+		return "", "", nil
+	}
+
+	// Use first series (most books are in one series)
+	seriesInfo := metadata.Series[0]
+
+	series, err := store.GetOrCreateSeriesByName(ctx, seriesInfo.Name)
+	if err != nil {
+		return "", "", fmt.Errorf("get/create series: %w", err)
+	}
+
+	return series.ID, seriesInfo.Sequence, nil
+}
+
 // UpdateBookFromScan updates an existing book with new scan database.
 // this preserves the book ID and creation timestamp while updating everything else.
-func UpdateBookFromScan(existingBook *domain.Book, item *LibraryItemData) error {
+func UpdateBookFromScan(ctx context.Context, existingBook *domain.Book, item *LibraryItemData, store Storer) error {
 	now := time.Now()
 
 	// Preserve ID and creation timestamp.
@@ -214,7 +359,7 @@ func UpdateBookFromScan(existingBook *domain.Book, item *LibraryItemData) error 
 
 	// convert fresh scan data.
 	// Maybe we should call ourselves the Febreeze brothers cause it's feeling so fresh right now.
-	freshBook, err := ConvertToBook(item)
+	freshBook, err := ConvertToBook(ctx, item, store)
 	if err != nil {
 		return err
 	}

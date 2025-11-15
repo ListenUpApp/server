@@ -1,11 +1,10 @@
 package domain
 
 // Contributor represents a person who contributed to a book in any capacity.
-// "I am a monument to all your sins" - but for audiobook credits.
 type Contributor struct {
 	Syncable
 	Name      string `json:"name"`
-	SortName  string `json:"sort_name,omitempty"`  // "Sanderson, Brandon" for proper sorting
+	SortName  string `json:"sort_name,omitempty"` // "Sanderson, Brandon" for proper sorting
 	Biography string `json:"biography,omitempty"`
 	ImageURL  string `json:"image_url,omitempty"`
 	ASIN      string `json:"asin,omitempty"` // Amazon author ID for future metadata enrichment
@@ -15,12 +14,18 @@ type Contributor struct {
 // "I have forgotten the face of my father" if you don't properly credit narrators.
 type ContributorRole string
 
+// Contributor role constants define the different types of contributions to a book.
 const (
-	RoleAuthor     ContributorRole = "author"
-	RoleNarrator   ContributorRole = "narrator"
-	RoleEditor     ContributorRole = "editor"
-	RoleTranslator ContributorRole = "translator"
-	// Room to grow: foreword, introduction, etc.
+	RoleAuthor       ContributorRole = "author"
+	RoleNarrator     ContributorRole = "narrator"
+	RoleEditor       ContributorRole = "editor"
+	RoleTranslator   ContributorRole = "translator"
+	RoleForeword     ContributorRole = "foreword"
+	RoleIntroduction ContributorRole = "introduction"
+	RoleAfterword    ContributorRole = "afterword"
+	RoleProducer     ContributorRole = "producer"
+	RoleAdapter      ContributorRole = "adapter"
+	RoleIllustrator  ContributorRole = "illustrator"
 )
 
 // String returns the string representation of the role.
@@ -31,7 +36,9 @@ func (r ContributorRole) String() string {
 // IsValid checks if the role is a recognized value.
 func (r ContributorRole) IsValid() bool {
 	switch r {
-	case RoleAuthor, RoleNarrator, RoleEditor, RoleTranslator:
+	case RoleAuthor, RoleNarrator, RoleEditor, RoleTranslator,
+		RoleForeword, RoleIntroduction, RoleAfterword,
+		RoleProducer, RoleAdapter, RoleIllustrator:
 		return true
 	default:
 		return false

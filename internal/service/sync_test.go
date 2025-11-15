@@ -53,8 +53,6 @@ func createTestBook(id string, updatedAt time.Time) *domain.Book {
 		},
 		Title:       "Test Book " + id,
 		Subtitle:    "A Test Subtitle",
-		Authors:     []string{"Test Author"},
-		Narrators:   []string{"Test Narrator"},
 		Description: "A test book description",
 		Path:        "/test/path/" + id,
 		AudioFiles: []domain.AudioFileInfo{
@@ -113,7 +111,7 @@ func TestGetManifest_WithMultipleBooks(t *testing.T) {
 	assert.Equal(t, manifest.LibraryVersion, manifest.Checkpoint)
 
 	// Verify future counts are zero.
-	assert.Equal(t, 0, manifest.Counts.Authors)
+	assert.Equal(t, 0, manifest.Counts.Contributors)
 	assert.Equal(t, 0, manifest.Counts.Series)
 }
 
@@ -228,7 +226,7 @@ func TestManifestResponse_Structure(t *testing.T) {
 	assert.Equal(t, manifest.LibraryVersion, manifest.Checkpoint)
 	assert.NotNil(t, manifest.BookIDs)
 	assert.GreaterOrEqual(t, manifest.Counts.Books, 0)
-	assert.GreaterOrEqual(t, manifest.Counts.Authors, 0)
+	assert.GreaterOrEqual(t, manifest.Counts.Contributors, 0)
 	assert.GreaterOrEqual(t, manifest.Counts.Series, 0)
 
 	// Verify timestamps are valid RFC3339.
