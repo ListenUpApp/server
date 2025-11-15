@@ -193,7 +193,7 @@ func main() {
 	// Create HTTP server with service layer.
 	// TODO: Future note to self: This is going to get old fast depending on how many
 	// services we need to instantiate. Let's look into a better solution.
-	httpServer := api.NewServer(instanceService, bookService, syncService, sseHandler, log.Logger)
+	httpServer := api.NewServer(db, instanceService, bookService, syncService, sseHandler, log.Logger)
 
 	// Configure HTTP server.
 	srv := &http.Server{

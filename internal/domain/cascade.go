@@ -12,6 +12,8 @@ import (
 type CascadeUpdater interface {
 	// TouchEntity updates the UpdatedAt timestamp for an entity by ID.
 	TouchEntity(ctx context.Context, entityType string, id string) error
+	// GetBookIDsBySeries retrieves book IDs in a series without loading full book data.
+	GetBookIDsBySeries(ctx context.Context, seriesID string) ([]string, error)
 }
 
 // CascadeBookUpdate updates timestamps for a book and all releated entities.
@@ -26,6 +28,37 @@ func CascadeBookUpdate(ctx context.Context, updater CascadeUpdater, bookID strin
 	}
 
 	// TODO: add more entities here when the time comes.
+
+	return nil
+}
+
+// CascadeSeriesUpdate updates timestamps for all books in a series.
+// When a series changes, all its books need to be touched for sync.
+func CascadeSeriesUpdate(ctx context.Context, updater CascadeUpdater, seriesID string) error {
+	// Touch the series itself
+	if err := updater.TouchEntity(ctx, "series", seriesID); err != nil {
+		return err
+	}
+
+	// Get book IDs in this series (optimized - doesn't load full book data)
+	bookIDs, err := updater.GetBookIDsBySeries(ctx, seriesID)
+	if err != nil {
+		return err
+	}
+
+	// Touch each book to trigger sync for clients
+	for _, bookID := range bookIDs {
+		// Check for context cancellation
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		if err := updater.TouchEntity(ctx, "book", bookID); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }

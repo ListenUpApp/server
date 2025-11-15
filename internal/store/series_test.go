@@ -26,7 +26,7 @@ func TestCreateSeries(t *testing.T) {
 		},
 		Name:        "The Stormlight Archive",
 		Description: "Epic fantasy series",
-		TotalBooks:  10,
+		TotalBooks:  0, // Will be computed from reverse index
 	}
 	series.InitTimestamps()
 
@@ -38,7 +38,8 @@ func TestCreateSeries(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, series.Name, retrieved.Name)
 	assert.Equal(t, series.Description, retrieved.Description)
-	assert.Equal(t, series.TotalBooks, retrieved.TotalBooks)
+	// TotalBooks should be 0 since no books are linked to this series yet
+	assert.Equal(t, 0, retrieved.TotalBooks)
 }
 
 func TestCreateSeries_AlreadyExists(t *testing.T) {
@@ -98,7 +99,6 @@ func TestUpdateSeries(t *testing.T) {
 	require.NoError(t, err)
 
 	// Update the series
-	series.TotalBooks = 9 // Series completed
 	series.Description = "Sci-fi series"
 	err = store.UpdateSeries(ctx, series)
 	require.NoError(t, err)
@@ -106,7 +106,8 @@ func TestUpdateSeries(t *testing.T) {
 	// Verify update
 	retrieved, err := store.GetSeries(ctx, seriesID)
 	require.NoError(t, err)
-	assert.Equal(t, 9, retrieved.TotalBooks)
+	// TotalBooks should still be 0 since no books are linked
+	assert.Equal(t, 0, retrieved.TotalBooks)
 	assert.Equal(t, "Sci-fi series", retrieved.Description)
 }
 

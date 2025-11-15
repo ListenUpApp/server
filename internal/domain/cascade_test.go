@@ -32,6 +32,13 @@ func (m *mockCascadeUpdater) TouchEntity(_ context.Context, entityType, id strin
 	return nil
 }
 
+func (m *mockCascadeUpdater) GetBookIDsBySeries(_ context.Context, _ string) ([]string, error) {
+	if m.returnError != nil {
+		return nil, m.returnError
+	}
+	return []string{}, nil
+}
+
 func TestCascadeBookUpdate(t *testing.T) {
 	ctx := context.Background()
 

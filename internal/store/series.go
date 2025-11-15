@@ -21,8 +21,10 @@ const (
 )
 
 var (
+	// ErrSeriesNotFound is returned when a series is not found in the store.
 	ErrSeriesNotFound = errors.New("series not found")
-	ErrSeriesExists   = errors.New("series already exists")
+	// ErrSeriesExists is returned when attempting to create a series that already exists.
+	ErrSeriesExists = errors.New("series already exists")
 )
 
 // CreateSeries creates a new series.
@@ -65,7 +67,7 @@ func (s *Store) CreateSeries(ctx context.Context, series *domain.Series) error {
 }
 
 // GetSeries retrieves a series by ID.
-func (s *Store) GetSeries(_ context.Context, id string) (*domain.Series, error) {
+func (s *Store) GetSeries(ctx context.Context, id string) (*domain.Series, error) {
 	key := []byte(seriesPrefix + id)
 
 	var series domain.Series
@@ -80,6 +82,16 @@ func (s *Store) GetSeries(_ context.Context, id string) (*domain.Series, error) 
 	if series.IsDeleted() {
 		return nil, ErrSeriesNotFound
 	}
+
+	// Populate total books count from reverse index
+	count, err := s.CountBooksInSeries(ctx, id)
+	if err != nil {
+		// Log but don't fail - TotalBooks will be 0
+		if s.logger != nil {
+			s.logger.Warn("failed to count books in series", "series_id", id, "error", err)
+		}
+	}
+	series.TotalBooks = count
 
 	return &series, nil
 }
@@ -138,6 +150,15 @@ func (s *Store) UpdateSeries(ctx context.Context, series *domain.Series) error {
 	}
 
 	s.eventEmitter.Emit(sse.NewSeriesUpdatedEvent(series))
+
+	// Cascade update to all books in this series
+	if err := domain.CascadeSeriesUpdate(ctx, s, series.ID); err != nil {
+		// Log but don't fail the update
+		if s.logger != nil {
+			s.logger.Error("cascade update failed", "series_id", series.ID, "error", err)
+		}
+	}
+
 	return nil
 }
 
@@ -286,6 +307,39 @@ func (s *Store) ListSeries(ctx context.Context, params PaginationParams) (*Pagin
 		return nil, fmt.Errorf("list series: %w", err)
 	}
 
+	// Populate total books count for all series in a single transaction
+	if len(seriesList) > 0 {
+		seriesIDs := make([]string, len(seriesList))
+		for i, series := range seriesList {
+			// Check for context cancellation
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			default:
+			}
+			seriesIDs[i] = series.ID
+		}
+
+		counts, err := s.CountBooksForMultipleSeries(ctx, seriesIDs)
+		if err != nil {
+			// Log but don't fail - TotalBooks will be 0 for all
+			if s.logger != nil {
+				s.logger.Warn("failed to batch count books for series", "error", err)
+			}
+		} else {
+			// Populate counts from batch result
+			for _, series := range seriesList {
+				// Check for context cancellation
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				default:
+				}
+				series.TotalBooks = counts[series.ID]
+			}
+		}
+	}
+
 	// Create result
 	result := &PaginatedResult[*domain.Series]{
 		Items:   seriesList,
@@ -304,7 +358,7 @@ func (s *Store) ListSeries(ctx context.Context, params PaginationParams) (*Pagin
 
 // GetSeriesUpdatedAfter efficiently queries series with UpdatedAt > timestamp.
 // This is used for delta sync.
-func (s *Store) GetSeriesUpdatedAfter(_ context.Context, timestamp time.Time) ([]*domain.Series, error) {
+func (s *Store) GetSeriesUpdatedAfter(ctx context.Context, timestamp time.Time) ([]*domain.Series, error) {
 	var seriesList []*domain.Series
 
 	err := s.db.View(func(txn *badger.Txn) error {
@@ -354,6 +408,39 @@ func (s *Store) GetSeriesUpdatedAfter(_ context.Context, timestamp time.Time) ([
 	})
 	if err != nil {
 		return nil, fmt.Errorf("query series by updated_at: %w", err)
+	}
+
+	// Populate total books count for all series in a single transaction
+	if len(seriesList) > 0 {
+		seriesIDs := make([]string, len(seriesList))
+		for i, series := range seriesList {
+			// Check for context cancellation
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			default:
+			}
+			seriesIDs[i] = series.ID
+		}
+
+		counts, err := s.CountBooksForMultipleSeries(ctx, seriesIDs)
+		if err != nil {
+			// Log but don't fail - TotalBooks will be 0 for all
+			if s.logger != nil {
+				s.logger.Warn("failed to batch count books for series", "error", err)
+			}
+		} else {
+			// Populate counts from batch result
+			for _, series := range seriesList {
+				// Check for context cancellation
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				default:
+				}
+				series.TotalBooks = counts[series.ID]
+			}
+		}
 	}
 
 	return seriesList, nil
@@ -407,6 +494,91 @@ func (s *Store) GetBooksBySeries(ctx context.Context, seriesID string) ([]*domai
 	// For now, return in database order
 
 	return books, nil
+}
+
+// GetBookIDsBySeries returns just the book IDs for a series without loading full book data.
+// This is optimized for cascade operations that only need IDs.
+func (s *Store) GetBookIDsBySeries(_ context.Context, seriesID string) ([]string, error) {
+	var bookIDs []string
+	prefix := []byte(bookBySeriesPrefix + seriesID + ":")
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false // Only need keys, not values
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			key := it.Item().Key()
+			// Extract book ID from key: idx:books:series:{seriesID}:{bookID}
+			parts := strings.Split(string(key), ":")
+			if len(parts) >= 5 {
+				bookIDs = append(bookIDs, parts[4])
+			}
+		}
+		return nil
+	})
+
+	return bookIDs, err
+}
+
+// CountBooksInSeries efficiently counts books in a series using the reverse index.
+func (s *Store) CountBooksInSeries(_ context.Context, seriesID string) (int, error) {
+	count := 0
+	prefix := []byte(bookBySeriesPrefix + seriesID + ":")
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false // We only need to count keys, not load values
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			count++
+		}
+		return nil
+	})
+
+	return count, err
+}
+
+// CountBooksForMultipleSeries counts books for multiple series in a single database transaction.
+// This avoids the N+1 query problem when listing many series.
+func (s *Store) CountBooksForMultipleSeries(_ context.Context, seriesIDs []string) (map[string]int, error) {
+	counts := make(map[string]int, len(seriesIDs))
+
+	// Create a set for O(1) lookup and initialize counts
+	seriesSet := make(map[string]struct{}, len(seriesIDs))
+	for _, id := range seriesIDs {
+		seriesSet[id] = struct{}{}
+		counts[id] = 0 // Initialize to 0
+	}
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false // Only need keys, not values
+		opts.Prefix = []byte(bookBySeriesPrefix)
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(opts.Prefix); it.ValidForPrefix(opts.Prefix); it.Next() {
+			key := it.Item().Key()
+			// Extract series ID from key: idx:books:series:{seriesID}:{bookID}
+			parts := strings.Split(string(key), ":")
+			if len(parts) >= 4 {
+				seriesID := parts[3]
+				if _, exists := seriesSet[seriesID]; exists {
+					counts[seriesID]++
+				}
+			}
+		}
+		return nil
+	})
+
+	return counts, err
 }
 
 // touchSeries updates just the UpdatedAt timestamp for a series without rewriting all data.

@@ -50,7 +50,7 @@ func setupTestServer(t *testing.T) (server *Server, cleanup func()) {
 	syncService := service.NewSyncService(s, logger)
 
 	// Create server.
-	server = NewServer(instanceService, bookService, syncService, sseHandler, logger)
+	server = NewServer(s, instanceService, bookService, syncService, sseHandler, logger)
 
 	// Return cleanup function.
 	cleanup = func() {

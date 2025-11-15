@@ -122,3 +122,63 @@ func (s *SyncService) GetBooksForSync(ctx context.Context, params store.Paginati
 
 	return response, nil
 }
+
+// ContributorsResponse represents paginated contributors for sync.
+type ContributorsResponse struct {
+	NextCursor   string                `json:"next_cursor,omitempty"`
+	Contributors []*domain.Contributor `json:"contributors"`
+	HasMore      bool                  `json:"has_more"`
+}
+
+// GetContributorsForSync returns paginated contributors for initial sync.
+func (s *SyncService) GetContributorsForSync(ctx context.Context, params store.PaginationParams) (*ContributorsResponse, error) {
+	params.Validate()
+
+	result, err := s.store.ListContributors(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ContributorsResponse{
+		Contributors: result.Items,
+		NextCursor:   result.NextCursor,
+		HasMore:      result.HasMore,
+	}
+
+	s.logger.Info("contributors fetched for sync",
+		"count", len(result.Items),
+		"has_more", result.HasMore,
+	)
+
+	return response, nil
+}
+
+// SeriesResponse represents paginated series for sync.
+type SeriesResponse struct {
+	NextCursor string           `json:"next_cursor,omitempty"`
+	Series     []*domain.Series `json:"series"`
+	HasMore    bool             `json:"has_more"`
+}
+
+// GetSeriesForSync returns paginated series for initial sync.
+func (s *SyncService) GetSeriesForSync(ctx context.Context, params store.PaginationParams) (*SeriesResponse, error) {
+	params.Validate()
+
+	result, err := s.store.ListSeries(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SeriesResponse{
+		Series:     result.Items,
+		NextCursor: result.NextCursor,
+		HasMore:    result.HasMore,
+	}
+
+	s.logger.Info("series fetched for sync",
+		"count", len(result.Items),
+		"has_more", result.HasMore,
+	)
+
+	return response, nil
+}
