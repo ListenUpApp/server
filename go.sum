@@ -39,6 +39,8 @@ github.com/simonhull/audiometa v0.0.0-20251111192723-552c738f3e35 h1:TcJo9JvpjjT
 github.com/simonhull/audiometa v0.0.0-20251111192723-552c738f3e35/go.mod h1:r7LerFEl4A5qhy0qoxXQ8dHYy0k6UzL4eGvUd3Ln0/M=
 github.com/simonhull/audiometa v0.0.0-20251111215546-26b62ea549cc h1:TmSkY3rhOmef3ICiSOMO/W2/0xKWg6F3zzeNwyx4/A0=
 github.com/simonhull/audiometa v0.0.0-20251111215546-26b62ea549cc/go.mod h1:r7LerFEl4A5qhy0qoxXQ8dHYy0k6UzL4eGvUd3Ln0/M=
+github.com/simonhull/audiometa v0.2.0 h1:zrQCzyMU3ESzpEbxPn8QzwQ7f9p7U7f83HPY+GWvqpk=
+github.com/simonhull/audiometa v0.2.0/go.mod h1:ripxkXnIjNT/7q/SAa/ZW4NhFaGRna8CZTeh4Ko72RY=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 go.opentelemetry.io/auto/sdk v1.1.0 h1:cH53jehLUN6UFLY71z+NDOiNJqDdPRaXzTel0sJySYA=
