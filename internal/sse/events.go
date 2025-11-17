@@ -34,6 +34,20 @@ const (
 
 	// EventHeartbeat represents a connection keepalive event.
 	EventHeartbeat EventType = "heartbeat"
+
+	// EventContributorCreated represents a contributor creation event.
+	EventContributorCreated EventType = "contributor.created"
+	// EventContributorUpdated represents a contributor update event.
+	EventContributorUpdated EventType = "contributor.updated"
+	// EventContributorDeleted represents a contributor deletion event.
+	EventContributorDeleted EventType = "contributor.deleted"
+
+	// EventSeriesCreated represents a series creation event.
+	EventSeriesCreated EventType = "series.created"
+	// EventSeriesUpdated represents a series update event.
+	EventSeriesUpdated EventType = "series.updated"
+	// EventSeriesDeleted represents a series deletion event.
+	EventSeriesDeleted EventType = "series.deleted"
 )
 
 // Event represents an SSE event to be sent to clients.
@@ -78,6 +92,16 @@ type ScanCompleteEventData struct {
 // HeartbeatEventData is the data payload for heartbeat events.
 type HeartbeatEventData struct {
 	ServerTime time.Time `json:"server_time"`
+}
+
+// ContributorEventData is the data payload for contributor events.
+type ContributorEventData struct {
+	Contributor *domain.Contributor `json:"contributor"`
+}
+
+// SeriesEventData is the data payload for series events.
+type SeriesEventData struct {
+	Series *domain.Series `json:"series"`
 }
 
 // NewBookCreatedEvent creates a book.created event.
@@ -144,6 +168,42 @@ func NewHeartbeatEvent() Event {
 		Data: HeartbeatEventData{
 			ServerTime: time.Now(),
 		},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewContributorCreatedEvent creates a contributor.created event.
+func NewContributorCreatedEvent(contributor *domain.Contributor) Event {
+	return Event{
+		Type:      EventContributorCreated,
+		Data:      ContributorEventData{Contributor: contributor},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewContributorUpdatedEvent creates a contributor.updated event.
+func NewContributorUpdatedEvent(contributor *domain.Contributor) Event {
+	return Event{
+		Type:      EventContributorUpdated,
+		Data:      ContributorEventData{Contributor: contributor},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewSeriesCreatedEvent creates a series.created event.
+func NewSeriesCreatedEvent(series *domain.Series) Event {
+	return Event{
+		Type:      EventSeriesCreated,
+		Data:      SeriesEventData{Series: series},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewSeriesUpdatedEvent creates a series.updated event.
+func NewSeriesUpdatedEvent(series *domain.Series) Event {
+	return Event{
+		Type:      EventSeriesUpdated,
+		Data:      SeriesEventData{Series: series},
 		Timestamp: time.Now(),
 	}
 }

@@ -1,13 +1,89 @@
 package scanner
 
 import (
+	"context"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/id"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// mockStore implements Storer for testing.
+type mockStore struct {
+	contributors map[string]*domain.Contributor
+	series       map[string]*domain.Series
+	mu           sync.Mutex
+}
+
+func newMockStore() *mockStore {
+	return &mockStore{
+		contributors: make(map[string]*domain.Contributor),
+		series:       make(map[string]*domain.Series),
+	}
+}
+
+func (m *mockStore) GetOrCreateContributorByName(_ context.Context, name string) (*domain.Contributor, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Check if exists
+	for _, c := range m.contributors {
+		if c.Name == name {
+			return c, nil
+		}
+	}
+
+	// Create new
+	contributorID, err := id.Generate("contributor")
+	if err != nil {
+		return nil, err
+	}
+
+	contributor := &domain.Contributor{
+		Syncable: domain.Syncable{
+			ID: contributorID,
+		},
+		Name: name,
+	}
+	contributor.InitTimestamps()
+
+	m.contributors[contributorID] = contributor
+	return contributor, nil
+}
+
+func (m *mockStore) GetOrCreateSeriesByName(_ context.Context, name string) (*domain.Series, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Check if exists
+	for _, s := range m.series {
+		if s.Name == name {
+			return s, nil
+		}
+	}
+
+	// Create new
+	seriesID, err := id.Generate("series")
+	if err != nil {
+		return nil, err
+	}
+
+	series := &domain.Series{
+		Syncable: domain.Syncable{
+			ID: seriesID,
+		},
+		Name:       name,
+		TotalBooks: 0,
+	}
+	series.InitTimestamps()
+
+	m.series[seriesID] = series
+	return series, nil
+}
 
 // TestConvertToBook_WithFullMetadata tests converting a library item with complete metadata.
 func TestConvertToBook_WithFullMetadata(t *testing.T) {
@@ -60,15 +136,20 @@ func TestConvertToBook_WithFullMetadata(t *testing.T) {
 		},
 	}
 
-	book, err := ConvertToBook(item)
+	ctx := context.Background()
+	mockStore := newMockStore()
+
+	book, err := ConvertToBook(ctx, item, mockStore)
 	require.NoError(t, err)
 	assert.NotEmpty(t, book.ID)
 	assert.True(t, book.ID[:5] == "book-")
 	assert.Equal(t, "/audiobooks/test-book", book.Path)
 	assert.Equal(t, "Test Book", book.Title)
 	assert.Equal(t, "A Test Subtitle", book.Subtitle)
-	assert.Equal(t, []string{"Author One", "Author Two"}, book.Authors)
-	assert.Equal(t, []string{"Narrator One"}, book.Narrators)
+
+	// Verify contributors were created
+	assert.Len(t, book.Contributors, 3) // 2 authors + 1 narrator
+	assert.Len(t, mockStore.contributors, 3)
 	assert.Equal(t, "This is a test book", book.Description)
 	assert.Equal(t, "Test Publisher", book.Publisher)
 	assert.Equal(t, "2024", book.PublishYear)
@@ -131,12 +212,13 @@ func TestConvertToBook_WithoutMetadata(t *testing.T) {
 		Metadata: nil,
 	}
 
-	book, err := ConvertToBook(item)
+	ctx := context.Background()
+	mockStore := newMockStore()
+	book, err := ConvertToBook(ctx, item, mockStore)
 	require.NoError(t, err)
 	assert.Equal(t, "My Awesome Book", book.Title) // Fallback to folder name
 	assert.Empty(t, book.Subtitle)
-	assert.Empty(t, book.Authors)
-	assert.Empty(t, book.Narrators)
+	assert.Empty(t, book.Contributors)
 }
 
 // TestConvertToBook_MultipleAudioFiles tests converting with multiple audio files.
@@ -177,7 +259,9 @@ func TestConvertToBook_MultipleAudioFiles(t *testing.T) {
 		},
 	}
 
-	book, err := ConvertToBook(item)
+	ctx := context.Background()
+	mockStore := newMockStore()
+	book, err := ConvertToBook(ctx, item, mockStore)
 	require.NoError(t, err)
 
 	// Should be sorted by filename.
@@ -213,13 +297,23 @@ func TestConvertToBook_WithSeries(t *testing.T) {
 		},
 	}
 
-	book, err := ConvertToBook(item)
+	ctx := context.Background()
+	mockStore := newMockStore()
+	book, err := ConvertToBook(ctx, item, mockStore)
 	require.NoError(t, err)
-	require.Len(t, book.Series, 2)
-	assert.Equal(t, "The Great Series", book.Series[0].Name)
-	assert.Equal(t, "3", book.Series[0].Sequence)
-	assert.Equal(t, "Another Series", book.Series[1].Name)
-	assert.Equal(t, "1", book.Series[1].Sequence)
+
+	// We use the first series from metadata
+	assert.NotEmpty(t, book.SeriesID)
+	assert.Equal(t, "3", book.Sequence)
+
+	// Verify series was created in mock store
+	require.Len(t, mockStore.series, 1)
+	var createdSeries *domain.Series
+	for _, s := range mockStore.series {
+		createdSeries = s
+		break
+	}
+	assert.Equal(t, "The Great Series", createdSeries.Name)
 }
 
 // TestConvertToBook_WithChapters_SingleFile tests chapter conversion for single-file audiobook.
@@ -246,7 +340,9 @@ func TestConvertToBook_WithChapters_SingleFile(t *testing.T) {
 		},
 	}
 
-	book, err := ConvertToBook(item)
+	ctx := context.Background()
+	mockStore := newMockStore()
+	book, err := ConvertToBook(ctx, item, mockStore)
 	require.NoError(t, err)
 	require.Len(t, book.Chapters, 3)
 
@@ -298,7 +394,9 @@ func TestConvertToBook_WithChapters_MultiFile(t *testing.T) {
 		},
 	}
 
-	book, err := ConvertToBook(item)
+	ctx := context.Background()
+	mockStore := newMockStore()
+	book, err := ConvertToBook(ctx, item, mockStore)
 	require.NoError(t, err)
 	require.Len(t, book.Chapters, 4)
 
@@ -330,7 +428,9 @@ func TestConvertToBook_NoCoverImage(t *testing.T) {
 		ImageFiles: []ImageFileData{},
 	}
 
-	book, err := ConvertToBook(item)
+	ctx := context.Background()
+	mockStore := newMockStore()
+	book, err := ConvertToBook(ctx, item, mockStore)
 	require.NoError(t, err)
 	assert.Nil(t, book.CoverImage)
 }
@@ -369,7 +469,9 @@ func TestConvertToBook_MultipleCoverImages(t *testing.T) {
 		},
 	}
 
-	book, err := ConvertToBook(item)
+	ctx := context.Background()
+	mockStore := newMockStore()
+	book, err := ConvertToBook(ctx, item, mockStore)
 	require.NoError(t, err)
 	require.NotNil(t, book.CoverImage)
 	assert.Equal(t, "cover.jpg", book.CoverImage.Filename) // Only first image used
@@ -405,7 +507,9 @@ func TestConvertToBook_FileExtensions(t *testing.T) {
 				},
 			}
 
-			book, err := ConvertToBook(item)
+			ctx := context.Background()
+			mockStore := newMockStore()
+			book, err := ConvertToBook(ctx, item, mockStore)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, book.AudioFiles[0].Format)
 		})
@@ -575,12 +679,12 @@ func TestUpdateBookFromScan(t *testing.T) {
 			CreatedAt: originalCreatedAt,
 			UpdatedAt: originalCreatedAt,
 		},
-		Title:      "Old Title",
-		Path:       "/old/path",
-		Authors:    []string{"Old Author"},
-		ScannedAt:  originalCreatedAt,
-		AudioFiles: []domain.AudioFileInfo{},
-		CoverImage: nil,
+		Title:        "Old Title",
+		Path:         "/old/path",
+		Contributors: []domain.BookContributor{}, // Old contributors
+		ScannedAt:    originalCreatedAt,
+		AudioFiles:   []domain.AudioFileInfo{},
+		CoverImage:   nil,
 	}
 
 	newItem := &LibraryItemData{
@@ -603,7 +707,9 @@ func TestUpdateBookFromScan(t *testing.T) {
 		},
 	}
 
-	err := UpdateBookFromScan(existingBook, newItem)
+	ctx := context.Background()
+	mockStore := newMockStore()
+	err := UpdateBookFromScan(ctx, existingBook, newItem, mockStore)
 	require.NoError(t, err)
 
 	// ID and CreatedAt should be preserved.
@@ -613,7 +719,9 @@ func TestUpdateBookFromScan(t *testing.T) {
 	// Everything else should be updated.
 	assert.Equal(t, "New Title", existingBook.Title)
 	assert.Equal(t, "/new/path", existingBook.Path)
-	assert.Equal(t, []string{"New Author"}, existingBook.Authors)
+
+	// Verify new contributor was created
+	assert.Len(t, existingBook.Contributors, 1)
 	assert.Len(t, existingBook.AudioFiles, 1)
 
 	// UpdatedAt and ScannedAt should be refreshed.
@@ -645,7 +753,9 @@ func TestUpdateBookFromScan_PreservesID(t *testing.T) {
 		Metadata: &BookMetadata{Title: "New"},
 	}
 
-	err := UpdateBookFromScan(existingBook, newItem)
+	ctx := context.Background()
+	mockStore := newMockStore()
+	err := UpdateBookFromScan(ctx, existingBook, newItem, mockStore)
 	require.NoError(t, err)
 
 	// ID must never change.
@@ -668,7 +778,9 @@ func TestConvertToBook_AudioFileWithoutMetadata(t *testing.T) {
 		},
 	}
 
-	book, err := ConvertToBook(item)
+	ctx := context.Background()
+	mockStore := newMockStore()
+	book, err := ConvertToBook(ctx, item, mockStore)
 	require.NoError(t, err)
 	require.Len(t, book.AudioFiles, 1)
 

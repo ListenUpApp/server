@@ -22,8 +22,6 @@ func createTestBook(id string) *domain.Book {
 		},
 		Title:       "Test Book",
 		Subtitle:    "A Test Subtitle",
-		Authors:     []string{"Test Author"},
-		Narrators:   []string{"Test Narrator"},
 		Description: "A test book description",
 		Path:        "/test/path/" + id,
 		AudioFiles: []domain.AudioFileInfo{

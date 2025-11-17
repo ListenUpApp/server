@@ -18,6 +18,7 @@ import (
 
 // Server holds dependencies for HTTP handlers.
 type Server struct {
+	store           *store.Store
 	instanceService *service.InstanceService
 	bookService     *service.BookService
 	syncService     *service.SyncService
@@ -27,8 +28,9 @@ type Server struct {
 }
 
 // NewServer creates a new HTTP server with all routes configured.
-func NewServer(instanceService *service.InstanceService, bookService *service.BookService, syncService *service.SyncService, sseHandler *sse.Handler, logger *slog.Logger) *Server {
+func NewServer(store *store.Store, instanceService *service.InstanceService, bookService *service.BookService, syncService *service.SyncService, sseHandler *sse.Handler, logger *slog.Logger) *Server {
 	s := &Server{
+		store:           store,
 		instanceService: instanceService,
 		bookService:     bookService,
 		syncService:     syncService,
@@ -66,17 +68,29 @@ func (s *Server) setupRoutes() {
 	s.router.Route("/api/v1", func(r chi.Router) {
 		r.Get("/instance", s.handleGetInstance)
 
-		// Books (temp).
+		// Books.
 		r.Get("/books", s.handleListBooks)
 		r.Get("/books/{id}", s.handleGetBook)
 
-		// Libraries (also temp).
+		// Series.
+		r.Get("/series", s.handleListSeries)
+		r.Get("/series/{id}", s.handleGetSeries)
+		r.Get("/series/{id}/books", s.handleGetSeriesBooks)
+
+		// Contributors.
+		r.Get("/contributors", s.handleListContributors)
+		r.Get("/contributors/{id}", s.handleGetContributor)
+		r.Get("/contributors/{id}/books", s.handleGetContributorBooks)
+
+		// Libraries.
 		r.Post("/libraries/{id}/scan", s.handleTriggerScan)
 
 		// Sync endpoints.
 		r.Route("/sync", func(r chi.Router) {
 			r.Get("/manifest", s.handleGetManifest)
 			r.Get("/books", s.handleSyncBooks)
+			r.Get("/series", s.handleSyncSeries)
+			r.Get("/contributors", s.handleSyncContributors)
 			r.Get("/stream", s.sseHandler.ServeHTTP)
 		})
 	})

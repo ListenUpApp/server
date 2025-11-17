@@ -254,6 +254,11 @@ func (s *Scanner) buildItemData(itemPath string, itemFiles []WalkResult, audioFi
 		MetadataFiles: metadataFiles,
 	}
 
+	// Build item-level BookMetadata from first audio file's metadata.
+	if len(audioFiles) > 0 && audioFiles[0].Metadata != nil {
+		item.Metadata = buildBookMetadata(audioFiles[0].Metadata)
+	}
+
 	// Determine if this is a file or directory.
 	if len(itemFiles) == 1 && itemPath == itemFiles[0].Path {
 		item.IsFile = true
@@ -302,7 +307,7 @@ func (s *Scanner) saveToDatabase(ctx context.Context, items []*LibraryItemData, 
 		}
 
 		// Convert to domain.Book.
-		book, err := ConvertToBook(item)
+		book, err := ConvertToBook(ctx, item, s.store)
 		if err != nil {
 			convertErr := fmt.Errorf("convert %s: %w", item.Path, err)
 			errs = append(errs, convertErr)

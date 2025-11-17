@@ -15,11 +15,13 @@ import (
 )
 
 const (
-	bookPrefix            = "book:"
-	bookByPathPrefix      = "idx:books:path:"
-	bookByInodePrefix     = "idx:books:inode"
-	bookByUpdatedAtPrefix = "idx:books:updated_at:" // Format: idx:books:updated_at:{RFC3339Nano}:book:{uuid}
-	bookByDeletedAtPrefix = "idx:books:deleted_at:" // Format: idx:books:deleted_at:{RFC3339Nano}:book:{uuid}
+	bookPrefix              = "book:"
+	bookByPathPrefix        = "idx:books:path:"
+	bookByInodePrefix       = "idx:books:inode"
+	bookByUpdatedAtPrefix   = "idx:books:updated_at:"  // Format: idx:books:updated_at:{RFC3339Nano}:book:{uuid}
+	bookByDeletedAtPrefix   = "idx:books:deleted_at:"  // Format: idx:books:deleted_at:{RFC3339Nano}:book:{uuid}
+	bookByContributorPrefix = "idx:books:contributor:" // Format: idx:books:contributor:{contributorID}:{bookID}
+	bookBySeriesPrefix      = "idx:books:series:"      // Format: idx:books:series:{seriesID}:{bookID}
 )
 
 var (
@@ -71,6 +73,23 @@ func (s *Store) CreateBook(ctx context.Context, book *domain.Book) error {
 				}
 			}
 		}
+
+		// Create contributor reverse indexes for efficient contributor -> books lookups.
+		for _, bc := range book.Contributors {
+			contributorBookKey := []byte(fmt.Sprintf("%s%s:%s", bookByContributorPrefix, bc.ContributorID, book.ID))
+			if err := txn.Set(contributorBookKey, []byte{}); err != nil {
+				return err
+			}
+		}
+
+		// Create series reverse index if book belongs to a series.
+		if book.SeriesID != "" {
+			seriesBookKey := []byte(fmt.Sprintf("%s%s:%s", bookBySeriesPrefix, book.SeriesID, book.ID))
+			if err := txn.Set(seriesBookKey, []byte{}); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	})
 	if err != nil {
@@ -220,6 +239,57 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 				}
 			}
 		}
+
+		// Update contributor reverse indexes.
+		// Build maps of old and new contributors.
+		oldContributors := make(map[string]bool)
+		for _, bc := range oldBook.Contributors {
+			oldContributors[bc.ContributorID] = true
+		}
+		newContributors := make(map[string]bool)
+		for _, bc := range book.Contributors {
+			newContributors[bc.ContributorID] = true
+		}
+
+		// Delete removed contributors.
+		for contributorID := range oldContributors {
+			if !newContributors[contributorID] {
+				contributorBookKey := []byte(fmt.Sprintf("%s%s:%s", bookByContributorPrefix, contributorID, book.ID))
+				if err := txn.Delete(contributorBookKey); err != nil {
+					return err
+				}
+			}
+		}
+
+		// Add new contributors.
+		for contributorID := range newContributors {
+			if !oldContributors[contributorID] {
+				contributorBookKey := []byte(fmt.Sprintf("%s%s:%s", bookByContributorPrefix, contributorID, book.ID))
+				if err := txn.Set(contributorBookKey, []byte{}); err != nil {
+					return err
+				}
+			}
+		}
+
+		// Update series reverse index if series changed.
+		if oldBook.SeriesID != book.SeriesID {
+			// Delete old series index if it existed.
+			if oldBook.SeriesID != "" {
+				oldSeriesBookKey := []byte(fmt.Sprintf("%s%s:%s", bookBySeriesPrefix, oldBook.SeriesID, book.ID))
+				if err := txn.Delete(oldSeriesBookKey); err != nil {
+					return err
+				}
+			}
+
+			// Create new series index if series is set.
+			if book.SeriesID != "" {
+				newSeriesBookKey := []byte(fmt.Sprintf("%s%s:%s", bookBySeriesPrefix, book.SeriesID, book.ID))
+				if err := txn.Set(newSeriesBookKey, []byte{}); err != nil {
+					return err
+				}
+			}
+		}
+
 		return nil
 	})
 	if err != nil {
@@ -288,6 +358,22 @@ func (s *Store) DeleteBook(ctx context.Context, id string) error {
 				if err := txn.Delete(inodeKey); err != nil {
 					return err
 				}
+			}
+		}
+
+		// Delete contributor reverse indexes.
+		for _, bc := range book.Contributors {
+			contributorBookKey := []byte(fmt.Sprintf("%s%s:%s", bookByContributorPrefix, bc.ContributorID, book.ID))
+			if err := txn.Delete(contributorBookKey); err != nil {
+				return err
+			}
+		}
+
+		// Delete series reverse index if book was in a series.
+		if book.SeriesID != "" {
+			seriesBookKey := []byte(fmt.Sprintf("%s%s:%s", bookBySeriesPrefix, book.SeriesID, book.ID))
+			if err := txn.Delete(seriesBookKey); err != nil {
+				return err
 			}
 		}
 
@@ -648,7 +734,10 @@ func (s *Store) TouchEntity(ctx context.Context, entityType, id string) error {
 	switch entityType {
 	case "book":
 		return s.touchBook(ctx, id)
-	// TODO: add authors etc when they're here.
+	case "contributor":
+		return s.touchContributor(ctx, id)
+	case "series":
+		return s.touchSeries(ctx, id)
 	default:
 		return fmt.Errorf("unknown entity type: %s", entityType)
 	}

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/listenupapp/listenup-server/internal/metadata"
 	"github.com/simonhull/audiometa"
 )
 
@@ -130,7 +131,7 @@ func convertMetadata(file *audiometa.File) *Metadata {
 		Narrator:   file.Tags.Narrator,
 		Publisher:  file.Tags.Publisher,
 		Series:     file.Tags.Series,
-		SeriesPart: file.Tags.SeriesPart,
+		SeriesPart: metadata.InferSeriesPosition(file),
 		ISBN:       file.Tags.ISBN,
 		ASIN:       file.Tags.ASIN,
 

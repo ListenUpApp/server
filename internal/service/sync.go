@@ -18,11 +18,10 @@ type ManifestResponse struct {
 	Checkpoint     string   `json:"checkpoint"`
 	BookIDs        []string `json:"book_ids"`
 	Counts         struct {
-		Books   int `json:"books"`
-		Authors int `json:"authors"`
-		Series  int `json:"series"`
-	} `json:"counts"` // Future: will be > 0 when authors implemented
-	// Future: will be > 0 when series implemented
+		Books        int `json:"books"`
+		Contributors int `json:"contributors"`
+		Series       int `json:"series"`
+	} `json:"counts"`
 }
 
 // SyncService orchestrates sync operations between server and clients.
@@ -60,6 +59,18 @@ func (s *SyncService) GetManifest(ctx context.Context) (*ManifestResponse, error
 		checkpoint = time.Now()
 	}
 
+	// Get contributor count
+	contributors, err := s.store.ListContributors(ctx, store.PaginationParams{Limit: 10000})
+	if err != nil {
+		return nil, err
+	}
+
+	// Get series count
+	series, err := s.store.ListSeries(ctx, store.PaginationParams{Limit: 10000})
+	if err != nil {
+		return nil, err
+	}
+
 	// Build response.
 	manifest := &ManifestResponse{
 		LibraryVersion: checkpoint.Format(time.RFC3339),
@@ -68,11 +79,13 @@ func (s *SyncService) GetManifest(ctx context.Context) (*ManifestResponse, error
 	}
 
 	manifest.Counts.Books = len(bookIDs)
-	manifest.Counts.Authors = 0 // Adding this for the future
-	manifest.Counts.Series = 0  // Adding this for the future
+	manifest.Counts.Contributors = len(contributors.Items)
+	manifest.Counts.Series = len(series.Items)
 
 	s.logger.Info("manifest generated",
 		"book_count", len(bookIDs),
+		"contributor_count", len(contributors.Items),
+		"series_count", len(series.Items),
 		"checkpoint", checkpoint.Format(time.RFC3339),
 	)
 
@@ -103,6 +116,66 @@ func (s *SyncService) GetBooksForSync(ctx context.Context, params store.Paginati
 	}
 
 	s.logger.Info("books fetched for sync",
+		"count", len(result.Items),
+		"has_more", result.HasMore,
+	)
+
+	return response, nil
+}
+
+// ContributorsResponse represents paginated contributors for sync.
+type ContributorsResponse struct {
+	NextCursor   string                `json:"next_cursor,omitempty"`
+	Contributors []*domain.Contributor `json:"contributors"`
+	HasMore      bool                  `json:"has_more"`
+}
+
+// GetContributorsForSync returns paginated contributors for initial sync.
+func (s *SyncService) GetContributorsForSync(ctx context.Context, params store.PaginationParams) (*ContributorsResponse, error) {
+	params.Validate()
+
+	result, err := s.store.ListContributors(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ContributorsResponse{
+		Contributors: result.Items,
+		NextCursor:   result.NextCursor,
+		HasMore:      result.HasMore,
+	}
+
+	s.logger.Info("contributors fetched for sync",
+		"count", len(result.Items),
+		"has_more", result.HasMore,
+	)
+
+	return response, nil
+}
+
+// SeriesResponse represents paginated series for sync.
+type SeriesResponse struct {
+	NextCursor string           `json:"next_cursor,omitempty"`
+	Series     []*domain.Series `json:"series"`
+	HasMore    bool             `json:"has_more"`
+}
+
+// GetSeriesForSync returns paginated series for initial sync.
+func (s *SyncService) GetSeriesForSync(ctx context.Context, params store.PaginationParams) (*SeriesResponse, error) {
+	params.Validate()
+
+	result, err := s.store.ListSeries(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SeriesResponse{
+		Series:     result.Items,
+		NextCursor: result.NextCursor,
+		HasMore:    result.HasMore,
+	}
+
+	s.logger.Info("series fetched for sync",
 		"count", len(result.Items),
 		"has_more", result.HasMore,
 	)

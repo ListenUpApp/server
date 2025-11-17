@@ -7,7 +7,7 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/matoous/go-nanoid/v2 v2.1.0
-	github.com/simonhull/audiometa v0.0.0-20251111215546-26b62ea549cc
+	github.com/simonhull/audiometa v0.2.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sys v0.38.0
 )
