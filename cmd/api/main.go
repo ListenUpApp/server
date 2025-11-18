@@ -191,9 +191,10 @@ func main() {
 	}
 
 	// Log server instance state.
-	if instanceConfig.HasRootUser {
+	if !instanceConfig.IsSetupRequired() {
 		log.Info("Server instance is configured and ready",
 			"instance_id", instanceConfig.ID,
+			"root_user_id", instanceConfig.RootUserID,
 			"created_at", instanceConfig.CreatedAt,
 		)
 	} else {

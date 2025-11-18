@@ -77,29 +77,43 @@ func (s *InstanceService) IsInstanceSetup(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	return instance.HasRootUser, nil
+	return !instance.IsSetupRequired(), nil
 }
 
-// MarkInstanceAsSetup marks the server instance as fully configured with a root user.
-// This would typically be called after root user creation.
-func (s *InstanceService) MarkInstanceAsSetup(ctx context.Context) error {
-	instance, err := s.store.GetInstance(ctx)
+// IsSetupRequired checks if the server requires initial setup.
+// Setup is required when no root user has been configured.
+func (s *InstanceService) IsSetupRequired(ctx context.Context) (bool, error) {
+	instance, err := s.GetInstance(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	return instance.IsSetupRequired(), nil
+}
+
+// SetRootUser configures the server instance with a root user.
+// This should only be called once during initial setup.
+func (s *InstanceService) SetRootUser(ctx context.Context, userID string) error {
+	instance, err := s.GetInstance(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get instance: %w", err)
 	}
 
-	if instance.HasRootUser {
-		return fmt.Errorf("instance is already set up")
+	if !instance.IsSetupRequired() {
+		return fmt.Errorf("root user already configured")
 	}
 
-	instance.HasRootUser = true
+	instance.SetRootUser(userID)
 
 	if err := s.store.UpdateInstance(ctx, instance); err != nil {
-		return fmt.Errorf("failed to mark instance as setup: %w", err)
+		return fmt.Errorf("failed to update instance: %w", err)
 	}
 
 	if s.logger != nil {
-		s.logger.Info("Server instance marked as setup", "instance_id", instance.ID)
+		s.logger.Info("Root user configured",
+			"instance_id", instance.ID,
+			"root_user_id", userID,
+		)
 	}
 
 	return nil

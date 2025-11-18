@@ -47,7 +47,8 @@ func TestCreateInstance(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, instance)
 	assert.Equal(t, "server-001", instance.ID)
-	assert.False(t, instance.HasRootUser)
+	assert.Empty(t, instance.RootUserID)
+	assert.True(t, instance.IsSetupRequired())
 	assert.False(t, instance.CreatedAt.IsZero())
 	assert.False(t, instance.UpdatedAt.IsZero())
 }
@@ -83,7 +84,7 @@ func TestGetInstance(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, instance)
 	assert.Equal(t, created.ID, instance.ID)
-	assert.Equal(t, created.HasRootUser, instance.HasRootUser)
+	assert.Equal(t, created.RootUserID, instance.RootUserID)
 }
 
 func TestGetInstance_NotFound(t *testing.T) {
@@ -111,15 +112,16 @@ func TestUpdateInstance(t *testing.T) {
 	// Wait a moment to ensure UpdatedAt will be different.
 	time.Sleep(10 * time.Millisecond)
 
-	// Update instance.
-	instance.HasRootUser = true
+	// Update instance with root user.
+	instance.SetRootUser("user_test123")
 	err = store.UpdateInstance(ctx, instance)
 	require.NoError(t, err)
 
 	// Verify update.
 	updated, err := store.GetInstance(ctx)
 	require.NoError(t, err)
-	assert.True(t, updated.HasRootUser)
+	assert.Equal(t, "user_test123", updated.RootUserID)
+	assert.False(t, updated.IsSetupRequired())
 	assert.True(t, updated.UpdatedAt.After(instance.CreatedAt))
 }
 
@@ -131,10 +133,10 @@ func TestUpdateInstance_NotFound(t *testing.T) {
 
 	// Try to update instance that doesn't exist.
 	instance := &domain.Instance{
-		ID:          "server-001",
-		HasRootUser: true,
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
+		ID:         "server-001",
+		RootUserID: "user_test123",
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
 	}
 
 	err := store.UpdateInstance(ctx, instance)
@@ -153,7 +155,8 @@ func TestInitializeInstance_Creates(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, instance)
 	assert.Equal(t, "server-001", instance.ID)
-	assert.False(t, instance.HasRootUser)
+	assert.True(t, instance.IsSetupRequired())
+	assert.Empty(t, instance.RootUserID)
 }
 
 func TestInitializeInstance_ReturnsExisting(t *testing.T) {
@@ -166,8 +169,8 @@ func TestInitializeInstance_ReturnsExisting(t *testing.T) {
 	created, err := store.CreateInstance(ctx)
 	require.NoError(t, err)
 
-	// Update it.
-	created.HasRootUser = true
+	// Update it with root user.
+	created.SetRootUser("user_existing123")
 	err = store.UpdateInstance(ctx, created)
 	require.NoError(t, err)
 
@@ -175,7 +178,8 @@ func TestInitializeInstance_ReturnsExisting(t *testing.T) {
 	instance, err := store.InitializeInstance(ctx)
 	require.NoError(t, err)
 	assert.NotNil(t, instance)
-	assert.True(t, instance.HasRootUser)
+	assert.False(t, instance.IsSetupRequired())
+	assert.Equal(t, "user_existing123", instance.RootUserID)
 	assert.Equal(t, created.ID, instance.ID)
 }
 
@@ -194,7 +198,7 @@ func TestStore_Persistence(t *testing.T) {
 
 	instance, err := store1.CreateInstance(ctx)
 	require.NoError(t, err)
-	instance.HasRootUser = true
+	instance.SetRootUser("user_persist123")
 	err = store1.UpdateInstance(ctx, instance)
 	require.NoError(t, err)
 
@@ -211,5 +215,6 @@ func TestStore_Persistence(t *testing.T) {
 	loaded, err := store2.GetInstance(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, instance.ID, loaded.ID)
-	assert.True(t, loaded.HasRootUser)
+	assert.Equal(t, "user_persist123", loaded.RootUserID)
+	assert.False(t, loaded.IsSetupRequired())
 }

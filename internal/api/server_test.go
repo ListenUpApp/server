@@ -119,7 +119,7 @@ func TestGetInstance_Success(t *testing.T) {
 	data, ok := result.Data.(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, createdInstance.ID, data["id"])
-	assert.Equal(t, false, data["has_root_user"])
+	assert.Equal(t, true, data["setup_required"])
 }
 
 func TestGetInstance_NotFound(t *testing.T) {
@@ -148,13 +148,13 @@ func TestGetInstance_WithRootUser(t *testing.T) {
 	server, cleanup := setupTestServer(t)
 	defer cleanup()
 
-	// Initialize instance and mark as setup.
+	// Initialize instance and set root user.
 	instanceService := server.instanceService
 	ctx := httptest.NewRequest(http.MethodGet, "/", http.NoBody).Context()
 	_, err := instanceService.InitializeInstance(ctx)
 	require.NoError(t, err)
 
-	err = instanceService.MarkInstanceAsSetup(ctx)
+	err = instanceService.SetRootUser(ctx, "user_test_root")
 	require.NoError(t, err)
 
 	// Make request.
@@ -174,7 +174,7 @@ func TestGetInstance_WithRootUser(t *testing.T) {
 	// Verify instance data.
 	data, ok := result.Data.(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, true, data["has_root_user"])
+	assert.Equal(t, false, data["setup_required"])
 }
 
 func TestServer_Routes(t *testing.T) {
@@ -263,7 +263,7 @@ func TestServer_JSONResponse(t *testing.T) {
 	data, ok := result.Data.(map[string]any)
 	require.True(t, ok)
 	assert.Contains(t, data, "id")
-	assert.Contains(t, data, "has_root_user")
+	assert.Contains(t, data, "setup_required")
 	assert.Contains(t, data, "created_at")
 	assert.Contains(t, data, "updated_at")
 
@@ -275,7 +275,7 @@ func TestServer_JSONResponse(t *testing.T) {
 
 	// Verify values match.
 	assert.Equal(t, instance.ID, data["id"])
-	assert.Equal(t, instance.HasRootUser, data["has_root_user"])
+	assert.Equal(t, instance.IsSetupRequired(), data["setup_required"])
 }
 
 func TestGetManifest_Success(t *testing.T) {
