@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/listenupapp/listenup-server/internal/auth"
 	"github.com/listenupapp/listenup-server/internal/config"
 	"github.com/listenupapp/listenup-server/internal/http/response"
 	"github.com/listenupapp/listenup-server/internal/scanner"
@@ -52,6 +53,11 @@ func setupTestServer(t *testing.T) (server *Server, cleanup func()) {
 			LocalURL:  "http://localhost:8080",
 			RemoteURL: "",
 		},
+		Auth: config.AuthConfig{
+			AccessTokenDuration:  15 * time.Minute,
+			RefreshTokenDuration: 7 * 24 * time.Hour,
+			AccessTokenKey:       []byte("test-secret-key-for-testing-only-32b"),
+		},
 	}
 
 	// Create services.
@@ -59,8 +65,16 @@ func setupTestServer(t *testing.T) (server *Server, cleanup func()) {
 	bookService := service.NewBookService(s, fileScanner, logger)
 	syncService := service.NewSyncService(s, logger)
 
+	// Create auth services.
+	// Use a test key (32 bytes as hex = 64 hex chars)
+	testKeyHex := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	tokenService, err := auth.NewTokenService(testKeyHex, cfg.Auth.AccessTokenDuration, cfg.Auth.RefreshTokenDuration)
+	require.NoError(t, err)
+	sessionService := service.NewSessionService(s, tokenService, logger)
+	authService := service.NewAuthService(s, tokenService, sessionService, instanceService, logger)
+
 	// Create server.
-	server = NewServer(s, instanceService, bookService, syncService, sseHandler, logger)
+	server = NewServer(s, instanceService, authService, bookService, syncService, sseHandler, logger)
 
 	// Return cleanup function.
 	cleanup = func() {

@@ -180,6 +180,18 @@ func main() {
 	bookService := service.NewBookService(db, fileScanner, log.Logger)
 	syncService := service.NewSyncService(db, log.Logger)
 
+	// Initialize auth services.
+	// Convert key bytes to hex string for token service
+	keyHex := fmt.Sprintf("%x", cfg.Auth.AccessTokenKey)
+	tokenService, err := auth.NewTokenService(keyHex, cfg.Auth.AccessTokenDuration, cfg.Auth.RefreshTokenDuration)
+	if err != nil {
+		log.Error("Failed to create token service", "error", err)
+		sseCancel()
+		os.Exit(1)
+	}
+	sessionService := service.NewSessionService(db, tokenService, log.Logger)
+	authService := service.NewAuthService(db, tokenService, sessionService, instanceService, log.Logger)
+
 	sseHandler := sse.NewHandler(sseManager, log.Logger)
 
 	// Check if server instance configuration exists, create if not (first run).
@@ -207,7 +219,7 @@ func main() {
 	// Create HTTP server with service layer.
 	// TODO: Future note to self: This is going to get old fast depending on how many
 	// services we need to instantiate. Let's look into a better solution.
-	httpServer := api.NewServer(db, instanceService, bookService, syncService, sseHandler, log.Logger)
+	httpServer := api.NewServer(db, instanceService, authService, bookService, syncService, sseHandler, log.Logger)
 
 	// Configure HTTP server.
 	srv := &http.Server{

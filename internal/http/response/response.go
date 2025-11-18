@@ -88,6 +88,11 @@ func NotFound(w http.ResponseWriter, message string, logger *slog.Logger) {
 	Error(w, http.StatusNotFound, message, logger)
 }
 
+// Conflict writes a 409 Conflict response.
+func Conflict(w http.ResponseWriter, message string, logger *slog.Logger) {
+	Error(w, http.StatusConflict, message, logger)
+}
+
 // InternalError writes a 500 Internal Server Error response.
 func InternalError(w http.ResponseWriter, message string, logger *slog.Logger) {
 	Error(w, http.StatusInternalServerError, message, logger)
