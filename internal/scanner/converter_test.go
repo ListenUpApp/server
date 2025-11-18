@@ -527,11 +527,11 @@ func TestSortAudioFilesByFilename(t *testing.T) {
 
 	sortAudioFilesByFilename(files)
 
-	// Simple string comparison (not natural sort yet).
-	assert.Equal(t, "track03.mp3", files[0].Filename)
-	assert.Equal(t, "track1.mp3", files[1].Filename)
-	assert.Equal(t, "track10.mp3", files[2].Filename)
-	assert.Equal(t, "track2.mp3", files[3].Filename)
+	// Natural sort: track1 < track2 < track03 < track10
+	assert.Equal(t, "track1.mp3", files[0].Filename)
+	assert.Equal(t, "track2.mp3", files[1].Filename)
+	assert.Equal(t, "track03.mp3", files[2].Filename)
+	assert.Equal(t, "track10.mp3", files[3].Filename)
 }
 
 // TestSortAudioFilesByFilename_Empty tests sorting empty slice.
@@ -551,25 +551,97 @@ func TestSortAudioFilesByFilename_Single(t *testing.T) {
 	assert.Equal(t, "track1.mp3", files[0].Filename)
 }
 
-// TestCompareFilenames tests filename comparison.
 func TestCompareFilenames(t *testing.T) {
 	tests := []struct {
+		name     string
 		a        string
 		b        string
-		expected int
+		expected int // -1 if a < b, 0 if a == b, 1 if a > b
 	}{
-		{"a.mp3", "b.mp3", -1},
-		{"b.mp3", "a.mp3", 1},
-		{"a.mp3", "a.mp3", 0},
-		{"track1.mp3", "track2.mp3", -1},
-		{"track10.mp3", "track2.mp3", -1}, // String comparison, not natural
+		// Equal strings
+		{"equal strings", "file.mp3", "file.mp3", 0},
+		{"both empty", "", "", 0},
+
+		// Simple alphabetic comparison
+		{"alphabetic a < b", "apple.mp3", "banana.mp3", -1},
+		{"alphabetic b > a", "zebra.mp3", "apple.mp3", 1},
+
+		// Natural numeric ordering (the main feature)
+		{"track1 < track2", "track1.mp3", "track2.mp3", -1},
+		{"track2 < track10", "track2.mp3", "track10.mp3", -1},
+		{"track1 < track10", "track1.mp3", "track10.mp3", -1},
+		{"chapter 1 < chapter 10", "Chapter 1.m4a", "Chapter 10.m4a", -1},
+
+		// Leading zeros
+		{"track01 < track02", "track01.mp3", "track02.mp3", -1},
+		{"track02 < track10", "track02.mp3", "track10.mp3", -1},
+		{"Part 001 < Part 010", "Part 001.flac", "Part 010.flac", -1},
+
+		// Mixed text and numbers
+		{"Book1Chapter1 < Book1Chapter2", "Book1Chapter1.mp3", "Book1Chapter2.mp3", -1},
+		{"Book1 < Book2", "Book1.mp3", "Book2.mp3", -1},
+		{"Book2 < Book10", "Book2.mp3", "Book10.mp3", -1},
+
+		// Numbers vs non-numbers (numbers should come first in mixed positions)
+		{"1file < afile", "1file.mp3", "afile.mp3", -1},
+
+		// Large numbers
+		{"track1 < track999", "track1.mp3", "track999.mp3", -1},
+		{"track999 < track1000", "track999.mp3", "track1000.mp3", -1},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.a+"_vs_"+tt.b, func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			result := compareFilenames(tt.a, tt.b)
-			assert.Equal(t, tt.expected, result)
+
+			// Normalize to -1, 0, 1 for comparison
+			normalized := 0
+			if result < 0 {
+				normalized = -1
+			} else if result > 0 {
+				normalized = 1
+			}
+
+			if normalized != tt.expected {
+				t.Errorf("compareFilenames(%q, %q) = %d (normalized %d), expected %d",
+					tt.a, tt.b, result, normalized, tt.expected)
+			}
+
+			// Verify symmetry: if a < b, then b > a
+			if tt.a != tt.b {
+				reverse := compareFilenames(tt.b, tt.a)
+				reverseNormalized := 0
+				if reverse < 0 {
+					reverseNormalized = -1
+				} else if reverse > 0 {
+					reverseNormalized = 1
+				}
+
+				if reverseNormalized != -tt.expected {
+					t.Errorf("compareFilenames symmetry check failed: compareFilenames(%q, %q) = %d, but compareFilenames(%q, %q) = %d",
+						tt.a, tt.b, normalized, tt.b, tt.a, reverseNormalized)
+				}
+			}
 		})
+	}
+}
+
+func TestCompareFilenamesTransitivity(t *testing.T) {
+	// Test that if a < b and b < c, then a < c
+	files := []string{
+		"track1.mp3",
+		"track2.mp3",
+		"track10.mp3",
+		"track20.mp3",
+	}
+
+	for i := 0; i < len(files); i++ {
+		for j := i + 1; j < len(files); j++ {
+			result := compareFilenames(files[i], files[j])
+			if result >= 0 {
+				t.Errorf("Expected %q < %q, but got result %d", files[i], files[j], result)
+			}
+		}
 	}
 }
 

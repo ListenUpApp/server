@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/dgraph-io/badger/v4"
+	"github.com/listenupapp/listenup-server/internal/domain"
 )
 
 // EventEmitter is the interface for emitting SSE events.
@@ -33,6 +34,9 @@ type Store struct {
 
 	// SSE event emitter for broadcasting changes.
 	eventEmitter EventEmitter
+
+	// Generic entities
+	Users *Entity[domain.User]
 }
 
 // New creates a new Store instance with the given database path and event emitter.
@@ -51,6 +55,9 @@ func New(path string, logger *slog.Logger, emitter EventEmitter) (*Store, error)
 		logger:       logger,
 		eventEmitter: emitter,
 	}
+
+	// Initialize generic entities
+	store.initUsers()
 
 	if logger != nil {
 		logger.Info("Badger database opened successfully", "path", path)
@@ -116,4 +123,16 @@ func (s *Store) exists(key []byte) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// initUsers initializes the Users entity on the store.
+// Uses case-insensitive email indexing via normalizeEmail transformation.
+func (s *Store) initUsers() {
+	s.Users = NewEntity[domain.User](s, "user:").
+		WithIndexTransform("email",
+			func(u *domain.User) []string {
+				return []string{normalizeEmail(u.Email)}
+			},
+			normalizeEmail, // Transform lookups to be case-insensitive
+		)
 }

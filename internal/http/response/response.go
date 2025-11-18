@@ -3,8 +3,11 @@ package response
 
 import (
 	"encoding/json/v2"
+	"errors"
 	"log/slog"
 	"net/http"
+
+	"github.com/listenupapp/listenup-server/internal/store"
 )
 
 // Envelope provides a consistent JSON response structure.
@@ -88,4 +91,20 @@ func NotFound(w http.ResponseWriter, message string, logger *slog.Logger) {
 // InternalError writes a 500 Internal Server Error response.
 func InternalError(w http.ResponseWriter, message string, logger *slog.Logger) {
 	Error(w, http.StatusInternalServerError, message, logger)
+}
+
+// HandleError writes an appropriate HTTP response based on the error type.
+// Store errors are mapped to their HTTP codes, unknown errors become 500.
+func HandleError(w http.ResponseWriter, err error, logger *slog.Logger) {
+	var storeErr *store.Error
+	if errors.As(err, &storeErr) {
+		Error(w, storeErr.HTTPCode(), storeErr.Message, logger)
+		return
+	}
+
+	// Unknown error = 500
+	if logger != nil {
+		logger.Error("Unhandled error", "error", err)
+	}
+	InternalError(w, "internal server error", logger)
 }

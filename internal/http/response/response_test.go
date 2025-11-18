@@ -2,12 +2,14 @@ package response
 
 import (
 	"encoding/json/v2"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/listenupapp/listenup-server/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -333,4 +335,58 @@ func TestEnvelope_OmitEmpty(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHandleError_StoreError(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		wantStatus int
+		wantBody   string
+	}{
+		{
+			name:       "not found",
+			err:        store.ErrNotFound,
+			wantStatus: http.StatusNotFound,
+			wantBody:   "resource not found",
+		},
+		{
+			name:       "already exists",
+			err:        store.ErrAlreadyExists,
+			wantStatus: http.StatusConflict,
+			wantBody:   "resource already exists",
+		},
+		{
+			name:       "invalid input",
+			err:        store.ErrInvalidInput,
+			wantStatus: http.StatusBadRequest,
+			wantBody:   "invalid input",
+		},
+		{
+			name:       "custom message",
+			err:        store.ErrNotFound.WithMessage("user not found"),
+			wantStatus: http.StatusNotFound,
+			wantBody:   "user not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			HandleError(w, tt.err, nil)
+
+			assert.Equal(t, tt.wantStatus, w.Code)
+			assert.Contains(t, w.Body.String(), tt.wantBody)
+		})
+	}
+}
+
+func TestHandleError_UnknownError(t *testing.T) {
+	w := httptest.NewRecorder()
+	err := errors.New("unknown error")
+
+	HandleError(w, err, nil)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "internal server error")
 }

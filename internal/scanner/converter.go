@@ -1,10 +1,11 @@
 package scanner
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -186,27 +187,90 @@ func findAudioFileForChapter(chapterStartMs int64, audioFiles []domain.AudioFile
 }
 
 // sortAudioFilesByFilename sorts audio files by filename for consistent ordering.
-// this ensures track01.mp3 comes before track 02.mp3 and whatnot.
+// This ensures track01.mp3 comes before track02.mp3 and track02.mp3 before track10.mp3.
 func sortAudioFilesByFilename(files []domain.AudioFileInfo) {
-	sort.Slice(files, func(i, j int) bool {
-		return compareFilenames(files[i].Filename, files[j].Filename) < 0
+	slices.SortFunc(files, func(a, b domain.AudioFileInfo) int {
+		return compareFilenames(a.Filename, b.Filename)
 	})
 }
 
-// compareFilenames compares two filenames, attempting to sort numerically.
-// ie. track1.mp3 < track2.mp3, track10.mp3 etc.
-// A lot of this sorting (especially multi-file) is based on what I *THINK* people.
-// are doing with their multiple file books but I don't have much experience with the concept.
+// compareFilenames compares two filenames with natural/numeric-aware sorting.
+// Examples:
+//
+//	track1.mp3 < track2.mp3 < track10.mp3  (not track1, track10, track2)
+//	Part 1 < Part 2 < Part 10
+//	Chapter 01.mp3 < Chapter 02.mp3 < Chapter 10.mp3
 func compareFilenames(a, b string) int {
-	// for now simple string comparison.
-	// TODO: Look into natural sort (numeric aware) for better sorting.
-	if a < b {
-		return -1
+	// Simple optimization: if strings are equal, short-circuit.
+	if a == b {
+		return 0
 	}
-	if a > b {
-		return 1
+
+	// Extract numeric and non-numeric segments and compare intelligently.
+	return naturalCompare(a, b)
+}
+
+// naturalCompare performs natural ordering comparison.
+// Splits strings into text and number segments, compares numbers numerically.
+func naturalCompare(a, b string) int {
+	var i, j int
+
+	for i < len(a) && j < len(b) {
+		// Check if both positions start with digits.
+		aIsDigit := isDigit(a[i])
+		bIsDigit := isDigit(b[j])
+
+		if aIsDigit && bIsDigit {
+			// Both are numeric - compare as numbers.
+			aNum, aNext := extractNumber(a, i)
+			bNum, bNext := extractNumber(b, j)
+
+			if aNum != bNum {
+				return cmp.Compare(aNum, bNum)
+			}
+
+			i = aNext
+			j = bNext
+		} else if aIsDigit != bIsDigit {
+			// One is digit, one isn't - digits come first.
+			if aIsDigit {
+				return -1
+			}
+			return 1
+		} else {
+			// Both are non-numeric - compare characters.
+			if a[i] != b[j] {
+				return cmp.Compare(a[i], b[j])
+			}
+			i++
+			j++
+		}
 	}
-	return 0
+
+	// One string is prefix of another.
+	return cmp.Compare(len(a), len(b))
+}
+
+// extractNumber extracts a number from string starting at pos.
+// Returns the number and the position after the number.
+func extractNumber(s string, pos int) (int, int) {
+	start := pos
+	for pos < len(s) && isDigit(s[pos]) {
+		pos++
+	}
+
+	// Parse the numeric segment.
+	num := 0
+	for i := start; i < pos; i++ {
+		num = num*10 + int(s[i]-'0')
+	}
+
+	return num, pos
+}
+
+// isDigit checks if a byte is a digit character.
+func isDigit(b byte) bool {
+	return b >= '0' && b <= '9'
 }
 
 // parseContributorString parses a contributor string that may contain role information.
