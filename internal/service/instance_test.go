@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/listenupapp/listenup-server/internal/config"
 	"github.com/listenupapp/listenup-server/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -26,8 +27,17 @@ func setupTestService(t *testing.T) (*InstanceService, func()) { //nolint:gocrit
 	s, err := store.New(dbPath, nil, store.NewNoopEmitter())
 	require.NoError(t, err)
 
+	// Create test config.
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Name:      "Test Server",
+			LocalURL:  "http://localhost:8080",
+			RemoteURL: "",
+		},
+	}
+
 	// Create service.
-	service := NewInstanceService(s, nil)
+	service := NewInstanceService(s, nil, cfg)
 
 	// Return cleanup function.
 	cleanup := func() {

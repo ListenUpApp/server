@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/listenupapp/listenup-server/internal/config"
 	"github.com/listenupapp/listenup-server/internal/http/response"
 	"github.com/listenupapp/listenup-server/internal/scanner"
 	"github.com/listenupapp/listenup-server/internal/service"
@@ -44,8 +45,17 @@ func setupTestServer(t *testing.T) (server *Server, cleanup func()) {
 	// Create scanner with SSE manager.
 	fileScanner := scanner.NewScanner(s, sseManager, logger)
 
+	// Create test config.
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Name:      "Test Server",
+			LocalURL:  "http://localhost:8080",
+			RemoteURL: "",
+		},
+	}
+
 	// Create services.
-	instanceService := service.NewInstanceService(s, logger)
+	instanceService := service.NewInstanceService(s, logger, cfg)
 	bookService := service.NewBookService(s, fileScanner, logger)
 	syncService := service.NewSyncService(s, logger)
 

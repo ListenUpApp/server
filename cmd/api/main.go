@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/api"
+	"github.com/listenupapp/listenup-server/internal/auth"
 	"github.com/listenupapp/listenup-server/internal/config"
 	"github.com/listenupapp/listenup-server/internal/logger"
 	"github.com/listenupapp/listenup-server/internal/processor"
@@ -42,6 +43,18 @@ func main() {
 		"log_level", cfg.Logger.Level,
 		"metadata_path", cfg.Metadata.BasePath,
 		"audiobook_path", cfg.Library.AudiobookPath,
+	)
+
+	// Load or generate authentication key.
+	authKey, err := auth.LoadOrGenerateKey(cfg.Metadata.BasePath)
+	if err != nil {
+		log.Error("Failed to load authentication key", "error", err)
+		os.Exit(1)
+	}
+	cfg.Auth.AccessTokenKey = authKey
+	log.Info("Authentication key loaded",
+		"access_token_duration", cfg.Auth.AccessTokenDuration,
+		"refresh_token_duration", cfg.Auth.RefreshTokenDuration,
 	)
 
 	// Initialize SSE manager first (required by store).
@@ -163,7 +176,7 @@ func main() {
 	log.Info("File watcher started", "scan_paths", len(bootstrap.Library.ScanPaths))
 
 	// Initialize services.
-	instanceService := service.NewInstanceService(db, log.Logger)
+	instanceService := service.NewInstanceService(db, log.Logger, cfg)
 	bookService := service.NewBookService(db, fileScanner, log.Logger)
 	syncService := service.NewSyncService(db, log.Logger)
 

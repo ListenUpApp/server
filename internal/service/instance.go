@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/listenupapp/listenup-server/internal/config"
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/store"
@@ -50,13 +48,20 @@ func (s *InstanceService) InitializeInstance(ctx context.Context) (*domain.Insta
 		return nil, fmt.Errorf("failed to initialize instance: %w", err)
 	}
 
-	instance = &domain.Instance{
-		ID:        uuid.New().String(),
-		Name:      s.config.Server.Name,
-		Version:   "0.1.0",
-		LocalUrl:  s.config.Server.LocalURL,
-		RemoteUrl: s.config.Server.RemoteURL,
-		CreatedAt: time.Now(),
+	// Update instance with config values if they're set.
+	if s.config.Server.Name != "" {
+		instance.Name = s.config.Server.Name
+	}
+	if s.config.Server.LocalURL != "" {
+		instance.LocalUrl = s.config.Server.LocalURL
+	}
+	if s.config.Server.RemoteURL != "" {
+		instance.RemoteUrl = s.config.Server.RemoteURL
+	}
+
+	// Save updated instance back to store.
+	if err := s.store.UpdateInstance(ctx, instance); err != nil {
+		return nil, fmt.Errorf("failed to update instance with config: %w", err)
 	}
 
 	return instance, nil

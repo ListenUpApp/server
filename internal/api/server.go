@@ -115,12 +115,14 @@ func (s *Server) handleGetInstance(w http.ResponseWriter, r *http.Request) {
 	}
 
 	instanceResponse := map[string]interface{}{
-		"id":         instance.ID,
-		"name":       instance.Name,
-		"version":    instance.Version,
-		"local_url":  instance.LocalUrl,
-		"remote_url": instance.RemoteUrl,
-		"created_at": instance.CreatedAt,
+		"id":            instance.ID,
+		"name":          instance.Name,
+		"version":       instance.Version,
+		"local_url":     instance.LocalUrl,
+		"remote_url":    instance.RemoteUrl,
+		"created_at":    instance.CreatedAt,
+		"updated_at":    instance.UpdatedAt,
+		"has_root_user": instance.HasRootUser,
 	}
 
 	response.Success(w, instanceResponse, s.logger)
