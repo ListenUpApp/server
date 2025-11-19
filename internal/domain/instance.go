@@ -6,8 +6,8 @@ import "time"
 type Instance struct {
 	Name       string    `json:"name"`
 	Version    string    `json:"version"`
-	LocalUrl   string    `json:"local_url,omitempty"`
-	RemoteUrl  string    `json:"remote_url,omitempty"`
+	LocalURL   string    `json:"local_url,omitempty"`
+	RemoteURL  string    `json:"remote_url,omitempty"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 	ID         string    `json:"id"`

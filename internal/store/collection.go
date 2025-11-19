@@ -20,8 +20,8 @@ const (
 
 	// Index Keys.
 	collectionsByLibraryPrefix = "idx:collections:library:"
-	bookCollectionsPrefix      = "idx:books:collections:"   // Format: idx:books:collections:{collectionID}:{bookID}
-	collectionBooksPrefix      = "idx:collections:books:"   // Format: idx:collections:books:{bookID}:{collectionID}
+	bookCollectionsPrefix      = "idx:books:collections:" // Format: idx:books:collections:{collectionID}:{bookID}
+	collectionBooksPrefix      = "idx:collections:books:" // Format: idx:collections:books:{bookID}:{collectionID}
 )
 
 var (

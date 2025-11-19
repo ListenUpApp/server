@@ -33,4 +33,3 @@ func (l *Library) RemoveScanPath(path string) {
 		return existing == path
 	})
 }
-

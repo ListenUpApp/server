@@ -69,6 +69,7 @@ func (s *Store) GetCollectionsContainingBook(ctx context.Context, bookID string)
 // A user can see a book if:
 //  1. The book is not in any collection (uncollected = public), OR
 //  2. The book is in at least one collection the user has access to
+//
 // Uses reverse indexes for O(Collections + BookIDs) instead of O(Books × Collections).
 func (s *Store) GetBooksForUser(ctx context.Context, userID string) ([]*domain.Book, error) {
 	if err := ctx.Err(); err != nil {
@@ -274,7 +275,10 @@ func (s *Store) CanUserAccessCollection(ctx context.Context, userID, collectionI
 	// Check if collection is shared with user
 	share, err := s.GetShareForUserAndCollection(ctx, userID, collectionID)
 	if err != nil {
-		// No share found or error
+		// No share found - return false without permission
+		return false, domain.PermissionRead, false, err
+	}
+	if share == nil {
 		return false, domain.PermissionRead, false, nil
 	}
 

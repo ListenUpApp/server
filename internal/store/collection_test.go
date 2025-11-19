@@ -507,7 +507,6 @@ func TestListCollectionsByLibrary(t *testing.T) {
 	assert.Len(t, collections, 2)
 }
 
-
 // Test Book-Collection Operations.
 
 func TestAddBookToCollection(t *testing.T) {

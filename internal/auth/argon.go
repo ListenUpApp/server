@@ -68,6 +68,7 @@ func HashPassword(password string) (string, error) {
 	return encoded, nil
 }
 
+// VerifyPassword verifies a password against an Argon2id encoded hash.
 func VerifyPassword(encodedHash, password string) (bool, error) {
 	// Validate password length before doing expensive hashing.
 	if len(password) > maxPasswordLength {
@@ -77,6 +78,7 @@ func VerifyPassword(encodedHash, password string) (bool, error) {
 	salt, hash, params, err := decodeHash(encodedHash)
 	if err != nil {
 		// Just returning false to prevent leaking of sensitive information.
+		//nolint:nilerr // Intentionally returning nil to avoid leaking hash validation details
 		return false, nil
 	}
 
@@ -98,7 +100,7 @@ func VerifyPassword(encodedHash, password string) (bool, error) {
 	return false, nil
 }
 
-// argon2Params holds the parameters extracted from an encoded hash
+// argon2Params holds the parameters extracted from an encoded hash.
 type argon2Params struct {
 	memory      uint32
 	iterations  uint32
@@ -144,6 +146,7 @@ func decodeHash(encodedHash string) (salt, hash []byte, params *argon2Params, er
 		return nil, nil, nil, fmt.Errorf("invalid hash encoding: %w", err)
 	}
 
+	//nolint:gosec // Hash length is always 32 bytes (argon2KeyLength), safe to convert
 	params.keyLength = uint32(len(hash))
 
 	return salt, hash, params, nil

@@ -5,6 +5,7 @@ package domain
 // users can share their curated collections with friends and family. While
 // Also providing enough controls to restrict books should you wish.
 
+// CollectionShare represents a collection shared with a user, including permission level.
 type CollectionShare struct {
 	Syncable
 	CollectionID     string          `json:"collection_id"`

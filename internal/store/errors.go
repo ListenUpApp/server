@@ -20,6 +20,8 @@ func (e *Error) Error() string {
 }
 
 func (e *Error) Unwrap() error { return e.Err }
+
+// HTTPCode returns the HTTP status code associated with this error.
 func (e *Error) HTTPCode() int { return e.Code }
 
 // WithMessage returns a new error with a custom message.
@@ -40,7 +42,7 @@ func (e *Error) WithCause(err error) *Error {
 	}
 }
 
-// Sentinel errors
+// Sentinel errors.
 var (
 	ErrNotFound = &Error{
 		Code:    http.StatusNotFound,
