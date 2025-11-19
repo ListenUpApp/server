@@ -23,6 +23,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/watcher"
 )
 
+//nolint:gocyclo,gocritic // gocyclo: Main has high complexity; gocritic: os.Exit is intentional, critical cleanup done explicitly
 func main() {
 	// Load configuration.
 	cfg, err := config.LoadConfig()
@@ -60,7 +61,6 @@ func main() {
 	// Initialize SSE manager first (required by store).
 	sseManager := sse.NewManager(log.Logger)
 	sseCtx, sseCancel := context.WithCancel(context.Background())
-	defer sseCancel()
 	go sseManager.Start(sseCtx)
 
 	// Initialize database with SSE manager for event broadcasting.

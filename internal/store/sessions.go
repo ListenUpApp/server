@@ -12,7 +12,7 @@ import (
 )
 
 // CreateSession creates a new user session.
-func (s *Store) CreateSession(ctx context.Context, session *domain.Session) error {
+func (s *Store) CreateSession(_ context.Context, session *domain.Session) error {
 	key := []byte(sessionPrefix + session.ID)
 
 	exists, err := s.exists(key)
@@ -140,7 +140,7 @@ func (s *Store) UpdateSession(ctx context.Context, session *domain.Session) erro
 }
 
 // DeleteSession deletes a session (logout).
-func (s *Store) DeleteSession(ctx context.Context, sessionID string) error {
+func (s *Store) DeleteSession(_ context.Context, sessionID string) error {
 	key := []byte(sessionPrefix + sessionID)
 
 	// Get session data (even if expired) to clean up indices
@@ -240,8 +240,10 @@ func (s *Store) DeleteExpiredSessions(ctx context.Context) (int, error) {
 
 			err := item.Value(func(val []byte) error {
 				var session domain.Session
-				if err := json.Unmarshal(val, &session); err != nil {
-					return nil // Skip malformed sessions
+				if unmarshalErr := json.Unmarshal(val, &session); unmarshalErr != nil {
+					// Skip malformed sessions - log but don't fail
+					//nolint:nilerr // Intentionally returning nil to continue iteration
+					return nil
 				}
 
 				if session.IsExpired() {

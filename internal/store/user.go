@@ -20,14 +20,20 @@ const (
 )
 
 var (
-	ErrUserNotFound    = errors.New("user not found")
-	ErrUserExists      = errors.New("user already exists")
-	ErrEmailExists     = errors.New("email already in use")
+	// ErrUserNotFound is returned when a user cannot be found by ID or email.
+	ErrUserNotFound = errors.New("user not found")
+	// ErrUserExists is returned when attempting to create a user with an existing ID.
+	ErrUserExists = errors.New("user already exists")
+	// ErrEmailExists is returned when attempting to create a user with an email that's already in use.
+	ErrEmailExists = errors.New("email already in use")
+	// ErrSessionNotFound is returned when a session cannot be found by ID.
 	ErrSessionNotFound = errors.New("session not found")
-	ErrSessionExpired  = errors.New("session expired")
+	// ErrSessionExpired is returned when attempting to use an expired session.
+	ErrSessionExpired = errors.New("session expired")
 )
 
-func (s *Store) CreateUser(ctx context.Context, user *domain.User) error {
+// CreateUser creates a new user account.
+func (s *Store) CreateUser(_ context.Context, user *domain.User) error {
 	key := []byte(userPrefix + user.ID)
 
 	// Checks if user ID already exists

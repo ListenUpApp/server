@@ -1,3 +1,4 @@
+// Package validation provides HTTP request validation utilities using the validator/v10 library.
 package validation
 
 import (

@@ -410,6 +410,7 @@ func TestEntity_List_ContextCancellation(t *testing.T) {
 
 	entity := store.NewEntity[TestEntity](s, "test:")
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	// Create entities
 	for i := 1; i <= 5; i++ {

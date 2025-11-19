@@ -32,6 +32,7 @@ func TestValidator_ValidateSuccess(t *testing.T) {
 func TestValidator_ValidateErrors(t *testing.T) {
 	v := validation.New()
 
+	//nolint:govet // fieldalignment: Minor memory optimization not worth the complexity in test code
 	tests := []struct {
 		name        string
 		req         TestRequest

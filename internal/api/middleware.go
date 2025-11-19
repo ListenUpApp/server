@@ -56,52 +56,11 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 	})
 }
 
-// requireRoot is middleware that ensures the authenticated user is a root user.
-// Must be used after requireAuth.
-func (s *Server) requireRoot(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		isRoot, ok := r.Context().Value(contextKeyIsRoot).(bool)
-		if !ok || !isRoot {
-			response.Forbidden(w, "Root access required", s.logger)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
-
 // getUserID extracts the authenticated user ID from request context.
 // Returns empty string if not authenticated.
 func getUserID(ctx context.Context) string {
 	if userID, ok := ctx.Value(contextKeyUserID).(string); ok {
 		return userID
-	}
-	return ""
-}
-
-// getEmail extracts the authenticated user email from request context.
-// Returns empty string if not authenticated.
-func getEmail(ctx context.Context) string {
-	if email, ok := ctx.Value(contextKeyEmail).(string); ok {
-		return email
-	}
-	return ""
-}
-
-// isRoot checks if the authenticated user is a root user.
-// Returns false if not authenticated.
-func isRoot(ctx context.Context) bool {
-	if isRoot, ok := ctx.Value(contextKeyIsRoot).(bool); ok {
-		return isRoot
-	}
-	return false
-}
-
-// getSessionID extracts the session ID from request context.
-// Returns empty string if not available.
-func getSessionID(ctx context.Context) string {
-	if sessionID, ok := ctx.Value(contextKeySessionID).(string); ok {
-		return sessionID
 	}
 	return ""
 }

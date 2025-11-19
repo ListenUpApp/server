@@ -28,7 +28,6 @@ linters:
     - stylecheck    # Replacement for golint
     - gocyclo       # Cyclomatic complexity
     - bodyclose     # Check HTTP response body is closed
-    - dupl          # Code clone detection
     - errorlint     # Error wrapping issues
     - exhaustive    # Check exhaustiveness of enum switch statements
     - goconst       # Repeated strings that could be constants
@@ -66,6 +65,7 @@ linters:
     - tagliatelle   # Struct tag formatting - too opinionated
     - testpackage   # Requires _test package - not always desired
     - paralleltest  # Parallel test requirements - too strict
+    - dupl          # Flags intentional CRUD patterns across domain entities
 
 linters-settings:
   errcheck:
@@ -139,7 +139,6 @@ issues:
     # Exclude some linters from running on tests
     - path: _test\.go
       linters:
-        - dupl
         - gosec
         - goconst
 
