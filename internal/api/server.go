@@ -20,6 +20,7 @@ import (
 type Server struct {
 	store           *store.Store
 	instanceService *service.InstanceService
+	authService     *service.AuthService
 	bookService     *service.BookService
 	syncService     *service.SyncService
 	sseHandler      *sse.Handler
@@ -28,10 +29,11 @@ type Server struct {
 }
 
 // NewServer creates a new HTTP server with all routes configured.
-func NewServer(store *store.Store, instanceService *service.InstanceService, bookService *service.BookService, syncService *service.SyncService, sseHandler *sse.Handler, logger *slog.Logger) *Server {
+func NewServer(store *store.Store, instanceService *service.InstanceService, authService *service.AuthService, bookService *service.BookService, syncService *service.SyncService, sseHandler *sse.Handler, logger *slog.Logger) *Server {
 	s := &Server{
 		store:           store,
 		instanceService: instanceService,
+		authService:     authService,
 		bookService:     bookService,
 		syncService:     syncService,
 		sseHandler:      sseHandler,
@@ -67,6 +69,20 @@ func (s *Server) setupRoutes() {
 	// API v1.
 	s.router.Route("/api/v1", func(r chi.Router) {
 		r.Get("/instance", s.handleGetInstance)
+
+		// Auth endpoints (public).
+		r.Route("/auth", func(r chi.Router) {
+			r.Post("/setup", s.handleSetup)
+			r.Post("/login", s.handleLogin)
+			r.Post("/refresh", s.handleRefresh)
+			r.Post("/logout", s.handleLogout)
+		})
+
+		// Protected user endpoints.
+		r.Route("/users", func(r chi.Router) {
+			r.Use(s.requireAuth)
+			r.Get("/me", s.handleGetCurrentUser)
+		})
 
 		// Books.
 		r.Get("/books", s.handleListBooks)
@@ -114,7 +130,18 @@ func (s *Server) handleGetInstance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response.Success(w, instance, s.logger)
+	instanceResponse := map[string]interface{}{
+		"id":             instance.ID,
+		"name":           instance.Name,
+		"version":        instance.Version,
+		"local_url":      instance.LocalUrl,
+		"remote_url":     instance.RemoteUrl,
+		"created_at":     instance.CreatedAt,
+		"updated_at":     instance.UpdatedAt,
+		"setup_required": instance.IsSetupRequired(),
+	}
+
+	response.Success(w, instanceResponse, s.logger)
 }
 
 // Placeholder routes, since I haven't thought through our API layer yet. Super basic logic.

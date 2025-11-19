@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/api"
+	"github.com/listenupapp/listenup-server/internal/auth"
 	"github.com/listenupapp/listenup-server/internal/config"
 	"github.com/listenupapp/listenup-server/internal/logger"
 	"github.com/listenupapp/listenup-server/internal/processor"
@@ -22,6 +23,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/watcher"
 )
 
+//nolint:gocyclo,gocritic // gocyclo: Main has high complexity; gocritic: os.Exit is intentional, critical cleanup done explicitly
 func main() {
 	// Load configuration.
 	cfg, err := config.LoadConfig()
@@ -44,10 +46,21 @@ func main() {
 		"audiobook_path", cfg.Library.AudiobookPath,
 	)
 
+	// Load or generate authentication key.
+	authKey, err := auth.LoadOrGenerateKey(cfg.Metadata.BasePath)
+	if err != nil {
+		log.Error("Failed to load authentication key", "error", err)
+		os.Exit(1)
+	}
+	cfg.Auth.AccessTokenKey = authKey
+	log.Info("Authentication key loaded",
+		"access_token_duration", cfg.Auth.AccessTokenDuration,
+		"refresh_token_duration", cfg.Auth.RefreshTokenDuration,
+	)
+
 	// Initialize SSE manager first (required by store).
 	sseManager := sse.NewManager(log.Logger)
 	sseCtx, sseCancel := context.WithCancel(context.Background())
-	defer sseCancel()
 	go sseManager.Start(sseCtx)
 
 	// Initialize database with SSE manager for event broadcasting.
@@ -163,9 +176,21 @@ func main() {
 	log.Info("File watcher started", "scan_paths", len(bootstrap.Library.ScanPaths))
 
 	// Initialize services.
-	instanceService := service.NewInstanceService(db, log.Logger)
+	instanceService := service.NewInstanceService(db, log.Logger, cfg)
 	bookService := service.NewBookService(db, fileScanner, log.Logger)
 	syncService := service.NewSyncService(db, log.Logger)
+
+	// Initialize auth services.
+	// Convert key bytes to hex string for token service
+	keyHex := fmt.Sprintf("%x", cfg.Auth.AccessTokenKey)
+	tokenService, err := auth.NewTokenService(keyHex, cfg.Auth.AccessTokenDuration, cfg.Auth.RefreshTokenDuration)
+	if err != nil {
+		log.Error("Failed to create token service", "error", err)
+		sseCancel()
+		os.Exit(1)
+	}
+	sessionService := service.NewSessionService(db, tokenService, log.Logger)
+	authService := service.NewAuthService(db, tokenService, sessionService, instanceService, log.Logger)
 
 	sseHandler := sse.NewHandler(sseManager, log.Logger)
 
@@ -178,9 +203,10 @@ func main() {
 	}
 
 	// Log server instance state.
-	if instanceConfig.HasRootUser {
+	if !instanceConfig.IsSetupRequired() {
 		log.Info("Server instance is configured and ready",
 			"instance_id", instanceConfig.ID,
+			"root_user_id", instanceConfig.RootUserID,
 			"created_at", instanceConfig.CreatedAt,
 		)
 	} else {
@@ -193,7 +219,7 @@ func main() {
 	// Create HTTP server with service layer.
 	// TODO: Future note to self: This is going to get old fast depending on how many
 	// services we need to instantiate. Let's look into a better solution.
-	httpServer := api.NewServer(db, instanceService, bookService, syncService, sseHandler, log.Logger)
+	httpServer := api.NewServer(db, instanceService, authService, bookService, syncService, sseHandler, log.Logger)
 
 	// Configure HTTP server.
 	srv := &http.Server{

@@ -1,0 +1,128 @@
+package domain
+
+import "time"
+
+// User represents an authenticated user account in the system.
+type User struct {
+	Syncable
+	Email        string    `json:"email"`
+	PasswordHash string    `json:"password_hash,omitempty"` // Stored hashed, filter from API responses
+	IsRoot       bool      `json:"is_root"`
+	DisplayName  string    `json:"display_name"`
+	FirstName    string    `json:"first_name"`
+	LastName     string    `json:"last_name"`
+	LastLoginAt  time.Time `json:"last_login_at"`
+}
+
+// FullName returns the user's full name, composed from first and last names.
+func (u *User) FullName() string {
+	if u.FirstName == "" && u.LastName == "" {
+		return u.DisplayName
+	}
+	if u.FirstName == "" {
+		return u.LastName
+	}
+	if u.LastName == "" {
+		return u.FirstName
+	}
+	return u.FirstName + " " + u.LastName
+}
+
+// Name returns the best available name to display for the user.
+// Prefers DisplayName, falls back to FullName, then email.
+func (u *User) Name() string {
+	if u.DisplayName != "" {
+		return u.DisplayName
+	}
+	fullName := u.FullName()
+	if fullName != "" {
+		return fullName
+	}
+	return u.Email
+}
+
+// Session represents an active user session with refresh token.
+// Each device gets its own session - you can see what's connected.
+type Session struct {
+	ID               string    `json:"id"`
+	UserID           string    `json:"user_id"`
+	RefreshTokenHash string    `json:"refresh_token_hash,omitempty"` // Stored hashed, filter from API responses
+	ExpiresAt        time.Time `json:"expires_at"`
+	CreatedAt        time.Time `json:"created_at"`
+	LastSeenAt       time.Time `json:"last_seen_at"`
+	IPAddress        string    `json:"ip_address,omitempty"`
+
+	// Device information - structured data from client
+	DeviceType      string `json:"device_type"`               // mobile, tablet, desktop, web, tv
+	Platform        string `json:"platform"`                  // iOS, Android, Windows, macOS, Linux, Web
+	PlatformVersion string `json:"platform_version"`          // 17.2, 14.0, 11, etc.
+	ClientName      string `json:"client_name"`               // ListenUp Mobile, ListenUp Web
+	ClientVersion   string `json:"client_version"`            // 1.0.0
+	ClientBuild     string `json:"client_build,omitempty"`    // 245 (optional)
+	DeviceName      string `json:"device_name,omitempty"`     // Simon's iPhone (optional, user-set)
+	DeviceModel     string `json:"device_model,omitempty"`    // iPhone 15 Pro, Pixel 8 (optional)
+	BrowserName     string `json:"browser_name,omitempty"`    // Chrome, Firefox, Safari (web only)
+	BrowserVersion  string `json:"browser_version,omitempty"` // 120.0.6099.109 (web only)
+}
+
+// Touch updates the session's last seen timestamp.
+func (s *Session) Touch() {
+	s.LastSeenAt = time.Now()
+}
+
+// IsExpired checks if the session has passed its expiration time.
+func (s *Session) IsExpired() bool {
+	return time.Now().After(s.ExpiresAt)
+}
+
+// DisplayName returns a human-readable description of the device.
+// This follows the priority logic from DeviceInfo.DisplayName().
+func (s *Session) DisplayName() string {
+	if s.DeviceName != "" {
+		return s.DeviceName
+	}
+
+	if s.DeviceModel != "" {
+		// "iPhone 15 Pro - iOS 17.2"
+		if s.PlatformVersion != "" {
+			return s.DeviceModel + " - " + s.Platform + " " + s.PlatformVersion
+		}
+		// "iPhone 15 Pro"
+		return s.DeviceModel
+	}
+
+	if s.Platform != "" {
+		// "iOS 17.2"
+		if s.PlatformVersion != "" {
+			return s.Platform + " " + s.PlatformVersion
+		}
+		// "iOS"
+		return s.Platform
+	}
+
+	// "ListenUp Mobile 1.0.0"
+	if s.ClientVersion != "" {
+		return s.ClientName + " " + s.ClientVersion
+	}
+
+	// "ListenUp Mobile"
+	if s.ClientName != "" {
+		return s.ClientName
+	}
+
+	return "Unknown Device"
+}
+
+// ShortName returns a concise device identifier for space-constrained UI.
+func (s *Session) ShortName() string {
+	if s.DeviceName != "" {
+		return s.DeviceName
+	}
+	if s.DeviceModel != "" {
+		return s.DeviceModel
+	}
+	if s.BrowserName != "" {
+		return s.BrowserName
+	}
+	return s.Platform
+}

@@ -53,10 +53,10 @@ func (s *Store) CreateInstance(_ context.Context) (*domain.Instance, error) {
 	// Create new instance.
 	now := time.Now()
 	instance := &domain.Instance{
-		ID:          "server-001", // Single server ID
-		HasRootUser: false,        // No root user initially
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:         "server-001", // Single server ID
+		RootUserID: "",           // No root user initially - setup required
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 
 	if err := s.set(serverKey, instance); err != nil {
@@ -66,7 +66,7 @@ func (s *Store) CreateInstance(_ context.Context) (*domain.Instance, error) {
 	if s.logger != nil {
 		s.logger.Info("Server instance configuration created",
 			"id", instance.ID,
-			"has_root_user", instance.HasRootUser,
+			"setup_required", instance.IsSetupRequired(),
 		)
 	}
 
@@ -75,7 +75,7 @@ func (s *Store) CreateInstance(_ context.Context) (*domain.Instance, error) {
 
 // UpdateInstance updates the server instance configuration.
 func (s *Store) UpdateInstance(ctx context.Context, instance *domain.Instance) error {
-	// Verify instance exists.
+	// Verify instance exists
 	_, err := s.GetInstance(ctx)
 	if err != nil {
 		return err
@@ -89,8 +89,8 @@ func (s *Store) UpdateInstance(ctx context.Context, instance *domain.Instance) e
 
 	if s.logger != nil {
 		s.logger.Info("Server instance configuration updated",
-			"id", instance.ID,
-			"has_root_user", instance.HasRootUser,
+			"instance_id", instance.ID,
+			"root_user_id", instance.RootUserID,
 		)
 	}
 
@@ -106,8 +106,8 @@ func (s *Store) InitializeInstance(ctx context.Context) (*domain.Instance, error
 		if s.logger != nil {
 			s.logger.Info("Server instance configuration found",
 				"id", instance.ID,
-				"has_root_user", instance.HasRootUser,
-				"is_setup", instance.HasRootUser,
+				"root_user_id", instance.RootUserID,
+				"setup_required", instance.IsSetupRequired(),
 			)
 		}
 		return instance, nil

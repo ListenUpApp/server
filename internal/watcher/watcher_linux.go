@@ -183,6 +183,7 @@ func (b *linuxBackend) readEvents(ctx context.Context) {
 func (b *linuxBackend) parseEvents(buf []byte) {
 	offset := 0
 	for offset < len(buf) {
+		//nolint:gosec // G103: Legitimate use of unsafe for syscall interface with inotify
 		event := (*unix.InotifyEvent)(unsafe.Pointer(&buf[offset]))
 		offset += unix.SizeofInotifyEvent + int(event.Len)
 

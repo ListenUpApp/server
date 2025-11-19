@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/listenupapp/listenup-server/internal/auth"
+	"github.com/listenupapp/listenup-server/internal/config"
 	"github.com/listenupapp/listenup-server/internal/http/response"
 	"github.com/listenupapp/listenup-server/internal/scanner"
 	"github.com/listenupapp/listenup-server/internal/service"
@@ -44,13 +46,35 @@ func setupTestServer(t *testing.T) (server *Server, cleanup func()) {
 	// Create scanner with SSE manager.
 	fileScanner := scanner.NewScanner(s, sseManager, logger)
 
+	// Create test config.
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Name:      "Test Server",
+			LocalURL:  "http://localhost:8080",
+			RemoteURL: "",
+		},
+		Auth: config.AuthConfig{
+			AccessTokenDuration:  15 * time.Minute,
+			RefreshTokenDuration: 7 * 24 * time.Hour,
+			AccessTokenKey:       []byte("test-secret-key-for-testing-only-32b"),
+		},
+	}
+
 	// Create services.
-	instanceService := service.NewInstanceService(s, logger)
+	instanceService := service.NewInstanceService(s, logger, cfg)
 	bookService := service.NewBookService(s, fileScanner, logger)
 	syncService := service.NewSyncService(s, logger)
 
+	// Create auth services.
+	// Use a test key (32 bytes as hex = 64 hex chars)
+	testKeyHex := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	tokenService, err := auth.NewTokenService(testKeyHex, cfg.Auth.AccessTokenDuration, cfg.Auth.RefreshTokenDuration)
+	require.NoError(t, err)
+	sessionService := service.NewSessionService(s, tokenService, logger)
+	authService := service.NewAuthService(s, tokenService, sessionService, instanceService, logger)
+
 	// Create server.
-	server = NewServer(s, instanceService, bookService, syncService, sseHandler, logger)
+	server = NewServer(s, instanceService, authService, bookService, syncService, sseHandler, logger)
 
 	// Return cleanup function.
 	cleanup = func() {
@@ -109,7 +133,7 @@ func TestGetInstance_Success(t *testing.T) {
 	data, ok := result.Data.(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, createdInstance.ID, data["id"])
-	assert.Equal(t, false, data["has_root_user"])
+	assert.Equal(t, true, data["setup_required"])
 }
 
 func TestGetInstance_NotFound(t *testing.T) {
@@ -138,13 +162,13 @@ func TestGetInstance_WithRootUser(t *testing.T) {
 	server, cleanup := setupTestServer(t)
 	defer cleanup()
 
-	// Initialize instance and mark as setup.
+	// Initialize instance and set root user.
 	instanceService := server.instanceService
 	ctx := httptest.NewRequest(http.MethodGet, "/", http.NoBody).Context()
 	_, err := instanceService.InitializeInstance(ctx)
 	require.NoError(t, err)
 
-	err = instanceService.MarkInstanceAsSetup(ctx)
+	err = instanceService.SetRootUser(ctx, "user_test_root")
 	require.NoError(t, err)
 
 	// Make request.
@@ -164,7 +188,7 @@ func TestGetInstance_WithRootUser(t *testing.T) {
 	// Verify instance data.
 	data, ok := result.Data.(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, true, data["has_root_user"])
+	assert.Equal(t, false, data["setup_required"])
 }
 
 func TestServer_Routes(t *testing.T) {
@@ -253,7 +277,7 @@ func TestServer_JSONResponse(t *testing.T) {
 	data, ok := result.Data.(map[string]any)
 	require.True(t, ok)
 	assert.Contains(t, data, "id")
-	assert.Contains(t, data, "has_root_user")
+	assert.Contains(t, data, "setup_required")
 	assert.Contains(t, data, "created_at")
 	assert.Contains(t, data, "updated_at")
 
@@ -265,7 +289,7 @@ func TestServer_JSONResponse(t *testing.T) {
 
 	// Verify values match.
 	assert.Equal(t, instance.ID, data["id"])
-	assert.Equal(t, instance.HasRootUser, data["has_root_user"])
+	assert.Equal(t, instance.IsSetupRequired(), data["setup_required"])
 }
 
 func TestGetManifest_Success(t *testing.T) {

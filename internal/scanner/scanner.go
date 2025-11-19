@@ -14,6 +14,30 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
+// Extension sets for file classification (package-level to avoid allocations).
+var (
+	audioExtensions = map[string]bool{
+		".mp3":  true,
+		".m4a":  true,
+		".m4b":  true,
+		".flac": true,
+		".ogg":  true,
+		".opus": true,
+		".aac":  true,
+		".wma":  true,
+		".wav":  true,
+	}
+
+	imageExtensions = map[string]bool{
+		".jpg":  true,
+		".jpeg": true,
+		".png":  true,
+		".webp": true,
+		".gif":  true,
+		".bmp":  true,
+	}
+)
+
 // Scanner orchestrates the library scanning process.
 type Scanner struct {
 	store        *store.Store
@@ -68,7 +92,11 @@ func (s *Scanner) Scan(ctx context.Context, folderPath string, opts ScanOptions)
 	}
 
 	tracker := NewProgressTracker(opts.OnProgress)
-	result.Progress = &tracker.progress
+	defer tracker.Close() // Ensure cleanup of background goroutine
+
+	// Get initial progress snapshot
+	progress := tracker.Get()
+	result.Progress = &progress
 
 	if opts.Workers <= 0 {
 		opts.Workers = runtime.NumCPU()
@@ -200,14 +228,17 @@ func (s *Scanner) buildLibraryItems(ctx context.Context, grouped map[string][]Wa
 }
 
 // classifyFiles separates files into audio, image, and metadata categories.
+// Uses a single-pass algorithm for optimal performance.
 func (s *Scanner) classifyFiles(itemFiles []WalkResult) ([]AudioFileData, []ImageFileData, []MetadataFileData) {
-	var audioFiles []AudioFileData
-	var imageFiles []ImageFileData
-	var metadataFiles []MetadataFileData
+	// Preallocate with reasonable capacities based on expected ratios.
+	audioFiles := make([]AudioFileData, 0, len(itemFiles)/3)
+	imageFiles := make([]ImageFileData, 0, len(itemFiles)/10)
+	metadataFiles := make([]MetadataFileData, 0, len(itemFiles)/10)
 
 	for _, f := range itemFiles {
 		ext := strings.ToLower(filepath.Ext(f.Path))
 
+		// Check audio first (most common).
 		if IsAudioExt(ext) {
 			audioFiles = append(audioFiles, AudioFileData{
 				Path:     f.Path,
@@ -218,7 +249,11 @@ func (s *Scanner) classifyFiles(itemFiles []WalkResult) ([]AudioFileData, []Imag
 				ModTime:  time.UnixMilli(f.ModTime),
 				Inode:    f.Inode,
 			})
-		} else if isImageExt(ext) {
+			continue
+		}
+
+		// Check image (second most common).
+		if isImageExt(ext) {
 			imageFiles = append(imageFiles, ImageFileData{
 				Path:     f.Path,
 				RelPath:  f.RelPath,
@@ -228,7 +263,11 @@ func (s *Scanner) classifyFiles(itemFiles []WalkResult) ([]AudioFileData, []Imag
 				ModTime:  time.UnixMilli(f.ModTime),
 				Inode:    f.Inode,
 			})
-		} else if metadataType := classifyMetadataFile(f.Path); metadataType != MetadataTypeUnknown {
+			continue
+		}
+
+		// Check metadata (least common).
+		if metadataType := classifyMetadataFile(f.Path); metadataType != MetadataTypeUnknown {
 			metadataFiles = append(metadataFiles, MetadataFileData{
 				Path:     f.Path,
 				RelPath:  f.RelPath,
@@ -495,15 +534,7 @@ func (s *Scanner) ScanFolder(ctx context.Context, folderPath string, opts ScanOp
 
 // isImageExt checks if a file extension is for an image file.
 func isImageExt(ext string) bool {
-	imageExts := map[string]bool{
-		".jpg":  true,
-		".jpeg": true,
-		".png":  true,
-		".webp": true,
-		".gif":  true,
-		".bmp":  true,
-	}
-	return imageExts[ext]
+	return imageExtensions[ext]
 }
 
 // classifyMetadataFile determines the type of metadata file.
@@ -536,16 +567,5 @@ func classifyMetadataFile(path string) MetadataFileType {
 
 // IsAudioExt checks if a file extension is for an audio file.
 func IsAudioExt(ext string) bool {
-	audioExts := map[string]bool{
-		".mp3":  true,
-		".m4a":  true,
-		".m4b":  true,
-		".flac": true,
-		".ogg":  true,
-		".opus": true,
-		".aac":  true,
-		".wma":  true,
-		".wav":  true,
-	}
-	return audioExts[ext]
+	return audioExtensions[ext]
 }

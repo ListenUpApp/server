@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // Config holds the application configuration.
@@ -17,6 +18,8 @@ type Config struct {
 	Logger   LoggerConfig
 	Metadata MetadataConfig
 	Library  LibraryConfig
+	Server   ServerConfig
+	Auth     AuthConfig
 }
 
 // AppConfig holds application-level configuration.
@@ -40,6 +43,22 @@ type LibraryConfig struct {
 	AudiobookPath string
 }
 
+// ServerConfig holds server configuration.
+type ServerConfig struct {
+	Name      string
+	LocalURL  string // Optional
+	RemoteURL string // Optional
+}
+
+// AuthConfig holds authentication configuration.
+type AuthConfig struct {
+	// PASETO v4 symmetric key for access tokens (32 bytes)
+	AccessTokenKey []byte
+	// Session durations
+	AccessTokenDuration  time.Duration // e.g., 15m
+	RefreshTokenDuration time.Duration // e.g., 720h (30 days)
+}
+
 // LoadConfig loads configuration from multiple sources with precedence:
 // 1. Command-line flags (highest priority).
 // 2. Environment variables.
@@ -51,6 +70,14 @@ func LoadConfig() (*Config, error) {
 	logLevel := flag.String("log-level", "", "Log level (debug, info, warn, error)")
 	metadataPath := flag.String("metadata-path", "", "Base path for metadata storage")
 	audiobookPath := flag.String("audiobook-path", "", "Path to audiobook library")
+	serverName := flag.String("server-name", "", "Name for the server")
+	serverLocalURL := flag.String("local-url", "", "Internal server url")
+	serverRemoteURL := flag.String("remote-url", "", "Remote server url")
+
+	// Auth flags
+	accessTokenDuration := flag.String("access-token-duration", "", "Access token lifetime (e.g., 15m)")
+	refreshTokenDuration := flag.String("refresh-token-duration", "", "Refresh token lifetime (e.g., 720h)")
+
 	envFile := flag.String("env-file", ".env", "Path to .env file")
 
 	// Parse flags but don't exit on error - we want to handle it gracefully.
@@ -70,10 +97,36 @@ func LoadConfig() (*Config, error) {
 		Metadata: MetadataConfig{
 			BasePath: getConfigValue(*metadataPath, "METADATA_PATH", ""),
 		},
+
 		Library: LibraryConfig{
 			AudiobookPath: getConfigValue(*audiobookPath, "AUDIOBOOK_PATH", ""),
 		},
+
+		Server: ServerConfig{
+			Name:      getConfigValue(*serverName, "SERVER_NAME", "ListenUp Server"),
+			LocalURL:  getConfigValue(*serverLocalURL, "SERVER_LOCAL_URL", ""),
+			RemoteURL: getConfigValue(*serverRemoteURL, "SERVER_REMOTE_URL", ""),
+		},
+
+		Auth: AuthConfig{
+			AccessTokenKey: nil, // Will be set by auth.LoadOrGenerateKey in main
+		},
 	}
+
+	// Parse auth durations.
+	accessDurationStr := getConfigValue(*accessTokenDuration, "ACCESS_TOKEN_DURATION", "15m")
+	accessDuration, err := time.ParseDuration(accessDurationStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid access token duration %q: %w", accessDurationStr, err)
+	}
+	cfg.Auth.AccessTokenDuration = accessDuration
+
+	refreshDurationStr := getConfigValue(*refreshTokenDuration, "REFRESH_TOKEN_DURATION", "720h")
+	refreshDuration, err := time.ParseDuration(refreshDurationStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid refresh token duration %q: %w", refreshDurationStr, err)
+	}
+	cfg.Auth.RefreshTokenDuration = refreshDuration
 
 	// Expand and validate metadata path.
 	if err := cfg.expandMetadataPath(); err != nil {
@@ -125,6 +178,9 @@ func (c *Config) Validate() error {
 	if c.Library.AudiobookPath == "" {
 		return errors.New("audiobook path cannot be empty after expansion")
 	}
+
+	// Auth durations are validated during LoadConfig parsing.
+	// Auth key is set by auth.LoadOrGenerateKey in main.
 
 	return nil
 }
@@ -220,7 +276,7 @@ func getConfigValue(flagValue, envKey, defaultValue string) string {
 // loadEnvFile loads environment variables from a .env file.
 // Format: KEY=value (one per line, # for comments).
 func loadEnvFile(path string) error {
-	file, err := os.Open(path)
+	file, err := os.Open(path) //#nosec G304 -- Config file path from user input is expected
 	if err != nil {
 		return err
 	}

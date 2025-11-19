@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,6 +23,10 @@ func TestValidate_ValidConfig(t *testing.T) {
 		},
 		Library: LibraryConfig{
 			AudiobookPath: "/audiobooks",
+		},
+		Auth: AuthConfig{
+			AccessTokenDuration:  15 * time.Minute,
+			RefreshTokenDuration: 720 * time.Hour,
 		},
 	}
 
@@ -56,6 +61,10 @@ func TestValidate_AllEnvironments(t *testing.T) {
 				},
 				Library: LibraryConfig{
 					AudiobookPath: "/audiobooks",
+				},
+				Auth: AuthConfig{
+					AccessTokenDuration:  15 * time.Minute,
+					RefreshTokenDuration: 720 * time.Hour,
 				},
 			}
 
@@ -99,6 +108,10 @@ func TestValidate_AllLogLevels(t *testing.T) {
 				Library: LibraryConfig{
 					AudiobookPath: "/audiobooks",
 				},
+				Auth: AuthConfig{
+					AccessTokenDuration:  15 * time.Minute,
+					RefreshTokenDuration: 720 * time.Hour,
+				},
 			}
 
 			err := cfg.Validate()
@@ -121,6 +134,10 @@ func TestValidate_EmptyMetadataPath(t *testing.T) {
 		},
 		Metadata: MetadataConfig{
 			BasePath: "",
+		},
+		Auth: AuthConfig{
+			AccessTokenDuration:  15 * time.Minute,
+			RefreshTokenDuration: 720 * time.Hour,
 		},
 	}
 

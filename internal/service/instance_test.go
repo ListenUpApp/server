@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/listenupapp/listenup-server/internal/config"
 	"github.com/listenupapp/listenup-server/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -26,8 +27,17 @@ func setupTestService(t *testing.T) (*InstanceService, func()) { //nolint:gocrit
 	s, err := store.New(dbPath, nil, store.NewNoopEmitter())
 	require.NoError(t, err)
 
+	// Create test config.
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Name:      "Test Server",
+			LocalURL:  "http://localhost:8080",
+			RemoteURL: "",
+		},
+	}
+
 	// Create service.
-	service := NewInstanceService(s, nil)
+	service := NewInstanceService(s, nil, cfg)
 
 	// Return cleanup function.
 	cleanup := func() {
@@ -53,7 +63,8 @@ func TestInstanceService_GetInstance(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, instance)
 	assert.Equal(t, "server-001", instance.ID)
-	assert.False(t, instance.HasRootUser)
+	assert.True(t, instance.IsSetupRequired())
+	assert.Empty(t, instance.RootUserID)
 }
 
 func TestInstanceService_GetInstance_NotFound(t *testing.T) {
@@ -79,7 +90,8 @@ func TestInstanceService_InitializeInstance_Creates(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, instance)
 	assert.Equal(t, "server-001", instance.ID)
-	assert.False(t, instance.HasRootUser)
+	assert.True(t, instance.IsSetupRequired())
+	assert.Empty(t, instance.RootUserID)
 }
 
 func TestInstanceService_InitializeInstance_ReturnsExisting(t *testing.T) {
@@ -105,7 +117,7 @@ func TestInstanceService_IsInstanceSetup(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Initialize instance (HasRootUser=false).
+	// Initialize instance (setup required).
 	_, err := service.InitializeInstance(ctx)
 	require.NoError(t, err)
 
@@ -114,8 +126,8 @@ func TestInstanceService_IsInstanceSetup(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, isSetup)
 
-	// Mark as setup.
-	err = service.MarkInstanceAsSetup(ctx)
+	// Set root user to complete setup.
+	err = service.SetRootUser(ctx, "user_test_root")
 	require.NoError(t, err)
 
 	// Check setup status again.
@@ -136,7 +148,7 @@ func TestInstanceService_IsInstanceSetup_NotFound(t *testing.T) {
 	assert.False(t, isSetup, "Should return false when instance doesn't exist")
 }
 
-func TestInstanceService_MarkInstanceAsSetup(t *testing.T) {
+func TestInstanceService_SetRootUser(t *testing.T) {
 	service, cleanup := setupTestService(t)
 	defer cleanup()
 
@@ -145,48 +157,49 @@ func TestInstanceService_MarkInstanceAsSetup(t *testing.T) {
 	// Initialize instance.
 	instance, err := service.InitializeInstance(ctx)
 	require.NoError(t, err)
-	assert.False(t, instance.HasRootUser)
+	assert.True(t, instance.IsSetupRequired())
 
 	// Wait a moment to ensure UpdatedAt will be different.
 	time.Sleep(10 * time.Millisecond)
 
-	// Mark as setup.
-	err = service.MarkInstanceAsSetup(ctx)
+	// Set root user.
+	err = service.SetRootUser(ctx, "user_test_123")
 	require.NoError(t, err)
 
-	// Verify it's marked as setup.
+	// Verify root user is set.
 	updated, err := service.GetInstance(ctx)
 	require.NoError(t, err)
-	assert.True(t, updated.HasRootUser)
+	assert.Equal(t, "user_test_123", updated.RootUserID)
+	assert.False(t, updated.IsSetupRequired())
 	assert.True(t, updated.UpdatedAt.After(updated.CreatedAt))
 }
 
-func TestInstanceService_MarkInstanceAsSetup_AlreadySetup(t *testing.T) {
+func TestInstanceService_SetRootUser_AlreadySet(t *testing.T) {
 	service, cleanup := setupTestService(t)
 	defer cleanup()
 
 	ctx := context.Background()
 
-	// Initialize and mark as setup.
+	// Initialize and set root user.
 	_, err := service.InitializeInstance(ctx)
 	require.NoError(t, err)
 
-	err = service.MarkInstanceAsSetup(ctx)
+	err = service.SetRootUser(ctx, "user_first")
 	require.NoError(t, err)
 
-	// Try to mark as setup again - should fail.
-	err = service.MarkInstanceAsSetup(ctx)
+	// Try to set root user again - should fail.
+	err = service.SetRootUser(ctx, "user_second")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "already set up")
+	assert.Contains(t, err.Error(), "root user already configured")
 }
 
-func TestInstanceService_MarkInstanceAsSetup_NotFound(t *testing.T) {
+func TestInstanceService_SetRootUser_NotFound(t *testing.T) {
 	service, cleanup := setupTestService(t)
 	defer cleanup()
 
 	ctx := context.Background()
 
-	// Try to mark as setup before instance exists.
-	err := service.MarkInstanceAsSetup(ctx)
+	// Try to set root user before instance exists.
+	err := service.SetRootUser(ctx, "user_test")
 	assert.Error(t, err)
 }

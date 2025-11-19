@@ -1,3 +1,4 @@
+//nolint:dupl // Similar CRUD patterns for different entity types are acceptable
 package store
 
 import (
