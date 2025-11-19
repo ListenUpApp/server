@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/dgraph-io/badger/v4"
 	"github.com/listenupapp/listenup-server/internal/domain"
 )
 
@@ -68,15 +69,10 @@ func (s *Store) GetCollectionsContainingBook(ctx context.Context, bookID string)
 // A user can see a book if:
 //  1. The book is not in any collection (uncollected = public), OR
 //  2. The book is in at least one collection the user has access to
+// Uses reverse indexes for O(Collections + BookIDs) instead of O(Books × Collections).
 func (s *Store) GetBooksForUser(ctx context.Context, userID string) ([]*domain.Book, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
-	}
-
-	// Get all books (use ListAllBooks for no pagination)
-	allBooks, err := s.ListAllBooks(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list all books: %w", err)
 	}
 
 	// Get collections user has access to
@@ -85,58 +81,96 @@ func (s *Store) GetBooksForUser(ctx context.Context, userID string) ([]*domain.B
 		return nil, fmt.Errorf("get user collections: %w", err)
 	}
 
-	// Create a set of collection IDs the user has access to
-	userCollectionIDs := make(map[string]bool)
+	// Collect bookIDs from user's accessible collections using reverse index
+	accessibleBookIDs := make(map[string]bool)
+
 	for _, coll := range userCollections {
-		userCollectionIDs[coll.ID] = true
-	}
+		// Scan idx:books:collections:{collectionID}:{bookID}
+		prefix := []byte(fmt.Sprintf("%s%s:", bookCollectionsPrefix, coll.ID))
 
-	// Get all collections to determine which books are uncollected
-	var allCollections []*domain.Collection
-	libraries, err := s.ListLibraries(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list libraries: %w", err)
-	}
-	for _, lib := range libraries {
-		// Use internal method to get all collections without ACL filtering
-		collections, err := s.ListAllCollectionsByLibrary(ctx, lib.ID)
+		err := s.db.View(func(txn *badger.Txn) error {
+			opts := badger.DefaultIteratorOptions
+			opts.PrefetchValues = false // Only need keys
+			opts.Prefix = prefix
+
+			it := txn.NewIterator(opts)
+			defer it.Close()
+
+			for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+				key := it.Item().Key()
+				// Key format: idx:books:collections:{collectionID}:{bookID}
+				// Extract bookID (everything after last colon)
+				parts := string(key)
+				lastColon := -1
+				for i := len(parts) - 1; i >= 0; i-- {
+					if parts[i] == ':' {
+						lastColon = i
+						break
+					}
+				}
+				if lastColon != -1 && lastColon < len(parts)-1 {
+					bookID := parts[lastColon+1:]
+					accessibleBookIDs[bookID] = true
+				}
+			}
+			return nil
+		})
 		if err != nil {
-			continue
-		}
-		allCollections = append(allCollections, collections...)
-	}
-
-	// Create a map of bookID -> list of collection IDs containing it
-	bookToCollections := make(map[string][]string)
-	for _, coll := range allCollections {
-		for _, bookID := range coll.BookIDs {
-			bookToCollections[bookID] = append(bookToCollections[bookID], coll.ID)
+			return nil, fmt.Errorf("scan books in collection %s: %w", coll.ID, err)
 		}
 	}
 
-	// Filter books based on access rules
-	var accessibleBooks []*domain.Book
-	for _, book := range allBooks {
-		collectionIDs, inAnyCollection := bookToCollections[book.ID]
+	// Find uncollected books (books with no index entries)
+	// These are public to all users
+	bookPrefix := []byte("book:")
+	err = s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false // Only need keys to get IDs
+		opts.Prefix = bookPrefix
 
-		if !inAnyCollection {
-			// Book is not in any collection -> public to all users
-			accessibleBooks = append(accessibleBooks, book)
-			continue
-		}
+		it := txn.NewIterator(opts)
+		defer it.Close()
 
-		// Book is in at least one collection -> check if user has access to any of them
-		hasAccess := false
-		for _, collID := range collectionIDs {
-			if userCollectionIDs[collID] {
-				hasAccess = true
-				break
+		for it.Seek(bookPrefix); it.ValidForPrefix(bookPrefix); it.Next() {
+			key := it.Item().Key()
+			// Extract book ID from key: "book:{id}"
+			bookID := string(key[len(bookPrefix):])
+
+			// Check if this book has any collection index entries
+			// If not, it's uncollected and public
+			checkPrefix := []byte(fmt.Sprintf("%s%s:", collectionBooksPrefix, bookID))
+
+			checkOpts := badger.DefaultIteratorOptions
+			checkOpts.PrefetchValues = false
+			checkOpts.Prefix = checkPrefix
+
+			checkIt := txn.NewIterator(checkOpts)
+			checkIt.Seek(checkPrefix)
+			hasIndex := checkIt.ValidForPrefix(checkPrefix)
+			checkIt.Close()
+
+			if !hasIndex {
+				// Book is uncollected -> public
+				accessibleBookIDs[bookID] = true
 			}
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scan for uncollected books: %w", err)
+	}
 
-		if hasAccess {
-			accessibleBooks = append(accessibleBooks, book)
+	// Load only the accessible books
+	accessibleBooks := make([]*domain.Book, 0, len(accessibleBookIDs))
+	for bookID := range accessibleBookIDs {
+		book, err := s.getBookInternal(ctx, bookID)
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn("failed to load accessible book", "book_id", bookID, "error", err)
+			}
+			continue
 		}
+		accessibleBooks = append(accessibleBooks, book)
 	}
 
 	return accessibleBooks, nil
@@ -144,6 +178,7 @@ func (s *Store) GetBooksForUser(ctx context.Context, userID string) ([]*domain.B
 
 // CanUserAccessBook checks if a user can see a specific book.
 // Returns true if book is uncollected OR user has access to at least one collection containing it.
+// Uses reverse index for O(1) lookup.
 func (s *Store) CanUserAccessBook(ctx context.Context, userID, bookID string) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
@@ -155,18 +190,47 @@ func (s *Store) CanUserAccessBook(ctx context.Context, userID, bookID string) (b
 		return false, err
 	}
 
-	// Get collections containing this book
-	collections, err := s.GetCollectionsContainingBook(ctx, bookID)
+	// Check reverse index to see if book is in any collections
+	// idx:collections:books:{bookID}:{collectionID}
+	prefix := []byte(fmt.Sprintf("%s%s:", collectionBooksPrefix, bookID))
+
+	var bookCollectionIDs []string
+	err = s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false // Only need keys
+		opts.Prefix = prefix
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			key := it.Item().Key()
+			// Extract collectionID from key
+			parts := string(key)
+			lastColon := -1
+			for i := len(parts) - 1; i >= 0; i-- {
+				if parts[i] == ':' {
+					lastColon = i
+					break
+				}
+			}
+			if lastColon != -1 && lastColon < len(parts)-1 {
+				collectionID := parts[lastColon+1:]
+				bookCollectionIDs = append(bookCollectionIDs, collectionID)
+			}
+		}
+		return nil
+	})
 	if err != nil {
-		return false, fmt.Errorf("get collections for book: %w", err)
+		return false, fmt.Errorf("check book collections: %w", err)
 	}
 
 	// If book is in no collections, it's public
-	if len(collections) == 0 {
+	if len(bookCollectionIDs) == 0 {
 		return true, nil
 	}
 
-	// Check if user has access to at least one collection
+	// Get user's accessible collection IDs
 	userCollections, err := s.GetCollectionsForUser(ctx, userID)
 	if err != nil {
 		return false, fmt.Errorf("get user collections: %w", err)
@@ -179,8 +243,8 @@ func (s *Store) CanUserAccessBook(ctx context.Context, userID, bookID string) (b
 	}
 
 	// Check if any collection containing the book is accessible to user
-	for _, coll := range collections {
-		if userCollectionIDs[coll.ID] {
+	for _, collID := range bookCollectionIDs {
+		if userCollectionIDs[collID] {
 			return true, nil // User has access via at least one collection
 		}
 	}

@@ -18,8 +18,10 @@ const (
 	libraryPrefix    = "library:"
 	collectionPrefix = "collection:"
 
-	// Index Key.
+	// Index Keys.
 	collectionsByLibraryPrefix = "idx:collections:library:"
+	bookCollectionsPrefix      = "idx:books:collections:"   // Format: idx:books:collections:{collectionID}:{bookID}
+	collectionBooksPrefix      = "idx:collections:books:"   // Format: idx:collections:books:{bookID}:{collectionID}
 )
 
 var (
@@ -372,6 +374,21 @@ func (s *Store) CreateCollection(_ context.Context, coll *domain.Collection) err
 			return err
 		}
 
+		// Create reverse indexes for initial BookIDs
+		for _, bookID := range coll.BookIDs {
+			// idx:books:collections:{collectionID}:{bookID}
+			bookCollKey := []byte(fmt.Sprintf("%s%s:%s", bookCollectionsPrefix, coll.ID, bookID))
+			if err := txn.Set(bookCollKey, []byte{}); err != nil {
+				return fmt.Errorf("set book-collection index: %w", err)
+			}
+
+			// idx:collections:books:{bookID}:{collectionID}
+			collBookKey := []byte(fmt.Sprintf("%s%s:%s", collectionBooksPrefix, bookID, coll.ID))
+			if err := txn.Set(collBookKey, []byte{}); err != nil {
+				return fmt.Errorf("set collection-book index: %w", err)
+			}
+		}
+
 		return nil
 	})
 	if err != nil {
@@ -458,8 +475,9 @@ func (s *Store) UpdateCollection(ctx context.Context, coll *domain.Collection, u
 		return ErrPermissionDenied
 	}
 
-	if err := s.set(key, coll); err != nil {
-		return fmt.Errorf("update collection: %w", err)
+	// Use internal method to handle index updates
+	if err := s.updateCollectionInternal(ctx, coll); err != nil {
+		return err
 	}
 
 	if s.logger != nil {
@@ -474,20 +492,80 @@ func (s *Store) UpdateCollection(ctx context.Context, coll *domain.Collection, u
 
 // updateCollectionInternal updates a collection without access control checks.
 // For internal store use only.
-func (s *Store) updateCollectionInternal(_ context.Context, coll *domain.Collection) error {
+func (s *Store) updateCollectionInternal(ctx context.Context, coll *domain.Collection) error {
 	key := []byte(collectionPrefix + coll.ID)
 
-	exists, err := s.exists(key)
+	// Get old collection state to detect BookIDs changes
+	oldColl, err := s.getCollectionInternal(ctx, coll.ID)
 	if err != nil {
-		return fmt.Errorf("check collection exists: %w", err)
+		return err
 	}
 
-	if !exists {
-		return ErrCollectionNotFound
-	}
+	// Use transaction to update collection and indexes atomically
+	err = s.db.Update(func(txn *badger.Txn) error {
+		// Marshal and update collection
+		data, err := json.Marshal(coll)
+		if err != nil {
+			return fmt.Errorf("marshal collection: %w", err)
+		}
 
-	if err := s.set(key, coll); err != nil {
-		return fmt.Errorf("update collection: %w", err)
+		if err := txn.Set(key, data); err != nil {
+			return fmt.Errorf("set collection: %w", err)
+		}
+
+		// Update reverse indexes for BookIDs changes
+		// Build sets for efficient comparison
+		oldBooks := make(map[string]bool)
+		for _, bookID := range oldColl.BookIDs {
+			oldBooks[bookID] = true
+		}
+
+		newBooks := make(map[string]bool)
+		for _, bookID := range coll.BookIDs {
+			newBooks[bookID] = true
+		}
+
+		// Add indexes for new books
+		for bookID := range newBooks {
+			if !oldBooks[bookID] {
+				// Book was added to collection
+				// idx:books:collections:{collectionID}:{bookID}
+				bookCollKey := []byte(fmt.Sprintf("%s%s:%s", bookCollectionsPrefix, coll.ID, bookID))
+				if err := txn.Set(bookCollKey, []byte{}); err != nil {
+					return fmt.Errorf("set book-collection index: %w", err)
+				}
+
+				// idx:collections:books:{bookID}:{collectionID}
+				collBookKey := []byte(fmt.Sprintf("%s%s:%s", collectionBooksPrefix, bookID, coll.ID))
+				if err := txn.Set(collBookKey, []byte{}); err != nil {
+					return fmt.Errorf("set collection-book index: %w", err)
+				}
+			}
+		}
+
+		// Remove indexes for removed books
+		for bookID := range oldBooks {
+			if !newBooks[bookID] {
+				// Book was removed from collection
+				// idx:books:collections:{collectionID}:{bookID}
+				bookCollKey := []byte(fmt.Sprintf("%s%s:%s", bookCollectionsPrefix, coll.ID, bookID))
+				if err := txn.Delete(bookCollKey); err != nil {
+					return fmt.Errorf("delete book-collection index: %w", err)
+				}
+
+				// idx:collections:books:{bookID}:{collectionID}
+				collBookKey := []byte(fmt.Sprintf("%s%s:%s", collectionBooksPrefix, bookID, coll.ID))
+				if err := txn.Delete(collBookKey); err != nil {
+					return fmt.Errorf("delete collection-book index: %w", err)
+				}
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("update collection transaction: %w", err)
 	}
 
 	return nil
@@ -571,7 +649,32 @@ func (s *Store) deleteCollectionInternal(ctx context.Context, id string) error {
 			return err
 		}
 
-		return txn.Set(indexKey, indexData)
+		if err := txn.Set(indexKey, indexData); err != nil {
+			return err
+		}
+
+		// Delete all book-collection reverse indexes
+		for _, bookID := range coll.BookIDs {
+			// idx:books:collections:{collectionID}:{bookID}
+			bookCollKey := []byte(fmt.Sprintf("%s%s:%s", bookCollectionsPrefix, coll.ID, bookID))
+			if err := txn.Delete(bookCollKey); err != nil {
+				// Ignore if key doesn't exist
+				if !errors.Is(err, badger.ErrKeyNotFound) {
+					return fmt.Errorf("delete book-collection index: %w", err)
+				}
+			}
+
+			// idx:collections:books:{bookID}:{collectionID}
+			collBookKey := []byte(fmt.Sprintf("%s%s:%s", collectionBooksPrefix, bookID, coll.ID))
+			if err := txn.Delete(collBookKey); err != nil {
+				// Ignore if key doesn't exist
+				if !errors.Is(err, badger.ErrKeyNotFound) {
+					return fmt.Errorf("delete collection-book index: %w", err)
+				}
+			}
+		}
+
+		return nil
 	})
 	if err != nil {
 		return fmt.Errorf("delete collection: %w", err)
@@ -734,26 +837,60 @@ func (s *Store) removeBookFromCollectionInternal(ctx context.Context, collection
 
 // GetCollectionsForBook returns all collections containing a specific book.
 // No access control - used for determining if a book is uncollected.
+// Uses reverse index for O(1) lookup.
 func (s *Store) GetCollectionsForBook(ctx context.Context, bookID string) ([]*domain.Collection, error) {
-	var matchingCollections []*domain.Collection
-
-	// Scan all collections (no reverse index yet).
-	libraries, err := s.ListLibraries(ctx)
-	if err != nil {
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
-	for _, lib := range libraries {
-		collections, err := s.ListAllCollectionsByLibrary(ctx, lib.ID)
-		if err != nil {
-			continue
-		}
+	var collectionIDs []string
 
-		for _, coll := range collections {
-			if coll.ContainsBook(bookID) {
-				matchingCollections = append(matchingCollections, coll)
+	// Use reverse index: idx:collections:books:{bookID}:{collectionID}
+	prefix := []byte(fmt.Sprintf("%s%s:", collectionBooksPrefix, bookID))
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false // We only need keys
+		opts.Prefix = prefix
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			key := it.Item().Key()
+			// Key format: idx:collections:books:{bookID}:{collectionID}
+			// Extract collectionID (everything after the last colon)
+			parts := string(key)
+			lastColon := -1
+			for i := len(parts) - 1; i >= 0; i-- {
+				if parts[i] == ':' {
+					lastColon = i
+					break
+				}
+			}
+			if lastColon != -1 && lastColon < len(parts)-1 {
+				collectionID := parts[lastColon+1:]
+				collectionIDs = append(collectionIDs, collectionID)
 			}
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scan collection-book index: %w", err)
 	}
-	return matchingCollections, nil
+
+	// Load the collections
+	collections := make([]*domain.Collection, 0, len(collectionIDs))
+	for _, collID := range collectionIDs {
+		coll, err := s.getCollectionInternal(ctx, collID)
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn("failed to get collection from index", "collection_id", collID, "error", err)
+			}
+			continue
+		}
+		collections = append(collections, coll)
+	}
+
+	return collections, nil
 }

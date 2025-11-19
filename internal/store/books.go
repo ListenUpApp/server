@@ -699,7 +699,7 @@ func (s *Store) GetAllBookIDs(_ context.Context) ([]string, error) {
 func (s *Store) GetBooksByCollectionPaginated(ctx context.Context, userID, collectionID string, params PaginationParams) (*PaginatedResult[*domain.Book], error) {
 	params.Validate()
 
-	coll, err := s.GetCollection(ctx, userID, collectionID)
+	coll, err := s.GetCollection(ctx, collectionID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -731,7 +731,7 @@ func (s *Store) GetBooksByCollectionPaginated(ctx context.Context, userID, colle
 	// Fetch Books.
 	books := make([]*domain.Book, 0, len(pageBookIDs))
 	for _, bookID := range pageBookIDs {
-		book, err := s.GetBook(ctx, userID, bookID)
+		book, err := s.GetBook(ctx, bookID, userID)
 		if err != nil {
 			if s.logger != nil {
 				s.logger.Warn("failed to get book from collection", "book_id", bookID, "collection_id", collectionID, "error", err)

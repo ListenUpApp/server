@@ -24,7 +24,7 @@ func (s *Server) handleListSeries(w http.ResponseWriter, r *http.Request) {
 
 	params := parsePaginationParams(r)
 
-	series, err := s.syncService.GetSeriesForSync(ctx, params)
+	series, err := s.syncService.GetSeriesForSync(ctx, userID, params)
 	if err != nil {
 		s.logger.Error("Failed to list series", "error", err, "user_id", userID)
 		response.InternalError(w, "Failed to retrieve series", s.logger)
@@ -112,9 +112,16 @@ func (s *Server) handleGetSeriesBooks(w http.ResponseWriter, r *http.Request) {
 // handleSyncSeries handles GET /api/v1/sync/series for syncing series.
 func (s *Server) handleSyncSeries(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	userID := getUserID(ctx)
+
+	if userID == "" {
+		response.Unauthorized(w, "Authentication required", s.logger)
+		return
+	}
+
 	params := parsePaginationParams(r)
 
-	series, err := s.syncService.GetSeriesForSync(ctx, params)
+	series, err := s.syncService.GetSeriesForSync(ctx, userID, params)
 	if err != nil {
 		s.logger.Error("Failed to sync series", "error", err)
 		response.InternalError(w, "Failed to sync series", s.logger)

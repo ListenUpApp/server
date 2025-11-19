@@ -142,8 +142,8 @@ func TestDeleteLibrary(t *testing.T) {
 	coll := &domain.Collection{
 		ID:        "coll-001",
 		LibraryID: lib.ID,
+		OwnerID:   testUserID,
 		Name:      "Test Collection",
-		Type:      domain.CollectionTypeCustom,
 		BookIDs:   []string{},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -160,7 +160,7 @@ func TestDeleteLibrary(t *testing.T) {
 	assert.ErrorIs(t, err, ErrLibraryNotFound)
 
 	// Verify collection is gone.
-	_, err = store.GetCollection(ctx, coll.ID)
+	_, err = store.GetCollection(ctx, coll.ID, testUserID)
 	assert.ErrorIs(t, err, ErrCollectionNotFound)
 }
 
@@ -252,8 +252,8 @@ func TestCreateCollection(t *testing.T) {
 	coll := &domain.Collection{
 		ID:        "coll-001",
 		LibraryID: lib.ID,
+		OwnerID:   testUserID,
 		Name:      "Test Collection",
-		Type:      domain.CollectionTypeCustom,
 		BookIDs:   []string{},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -262,11 +262,10 @@ func TestCreateCollection(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify collection was created.
-	retrieved, err := store.GetCollection(ctx, coll.ID)
+	retrieved, err := store.GetCollection(ctx, coll.ID, testUserID)
 	require.NoError(t, err)
 	assert.Equal(t, coll.ID, retrieved.ID)
 	assert.Equal(t, coll.Name, retrieved.Name)
-	assert.Equal(t, coll.Type, retrieved.Type)
 	assert.Equal(t, coll.LibraryID, retrieved.LibraryID)
 }
 
@@ -291,8 +290,8 @@ func TestCreateCollection_Duplicate(t *testing.T) {
 	coll := &domain.Collection{
 		ID:        "coll-001",
 		LibraryID: lib.ID,
+		OwnerID:   testUserID,
 		Name:      "Test Collection",
-		Type:      domain.CollectionTypeCustom,
 		BookIDs:   []string{},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -312,7 +311,7 @@ func TestGetCollection_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	_, err := store.GetCollection(ctx, "nonexistent")
+	_, err := store.GetCollection(ctx, "nonexistent", testUserID)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrCollectionNotFound)
 }
@@ -337,8 +336,8 @@ func TestUpdateCollection(t *testing.T) {
 	coll := &domain.Collection{
 		ID:        "coll-001",
 		LibraryID: lib.ID,
+		OwnerID:   testUserID,
 		Name:      "Test Collection",
-		Type:      domain.CollectionTypeCustom,
 		BookIDs:   []string{},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -349,11 +348,11 @@ func TestUpdateCollection(t *testing.T) {
 	// Update collection.
 	coll.Name = "Updated Collection"
 	coll.BookIDs = []string{"book-001", "book-002"}
-	err = store.UpdateCollection(ctx, coll)
+	err = store.UpdateCollection(ctx, coll, testUserID)
 	require.NoError(t, err)
 
 	// Verify update.
-	retrieved, err := store.GetCollection(ctx, coll.ID)
+	retrieved, err := store.GetCollection(ctx, coll.ID, testUserID)
 	require.NoError(t, err)
 	assert.Equal(t, "Updated Collection", retrieved.Name)
 	assert.Len(t, retrieved.BookIDs, 2)
@@ -368,14 +367,14 @@ func TestUpdateCollection_NotFound(t *testing.T) {
 	coll := &domain.Collection{
 		ID:        "nonexistent",
 		LibraryID: "lib-001",
+		OwnerID:   testUserID,
 		Name:      "Test Collection",
-		Type:      domain.CollectionTypeCustom,
 		BookIDs:   []string{},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
 
-	err := store.UpdateCollection(ctx, coll)
+	err := store.UpdateCollection(ctx, coll, testUserID)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrCollectionNotFound)
 }
@@ -400,8 +399,8 @@ func TestDeleteCollection(t *testing.T) {
 	coll := &domain.Collection{
 		ID:        "coll-001",
 		LibraryID: lib.ID,
+		OwnerID:   testUserID,
 		Name:      "Test Collection",
-		Type:      domain.CollectionTypeCustom,
 		BookIDs:   []string{},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -410,11 +409,11 @@ func TestDeleteCollection(t *testing.T) {
 	require.NoError(t, err)
 
 	// Delete collection.
-	err = store.DeleteCollection(ctx, coll.ID)
+	err = store.DeleteCollection(ctx, coll.ID, testUserID)
 	require.NoError(t, err)
 
 	// Verify collection is gone.
-	_, err = store.GetCollection(ctx, coll.ID)
+	_, err = store.GetCollection(ctx, coll.ID, testUserID)
 	assert.ErrorIs(t, err, ErrCollectionNotFound)
 }
 
@@ -435,12 +434,13 @@ func TestDeleteCollection_SystemCollection(t *testing.T) {
 	err := store.CreateLibrary(ctx, lib)
 	require.NoError(t, err)
 
-	// Create system collection (default).
+	// Create system collection (inbox).
 	coll := &domain.Collection{
 		ID:        "coll-001",
 		LibraryID: lib.ID,
-		Name:      "Default Collection",
-		Type:      domain.CollectionTypeDefault,
+		OwnerID:   testUserID,
+		Name:      "Inbox",
+		IsInbox:   true, // Mark as system collection
 		BookIDs:   []string{},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -449,7 +449,7 @@ func TestDeleteCollection_SystemCollection(t *testing.T) {
 	require.NoError(t, err)
 
 	// Try to delete system collection.
-	err = store.DeleteCollection(ctx, coll.ID)
+	err = store.DeleteCollection(ctx, coll.ID, testUserID)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot delete system collection")
 }
@@ -472,7 +472,7 @@ func TestListCollectionsByLibrary(t *testing.T) {
 	require.NoError(t, err)
 
 	// Empty list.
-	collections, err := store.ListCollectionsByLibrary(ctx, lib.ID)
+	collections, err := store.ListCollectionsByLibrary(ctx, lib.ID, testUserID)
 	require.NoError(t, err)
 	assert.Empty(t, collections)
 
@@ -480,8 +480,8 @@ func TestListCollectionsByLibrary(t *testing.T) {
 	coll1 := &domain.Collection{
 		ID:        "coll-001",
 		LibraryID: lib.ID,
+		OwnerID:   testUserID,
 		Name:      "Collection 1",
-		Type:      domain.CollectionTypeCustom,
 		BookIDs:   []string{},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -489,8 +489,8 @@ func TestListCollectionsByLibrary(t *testing.T) {
 	coll2 := &domain.Collection{
 		ID:        "coll-002",
 		LibraryID: lib.ID,
+		OwnerID:   testUserID,
 		Name:      "Collection 2",
-		Type:      domain.CollectionTypeCustom,
 		BookIDs:   []string{},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -502,147 +502,11 @@ func TestListCollectionsByLibrary(t *testing.T) {
 	require.NoError(t, err)
 
 	// List collections.
-	collections, err = store.ListCollectionsByLibrary(ctx, lib.ID)
+	collections, err = store.ListCollectionsByLibrary(ctx, lib.ID, testUserID)
 	require.NoError(t, err)
 	assert.Len(t, collections, 2)
 }
 
-func TestGetCollectionByType(t *testing.T) {
-	store, cleanup := setupTestStore(t)
-	defer cleanup()
-
-	ctx := context.Background()
-
-	// Create library.
-	lib := &domain.Library{
-		ID:        "lib-001",
-		Name:      "Test Library",
-		ScanPaths: []string{"/path/to/audiobooks"},
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-	err := store.CreateLibrary(ctx, lib)
-	require.NoError(t, err)
-
-	// Create default collection.
-	defaultColl := &domain.Collection{
-		ID:        "coll-default",
-		LibraryID: lib.ID,
-		Name:      "Default Collection",
-		Type:      domain.CollectionTypeDefault,
-		BookIDs:   []string{},
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-	err = store.CreateCollection(ctx, defaultColl)
-	require.NoError(t, err)
-
-	// Create inbox collection.
-	inboxColl := &domain.Collection{
-		ID:        "coll-inbox",
-		LibraryID: lib.ID,
-		Name:      "Inbox Collection",
-		Type:      domain.CollectionTypeInbox,
-		BookIDs:   []string{},
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-	err = store.CreateCollection(ctx, inboxColl)
-	require.NoError(t, err)
-
-	// Get default collection.
-	retrieved, err := store.GetCollectionByType(ctx, lib.ID, domain.CollectionTypeDefault)
-	require.NoError(t, err)
-	assert.Equal(t, defaultColl.ID, retrieved.ID)
-	assert.Equal(t, domain.CollectionTypeDefault, retrieved.Type)
-
-	// Get inbox collection.
-	retrieved, err = store.GetCollectionByType(ctx, lib.ID, domain.CollectionTypeInbox)
-	require.NoError(t, err)
-	assert.Equal(t, inboxColl.ID, retrieved.ID)
-	assert.Equal(t, domain.CollectionTypeInbox, retrieved.Type)
-}
-
-func TestGetCollectionByType_NotFound(t *testing.T) {
-	store, cleanup := setupTestStore(t)
-	defer cleanup()
-
-	ctx := context.Background()
-
-	_, err := store.GetCollectionByType(ctx, "lib-001", domain.CollectionTypeDefault)
-	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrCollectionNotFound)
-}
-
-func TestGetDefaultCollection(t *testing.T) {
-	store, cleanup := setupTestStore(t)
-	defer cleanup()
-
-	ctx := context.Background()
-
-	// Create library and default collection.
-	lib := &domain.Library{
-		ID:        "lib-001",
-		Name:      "Test Library",
-		ScanPaths: []string{"/path/to/audiobooks"},
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-	err := store.CreateLibrary(ctx, lib)
-	require.NoError(t, err)
-
-	defaultColl := &domain.Collection{
-		ID:        "coll-default",
-		LibraryID: lib.ID,
-		Name:      "Default Collection",
-		Type:      domain.CollectionTypeDefault,
-		BookIDs:   []string{},
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-	err = store.CreateCollection(ctx, defaultColl)
-	require.NoError(t, err)
-
-	// Get default collection.
-	retrieved, err := store.GetDefaultCollection(ctx, lib.ID)
-	require.NoError(t, err)
-	assert.Equal(t, defaultColl.ID, retrieved.ID)
-}
-
-func TestGetInboxCollection(t *testing.T) {
-	store, cleanup := setupTestStore(t)
-	defer cleanup()
-
-	ctx := context.Background()
-
-	// Create library and inbox collection.
-	lib := &domain.Library{
-		ID:        "lib-001",
-		Name:      "Test Library",
-		ScanPaths: []string{"/path/to/audiobooks"},
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-	err := store.CreateLibrary(ctx, lib)
-	require.NoError(t, err)
-
-	inboxColl := &domain.Collection{
-		ID:        "coll-inbox",
-		LibraryID: lib.ID,
-		Name:      "Inbox Collection",
-		Type:      domain.CollectionTypeInbox,
-		BookIDs:   []string{},
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-	err = store.CreateCollection(ctx, inboxColl)
-	require.NoError(t, err)
-
-	// Get inbox collection.
-	retrieved, err := store.GetInboxCollection(ctx, lib.ID)
-	require.NoError(t, err)
-	assert.Equal(t, inboxColl.ID, retrieved.ID)
-}
 
 // Test Book-Collection Operations.
 
@@ -666,8 +530,8 @@ func TestAddBookToCollection(t *testing.T) {
 	coll := &domain.Collection{
 		ID:        "coll-001",
 		LibraryID: lib.ID,
+		OwnerID:   testUserID,
 		Name:      "Test Collection",
-		Type:      domain.CollectionTypeCustom,
 		BookIDs:   []string{},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -676,11 +540,11 @@ func TestAddBookToCollection(t *testing.T) {
 	require.NoError(t, err)
 
 	// Add book to collection.
-	err = store.AddBookToCollection(ctx, "book-001", coll.ID)
+	err = store.AddBookToCollection(ctx, "book-001", coll.ID, testUserID)
 	require.NoError(t, err)
 
 	// Verify book was added.
-	retrieved, err := store.GetCollection(ctx, coll.ID)
+	retrieved, err := store.GetCollection(ctx, coll.ID, testUserID)
 	require.NoError(t, err)
 	assert.Len(t, retrieved.BookIDs, 1)
 	assert.Contains(t, retrieved.BookIDs, "book-001")
@@ -706,8 +570,8 @@ func TestAddBookToCollection_Duplicate(t *testing.T) {
 	coll := &domain.Collection{
 		ID:        "coll-001",
 		LibraryID: lib.ID,
+		OwnerID:   testUserID,
 		Name:      "Test Collection",
-		Type:      domain.CollectionTypeCustom,
 		BookIDs:   []string{},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -716,13 +580,13 @@ func TestAddBookToCollection_Duplicate(t *testing.T) {
 	require.NoError(t, err)
 
 	// Add book twice.
-	err = store.AddBookToCollection(ctx, "book-001", coll.ID)
+	err = store.AddBookToCollection(ctx, "book-001", coll.ID, testUserID)
 	require.NoError(t, err)
-	err = store.AddBookToCollection(ctx, "book-001", coll.ID)
+	err = store.AddBookToCollection(ctx, "book-001", coll.ID, testUserID)
 	require.NoError(t, err) // Should not error
 
 	// Verify book appears only once.
-	retrieved, err := store.GetCollection(ctx, coll.ID)
+	retrieved, err := store.GetCollection(ctx, coll.ID, testUserID)
 	require.NoError(t, err)
 	assert.Len(t, retrieved.BookIDs, 1)
 }
@@ -747,8 +611,8 @@ func TestRemoveBookFromCollection(t *testing.T) {
 	coll := &domain.Collection{
 		ID:        "coll-001",
 		LibraryID: lib.ID,
+		OwnerID:   testUserID,
 		Name:      "Test Collection",
-		Type:      domain.CollectionTypeCustom,
 		BookIDs:   []string{"book-001", "book-002", "book-003"},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -757,11 +621,11 @@ func TestRemoveBookFromCollection(t *testing.T) {
 	require.NoError(t, err)
 
 	// Remove book from collection.
-	err = store.RemoveBookFromCollection(ctx, "book-002", coll.ID)
+	err = store.RemoveBookFromCollection(ctx, "book-002", coll.ID, testUserID)
 	require.NoError(t, err)
 
 	// Verify book was removed.
-	retrieved, err := store.GetCollection(ctx, coll.ID)
+	retrieved, err := store.GetCollection(ctx, coll.ID, testUserID)
 	require.NoError(t, err)
 	assert.Len(t, retrieved.BookIDs, 2)
 	assert.Contains(t, retrieved.BookIDs, "book-001")
@@ -799,8 +663,8 @@ func TestGetCollectionsForBook(t *testing.T) {
 	coll1 := &domain.Collection{
 		ID:        "coll-001",
 		LibraryID: lib1.ID,
+		OwnerID:   testUserID,
 		Name:      "Collection 1",
-		Type:      domain.CollectionTypeCustom,
 		BookIDs:   []string{"book-001", "book-002"},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -808,8 +672,8 @@ func TestGetCollectionsForBook(t *testing.T) {
 	coll2 := &domain.Collection{
 		ID:        "coll-002",
 		LibraryID: lib1.ID,
+		OwnerID:   testUserID,
 		Name:      "Collection 2",
-		Type:      domain.CollectionTypeCustom,
 		BookIDs:   []string{"book-002", "book-003"},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -817,8 +681,8 @@ func TestGetCollectionsForBook(t *testing.T) {
 	coll3 := &domain.Collection{
 		ID:        "coll-003",
 		LibraryID: lib2.ID,
+		OwnerID:   testUserID,
 		Name:      "Collection 3",
-		Type:      domain.CollectionTypeCustom,
 		BookIDs:   []string{"book-004"},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -877,8 +741,8 @@ func TestLibrary_Persistence(t *testing.T) {
 	coll := &domain.Collection{
 		ID:        "coll-001",
 		LibraryID: lib.ID,
+		OwnerID:   testUserID,
 		Name:      "Test Collection",
-		Type:      domain.CollectionTypeCustom,
 		BookIDs:   []string{"book-001", "book-002"},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -901,7 +765,7 @@ func TestLibrary_Persistence(t *testing.T) {
 	assert.Equal(t, lib.ID, retrievedLib.ID)
 	assert.Equal(t, lib.Name, retrievedLib.Name)
 
-	retrievedColl, err := store2.GetCollection(ctx, coll.ID)
+	retrievedColl, err := store2.GetCollection(ctx, coll.ID, testUserID)
 	require.NoError(t, err)
 	assert.Equal(t, coll.ID, retrievedColl.ID)
 	assert.Len(t, retrievedColl.BookIDs, 2)
@@ -915,14 +779,14 @@ func TestEnsureLibrary_NewLibrary(t *testing.T) {
 
 	ctx := context.Background()
 
-	result, err := store.EnsureLibrary(ctx, "/path/to/audiobooks")
+	result, err := store.EnsureLibrary(ctx, "/path/to/audiobooks", testUserID)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
 	// Verify result structure.
 	assert.True(t, result.IsNewLibrary)
 	assert.NotNil(t, result.Library)
-	assert.NotNil(t, result.DefaultCollection)
+	assert.NotNil(t, result.InboxCollection)
 	assert.NotNil(t, result.InboxCollection)
 
 	// Verify library details.
@@ -935,30 +799,16 @@ func TestEnsureLibrary_NewLibrary(t *testing.T) {
 	assert.False(t, result.Library.CreatedAt.IsZero())
 	assert.False(t, result.Library.UpdatedAt.IsZero())
 
-	// Verify default collection.
-	assert.NotEmpty(t, result.DefaultCollection.ID)
-	assert.Contains(t, result.DefaultCollection.ID, "coll-")
-	assert.Len(t, result.DefaultCollection.ID, len("coll-")+21, "Should have NanoID format: prefix + 21 chars")
-	assert.Equal(t, result.Library.ID, result.DefaultCollection.LibraryID)
-	assert.Equal(t, "All Books", result.DefaultCollection.Name)
-	assert.Equal(t, domain.CollectionTypeDefault, result.DefaultCollection.Type)
-	assert.Empty(t, result.DefaultCollection.BookIDs)
-	assert.False(t, result.DefaultCollection.CreatedAt.IsZero())
-	assert.False(t, result.DefaultCollection.UpdatedAt.IsZero())
-
 	// Verify inbox collection.
 	assert.NotEmpty(t, result.InboxCollection.ID)
 	assert.Contains(t, result.InboxCollection.ID, "coll-")
 	assert.Len(t, result.InboxCollection.ID, len("coll-")+21, "Should have NanoID format: prefix + 21 chars")
 	assert.Equal(t, result.Library.ID, result.InboxCollection.LibraryID)
 	assert.Equal(t, "Inbox", result.InboxCollection.Name)
-	assert.Equal(t, domain.CollectionTypeInbox, result.InboxCollection.Type)
+	assert.True(t, result.InboxCollection.IsInbox, "Inbox collection should have IsInbox = true")
 	assert.Empty(t, result.InboxCollection.BookIDs)
 	assert.False(t, result.InboxCollection.CreatedAt.IsZero())
 	assert.False(t, result.InboxCollection.UpdatedAt.IsZero())
-
-	// Verify collections have different IDs.
-	assert.NotEqual(t, result.DefaultCollection.ID, result.InboxCollection.ID)
 }
 
 func TestEnsureLibrary_ExistingLibrary(t *testing.T) {
@@ -968,16 +818,16 @@ func TestEnsureLibrary_ExistingLibrary(t *testing.T) {
 	ctx := context.Background()
 
 	// First call - creates library.
-	result1, err := store.EnsureLibrary(ctx, "/path/to/audiobooks")
+	result1, err := store.EnsureLibrary(ctx, "/path/to/audiobooks", testUserID)
 	require.NoError(t, err)
 	assert.True(t, result1.IsNewLibrary)
 
 	originalID := result1.Library.ID
-	originalDefaultID := result1.DefaultCollection.ID
+	originalDefaultID := result1.InboxCollection.ID
 	originalInboxID := result1.InboxCollection.ID
 
 	// Second call - returns existing library.
-	result2, err := store.EnsureLibrary(ctx, "/path/to/audiobooks")
+	result2, err := store.EnsureLibrary(ctx, "/path/to/audiobooks", testUserID)
 	require.NoError(t, err)
 	assert.False(t, result2.IsNewLibrary)
 
@@ -988,7 +838,7 @@ func TestEnsureLibrary_ExistingLibrary(t *testing.T) {
 	assert.Equal(t, "/path/to/audiobooks", result2.Library.ScanPaths[0])
 
 	// Should be the same collections.
-	assert.Equal(t, originalDefaultID, result2.DefaultCollection.ID)
+	assert.Equal(t, originalDefaultID, result2.InboxCollection.ID)
 	assert.Equal(t, originalInboxID, result2.InboxCollection.ID)
 }
 
@@ -999,7 +849,7 @@ func TestEnsureLibrary_AddsNewScanPath(t *testing.T) {
 	ctx := context.Background()
 
 	// First call.
-	result1, err := store.EnsureLibrary(ctx, "/path/one")
+	result1, err := store.EnsureLibrary(ctx, "/path/one", testUserID)
 	require.NoError(t, err)
 	assert.True(t, result1.IsNewLibrary)
 	assert.Len(t, result1.Library.ScanPaths, 1)
@@ -1008,7 +858,7 @@ func TestEnsureLibrary_AddsNewScanPath(t *testing.T) {
 	originalID := result1.Library.ID
 
 	// Second call with new path.
-	result2, err := store.EnsureLibrary(ctx, "/path/two")
+	result2, err := store.EnsureLibrary(ctx, "/path/two", testUserID)
 	require.NoError(t, err)
 	assert.False(t, result2.IsNewLibrary)
 	assert.Equal(t, originalID, result2.Library.ID)
@@ -1017,7 +867,7 @@ func TestEnsureLibrary_AddsNewScanPath(t *testing.T) {
 	assert.Contains(t, result2.Library.ScanPaths, "/path/two")
 
 	// Third call with another new path.
-	result3, err := store.EnsureLibrary(ctx, "/path/three")
+	result3, err := store.EnsureLibrary(ctx, "/path/three", testUserID)
 	require.NoError(t, err)
 	assert.False(t, result3.IsNewLibrary)
 	assert.Equal(t, originalID, result3.Library.ID)
@@ -1035,13 +885,13 @@ func TestEnsureLibrary_DoesNotDuplicatePaths(t *testing.T) {
 	scanPath := "/test/audiobooks"
 
 	// First call.
-	result1, err := store.EnsureLibrary(ctx, scanPath)
+	result1, err := store.EnsureLibrary(ctx, scanPath, testUserID)
 	require.NoError(t, err)
 	assert.True(t, result1.IsNewLibrary)
 	assert.Len(t, result1.Library.ScanPaths, 1)
 
 	// Second call with same path should not duplicate.
-	result2, err := store.EnsureLibrary(ctx, scanPath)
+	result2, err := store.EnsureLibrary(ctx, scanPath, testUserID)
 	require.NoError(t, err)
 	assert.False(t, result2.IsNewLibrary)
 	assert.Equal(t, result1.Library.ID, result2.Library.ID)
@@ -1049,7 +899,7 @@ func TestEnsureLibrary_DoesNotDuplicatePaths(t *testing.T) {
 	assert.Contains(t, result2.Library.ScanPaths, scanPath)
 
 	// Third call with same path again.
-	result3, err := store.EnsureLibrary(ctx, scanPath)
+	result3, err := store.EnsureLibrary(ctx, scanPath, testUserID)
 	require.NoError(t, err)
 	assert.False(t, result3.IsNewLibrary)
 	assert.Equal(t, result1.Library.ID, result3.Library.ID)
@@ -1072,7 +922,7 @@ func TestEnsureLibrary_MultiplePathsSequence(t *testing.T) {
 
 	// Add each path sequentially.
 	for i, path := range paths {
-		result, err := store.EnsureLibrary(ctx, path)
+		result, err := store.EnsureLibrary(ctx, path, testUserID)
 		require.NoError(t, err)
 
 		if i == 0 {
@@ -1106,7 +956,7 @@ func TestEnsureLibrary_Idempotent(t *testing.T) {
 	var results []*BootstrapResult
 
 	for i := 0; i < 5; i++ {
-		result, err := store.EnsureLibrary(ctx, scanPath)
+		result, err := store.EnsureLibrary(ctx, scanPath, testUserID)
 		require.NoError(t, err)
 		results = append(results, result)
 	}
@@ -1120,7 +970,7 @@ func TestEnsureLibrary_Idempotent(t *testing.T) {
 	// All calls should return the same library and collections.
 	for i := 1; i < len(results); i++ {
 		assert.Equal(t, results[0].Library.ID, results[i].Library.ID)
-		assert.Equal(t, results[0].DefaultCollection.ID, results[i].DefaultCollection.ID)
+		assert.Equal(t, results[0].InboxCollection.ID, results[i].InboxCollection.ID)
 		assert.Equal(t, results[0].InboxCollection.ID, results[i].InboxCollection.ID)
 	}
 

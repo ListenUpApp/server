@@ -24,7 +24,7 @@ func (s *Server) handleListContributors(w http.ResponseWriter, r *http.Request) 
 
 	params := parsePaginationParams(r)
 
-	contributors, err := s.syncService.GetContributorsForSync(ctx, params)
+	contributors, err := s.syncService.GetContributorsForSync(ctx, userID, params)
 	if err != nil {
 		s.logger.Error("Failed to list contributors", "error", err, "user_id", userID)
 		response.InternalError(w, "Failed to retrieve contributors", s.logger)
@@ -112,9 +112,16 @@ func (s *Server) handleGetContributorBooks(w http.ResponseWriter, r *http.Reques
 // handleSyncContributors handles GET /api/v1/sync/contributors for syncing contributors.
 func (s *Server) handleSyncContributors(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	userID := getUserID(ctx)
+
+	if userID == "" {
+		response.Unauthorized(w, "Authentication required", s.logger)
+		return
+	}
+
 	params := parsePaginationParams(r)
 
-	contributors, err := s.syncService.GetContributorsForSync(ctx, params)
+	contributors, err := s.syncService.GetContributorsForSync(ctx, userID, params)
 	if err != nil {
 		s.logger.Error("Failed to sync contributors", "error", err)
 		response.InternalError(w, "Failed to sync contributors", s.logger)

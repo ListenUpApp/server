@@ -279,13 +279,15 @@ func (s *Server) handleGetManifest(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleSyncBooks returns paginated books for synching.
+// Allows unauthenticated access (returns only uncollected books for anonymous users).
 func (s *Server) handleSyncBooks(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	userID := getUserID(ctx) // May be empty for unauthenticated requests
 
 	// Parse pagination parameters.
 	params := parsePaginationParams(r)
 
-	books, err := s.syncService.GetBooksForSync(ctx, params)
+	books, err := s.syncService.GetBooksForSync(ctx, userID, params)
 	if err != nil {
 		s.logger.Error("Failed to get books for sync", "error", err)
 		response.InternalError(w, "Failed to retrieve books", s.logger)

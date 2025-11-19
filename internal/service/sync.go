@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -100,24 +101,68 @@ type BooksResponse struct {
 }
 
 // GetBooksForSync returns paginated books for initial sync.
-func (s *SyncService) GetBooksForSync(ctx context.Context, params store.PaginationParams) (*BooksResponse, error) {
+// Only returns books the user has access to (permissive access model).
+func (s *SyncService) GetBooksForSync(ctx context.Context, userID string, params store.PaginationParams) (*BooksResponse, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	// Validate and set defaults.
 	params.Validate()
 
-	result, err := s.store.ListBooks(ctx, params)
+	// Get all books the user can access (implements permissive access model)
+	accessibleBooks, err := s.store.GetBooksForUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 
+	// Apply cursor-based pagination manually
+	total := len(accessibleBooks)
+
+	// Decode cursor to get starting index
+	startIdx := 0
+	if params.Cursor != "" {
+		decoded, err := store.DecodeCursor(params.Cursor)
+		if err != nil {
+			return nil, err
+		}
+		// For in-memory pagination, cursor is just the index as string
+		if _, err := fmt.Sscanf(decoded, "%d", &startIdx); err != nil {
+			return nil, err
+		}
+	}
+
+	if startIdx >= total {
+		return &BooksResponse{
+			Books:   []*domain.Book{},
+			HasMore: false,
+		}, nil
+	}
+
+	// Calculate end index
+	endIdx := startIdx + params.Limit
+	if endIdx > total {
+		endIdx = total
+	}
+
+	// Slice the results
+	books := accessibleBooks[startIdx:endIdx]
+	hasMore := endIdx < total
+
 	response := &BooksResponse{
-		Books:      result.Items,
-		NextCursor: result.NextCursor,
-		HasMore:    result.HasMore,
+		Books:   books,
+		HasMore: hasMore,
+	}
+
+	// Set next cursor if there are more results
+	if hasMore {
+		response.NextCursor = store.EncodeCursor(fmt.Sprintf("%d", endIdx))
 	}
 
 	s.logger.Info("books fetched for sync",
-		"count", len(result.Items),
-		"has_more", result.HasMore,
+		"user_id", userID,
+		"count", len(books),
+		"has_more", hasMore,
 	)
 
 	return response, nil
@@ -131,7 +176,13 @@ type ContributorsResponse struct {
 }
 
 // GetContributorsForSync returns paginated contributors for initial sync.
-func (s *SyncService) GetContributorsForSync(ctx context.Context, params store.PaginationParams) (*ContributorsResponse, error) {
+// Note: Contributors don't have direct access control - they're visible if any book they contributed to is visible.
+// For simplicity, we return all contributors and rely on client-side filtering based on accessible books.
+func (s *SyncService) GetContributorsForSync(ctx context.Context, userID string, params store.PaginationParams) (*ContributorsResponse, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	params.Validate()
 
 	result, err := s.store.ListContributors(ctx, params)
@@ -146,6 +197,7 @@ func (s *SyncService) GetContributorsForSync(ctx context.Context, params store.P
 	}
 
 	s.logger.Info("contributors fetched for sync",
+		"user_id", userID,
 		"count", len(result.Items),
 		"has_more", result.HasMore,
 	)
@@ -161,7 +213,13 @@ type SeriesResponse struct {
 }
 
 // GetSeriesForSync returns paginated series for initial sync.
-func (s *SyncService) GetSeriesForSync(ctx context.Context, params store.PaginationParams) (*SeriesResponse, error) {
+// Note: Series don't have direct access control - they're visible if any book in them is visible.
+// For simplicity, we return all series and rely on client-side filtering based on accessible books.
+func (s *SyncService) GetSeriesForSync(ctx context.Context, userID string, params store.PaginationParams) (*SeriesResponse, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	params.Validate()
 
 	result, err := s.store.ListSeries(ctx, params)
@@ -176,6 +234,7 @@ func (s *SyncService) GetSeriesForSync(ctx context.Context, params store.Paginat
 	}
 
 	s.logger.Info("series fetched for sync",
+		"user_id", userID,
 		"count", len(result.Items),
 		"has_more", result.HasMore,
 	)
