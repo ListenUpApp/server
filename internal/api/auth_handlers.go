@@ -1,7 +1,7 @@
 package api
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"strings"
 
@@ -14,7 +14,7 @@ import (
 // POST /api/v1/auth/setup.
 func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	var req service.SetupRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.UnmarshalRead(r.Body, &req); err != nil {
 		response.BadRequest(w, "Invalid request body", s.logger)
 		return
 	}
@@ -60,7 +60,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		DeviceInfo auth.DeviceInfo `json:"device_info"`
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+	if err := json.UnmarshalRead(r.Body, &reqBody); err != nil {
 		response.BadRequest(w, "Invalid request body", s.logger)
 		return
 	}
@@ -112,7 +112,7 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		DeviceInfo   auth.DeviceInfo `json:"device_info"` // Optional
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+	if err := json.UnmarshalRead(r.Body, &reqBody); err != nil {
 		response.BadRequest(w, "Invalid request body", s.logger)
 		return
 	}
@@ -152,7 +152,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		SessionID string `json:"session_id"`
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+	if err := json.UnmarshalRead(r.Body, &reqBody); err != nil {
 		response.BadRequest(w, "Invalid request body", s.logger)
 		return
 	}

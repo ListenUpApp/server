@@ -36,7 +36,8 @@ type Store struct {
 	eventEmitter EventEmitter
 
 	// Generic entities
-	Users *Entity[domain.User]
+	Users            *Entity[domain.User]
+	CollectionShares *Entity[domain.CollectionShare]
 }
 
 // New creates a new Store instance with the given database path and event emitter.
@@ -58,6 +59,7 @@ func New(path string, logger *slog.Logger, emitter EventEmitter) (*Store, error)
 
 	// Initialize generic entities
 	store.initUsers()
+	store.initCollectionShares()
 
 	if logger != nil {
 		logger.Info("Badger database opened successfully", "path", path)
@@ -135,4 +137,16 @@ func (s *Store) initUsers() {
 			},
 			normalizeEmail, // Transform lookups to be case-insensitive
 		)
+}
+
+// initCollectionShares initializes the CollectionShares entity on the store.
+// Indexes by user (for finding all shares a user has) and collection (for finding all shares of a collection).
+func (s *Store) initCollectionShares() {
+	s.CollectionShares = NewEntity[domain.CollectionShare](s, "share:").
+		WithIndex("user", func(cs *domain.CollectionShare) []string {
+			return []string{cs.SharedWithUserID}
+		}).
+		WithIndex("collection", func(cs *domain.CollectionShare) []string {
+			return []string{cs.CollectionID}
+		})
 }

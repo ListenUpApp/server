@@ -3,7 +3,7 @@ package audio
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"os/exec"
 	"strconv"

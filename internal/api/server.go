@@ -18,27 +18,31 @@ import (
 
 // Server holds dependencies for HTTP handlers.
 type Server struct {
-	store           *store.Store
-	instanceService *service.InstanceService
-	authService     *service.AuthService
-	bookService     *service.BookService
-	syncService     *service.SyncService
-	sseHandler      *sse.Handler
-	router          *chi.Mux
-	logger          *slog.Logger
+	store             *store.Store
+	instanceService   *service.InstanceService
+	authService       *service.AuthService
+	bookService       *service.BookService
+	collectionService *service.CollectionService
+	sharingService    *service.SharingService
+	syncService       *service.SyncService
+	sseHandler        *sse.Handler
+	router            *chi.Mux
+	logger            *slog.Logger
 }
 
 // NewServer creates a new HTTP server with all routes configured.
-func NewServer(store *store.Store, instanceService *service.InstanceService, authService *service.AuthService, bookService *service.BookService, syncService *service.SyncService, sseHandler *sse.Handler, logger *slog.Logger) *Server {
+func NewServer(store *store.Store, instanceService *service.InstanceService, authService *service.AuthService, bookService *service.BookService, collectionService *service.CollectionService, sharingService *service.SharingService, syncService *service.SyncService, sseHandler *sse.Handler, logger *slog.Logger) *Server {
 	s := &Server{
-		store:           store,
-		instanceService: instanceService,
-		authService:     authService,
-		bookService:     bookService,
-		syncService:     syncService,
-		sseHandler:      sseHandler,
-		router:          chi.NewRouter(),
-		logger:          logger,
+		store:             store,
+		instanceService:   instanceService,
+		authService:       authService,
+		bookService:       bookService,
+		collectionService: collectionService,
+		sharingService:    sharingService,
+		syncService:       syncService,
+		sseHandler:        sseHandler,
+		router:            chi.NewRouter(),
+		logger:            logger,
 	}
 
 	s.setupMiddleware()
@@ -84,22 +88,57 @@ func (s *Server) setupRoutes() {
 			r.Get("/me", s.handleGetCurrentUser)
 		})
 
-		// Books.
-		r.Get("/books", s.handleListBooks)
-		r.Get("/books/{id}", s.handleGetBook)
+		// Books (require auth for ACL).
+		r.Route("/books", func(r chi.Router) {
+			r.Use(s.requireAuth)
+			r.Get("/", s.handleListBooks)
+			r.Get("/{id}", s.handleGetBook)
+		})
 
-		// Series.
-		r.Get("/series", s.handleListSeries)
-		r.Get("/series/{id}", s.handleGetSeries)
-		r.Get("/series/{id}/books", s.handleGetSeriesBooks)
+		// Series (require auth for ACL).
+		r.Route("/series", func(r chi.Router) {
+			r.Use(s.requireAuth)
+			r.Get("/", s.handleListSeries)
+			r.Get("/{id}", s.handleGetSeries)
+			r.Get("/{id}/books", s.handleGetSeriesBooks)
+		})
 
-		// Contributors.
-		r.Get("/contributors", s.handleListContributors)
-		r.Get("/contributors/{id}", s.handleGetContributor)
-		r.Get("/contributors/{id}/books", s.handleGetContributorBooks)
+		// Contributors (require auth for ACL).
+		r.Route("/contributors", func(r chi.Router) {
+			r.Use(s.requireAuth)
+			r.Get("/", s.handleListContributors)
+			r.Get("/{id}", s.handleGetContributor)
+			r.Get("/{id}/books", s.handleGetContributorBooks)
+		})
 
-		// Libraries.
-		r.Post("/libraries/{id}/scan", s.handleTriggerScan)
+		// Collections (require auth).
+		r.Route("/collections", func(r chi.Router) {
+			r.Use(s.requireAuth)
+			r.Post("/", s.handleCreateCollection)
+			r.Get("/", s.handleListCollections)
+			r.Get("/{id}", s.handleGetCollection)
+			r.Patch("/{id}", s.handleUpdateCollection)
+			r.Delete("/{id}", s.handleDeleteCollection)
+			r.Post("/{id}/books", s.handleAddBookToCollection)
+			r.Delete("/{id}/books/{bookID}", s.handleRemoveBookFromCollection)
+			r.Get("/{id}/books", s.handleGetCollectionBooks)
+		})
+
+		// Shares (require auth).
+		r.Route("/shares", func(r chi.Router) {
+			r.Use(s.requireAuth)
+			r.Post("/", s.handleCreateShare)
+			r.Get("/", s.handleListShares)
+			r.Get("/{id}", s.handleGetShare)
+			r.Patch("/{id}", s.handleUpdateShare)
+			r.Delete("/{id}", s.handleDeleteShare)
+		})
+
+		// Libraries (require auth).
+		r.Route("/libraries", func(r chi.Router) {
+			r.Use(s.requireAuth)
+			r.Post("/{id}/scan", s.handleTriggerScan)
+		})
 
 		// Sync endpoints.
 		r.Route("/sync", func(r chi.Router) {
@@ -147,16 +186,22 @@ func (s *Server) handleGetInstance(w http.ResponseWriter, r *http.Request) {
 // Placeholder routes, since I haven't thought through our API layer yet. Super basic logic.
 // for the time being.
 
-// handleListBooks returns a paginated list of books.
+// handleListBooks returns a paginated list of books accessible to the authenticated user.
 func (s *Server) handleListBooks(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	userID := getUserID(ctx)
+
+	if userID == "" {
+		response.Unauthorized(w, "Authentication required", s.logger)
+		return
+	}
 
 	// Parse pagination parameters from query string.
 	params := parsePaginationParams(r)
 
-	books, err := s.bookService.ListBooks(ctx, params)
+	books, err := s.bookService.ListBooks(ctx, userID, params)
 	if err != nil {
-		s.logger.Error("Failed to list books", "error", err)
+		s.logger.Error("Failed to list books", "error", err, "user_id", userID)
 		response.InternalError(w, "Failed to retrieve books", s.logger)
 		return
 	}
@@ -164,23 +209,29 @@ func (s *Server) handleListBooks(w http.ResponseWriter, r *http.Request) {
 	response.Success(w, books, s.logger)
 }
 
-// handleGetBook returns a single book by ID.
+// handleGetBook returns a single book by ID if the user has access.
 func (s *Server) handleGetBook(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	userID := getUserID(ctx)
 	id := chi.URLParam(r, "id")
+
+	if userID == "" {
+		response.Unauthorized(w, "Authentication required", s.logger)
+		return
+	}
 
 	if id == "" {
 		response.BadRequest(w, "Book ID is required", s.logger)
 		return
 	}
 
-	book, err := s.bookService.GetBook(ctx, id)
+	book, err := s.bookService.GetBook(ctx, userID, id)
 	if err != nil {
 		if errors.Is(err, store.ErrBookNotFound) {
 			response.NotFound(w, "Book not found", s.logger)
 			return
 		}
-		s.logger.Error("Failed to get book", "error", err, "id", id)
+		s.logger.Error("Failed to get book", "error", err, "id", id, "user_id", userID)
 		response.InternalError(w, "Failed to retrieve book", s.logger)
 		return
 	}

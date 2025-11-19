@@ -63,6 +63,8 @@ func setupTestServer(t *testing.T) (server *Server, cleanup func()) {
 	// Create services.
 	instanceService := service.NewInstanceService(s, logger, cfg)
 	bookService := service.NewBookService(s, fileScanner, logger)
+	collectionService := service.NewCollectionService(s, logger)
+	sharingService := service.NewSharingService(s, logger)
 	syncService := service.NewSyncService(s, logger)
 
 	// Create auth services.
@@ -74,7 +76,7 @@ func setupTestServer(t *testing.T) (server *Server, cleanup func()) {
 	authService := service.NewAuthService(s, tokenService, sessionService, instanceService, logger)
 
 	// Create server.
-	server = NewServer(s, instanceService, authService, bookService, syncService, sseHandler, logger)
+	server = NewServer(s, instanceService, authService, bookService, collectionService, sharingService, syncService, sseHandler, logger)
 
 	// Return cleanup function.
 	cleanup = func() {
