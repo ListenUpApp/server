@@ -68,7 +68,9 @@ func setupAuthTest(t *testing.T) (*AuthService, *InstanceService, *auth.TokenSer
 
 	// Cleanup function
 	cleanup := func() {
+		//nolint:errcheck // Test cleanup - errors logged but not critical
 		_ = s.Close()
+		//nolint:errcheck // Test cleanup - errors logged but not critical
 		_ = os.RemoveAll(tmpDir)
 	}
 
@@ -587,7 +589,9 @@ func TestAuthService_Setup_ValidationErrors(t *testing.T) {
 	}
 }
 
-// Helper function to create a test user
+// Helper function to create a test user.
+//
+//nolint:unparam // email parameter is kept for test flexibility despite current uniform usage
 func createTestUser(t *testing.T, s *store.Store, email, passwordHash string) *domain.User {
 	t.Helper()
 

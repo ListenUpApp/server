@@ -1,3 +1,4 @@
+// Package metadata provides utilities for extracting and inferring metadata from audiobook files.
 package metadata
 
 import (
@@ -6,8 +7,8 @@ import (
 	"github.com/simonhull/audiometa"
 )
 
-// InferSeriesPosition attempts to determine series position for audiobooks
-// This implements application-specific heuristics that were previously in audiometa
+// InferSeriesPosition attempts to determine series position for audiobooks.
+// This implements application-specific heuristics that were previously in audiometa.
 func InferSeriesPosition(file *audiometa.File) string {
 	// First, check if audiometa found an explicit marker
 	if file.Tags.SeriesPart != "" {
@@ -26,8 +27,8 @@ func InferSeriesPosition(file *audiometa.File) string {
 	return ""
 }
 
-// isLikelySeriesTrackNumber determines if a track number likely represents series position
-// This is the heuristic that was removed from audiometa
+// isLikelySeriesTrackNumber determines if a track number likely represents series position.
+// This is the heuristic that was removed from audiometa.
 func isLikelySeriesTrackNumber(trackNum, trackTotal int) bool {
 	// Invalid input
 	if trackNum == 0 || trackTotal == 0 {

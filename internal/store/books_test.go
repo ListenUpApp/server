@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testUserID = "test-user-123"
+
 // Helper function to create a test book.
 func createTestBook(id string) *domain.Book {
 	now := time.Now()
@@ -64,7 +66,7 @@ func TestCreateBook(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify book was created.
-	retrieved, err := store.GetBook(ctx, book.ID)
+	retrieved, err := store.GetBook(ctx, book.ID, testUserID)
 	require.NoError(t, err)
 	assert.Equal(t, book.ID, retrieved.ID)
 	assert.Equal(t, book.Title, retrieved.Title)
@@ -102,7 +104,7 @@ func TestGetBook(t *testing.T) {
 	require.NoError(t, err)
 
 	// Get the book.
-	retrieved, err := store.GetBook(ctx, "book-001")
+	retrieved, err := store.GetBook(ctx, "book-001", testUserID)
 	require.NoError(t, err)
 	assert.Equal(t, book.ID, retrieved.ID)
 	assert.Equal(t, book.Title, retrieved.Title)
@@ -115,7 +117,7 @@ func TestGetBook_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	_, err := store.GetBook(ctx, "nonexistent")
+	_, err := store.GetBook(ctx, "nonexistent", testUserID)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrBookNotFound)
 }
@@ -173,7 +175,7 @@ func TestUpdateBook(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify update.
-	retrieved, err := store.GetBook(ctx, book.ID)
+	retrieved, err := store.GetBook(ctx, book.ID, testUserID)
 	require.NoError(t, err)
 	assert.Equal(t, "Updated Title", retrieved.Title)
 	assert.Equal(t, "Updated Description", retrieved.Description)
@@ -197,7 +199,7 @@ func TestUpdateBook_PathChange(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify path was updated.
-	retrieved, err := store.GetBook(ctx, book.ID)
+	retrieved, err := store.GetBook(ctx, book.ID, testUserID)
 	require.NoError(t, err)
 	assert.Equal(t, "/new/test/path/book-001", retrieved.Path)
 	assert.NotEqual(t, originalPath, retrieved.Path)
@@ -280,7 +282,7 @@ func TestDeleteBook(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify book is gone.
-	_, err = store.GetBook(ctx, book.ID)
+	_, err = store.GetBook(ctx, book.ID, testUserID)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrBookNotFound)
 
@@ -478,8 +480,8 @@ func TestGetBooksByCollectionPaginated(t *testing.T) {
 	coll := &domain.Collection{
 		ID:        "coll-001",
 		LibraryID: lib.ID,
+		OwnerID:   testUserID,
 		Name:      "Test Collection",
-		Type:      domain.CollectionTypeDefault,
 		BookIDs:   []string{},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -493,7 +495,7 @@ func TestGetBooksByCollectionPaginated(t *testing.T) {
 		err := store.CreateBook(ctx, book)
 		require.NoError(t, err)
 
-		err = store.AddBookToCollection(ctx, book.ID, coll.ID)
+		err = store.AddBookToCollection(ctx, book.ID, coll.ID, testUserID)
 		require.NoError(t, err)
 	}
 
@@ -502,7 +504,7 @@ func TestGetBooksByCollectionPaginated(t *testing.T) {
 		Limit:  3,
 		Cursor: "",
 	}
-	result, err := store.GetBooksByCollectionPaginated(ctx, coll.ID, params)
+	result, err := store.GetBooksByCollectionPaginated(ctx, testUserID, coll.ID, params)
 	require.NoError(t, err)
 	assert.Len(t, result.Items, 3)
 	assert.True(t, result.HasMore)
@@ -510,7 +512,7 @@ func TestGetBooksByCollectionPaginated(t *testing.T) {
 
 	// Get second page.
 	params.Cursor = result.NextCursor
-	result, err = store.GetBooksByCollectionPaginated(ctx, coll.ID, params)
+	result, err = store.GetBooksByCollectionPaginated(ctx, testUserID, coll.ID, params)
 	require.NoError(t, err)
 	assert.Len(t, result.Items, 2)
 	assert.False(t, result.HasMore)
@@ -595,7 +597,7 @@ func TestSoftDelete(t *testing.T) {
 	require.NoError(t, s.CreateBook(ctx, book))
 
 	// Verify book exists.
-	retrieved, err := s.GetBook(ctx, book.ID)
+	retrieved, err := s.GetBook(ctx, book.ID, testUserID)
 	require.NoError(t, err)
 	require.False(t, retrieved.IsDeleted())
 
@@ -608,7 +610,7 @@ func TestSoftDelete(t *testing.T) {
 	require.NoError(t, err)
 
 	// GetBook should return not found for deleted books.
-	_, err = s.GetBook(ctx, book.ID)
+	_, err = s.GetBook(ctx, book.ID, testUserID)
 	assert.ErrorIs(t, err, ErrBookNotFound, "GetBook should return not found for deleted books")
 
 	// But the book should appear in deleted books query.
@@ -809,19 +811,19 @@ func TestSoftDelete_RemovedFromCollections(t *testing.T) {
 	s, cleanup := setupTestStore(t)
 	defer cleanup()
 
-	// Bootstrap library (creates default collections).
-	bootstrap, err := s.EnsureLibrary(ctx, "/test/audiobooks")
+	// Bootstrap library (creates inbox collection).
+	bootstrap, err := s.EnsureLibrary(ctx, "/test/audiobooks", testUserID)
 	require.NoError(t, err)
 
 	// Create book.
 	book := createTestBook("book-001")
 	require.NoError(t, s.CreateBook(ctx, book))
 
-	// Add book to default collection.
-	require.NoError(t, s.AddBookToCollection(ctx, book.ID, bootstrap.DefaultCollection.ID))
+	// Add book to inbox collection.
+	require.NoError(t, s.AddBookToCollection(ctx, book.ID, bootstrap.InboxCollection.ID, testUserID))
 
 	// Verify book is in collection.
-	result, err := s.GetBooksByCollectionPaginated(ctx, bootstrap.DefaultCollection.ID, PaginationParams{Limit: 10})
+	result, err := s.GetBooksByCollectionPaginated(ctx, testUserID, bootstrap.InboxCollection.ID, PaginationParams{Limit: 10})
 	require.NoError(t, err)
 	assert.Len(t, result.Items, 1)
 
@@ -829,7 +831,7 @@ func TestSoftDelete_RemovedFromCollections(t *testing.T) {
 	require.NoError(t, s.DeleteBook(ctx, book.ID))
 
 	// Book should be removed from collection.
-	result, err = s.GetBooksByCollectionPaginated(ctx, bootstrap.DefaultCollection.ID, PaginationParams{Limit: 10})
+	result, err = s.GetBooksByCollectionPaginated(ctx, testUserID, bootstrap.InboxCollection.ID, PaginationParams{Limit: 10})
 	require.NoError(t, err)
 	assert.Empty(t, result.Items, "Deleted book should be removed from collection")
 }

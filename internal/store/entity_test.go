@@ -214,7 +214,7 @@ func TestEntity_ContextCancellation(t *testing.T) {
 		Email: "john@example.com",
 	}
 
-	// Test Create with cancelled context
+	// Test Create with canceled context
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -222,7 +222,7 @@ func TestEntity_ContextCancellation(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorIs(t, err, context.Canceled)
 
-	// Test Get with cancelled context
+	// Test Get with canceled context
 	ctx, cancel = context.WithCancel(context.Background())
 	cancel()
 
@@ -230,7 +230,7 @@ func TestEntity_ContextCancellation(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorIs(t, err, context.Canceled)
 
-	// Test Update with cancelled context
+	// Test Update with canceled context
 	ctx, cancel = context.WithCancel(context.Background())
 	cancel()
 
@@ -238,7 +238,7 @@ func TestEntity_ContextCancellation(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorIs(t, err, context.Canceled)
 
-	// Test Delete with cancelled context
+	// Test Delete with canceled context
 	ctx, cancel = context.WithCancel(context.Background())
 	cancel()
 

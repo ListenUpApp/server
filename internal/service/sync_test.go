@@ -15,6 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testUserID = "test-user-123"
+
 // setupTestSync creates a test sync service with temp database.
 func setupTestSync(t *testing.T) (*SyncService, *store.Store, func()) {
 	t.Helper()
@@ -251,7 +253,7 @@ func TestGetBooksForSync_WithPagination(t *testing.T) {
 	}
 
 	// Get first page.
-	response, err := syncService.GetBooksForSync(ctx, store.PaginationParams{
+	response, err := syncService.GetBooksForSync(ctx, testUserID, store.PaginationParams{
 		Limit:  2,
 		Cursor: "",
 	})
@@ -264,7 +266,7 @@ func TestGetBooksForSync_WithPagination(t *testing.T) {
 	assert.NotEmpty(t, response.NextCursor)
 
 	// Get second page.
-	response2, err := syncService.GetBooksForSync(ctx, store.PaginationParams{
+	response2, err := syncService.GetBooksForSync(ctx, testUserID, store.PaginationParams{
 		Limit:  2,
 		Cursor: response.NextCursor,
 	})
@@ -273,7 +275,7 @@ func TestGetBooksForSync_WithPagination(t *testing.T) {
 	assert.True(t, response2.HasMore)
 
 	// Get last page.
-	response3, err := syncService.GetBooksForSync(ctx, store.PaginationParams{
+	response3, err := syncService.GetBooksForSync(ctx, testUserID, store.PaginationParams{
 		Limit:  2,
 		Cursor: response2.NextCursor,
 	})
@@ -290,7 +292,7 @@ func TestGetBooksForSync_Empty(t *testing.T) {
 
 	ctx := context.Background()
 
-	response, err := syncService.GetBooksForSync(ctx, store.PaginationParams{
+	response, err := syncService.GetBooksForSync(ctx, testUserID, store.PaginationParams{
 		Limit:  50,
 		Cursor: "",
 	})
@@ -317,7 +319,7 @@ func TestGetBooksForSync_SinglePage(t *testing.T) {
 	}
 
 	// Request with limit larger than book count.
-	response, err := syncService.GetBooksForSync(ctx, store.PaginationParams{
+	response, err := syncService.GetBooksForSync(ctx, testUserID, store.PaginationParams{
 		Limit:  50,
 		Cursor: "",
 	})

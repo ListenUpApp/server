@@ -480,7 +480,7 @@ func (s *Store) GetBooksBySeries(ctx context.Context, seriesID string) ([]*domai
 	// Fetch actual books
 	books := make([]*domain.Book, 0, len(bookIDs))
 	for _, bookID := range bookIDs {
-		book, err := s.GetBook(ctx, bookID)
+		book, err := s.getBookInternal(ctx, bookID)
 		if err != nil {
 			if errors.Is(err, ErrBookNotFound) {
 				continue // Skip missing books

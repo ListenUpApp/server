@@ -110,7 +110,32 @@ func (s *Store) CreateBook(ctx context.Context, book *domain.Book) error {
 }
 
 // GetBook retrieves a book by ID.
-func (s *Store) GetBook(_ context.Context, id string) (*domain.Book, error) {
+// GetBook retrieves a book by ID with access control.
+// User must be able to access the book via collections or it must be uncollected.
+// Returns ErrBookNotFound if book doesn't exist OR user doesn't have access.
+func (s *Store) GetBook(ctx context.Context, id string, userID string) (*domain.Book, error) {
+	// Get the book without access checks first
+	book, err := s.getBookInternal(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if user can access this book
+	canAccess, err := s.CanUserAccessBook(ctx, userID, id)
+	if err != nil {
+		return nil, err
+	}
+	if !canAccess {
+		// Don't leak that book exists
+		return nil, ErrBookNotFound
+	}
+
+	return book, nil
+}
+
+// getBookInternal retrieves a book by ID without access control.
+// For internal store use only.
+func (s *Store) getBookInternal(_ context.Context, id string) (*domain.Book, error) {
 	key := []byte(bookPrefix + id)
 
 	var book domain.Book
@@ -141,6 +166,7 @@ func (s *Store) GetBook(_ context.Context, id string) (*domain.Book, error) {
 
 // GetBookByInode retrieves a book by an audio file inode.
 // This is used during file watching for fast lookups when a file changes.
+// No access control - for internal system use only.
 func (s *Store) GetBookByInode(ctx context.Context, inode int64) (*domain.Book, error) {
 	inodeKey := []byte(fmt.Sprintf("%s%d", bookByInodePrefix, inode))
 
@@ -162,7 +188,7 @@ func (s *Store) GetBookByInode(ctx context.Context, inode int64) (*domain.Book, 
 		}
 		return nil, fmt.Errorf("get book by inode: %w", err)
 	}
-	return s.GetBook(ctx, bookID)
+	return s.getBookInternal(ctx, bookID)
 }
 
 // UpdateBook updates an existing book.
@@ -170,7 +196,7 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 	key := []byte(bookPrefix + book.ID)
 
 	// Get old book for index updates.
-	oldBook, err := s.GetBook(ctx, book.ID)
+	oldBook, err := s.getBookInternal(ctx, book.ID)
 	if err != nil {
 		return err
 	}
@@ -312,8 +338,9 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 }
 
 // DeleteBook deletes a book and removes it from all collections.
+// This is a system operation that bypasses ACL checks.
 func (s *Store) DeleteBook(ctx context.Context, id string) error {
-	book, err := s.GetBook(ctx, id)
+	book, err := s.getBookInternal(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -325,7 +352,7 @@ func (s *Store) DeleteBook(ctx context.Context, id string) error {
 	}
 
 	for _, coll := range collections {
-		if err := s.RemoveBookFromCollection(ctx, id, coll.ID); err != nil {
+		if err := s.removeBookFromCollectionInternal(ctx, coll.ID, id); err != nil {
 			return fmt.Errorf("remove from collection %s: %w", coll.ID, err)
 		}
 	}
@@ -459,8 +486,9 @@ func (s *Store) GetBooksDeletedAfter(_ context.Context, timestamp time.Time) ([]
 }
 
 // BookExists checks if a book exists in our db by ID.
+// This is a system operation that bypasses ACL.
 func (s *Store) BookExists(ctx context.Context, id string) (bool, error) {
-	book, err := s.GetBook(ctx, id)
+	book, err := s.getBookInternal(ctx, id)
 	if err != nil {
 		if errors.Is(err, ErrBookNotFound) {
 			return false, nil
@@ -668,10 +696,10 @@ func (s *Store) GetAllBookIDs(_ context.Context) ([]string, error) {
 }
 
 // GetBooksByCollectionPaginated returns paginated books in a collection.
-func (s *Store) GetBooksByCollectionPaginated(ctx context.Context, collectionID string, params PaginationParams) (*PaginatedResult[*domain.Book], error) {
+func (s *Store) GetBooksByCollectionPaginated(ctx context.Context, userID, collectionID string, params PaginationParams) (*PaginatedResult[*domain.Book], error) {
 	params.Validate()
 
-	coll, err := s.GetCollection(ctx, collectionID)
+	coll, err := s.GetCollection(ctx, collectionID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -703,7 +731,7 @@ func (s *Store) GetBooksByCollectionPaginated(ctx context.Context, collectionID 
 	// Fetch Books.
 	books := make([]*domain.Book, 0, len(pageBookIDs))
 	for _, bookID := range pageBookIDs {
-		book, err := s.GetBook(ctx, bookID)
+		book, err := s.GetBook(ctx, bookID, userID)
 		if err != nil {
 			if s.logger != nil {
 				s.logger.Warn("failed to get book from collection", "book_id", bookID, "collection_id", collectionID, "error", err)

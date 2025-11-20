@@ -1,3 +1,5 @@
+// Package store provides data storage and retrieval operations using BadgerDB.
+//
 //nolint:dupl // Similar CRUD patterns for different entity types are acceptable
 package store
 
@@ -22,8 +24,10 @@ const (
 )
 
 var (
+	// ErrContributorNotFound is returned when a contributor cannot be found.
 	ErrContributorNotFound = errors.New("contributor not found")
-	ErrContributorExists   = errors.New("contributor already exists")
+	// ErrContributorExists is returned when attempting to create a contributor that already exists.
+	ErrContributorExists = errors.New("contributor already exists")
 )
 
 // CreateContributor creates a new contributor.
@@ -414,7 +418,7 @@ func (s *Store) GetBooksByContributor(ctx context.Context, contributorID string)
 	// Fetch actual books
 	books := make([]*domain.Book, 0, len(bookIDs))
 	for _, bookID := range bookIDs {
-		book, err := s.GetBook(ctx, bookID)
+		book, err := s.getBookInternal(ctx, bookID)
 		if err != nil {
 			if errors.Is(err, ErrBookNotFound) {
 				continue // Skip missing books

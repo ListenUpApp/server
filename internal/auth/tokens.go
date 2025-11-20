@@ -17,13 +17,13 @@ const (
 	tokenIssuer   = "listenup-server"
 	tokenAudience = "listenup-client"
 
-	// PASETO v4 symmetric key requirements
+	// PASETO v4 symmetric key requirements.
 	keyBytesSize     = 32 // 256 bits
 	keyHexSize       = 64 // 32 bytes as hex string
 	refreshTokenSize = 32 // 256 bits of entropy
 )
 
-// TokenService handles PASETO token generation and verification
+// TokenService handles PASETO token generation and verification.
 type TokenService struct {
 	symmetricKey         paseto.V4SymmetricKey
 	accessTokenDuration  time.Duration
@@ -80,8 +80,10 @@ func (s *TokenService) GenerateAccessToken(user *domain.User) (string, error) {
 	token.SetJti(tokenID)
 
 	// Our custom claims
-	token.Set("user_id", user.ID)
-	token.Set("email", user.Email)
+	//nolint:errcheck // Token.Set only errors on invalid types, which we control
+	_ = token.Set("user_id", user.ID)
+	//nolint:errcheck // Token.Set only errors on invalid types, which we control
+	_ = token.Set("email", user.Email)
 
 	// Let's encrypt.
 	encrypted := token.V4Encrypt(s.symmetricKey, nil)

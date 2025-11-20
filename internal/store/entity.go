@@ -198,6 +198,68 @@ func (e *Entity[T]) GetByIndex(ctx context.Context, indexName, value string) (*T
 	return e.Get(ctx, id)
 }
 
+// FindByIndex retrieves all entities matching a secondary index value.
+// If the index has a lookup transform, it will be applied to the value before lookup.
+func (e *Entity[T]) FindByIndex(ctx context.Context, indexName, value string) ([]*T, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	// Find the index and apply transformation if available
+	transformedValue := value
+	for _, idx := range e.indexes {
+		if idx.name == indexName && idx.lookupTransform != nil {
+			transformedValue = idx.lookupTransform(value)
+			break
+		}
+	}
+
+	// Build the prefix for all keys in this index with this value
+	indexPrefix := []byte(e.prefix + "idx:" + indexName + ":" + transformedValue)
+
+	var entities []*T
+	err := e.store.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = indexPrefix
+		opts.PrefetchValues = true
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(indexPrefix); it.ValidForPrefix(indexPrefix); it.Next() {
+			// Get the ID from the index value
+			var id string
+			err := it.Item().Value(func(val []byte) error {
+				id = string(val)
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+
+			// Get the actual entity
+			entity, err := e.Get(ctx, id)
+			if err != nil {
+				// Skip if entity not found (index cleanup issue)
+				if errors.Is(err, ErrNotFound) {
+					continue
+				}
+				return err
+			}
+
+			entities = append(entities, entity)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return entities, nil
+}
+
 // Update updates an existing entity.
 // Returns ErrNotFound if the entity does not exist.
 func (e *Entity[T]) Update(ctx context.Context, id string, entity *T) error {

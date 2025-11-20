@@ -80,8 +80,10 @@ func main() {
 	}()
 
 	// Bootstrap library and collections (ensures they exist).
+	// Note: Use placeholder owner ID "system" for initial bootstrap.
+	// This will be updated to the actual root user ID when setup completes.
 	ctx := context.Background()
-	bootstrap, err := db.EnsureLibrary(ctx, cfg.Library.AudiobookPath)
+	bootstrap, err := db.EnsureLibrary(ctx, cfg.Library.AudiobookPath, "system")
 	if err != nil {
 		log.Error("Failed to bootstrap library", "error", err)
 		sseCancel()
@@ -91,9 +93,9 @@ func main() {
 	log.Info("Library ready",
 		"library_id", bootstrap.Library.ID,
 		"library_name", bootstrap.Library.Name,
+		"owner_id", bootstrap.Library.OwnerID,
 		"scan_paths", len(bootstrap.Library.ScanPaths),
 		"is_new", bootstrap.IsNewLibrary,
-		"default_collection", bootstrap.DefaultCollection.ID,
 		"inbox_collection", bootstrap.InboxCollection.ID,
 	)
 
@@ -178,6 +180,8 @@ func main() {
 	// Initialize services.
 	instanceService := service.NewInstanceService(db, log.Logger, cfg)
 	bookService := service.NewBookService(db, fileScanner, log.Logger)
+	collectionService := service.NewCollectionService(db, log.Logger)
+	sharingService := service.NewSharingService(db, log.Logger)
 	syncService := service.NewSyncService(db, log.Logger)
 
 	// Initialize auth services.
@@ -219,7 +223,7 @@ func main() {
 	// Create HTTP server with service layer.
 	// TODO: Future note to self: This is going to get old fast depending on how many
 	// services we need to instantiate. Let's look into a better solution.
-	httpServer := api.NewServer(db, instanceService, authService, bookService, syncService, sseHandler, log.Logger)
+	httpServer := api.NewServer(db, instanceService, authService, bookService, collectionService, sharingService, syncService, sseHandler, log.Logger)
 
 	// Configure HTTP server.
 	srv := &http.Server{

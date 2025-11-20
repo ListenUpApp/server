@@ -18,7 +18,7 @@ type InstanceService struct {
 	config *config.Config
 }
 
-// NewInstanceService creates a new instance service
+// NewInstanceService creates a new instance service.
 func NewInstanceService(store *store.Store, logger *slog.Logger, config *config.Config) *InstanceService {
 	return &InstanceService{
 		store:  store,
@@ -53,10 +53,10 @@ func (s *InstanceService) InitializeInstance(ctx context.Context) (*domain.Insta
 		instance.Name = s.config.Server.Name
 	}
 	if s.config.Server.LocalURL != "" {
-		instance.LocalUrl = s.config.Server.LocalURL
+		instance.LocalURL = s.config.Server.LocalURL
 	}
 	if s.config.Server.RemoteURL != "" {
-		instance.RemoteUrl = s.config.Server.RemoteURL
+		instance.RemoteURL = s.config.Server.RemoteURL
 	}
 
 	// Save updated instance back to store.
