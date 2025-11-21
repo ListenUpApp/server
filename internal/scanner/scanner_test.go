@@ -17,7 +17,7 @@ func TestScanner_Scan_EmptyDirectory(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	// Create mock store (nil is ok for now since we're not using it yet).
-	scanner := NewScanner(nil, store.NewNoopEmitter(), logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
@@ -61,7 +61,7 @@ func TestScanner_Scan_SingleAudiobook(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
@@ -107,7 +107,7 @@ func TestScanner_Scan_MultipleAudiobooks(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
@@ -161,7 +161,7 @@ func TestScanner_Scan_ContextCancellation(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 
 	// Start scan and cancel during analysis.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -203,7 +203,7 @@ func TestScanner_Scan_ProgressCallback(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 
 	// Track progress callbacks with mutex for thread safety.
 	var (
@@ -249,7 +249,7 @@ func TestScanner_Scan_ProgressCallback(t *testing.T) {
 
 func TestScanner_Scan_NonexistentPath(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
@@ -283,7 +283,7 @@ func TestScanner_Scan_DryRun(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
@@ -310,7 +310,7 @@ func TestScanner_ScanFolder_EmptyFolder(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
@@ -352,7 +352,7 @@ func TestScanner_ScanFolder_SingleM4B(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
@@ -407,7 +407,7 @@ func TestScanner_ScanFolder_MultipleMP3s(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
@@ -462,7 +462,7 @@ func TestScanner_ScanFolder_WithCoverArt(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
@@ -539,7 +539,7 @@ func TestScanner_ScanFolder_MultiDisc(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
@@ -599,7 +599,7 @@ func TestScanner_ScanFolder_WithMetadata(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
@@ -645,7 +645,7 @@ func TestScanner_ScanFolder_WithMetadata(t *testing.T) {
 
 func TestScanner_ScanFolder_NonexistentPath(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
@@ -681,7 +681,7 @@ func TestScanner_ScanFolder_ContextCancellation(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 
 	// Create cancellable context.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -726,7 +726,7 @@ func TestScanner_ScanFolder_IgnoresHiddenFiles(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
