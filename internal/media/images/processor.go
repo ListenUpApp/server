@@ -25,7 +25,7 @@ func NewProcessor(storage *Storage, logger *slog.Logger) *Processor {
 // ExtractAndProcess extracts cover art from an audio file and stores it.
 // Returns the SHA256 hash of the cover for cache validation.
 // Returns empty string (no error) if the audio file has no embedded cover.
-func (p *Processor) ExtractAndProcess(ctx context.Context, audioFilePath string, bookID string) (string, error) {
+func (p *Processor) ExtractAndProcess(ctx context.Context, audioFilePath, bookID string) (string, error) {
 	// Open audio file.
 	file, err := audiometa.OpenContext(ctx, audioFilePath)
 	if err != nil {

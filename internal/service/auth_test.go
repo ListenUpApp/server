@@ -89,9 +89,10 @@ func TestAuthService_Setup_Success(t *testing.T) {
 
 	// Setup should work
 	req := SetupRequest{
-		Email:       "admin@example.com",
-		Password:    "SecurePassword123!",
-		DisplayName: "Admin User",
+		Email:     "admin@example.com",
+		Password:  "SecurePassword123!",
+		FirstName: "Admin",
+		LastName:  "User",
 	}
 
 	resp, err := authService.Setup(ctx, req)
@@ -127,9 +128,10 @@ func TestAuthService_Setup_AlreadyConfigured(t *testing.T) {
 
 	// First setup succeeds
 	req := SetupRequest{
-		Email:       "admin@example.com",
-		Password:    "SecurePassword123!",
-		DisplayName: "Admin User",
+		Email:     "admin@example.com",
+		Password:  "SecurePassword123!",
+		FirstName: "Admin",
+		LastName:  "User",
 	}
 
 	_, err = authService.Setup(ctx, req)
@@ -137,9 +139,10 @@ func TestAuthService_Setup_AlreadyConfigured(t *testing.T) {
 
 	// Second setup should fail
 	req2 := SetupRequest{
-		Email:       "admin2@example.com",
-		Password:    "SecurePassword123!",
-		DisplayName: "Admin User 2",
+		Email:     "admin2@example.com",
+		Password:  "SecurePassword123!",
+		FirstName: "Admin",
+		LastName:  "User 2",
 	}
 
 	_, err = authService.Setup(ctx, req2)
@@ -177,9 +180,10 @@ func TestAuthService_Setup_WeakPassword(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := SetupRequest{
-				Email:       "admin@example.com",
-				Password:    tt.password,
-				DisplayName: "Admin User",
+				Email:     "admin@example.com",
+				Password:  tt.password,
+				FirstName: "Admin",
+				LastName:  "User",
 			}
 
 			_, err := authService.Setup(ctx, req)
@@ -545,36 +549,40 @@ func TestAuthService_Setup_ValidationErrors(t *testing.T) {
 		{
 			name: "invalid email format",
 			req: SetupRequest{
-				Email:       "not-an-email",
-				Password:    "ValidPassword123!",
-				DisplayName: "Admin User",
+				Email:     "not-an-email",
+				Password:  "ValidPassword123!",
+				FirstName: "Admin",
+				LastName:  "User",
 			},
 			wantErr: "email",
 		},
 		{
 			name: "missing email",
 			req: SetupRequest{
-				Email:       "",
-				Password:    "ValidPassword123!",
-				DisplayName: "Admin User",
+				Email:     "",
+				Password:  "ValidPassword123!",
+				FirstName: "Admin",
+				LastName:  "User",
 			},
 			wantErr: "email",
 		},
 		{
-			name: "missing display name",
+			name: "missing first name",
 			req: SetupRequest{
-				Email:       "admin@example.com",
-				Password:    "ValidPassword123!",
-				DisplayName: "",
+				Email:     "admin@example.com",
+				Password:  "ValidPassword123!",
+				FirstName: "",
+				LastName:  "User",
 			},
-			wantErr: "display_name",
+			wantErr: "first_name",
 		},
 		{
 			name: "password too long",
 			req: SetupRequest{
-				Email:       "admin@example.com",
-				Password:    string(make([]byte, 1025)),
-				DisplayName: "Admin User",
+				Email:     "admin@example.com",
+				Password:  string(make([]byte, 1025)),
+				FirstName: "Admin",
+				LastName:  "User",
 			},
 			wantErr: "password",
 		},
@@ -604,6 +612,8 @@ func createTestUser(t *testing.T, s *store.Store, email, passwordHash string) *d
 		},
 		Email:        email,
 		PasswordHash: passwordHash,
+		FirstName:    "Test",
+		LastName:     "User",
 		DisplayName:  "Test User",
 		IsRoot:       false,
 	}

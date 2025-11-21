@@ -80,7 +80,7 @@ func TestProcessor_ExtractAndProcess(t *testing.T) {
 		// Create an invalid audio file.
 		tmpDir := t.TempDir()
 		invalidFile := filepath.Join(tmpDir, "invalid.m4b")
-		err := os.WriteFile(invalidFile, []byte("not an audio file"), 0644)
+		err := os.WriteFile(invalidFile, []byte("not an audio file"), 0o644)
 		require.NoError(t, err)
 
 		ctx := context.Background()
@@ -102,7 +102,7 @@ func TestProcessor_ExtractAndProcess(t *testing.T) {
 
 		processor := setupTestProcessor(t)
 
-		hash, err := processor.ExtractAndProcess(ctx, testFile, "book-cancelled")
+		hash, err := processor.ExtractAndProcess(ctx, testFile, "book-canceled")
 		assert.Error(t, err)
 		assert.Empty(t, hash)
 		assert.Contains(t, err.Error(), "context canceled")
@@ -155,7 +155,7 @@ func TestProcessor_ErrorHandling(t *testing.T) {
 		// For now, we'll test with an invalid file.
 		tmpDir := t.TempDir()
 		invalidFile := filepath.Join(tmpDir, "corrupted.m4b")
-		err := os.WriteFile(invalidFile, []byte("corrupted"), 0644)
+		err := os.WriteFile(invalidFile, []byte("corrupted"), 0o644)
 		require.NoError(t, err)
 
 		ctx := context.Background()
@@ -170,10 +170,10 @@ func TestProcessor_ErrorHandling(t *testing.T) {
 		// Create storage in a read-only directory.
 		tmpDir := t.TempDir()
 		readOnlyDir := filepath.Join(tmpDir, "readonly")
-		err := os.Mkdir(readOnlyDir, 0555) // Read-only.
+		err := os.Mkdir(readOnlyDir, 0o555) // Read-only.
 		require.NoError(t, err)
 		t.Cleanup(func() {
-			os.Chmod(readOnlyDir, 0755) // Restore permissions for cleanup.
+			_ = os.Chmod(readOnlyDir, 0o755) //nolint:errcheck // Cleanup best-effort.
 		})
 
 		storage, err := NewStorage(readOnlyDir)
