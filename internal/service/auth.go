@@ -64,9 +64,10 @@ func NewAuthService(
 
 // SetupRequest contains the initial root user creation data.
 type SetupRequest struct {
-	Email       string `json:"email" validate:"required,email"`
-	Password    string `json:"password" validate:"required,min=8,max=1024"`
-	DisplayName string `json:"display_name" validate:"required"`
+	Email     string `json:"email" validate:"required,email"`
+	Password  string `json:"password" validate:"required,min=8,max=1024"`
+	FirstName string `json:"first_name" validate:"required"`
+	LastName  string `json:"last_name" validate:"required"`
 }
 
 // LoginRequest contains user credentials and device information.
@@ -127,7 +128,9 @@ func (s *AuthService) Setup(ctx context.Context, req SetupRequest) (*AuthRespons
 		Email:        req.Email,
 		PasswordHash: passwordHash,
 		IsRoot:       true, // First user is root
-		DisplayName:  req.DisplayName,
+		FirstName:    req.FirstName,
+		LastName:     req.LastName,
+		DisplayName:  req.FirstName + " " + req.LastName, // Auto-generate from names
 		LastLoginAt:  now,
 	}
 	user.InitTimestamps()

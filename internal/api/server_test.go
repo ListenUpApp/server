@@ -1,7 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json/v2"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"io"
 	"log/slog"
 	"net/http"
@@ -14,6 +18,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/auth"
 	"github.com/listenupapp/listenup-server/internal/config"
 	"github.com/listenupapp/listenup-server/internal/http/response"
+	"github.com/listenupapp/listenup-server/internal/media/images"
 	"github.com/listenupapp/listenup-server/internal/scanner"
 	"github.com/listenupapp/listenup-server/internal/service"
 	"github.com/listenupapp/listenup-server/internal/sse"
@@ -44,7 +49,7 @@ func setupTestServer(t *testing.T) (server *Server, cleanup func()) {
 	require.NoError(t, err)
 
 	// Create scanner with SSE manager.
-	fileScanner := scanner.NewScanner(s, sseManager, logger)
+	fileScanner := scanner.NewScanner(s, sseManager, nil, logger)
 
 	// Create test config.
 	cfg := &config.Config{
@@ -75,8 +80,12 @@ func setupTestServer(t *testing.T) (server *Server, cleanup func()) {
 	sessionService := service.NewSessionService(s, tokenService, logger)
 	authService := service.NewAuthService(s, tokenService, sessionService, instanceService, logger)
 
+	// Create image storage.
+	imageStorage, err := images.NewStorage(tmpDir)
+	require.NoError(t, err)
+
 	// Create server.
-	server = NewServer(s, instanceService, authService, bookService, collectionService, sharingService, syncService, sseHandler, logger)
+	server = NewServer(s, instanceService, authService, bookService, collectionService, sharingService, syncService, sseHandler, imageStorage, logger)
 
 	// Return cleanup function.
 	cleanup = func() {
@@ -374,4 +383,211 @@ func TestGetSyncBooks_Success(t *testing.T) {
 	require.True(t, ok)
 	assert.Empty(t, books)
 	assert.Equal(t, false, data["has_more"])
+}
+
+// Test cover endpoint functionality.
+
+func TestGetCover_Success(t *testing.T) {
+	server, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// Create a test cover image.
+	bookID := "book-test-123"
+	testCover := createTestJPEG(t, 1200, 1200)
+	err := server.imageStorage.Save(bookID, testCover)
+	require.NoError(t, err)
+
+	// Request cover.
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/covers/"+bookID, http.NoBody)
+	w := httptest.NewRecorder()
+
+	server.ServeHTTP(w, req)
+
+	// Verify response.
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "image/jpeg", w.Header().Get("Content-Type"))
+	assert.NotEmpty(t, w.Header().Get("ETag"))
+	assert.NotEmpty(t, w.Header().Get("Last-Modified"))
+	assert.Equal(t, "public, max-age=604800", w.Header().Get("Cache-Control"))
+
+	// Verify content matches.
+	assert.Equal(t, testCover, w.Body.Bytes())
+
+	// Verify it's a valid JPEG.
+	_, err = jpeg.Decode(bytes.NewReader(w.Body.Bytes()))
+	assert.NoError(t, err)
+}
+
+func TestGetCover_NotFound(t *testing.T) {
+	server, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// Request non-existent cover.
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/covers/non-existent-book", http.NoBody)
+	w := httptest.NewRecorder()
+
+	server.ServeHTTP(w, req)
+
+	// Verify 404 response.
+	assert.Equal(t, http.StatusNotFound, w.Code)
+
+	// Verify JSON error response.
+	var result response.Envelope
+	err := json.Unmarshal(w.Body.Bytes(), &result)
+	require.NoError(t, err)
+
+	assert.False(t, result.Success)
+	assert.Contains(t, result.Error, "Cover not found")
+}
+
+func TestGetCover_NotModified(t *testing.T) {
+	server, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// Create a test cover.
+	bookID := "book-cache-test"
+	testCover := createTestJPEG(t, 800, 800)
+	err := server.imageStorage.Save(bookID, testCover)
+	require.NoError(t, err)
+
+	// First request - get ETag.
+	req1 := httptest.NewRequest(http.MethodGet, "/api/v1/covers/"+bookID, http.NoBody)
+	w1 := httptest.NewRecorder()
+
+	server.ServeHTTP(w1, req1)
+	require.Equal(t, http.StatusOK, w1.Code)
+
+	etag := w1.Header().Get("ETag")
+	require.NotEmpty(t, etag)
+
+	// Second request with If-None-Match header.
+	req2 := httptest.NewRequest(http.MethodGet, "/api/v1/covers/"+bookID, http.NoBody)
+	req2.Header.Set("If-None-Match", etag)
+	w2 := httptest.NewRecorder()
+
+	server.ServeHTTP(w2, req2)
+
+	// Verify 304 response.
+	assert.Equal(t, http.StatusNotModified, w2.Code)
+	assert.Empty(t, w2.Body.Bytes(), "304 response should have no body")
+}
+
+func TestGetCover_ETagConsistency(t *testing.T) {
+	server, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// Create a test cover.
+	bookID := "book-etag-test"
+	testCover := createTestJPEG(t, 600, 600)
+	err := server.imageStorage.Save(bookID, testCover)
+	require.NoError(t, err)
+
+	// Make multiple requests.
+	etags := make([]string, 3)
+	for i := range 3 {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/covers/"+bookID, http.NoBody)
+		w := httptest.NewRecorder()
+
+		server.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		etags[i] = w.Header().Get("ETag")
+		require.NotEmpty(t, etags[i])
+	}
+
+	// All ETags should be identical.
+	assert.Equal(t, etags[0], etags[1])
+	assert.Equal(t, etags[1], etags[2])
+}
+
+func TestGetCover_CacheHeaders(t *testing.T) {
+	server, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// Create a test cover.
+	bookID := "book-cache-headers-test"
+	testCover := createTestJPEG(t, 400, 400)
+	err := server.imageStorage.Save(bookID, testCover)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/covers/"+bookID, http.NoBody)
+	w := httptest.NewRecorder()
+
+	server.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// Verify all cache headers are set.
+	assert.Equal(t, "public, max-age=604800", w.Header().Get("Cache-Control"))
+	assert.NotEmpty(t, w.Header().Get("ETag"))
+	assert.NotEmpty(t, w.Header().Get("Last-Modified"))
+
+	// Verify Last-Modified is a valid HTTP date.
+	lastModified := w.Header().Get("Last-Modified")
+	_, err = http.ParseTime(lastModified)
+	assert.NoError(t, err, "Last-Modified should be valid HTTP date")
+
+	// Verify ETag is quoted.
+	etag := w.Header().Get("ETag")
+	assert.True(t, etag[0] == '"' && etag[len(etag)-1] == '"', "ETag should be quoted")
+}
+
+func TestGetCover_EmptyBookID(t *testing.T) {
+	server, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// Request with empty book ID.
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/covers/", http.NoBody)
+	w := httptest.NewRecorder()
+
+	server.ServeHTTP(w, req)
+
+	// Should get 404 (route doesn't match).
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestGetCover_ContentLength(t *testing.T) {
+	server, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// Create a test cover.
+	bookID := "book-content-length-test"
+	testCover := createTestJPEG(t, 1200, 1200)
+	err := server.imageStorage.Save(bookID, testCover)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/covers/"+bookID, http.NoBody)
+	w := httptest.NewRecorder()
+
+	server.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// Verify Content-Length header.
+	contentLength := w.Header().Get("Content-Length")
+	assert.NotEmpty(t, contentLength)
+	assert.Equal(t, len(testCover), w.Body.Len())
+}
+
+// Helper function to create a test JPEG image.
+func createTestJPEG(t *testing.T, width, height int) []byte {
+	t.Helper()
+
+	// Create test image with gradient.
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	for y := range height {
+		for x := range width {
+			r := uint8((x * 255) / width)
+			g := uint8((y * 255) / height)
+			b := uint8(((x + y) * 255) / (width + height))
+			img.Set(x, y, color.RGBA{R: r, G: g, B: b, A: 255})
+		}
+	}
+
+	// Encode as JPEG.
+	var buf bytes.Buffer
+	err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 90})
+	require.NoError(t, err)
+
+	return buf.Bytes()
 }

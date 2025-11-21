@@ -5,11 +5,13 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"os"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/listenupapp/listenup-server/internal/http/response"
+	"github.com/listenupapp/listenup-server/internal/media/images"
 	"github.com/listenupapp/listenup-server/internal/scanner"
 	"github.com/listenupapp/listenup-server/internal/service"
 	"github.com/listenupapp/listenup-server/internal/sse"
@@ -26,12 +28,13 @@ type Server struct {
 	sharingService    *service.SharingService
 	syncService       *service.SyncService
 	sseHandler        *sse.Handler
+	imageStorage      *images.Storage
 	router            *chi.Mux
 	logger            *slog.Logger
 }
 
 // NewServer creates a new HTTP server with all routes configured.
-func NewServer(store *store.Store, instanceService *service.InstanceService, authService *service.AuthService, bookService *service.BookService, collectionService *service.CollectionService, sharingService *service.SharingService, syncService *service.SyncService, sseHandler *sse.Handler, logger *slog.Logger) *Server {
+func NewServer(store *store.Store, instanceService *service.InstanceService, authService *service.AuthService, bookService *service.BookService, collectionService *service.CollectionService, sharingService *service.SharingService, syncService *service.SyncService, sseHandler *sse.Handler, imageStorage *images.Storage, logger *slog.Logger) *Server {
 	s := &Server{
 		store:             store,
 		instanceService:   instanceService,
@@ -41,6 +44,7 @@ func NewServer(store *store.Store, instanceService *service.InstanceService, aut
 		sharingService:    sharingService,
 		syncService:       syncService,
 		sseHandler:        sseHandler,
+		imageStorage:      imageStorage,
 		router:            chi.NewRouter(),
 		logger:            logger,
 	}
@@ -148,6 +152,9 @@ func (s *Server) setupRoutes() {
 			r.Get("/contributors", s.handleSyncContributors)
 			r.Get("/stream", s.sseHandler.ServeHTTP)
 		})
+
+		// Cover images (public for sharing, cached aggressively).
+		r.Get("/covers/{id}", s.handleGetCover)
 	})
 }
 
@@ -295,6 +302,66 @@ func (s *Server) handleSyncBooks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.Success(w, books, s.logger)
+}
+
+// handleGetCover serves cover images for audiobooks.
+func (s *Server) handleGetCover(w http.ResponseWriter, r *http.Request) {
+	bookID := chi.URLParam(r, "id")
+	if bookID == "" {
+		response.BadRequest(w, "Book ID is required", s.logger)
+		return
+	}
+
+	// Check if cover exists.
+	if !s.imageStorage.Exists(bookID) {
+		response.NotFound(w, "Cover not found for this book", s.logger)
+		return
+	}
+
+	// Get cover file info for Last-Modified header.
+	coverPath := s.imageStorage.Path(bookID)
+	fileInfo, err := os.Stat(coverPath)
+	if err != nil {
+		s.logger.Error("Failed to stat cover file", "book_id", bookID, "error", err)
+		response.InternalError(w, "Failed to retrieve cover", s.logger)
+		return
+	}
+
+	// Compute ETag from hash.
+	hash, err := s.imageStorage.Hash(bookID)
+	if err != nil {
+		s.logger.Error("Failed to compute cover hash", "book_id", bookID, "error", err)
+		response.InternalError(w, "Failed to retrieve cover", s.logger)
+		return
+	}
+	etag := `"` + hash + `"`
+
+	// Check If-None-Match for cache validation.
+	if match := r.Header.Get("If-None-Match"); match == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+
+	// Get cover data.
+	data, err := s.imageStorage.Get(bookID)
+	if err != nil {
+		s.logger.Error("Failed to read cover file", "book_id", bookID, "error", err)
+		response.InternalError(w, "Failed to retrieve cover", s.logger)
+		return
+	}
+
+	// Set caching headers.
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	w.Header().Set("Cache-Control", "public, max-age=604800") // 1 week
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Last-Modified", fileInfo.ModTime().UTC().Format(http.TimeFormat))
+
+	// Write image data.
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(data); err != nil {
+		s.logger.Error("Failed to write cover response", "book_id", bookID, "error", err)
+	}
 }
 
 // Helper functions.

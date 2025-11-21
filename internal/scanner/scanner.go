@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/listenupapp/listenup-server/internal/media/images"
 	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
@@ -40,9 +41,10 @@ var (
 
 // Scanner orchestrates the library scanning process.
 type Scanner struct {
-	store        *store.Store
-	eventEmitter store.EventEmitter
-	logger       *slog.Logger
+	store          *store.Store
+	eventEmitter   store.EventEmitter
+	logger         *slog.Logger
+	imageProcessor *images.Processor
 
 	walker   *Walker
 	grouper  *Grouper
@@ -51,15 +53,16 @@ type Scanner struct {
 }
 
 // NewScanner creates a new scanner instance.
-func NewScanner(store *store.Store, emitter store.EventEmitter, logger *slog.Logger) *Scanner {
+func NewScanner(store *store.Store, emitter store.EventEmitter, imageProcessor *images.Processor, logger *slog.Logger) *Scanner {
 	return &Scanner{
-		store:        store,
-		eventEmitter: emitter,
-		logger:       logger,
-		walker:       NewWalker(logger),
-		grouper:      NewGrouper(logger),
-		analyzer:     NewAnalyzer(logger),
-		differ:       NewDiffer(logger),
+		store:          store,
+		eventEmitter:   emitter,
+		logger:         logger,
+		imageProcessor: imageProcessor,
+		walker:         NewWalker(logger),
+		grouper:        NewGrouper(logger),
+		analyzer:       NewAnalyzer(logger),
+		differ:         NewDiffer(logger),
 	}
 }
 
@@ -358,6 +361,18 @@ func (s *Scanner) saveToDatabase(ctx context.Context, items []*LibraryItemData, 
 			})
 			result.Errors++
 			continue
+		}
+
+		// Extract and process embedded cover art if present.
+		if s.imageProcessor != nil && len(item.AudioFiles) > 0 {
+			firstAudioFile := item.AudioFiles[0].Path
+			if _, extractErr := s.imageProcessor.ExtractAndProcess(ctx, firstAudioFile, book.ID); extractErr != nil {
+				s.logger.Warn("failed to extract cover",
+					"book_id", book.ID,
+					"path", firstAudioFile,
+					"error", extractErr,
+				)
+			}
 		}
 
 		// Save to database.
