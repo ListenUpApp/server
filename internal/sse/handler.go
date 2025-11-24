@@ -74,12 +74,25 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Stream events until client disconnects.
 	ctx := r.Context()
+
+	// Send periodic heartbeat to keep connection alive (every 30 seconds).
+	heartbeatTicker := time.NewTicker(30 * time.Second)
+	defer heartbeatTicker.Stop()
+
 	for {
 		select {
 		case event := <-client.EventChan:
 			if err := h.sendEvent(w, rc, string(event.Type), event); err != nil {
 				// Client disconnect is normal, not an error condition.
 				clientLogger.Info("client disconnected during send")
+				return
+			}
+
+		case <-heartbeatTicker.C:
+			// Send heartbeat to keep connection alive.
+			heartbeat := NewHeartbeatEvent()
+			if err := h.sendEvent(w, rc, string(heartbeat.Type), heartbeat); err != nil {
+				clientLogger.Info("client disconnected during heartbeat")
 				return
 			}
 

@@ -163,7 +163,7 @@ func main() {
 	}()
 
 	// Initialize event processor.
-	eventProcessor := processor.NewEventProcessor(fileScanner, log.Logger)
+	eventProcessor := processor.NewEventProcessor(fileScanner, db, log.Logger)
 
 	// Process file watcher events in background.
 	go func() {

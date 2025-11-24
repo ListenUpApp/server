@@ -395,3 +395,58 @@ func BenchmarkAnalyzer_Analyze(b *testing.B) {
 		}
 	}
 }
+package scanner
+
+import (
+	"testing"
+)
+
+// TestBuildBookMetadata_UsesAlbumForTitle verifies that buildBookMetadata
+// uses the Album tag (book title) instead of Title tag (track/chapter title).
+func TestBuildBookMetadata_UsesAlbumForTitle(t *testing.T) {
+	tests := []struct {
+		name          string
+		audioMetadata *AudioMetadata
+		expectedTitle string
+	}{
+		{
+			name: "Album tag should be used for book title",
+			audioMetadata: &AudioMetadata{
+				Title: "01 - Prologue", // Track title (wrong)
+				Album: "A Clash of Kings", // Book title (correct)
+				Artist: "George R.R. Martin",
+			},
+			expectedTitle: "A Clash of Kings",
+		},
+		{
+			name: "Handle missing Title tag (null)",
+			audioMetadata: &AudioMetadata{
+				Title: "", // Empty track title
+				Album: "North! Or Be Eaten", // Book title
+				Artist: "Andrew Peterson",
+			},
+			expectedTitle: "North! Or Be Eaten",
+		},
+		{
+			name: "Chapter title should not be used",
+			audioMetadata: &AudioMetadata{
+				Title: "Chapter Four", // Chapter title (wrong)
+				Album: "The Tower of Swallows", // Book title (correct)
+				Artist: "Andrzej Sapkowski",
+			},
+			expectedTitle: "The Tower of Swallows",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildBookMetadata(tt.audioMetadata)
+			if result == nil {
+				t.Fatal("buildBookMetadata returned nil")
+			}
+			if result.Title != tt.expectedTitle {
+				t.Errorf("Title = %q, want %q", result.Title, tt.expectedTitle)
+			}
+		})
+	}
+}

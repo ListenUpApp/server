@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/dto"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
@@ -27,15 +28,17 @@ type ManifestResponse struct {
 
 // SyncService orchestrates sync operations between server and clients.
 type SyncService struct {
-	store  *store.Store
-	logger *slog.Logger
+	store    *store.Store
+	enricher *dto.Enricher
+	logger   *slog.Logger
 }
 
 // NewSyncService creates a new sync service.
 func NewSyncService(store *store.Store, logger *slog.Logger) *SyncService {
 	return &SyncService{
-		store:  store,
-		logger: logger,
+		store:    store,
+		enricher: dto.NewEnricher(store),
+		logger:   logger,
 	}
 }
 
@@ -94,10 +97,11 @@ func (s *SyncService) GetManifest(ctx context.Context) (*ManifestResponse, error
 }
 
 // BooksResponse represents paginated books with related entities.
+// Uses shared dto.Book for consistency with SSE events.
 type BooksResponse struct {
-	NextCursor string         `json:"next_cursor,omitempty"`
-	Books      []*domain.Book `json:"books"`
-	HasMore    bool           `json:"has_more"`
+	NextCursor string      `json:"next_cursor,omitempty"`
+	Books      []*dto.Book `json:"books"`
+	HasMore    bool        `json:"has_more"`
 }
 
 // GetBooksForSync returns paginated books for initial sync.
@@ -134,7 +138,7 @@ func (s *SyncService) GetBooksForSync(ctx context.Context, userID string, params
 
 	if startIdx >= total {
 		return &BooksResponse{
-			Books:   []*domain.Book{},
+			Books:   []*dto.Book{},
 			HasMore: false,
 		}, nil
 	}
@@ -149,8 +153,15 @@ func (s *SyncService) GetBooksForSync(ctx context.Context, userID string, params
 	books := accessibleBooks[startIdx:endIdx]
 	hasMore := endIdx < total
 
+	// Enrich books with denormalized display fields (author names, narrator names, series names).
+	// Uses shared enricher for consistency with SSE events.
+	enrichedBooks, err := s.enricher.EnrichBooks(ctx, books)
+	if err != nil {
+		return nil, fmt.Errorf("failed to enrich books: %w", err)
+	}
+
 	response := &BooksResponse{
-		Books:   books,
+		Books:   enrichedBooks,
 		HasMore: hasMore,
 	}
 

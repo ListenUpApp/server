@@ -309,7 +309,7 @@ func buildBookMetadata(audioMeta *AudioMetadata) *BookMetadata {
 	}
 
 	bookMeta := &BookMetadata{
-		Title:       audioMeta.Title,
+		Title:       audioMeta.Album, // Use Album tag for book title (not Title which is track/chapter)
 		Subtitle:    audioMeta.Subtitle,
 		Description: audioMeta.Description,
 		Publisher:   audioMeta.Publisher,

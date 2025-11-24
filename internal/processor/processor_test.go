@@ -11,10 +11,112 @@ import (
 	"testing"
 	"time"
 
+	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/id"
 	"github.com/listenupapp/listenup-server/internal/scanner"
 	"github.com/listenupapp/listenup-server/internal/store"
 	"github.com/listenupapp/listenup-server/internal/watcher"
 )
+
+// mockBookStore is a simple in-memory implementation of BookStore for testing.
+type mockBookStore struct {
+	mu              sync.Mutex
+	books           map[string]*domain.Book // path -> book
+	contributors    map[string]*domain.Contributor
+	series          map[string]*domain.Series
+	createBookCalls int
+	updateBookCalls int
+}
+
+func newMockBookStore() *mockBookStore {
+	return &mockBookStore{
+		books:        make(map[string]*domain.Book),
+		contributors: make(map[string]*domain.Contributor),
+		series:       make(map[string]*domain.Series),
+	}
+}
+
+func (m *mockBookStore) GetBookByPath(_ context.Context, path string) (*domain.Book, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	book, ok := m.books[path]
+	if !ok {
+		return nil, store.ErrBookNotFound
+	}
+	return book, nil
+}
+
+func (m *mockBookStore) CreateBook(_ context.Context, book *domain.Book) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, exists := m.books[book.Path]; exists {
+		return store.ErrBookExists
+	}
+	m.books[book.Path] = book
+	m.createBookCalls++
+	return nil
+}
+
+func (m *mockBookStore) BroadcastBookCreated(_ context.Context, _ *domain.Book) error {
+	// No-op for tests - SSE broadcasting not tested here
+	return nil
+}
+
+func (m *mockBookStore) UpdateBook(_ context.Context, book *domain.Book) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, exists := m.books[book.Path]; !exists {
+		return store.ErrBookNotFound
+	}
+	m.books[book.Path] = book
+	m.updateBookCalls++
+	return nil
+}
+
+func (m *mockBookStore) GetOrCreateContributorByName(_ context.Context, name string) (*domain.Contributor, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if contributor, ok := m.contributors[name]; ok {
+		return contributor, nil
+	}
+
+	contributorID, err := id.Generate("contributor")
+	if err != nil {
+		return nil, err
+	}
+
+	contributor := &domain.Contributor{
+		Syncable: domain.Syncable{ID: contributorID},
+		Name:     name,
+	}
+	m.contributors[name] = contributor
+	return contributor, nil
+}
+
+func (m *mockBookStore) GetOrCreateSeriesByName(_ context.Context, name string) (*domain.Series, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if s, ok := m.series[name]; ok {
+		return s, nil
+	}
+
+	seriesID, err := id.Generate("series")
+	if err != nil {
+		return nil, err
+	}
+
+	s := &domain.Series{
+		Syncable: domain.Syncable{ID: seriesID},
+		Name:     name,
+	}
+	m.series[name] = s
+	return s, nil
+}
 
 // TestEventProcessor_ProcessEvent_AudioFile tests processing an audio file event.
 func TestEventProcessor_ProcessEvent_AudioFile(t *testing.T) {
@@ -35,8 +137,9 @@ func TestEventProcessor_ProcessEvent_AudioFile(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError, // Reduce noise in tests
 	}))
+	mockStore := newMockBookStore()
 	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
-	processor := NewEventProcessor(scnr, logger)
+	processor := NewEventProcessor(scnr, mockStore, logger)
 
 	// Create event.
 	event := watcher.Event{
@@ -78,7 +181,8 @@ func TestEventProcessor_ProcessEvent_CoverFile(t *testing.T) {
 		Level: slog.LevelError,
 	}))
 	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
-	processor := NewEventProcessor(scnr, logger)
+	mockStore := newMockBookStore()
+	processor := NewEventProcessor(scnr, mockStore, logger)
 
 	// Create event.
 	event := watcher.Event{
@@ -114,7 +218,8 @@ func TestEventProcessor_ProcessEvent_MetadataFile(t *testing.T) {
 		Level: slog.LevelError,
 	}))
 	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
-	processor := NewEventProcessor(scnr, logger)
+	mockStore := newMockBookStore()
+	processor := NewEventProcessor(scnr, mockStore, logger)
 
 	// Create event.
 	event := watcher.Event{
@@ -150,7 +255,8 @@ func TestEventProcessor_ProcessEvent_IgnoredFile(t *testing.T) {
 		Level: slog.LevelError,
 	}))
 	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
-	processor := NewEventProcessor(scnr, logger)
+	mockStore := newMockBookStore()
+	processor := NewEventProcessor(scnr, mockStore, logger)
 
 	// Create event.
 	event := watcher.Event{
@@ -183,7 +289,8 @@ func TestEventProcessor_ProcessEvent_RemovedFile(t *testing.T) {
 		Level: slog.LevelError,
 	}))
 	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
-	processor := NewEventProcessor(scnr, logger)
+	mockStore := newMockBookStore()
+	processor := NewEventProcessor(scnr, mockStore, logger)
 
 	// Create event for a removed file (file doesn't need to exist).
 	removedFile := filepath.Join(bookFolder, "chapter01.mp3")
@@ -215,7 +322,8 @@ func TestEventProcessor_ProcessEvent_RemovedFile_AllFilesGone(t *testing.T) {
 		Level: slog.LevelInfo, // Enable to verify logging
 	}))
 	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
-	processor := NewEventProcessor(scnr, logger)
+	mockStore := newMockBookStore()
+	processor := NewEventProcessor(scnr, mockStore, logger)
 
 	// Simulate removal of last audio file.
 	removedFile := filepath.Join(bookFolder, "chapter01.mp3")
@@ -259,7 +367,8 @@ func TestEventProcessor_ConcurrentEvents(t *testing.T) {
 		Level: slog.LevelError,
 	}))
 	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
-	processor := NewEventProcessor(scnr, logger)
+	mockStore := newMockBookStore()
+	processor := NewEventProcessor(scnr, mockStore, logger)
 
 	// Track how many events were actually processed (not skipped due to lock).
 	var processedCount atomic.Int32
@@ -327,7 +436,8 @@ func TestEventProcessor_MultiFileBookEvolution(t *testing.T) {
 		Level: slog.LevelError,
 	}))
 	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
-	processor := NewEventProcessor(scnr, logger)
+	mockStore := newMockBookStore()
+	processor := NewEventProcessor(scnr, mockStore, logger)
 
 	ctx := context.Background()
 
@@ -428,7 +538,8 @@ func TestEventProcessor_DiscFolderHandling(t *testing.T) {
 		Level: slog.LevelError,
 	}))
 	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
-	processor := NewEventProcessor(scnr, logger)
+	mockStore := newMockBookStore()
+	processor := NewEventProcessor(scnr, mockStore, logger)
 
 	ctx := context.Background()
 
@@ -476,7 +587,7 @@ func TestEventProcessor_GetFolderLock(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError,
 	}))
-	processor := NewEventProcessor(nil, logger)
+	processor := NewEventProcessor(nil, nil, logger)
 
 	folderPath := "/library/Author/Book"
 
@@ -515,7 +626,7 @@ func TestEventProcessor_GetFolderLock_Concurrent(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError,
 	}))
-	processor := NewEventProcessor(nil, logger)
+	processor := NewEventProcessor(nil, nil, logger)
 
 	folderPath := "/library/Author/Book"
 	numGoroutines := 100
@@ -563,7 +674,8 @@ func TestEventProcessor_ModifiedEvent(t *testing.T) {
 		Level: slog.LevelError,
 	}))
 	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
-	processor := NewEventProcessor(scnr, logger)
+	mockStore := newMockBookStore()
+	processor := NewEventProcessor(scnr, mockStore, logger)
 
 	// Create modified event.
 	event := watcher.Event{

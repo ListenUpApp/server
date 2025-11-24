@@ -8,6 +8,7 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/dto"
 )
 
 // EventEmitter is the interface for emitting SSE events.
@@ -35,6 +36,10 @@ type Store struct {
 	// SSE event emitter for broadcasting changes.
 	eventEmitter EventEmitter
 
+	// Enricher for denormalizing domain models before sending to clients.
+	// Used to populate display fields (author names, series names) in SSE events.
+	enricher *dto.Enricher
+
 	// Generic entities
 	Users            *Entity[domain.User]
 	CollectionShares *Entity[domain.CollectionShare]
@@ -56,6 +61,10 @@ func New(path string, logger *slog.Logger, emitter EventEmitter) (*Store, error)
 		logger:       logger,
 		eventEmitter: emitter,
 	}
+
+	// Initialize enricher for SSE event denormalization.
+	// Store implements dto.Store interface (GetContributorsByIDs, GetSeries).
+	store.enricher = dto.NewEnricher(store)
 
 	// Initialize generic entities
 	store.initUsers()
