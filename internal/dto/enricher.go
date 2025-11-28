@@ -60,6 +60,27 @@ func (e *Enricher) EnrichBook(ctx context.Context, book *domain.Book) (*Book, er
 		}
 	}
 
+	// Build denormalized contributors list with names
+	dto.Contributors = make([]BookContributor, 0, len(book.Contributors))
+	for _, bc := range book.Contributors {
+		name := ""
+		if contributor, ok := contributorMap[bc.ContributorID]; ok {
+			name = contributor.Name
+		}
+
+		// Convert roles to strings
+		roles := make([]string, len(bc.Roles))
+		for i, role := range bc.Roles {
+			roles[i] = role.String()
+		}
+
+		dto.Contributors = append(dto.Contributors, BookContributor{
+			ContributorID: bc.ContributorID,
+			Name:          name,
+			Roles:         roles,
+		})
+	}
+
 	// Enrich author (first contributor with "author" role)
 	for _, bc := range book.Contributors {
 		if hasRole(bc, domain.RoleAuthor) {
@@ -144,6 +165,27 @@ func (e *Enricher) EnrichBooks(ctx context.Context, books []*domain.Book) ([]*Bo
 	enrichedBooks := make([]*Book, len(books))
 	for i, book := range books {
 		dto := &Book{Book: book}
+
+		// Build denormalized contributors list with names
+		dto.Contributors = make([]BookContributor, 0, len(book.Contributors))
+		for _, bc := range book.Contributors {
+			name := ""
+			if contributor, ok := contributorMap[bc.ContributorID]; ok {
+				name = contributor.Name
+			}
+
+			// Convert roles to strings
+			roles := make([]string, len(bc.Roles))
+			for j, role := range bc.Roles {
+				roles[j] = role.String()
+			}
+
+			dto.Contributors = append(dto.Contributors, BookContributor{
+				ContributorID: bc.ContributorID,
+				Name:          name,
+				Roles:         roles,
+			})
+		}
 
 		// Enrich author
 		for _, bc := range book.Contributors {

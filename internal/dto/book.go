@@ -7,6 +7,14 @@ package dto
 
 import "github.com/listenupapp/listenup-server/internal/domain"
 
+// BookContributor is the client-facing representation of a book-contributor relationship.
+// Includes the denormalized contributor name for immediate rendering.
+type BookContributor struct {
+	ContributorID string   `json:"contributor_id"`
+	Name          string   `json:"name"`  // Denormalized from Contributor entity
+	Roles         []string `json:"roles"` // String representation of roles
+}
+
 // Book is the client-facing representation of a book.
 //
 // Philosophy: SSE events are UI updates, not database replication.
@@ -21,6 +29,9 @@ import "github.com/listenupapp/listenup-server/internal/domain"
 // Cache refresh is a feature: name changes propagate automatically.
 type Book struct {
 	*domain.Book // Embeds all database fields
+
+	// Override Contributors with denormalized version
+	Contributors []BookContributor `json:"contributors"`
 
 	// Denormalized fields for immediate rendering
 	// These are populated by Enricher before sending to clients

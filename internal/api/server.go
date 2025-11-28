@@ -7,9 +7,11 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	"github.com/listenupapp/listenup-server/internal/http/response"
 	"github.com/listenupapp/listenup-server/internal/media/images"
 	"github.com/listenupapp/listenup-server/internal/scanner"
@@ -31,6 +33,7 @@ type Server struct {
 	imageStorage      *images.Storage
 	router            *chi.Mux
 	logger            *slog.Logger
+	authRateLimiter   *RateLimiter
 }
 
 // NewServer creates a new HTTP server with all routes configured.
@@ -47,6 +50,10 @@ func NewServer(store *store.Store, instanceService *service.InstanceService, aut
 		imageStorage:      imageStorage,
 		router:            chi.NewRouter(),
 		logger:            logger,
+		// Rate limiter for login endpoint: 20 attempts per minute with burst of 10.
+		// Sensible default for self-hosted - protects against brute force
+		// without impeding legitimate use.
+		authRateLimiter: NewRateLimiter(20, time.Minute, 10),
 	}
 
 	s.setupMiddleware()
@@ -62,6 +69,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // setupMiddleware configures middleware stack.
 func (s *Server) setupMiddleware() {
+	// CORS middleware - permissive defaults for self-hosted deployments.
+	// Users can restrict origins by placing a reverse proxy in front.
+	s.router.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Requested-With"},
+		ExposedHeaders:   []string{"Link", "X-Total-Count"},
+		AllowCredentials: true,
+		MaxAge:           300, // 5 minutes
+	}))
+
 	s.router.Use(middleware.RequestID)
 	s.router.Use(middleware.RealIP)
 	s.router.Use(middleware.Logger)
@@ -80,8 +98,12 @@ func (s *Server) setupRoutes() {
 
 		// Auth endpoints (public).
 		r.Route("/auth", func(r chi.Router) {
-			r.Post("/setup", s.handleSetup)
-			r.Post("/login", s.handleLogin)
+			// Rate limit login/setup (brute-force attack vectors).
+			// Refresh/logout don't need rate limiting:
+			// - Refresh tokens are random and single-use
+			// - Logout is harmless
+			r.With(RateLimitMiddleware(s.authRateLimiter, s.logger)).Post("/setup", s.handleSetup)
+			r.With(RateLimitMiddleware(s.authRateLimiter, s.logger)).Post("/login", s.handleLogin)
 			r.Post("/refresh", s.handleRefresh)
 			r.Post("/logout", s.handleLogout)
 		})
@@ -144,8 +166,9 @@ func (s *Server) setupRoutes() {
 			r.Post("/{id}/scan", s.handleTriggerScan)
 		})
 
-		// Sync endpoints.
+		// Sync endpoints (require auth for ACL filtering).
 		r.Route("/sync", func(r chi.Router) {
+			r.Use(s.requireAuth)
 			r.Get("/manifest", s.handleGetManifest)
 			r.Get("/books", s.handleSyncBooks)
 			r.Get("/series", s.handleSyncSeries)
