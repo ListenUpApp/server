@@ -3,12 +3,14 @@ package store
 import (
 	"encoding/base64"
 	"fmt"
+	"time"
 )
 
 // PaginationParams contains pagination request parameters.
 type PaginationParams struct {
-	Cursor string
-	Limit  int
+	Cursor       string
+	Limit        int
+	UpdatedAfter time.Time
 }
 
 // PaginatedResult contains paginated data and metadata.

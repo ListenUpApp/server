@@ -284,3 +284,76 @@ func (s *Store) CanUserAccessCollection(ctx context.Context, userID, collectionI
 
 	return true, share.Permission, false, nil
 }
+
+// GetBooksForUserUpdatedAfter efficiently retrieves books accessible to the user that have been
+// updated after the specified timestamp. It uses the global updated_at index to find candidates
+// and then filters them by user access (uncollected or shared via collection).
+//
+// This is optimized for delta sync where the number of updated books is usually small compared
+// to the total library size.
+func (s *Store) GetBooksForUserUpdatedAfter(ctx context.Context, userID string, timestamp time.Time) ([]*domain.Book, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	var accessibleBooks []*domain.Book
+
+	// Iterate over the global updated_at index starting from timestamp
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false // We only need keys
+		opts.Prefix = []byte(bookByUpdatedAtPrefix)
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		// Seek to the timestamp
+		seekKey := formatTimestampIndexKey(bookByUpdatedAtPrefix, timestamp, "", "")
+		
+		for it.Seek(seekKey); it.ValidForPrefix([]byte(bookByUpdatedAtPrefix)); it.Next() {
+			key := it.Item().Key()
+			
+			// Parse key to get book ID: idx:books:updated_at:{RFC3339Nano}:book:{uuid}
+			// We can use the existing parseTimestampIndexKey helper or parse manually
+			entityType, bookID, err := parseTimestampIndexKey(key, bookByUpdatedAtPrefix)
+			if err != nil {
+				// Skip invalid keys
+				continue
+			}
+
+			// We only care about books (though currently this index only has books)
+			if entityType != "book" {
+				continue
+			}
+
+			// Check if user has access to this book
+			// This uses the reverse index (O(1) relative to library size)
+			canAccess, err := s.CanUserAccessBook(ctx, userID, bookID)
+			if err != nil {
+				if s.logger != nil {
+					s.logger.Warn("failed to check access for book during delta sync", "book_id", bookID, "error", err)
+				}
+				continue
+			}
+
+			if canAccess {
+				// Fetch the actual book
+				book, err := s.getBookInternal(ctx, bookID)
+				if err != nil {
+					continue
+				}
+				// Double check timestamp (should be redundant if index is correct, but safe)
+				if book.UpdatedAt.After(timestamp) {
+					accessibleBooks = append(accessibleBooks, book)
+				}
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("get updated books: %w", err)
+	}
+
+	return accessibleBooks, nil
+}

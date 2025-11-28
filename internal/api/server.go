@@ -380,6 +380,12 @@ func parsePaginationParams(r *http.Request) store.PaginationParams {
 		params.Cursor = cursor
 	}
 
+	if updatedAfterStr := r.URL.Query().Get("updated_after"); updatedAfterStr != "" {
+		if t, err := time.Parse(time.RFC3339, updatedAfterStr); err == nil {
+			params.UpdatedAfter = t
+		}
+	}
+
 	// Validate parameters.
 	params.Validate()
 
