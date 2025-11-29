@@ -93,6 +93,11 @@ func Conflict(w http.ResponseWriter, message string, logger *slog.Logger) {
 	Error(w, http.StatusConflict, message, logger)
 }
 
+// TooManyRequests writes a 429 Too Many Requests response.
+func TooManyRequests(w http.ResponseWriter, message string, logger *slog.Logger) {
+	Error(w, http.StatusTooManyRequests, message, logger)
+}
+
 // InternalError writes a 500 Internal Server Error response.
 func InternalError(w http.ResponseWriter, message string, logger *slog.Logger) {
 	Error(w, http.StatusInternalServerError, message, logger)

@@ -402,6 +402,21 @@ func (s *Scanner) saveToDatabase(ctx context.Context, items []*LibraryItemData, 
 	return nil
 }
 
+// ExtractCoverArt extracts embedded cover art from an audio file and processes it.
+// Returns the path to the processed cover image, or empty string if no cover found.
+func (s *Scanner) ExtractCoverArt(ctx context.Context, audioFilePath, bookID string) (string, error) {
+	if s.imageProcessor == nil {
+		return "", nil // No image processor configured
+	}
+
+	coverPath, err := s.imageProcessor.ExtractAndProcess(ctx, audioFilePath, bookID)
+	if err != nil {
+		return "", fmt.Errorf("extract and process cover: %w", err)
+	}
+
+	return coverPath, nil
+}
+
 // ScanFolder scans a specific folder incrementally.
 // Only scans the given folder (and disc subdirectories if present), not the entire library.
 // Returns a LibraryItemData structure that can be used to create or update a library item.
@@ -526,6 +541,12 @@ func (s *Scanner) ScanFolder(ctx context.Context, folderPath string, opts ScanOp
 		AudioFiles:    analyzed,
 		ImageFiles:    imageFiles,
 		MetadataFiles: metadataFiles,
+	}
+
+	// Build item-level BookMetadata from first audio file's metadata.
+	// This ensures contributors are extracted properly in ConvertToBook().
+	if len(analyzed) > 0 && analyzed[0].Metadata != nil {
+		item.Metadata = buildBookMetadata(analyzed[0].Metadata)
 	}
 
 	// Determine if this is a file or directory.

@@ -45,9 +45,13 @@ type LibraryConfig struct {
 
 // ServerConfig holds server configuration.
 type ServerConfig struct {
-	Name      string
-	LocalURL  string // Optional
-	RemoteURL string // Optional
+	Name         string
+	LocalURL     string        // Optional
+	RemoteURL    string        // Optional
+	Port         string        // Server port (default: 8080)
+	ReadTimeout  time.Duration // HTTP read timeout (default: 15s)
+	WriteTimeout time.Duration // HTTP write timeout (default: 15s)
+	IdleTimeout  time.Duration // HTTP idle timeout (default: 60s)
 }
 
 // AuthConfig holds authentication configuration.
@@ -78,6 +82,12 @@ func LoadConfig() (*Config, error) {
 	accessTokenDuration := flag.String("access-token-duration", "", "Access token lifetime (e.g., 15m)")
 	refreshTokenDuration := flag.String("refresh-token-duration", "", "Refresh token lifetime (e.g., 720h)")
 
+	// Server flags
+	serverPort := flag.String("port", "", "Server port (default: 8080)")
+	readTimeout := flag.String("read-timeout", "", "HTTP read timeout (default: 15s)")
+	writeTimeout := flag.String("write-timeout", "", "HTTP write timeout (default: 15s)")
+	idleTimeout := flag.String("idle-timeout", "", "HTTP idle timeout (default: 60s)")
+
 	envFile := flag.String("env-file", ".env", "Path to .env file")
 
 	// Parse flags but don't exit on error - we want to handle it gracefully.
@@ -106,6 +116,7 @@ func LoadConfig() (*Config, error) {
 			Name:      getConfigValue(*serverName, "SERVER_NAME", "ListenUp Server"),
 			LocalURL:  getConfigValue(*serverLocalURL, "SERVER_LOCAL_URL", ""),
 			RemoteURL: getConfigValue(*serverRemoteURL, "SERVER_REMOTE_URL", ""),
+			Port:      getConfigValue(*serverPort, "SERVER_PORT", "8080"),
 		},
 
 		Auth: AuthConfig{
@@ -127,6 +138,28 @@ func LoadConfig() (*Config, error) {
 		return nil, fmt.Errorf("invalid refresh token duration %q: %w", refreshDurationStr, err)
 	}
 	cfg.Auth.RefreshTokenDuration = refreshDuration
+
+	// Parse server timeouts.
+	readTimeoutStr := getConfigValue(*readTimeout, "SERVER_READ_TIMEOUT", "15s")
+	readTimeoutDuration, err := time.ParseDuration(readTimeoutStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid read timeout %q: %w", readTimeoutStr, err)
+	}
+	cfg.Server.ReadTimeout = readTimeoutDuration
+
+	writeTimeoutStr := getConfigValue(*writeTimeout, "SERVER_WRITE_TIMEOUT", "15s")
+	writeTimeoutDuration, err := time.ParseDuration(writeTimeoutStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid write timeout %q: %w", writeTimeoutStr, err)
+	}
+	cfg.Server.WriteTimeout = writeTimeoutDuration
+
+	idleTimeoutStr := getConfigValue(*idleTimeout, "SERVER_IDLE_TIMEOUT", "60s")
+	idleTimeoutDuration, err := time.ParseDuration(idleTimeoutStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid idle timeout %q: %w", idleTimeoutStr, err)
+	}
+	cfg.Server.IdleTimeout = idleTimeoutDuration
 
 	// Expand and validate metadata path.
 	if err := cfg.expandMetadataPath(); err != nil {

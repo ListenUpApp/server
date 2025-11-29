@@ -52,6 +52,12 @@ func (s *Server) handleCreateCollection(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Validate collection name length.
+	if len(req.Name) > 255 {
+		response.BadRequest(w, "Collection name must be 255 characters or less", s.logger)
+		return
+	}
+
 	collection, err := s.collectionService.CreateCollection(ctx, userID, req.LibraryID, req.Name)
 	if err != nil {
 		s.logger.Error("Failed to create collection", "error", err, "user_id", userID)
@@ -142,6 +148,12 @@ func (s *Server) handleUpdateCollection(w http.ResponseWriter, r *http.Request) 
 
 	if req.Name == "" {
 		response.BadRequest(w, "Collection name is required", s.logger)
+		return
+	}
+
+	// Validate collection name length.
+	if len(req.Name) > 255 {
+		response.BadRequest(w, "Collection name must be 255 characters or less", s.logger)
 		return
 	}
 

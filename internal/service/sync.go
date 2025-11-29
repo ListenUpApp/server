@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/dto"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
@@ -27,15 +28,17 @@ type ManifestResponse struct {
 
 // SyncService orchestrates sync operations between server and clients.
 type SyncService struct {
-	store  *store.Store
-	logger *slog.Logger
+	store    *store.Store
+	enricher *dto.Enricher
+	logger   *slog.Logger
 }
 
 // NewSyncService creates a new sync service.
 func NewSyncService(store *store.Store, logger *slog.Logger) *SyncService {
 	return &SyncService{
-		store:  store,
-		logger: logger,
+		store:    store,
+		enricher: dto.NewEnricher(store),
+		logger:   logger,
 	}
 }
 
@@ -94,14 +97,16 @@ func (s *SyncService) GetManifest(ctx context.Context) (*ManifestResponse, error
 }
 
 // BooksResponse represents paginated books with related entities.
+// Uses shared dto.Book for consistency with SSE events.
 type BooksResponse struct {
-	NextCursor string         `json:"next_cursor,omitempty"`
-	Books      []*domain.Book `json:"books"`
-	HasMore    bool           `json:"has_more"`
+	NextCursor     string      `json:"next_cursor,omitempty"`
+	Books          []*dto.Book `json:"books"`
+	DeletedBookIDs []string    `json:"deleted_book_ids,omitempty"`
+	HasMore        bool        `json:"has_more"`
 }
 
-// GetBooksForSync returns paginated books for initial sync.
-// Only returns books the user has access to (permissive access model).
+// GetBooksForSync returns paginated books for sync.
+// Supports both full sync (paginated iteration of all books) and delta sync (books updated after timestamp).
 func (s *SyncService) GetBooksForSync(ctx context.Context, userID string, params store.PaginationParams) (*BooksResponse, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -110,14 +115,43 @@ func (s *SyncService) GetBooksForSync(ctx context.Context, userID string, params
 	// Validate and set defaults.
 	params.Validate()
 
-	// Get all books the user can access (implements permissive access model)
-	accessibleBooks, err := s.store.GetBooksForUser(ctx, userID)
-	if err != nil {
-		return nil, err
+	var books []*domain.Book
+	var deletedBookIDs []string
+	var err error
+
+	// DELTA SYNC: If UpdatedAfter is set, fetch only changed items.
+	if !params.UpdatedAfter.IsZero() {
+		// 1. Get books updated after timestamp
+		books, err = s.store.GetBooksForUserUpdatedAfter(ctx, userID, params.UpdatedAfter)
+		if err != nil {
+			return nil, err
+		}
+
+		// 2. Get books deleted after timestamp (for local deletion)
+		// Note: We don't filter deletions by ACL because if a user had access to a book
+		// that was deleted, they should probably delete it locally too.
+		// Leaking that a book ID *existed* and was deleted is a minor privacy trade-off
+		// for simpler sync logic.
+		deletedBookIDs, err = s.store.GetBooksDeletedAfter(ctx, params.UpdatedAfter)
+		if err != nil {
+			return nil, err
+		}
+
+		// Delta sync results are typically small enough to not need pagination,
+		// but we apply it anyway if the result set is huge.
+		// However, for simplicity in this iteration, we return all changes in one go
+		// if they fit in reasonable memory, or we could reuse the in-memory pagination logic below.
+	} else {
+		// FULL SYNC: Get all books the user can access (permissive access model)
+		books, err = s.store.GetBooksForUser(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	// Apply cursor-based pagination manually
-	total := len(accessibleBooks)
+	// Apply cursor-based pagination manually (in-memory)
+	// This applies to both full sync and delta sync results
+	total := len(books)
 
 	// Decode cursor to get starting index
 	startIdx := 0
@@ -132,9 +166,9 @@ func (s *SyncService) GetBooksForSync(ctx context.Context, userID string, params
 		}
 	}
 
-	if startIdx >= total {
+	if startIdx >= total && len(deletedBookIDs) == 0 {
 		return &BooksResponse{
-			Books:   []*domain.Book{},
+			Books:   []*dto.Book{},
 			HasMore: false,
 		}, nil
 	}
@@ -146,12 +180,24 @@ func (s *SyncService) GetBooksForSync(ctx context.Context, userID string, params
 	}
 
 	// Slice the results
-	books := accessibleBooks[startIdx:endIdx]
+	pageBooks := books[startIdx:endIdx]
 	hasMore := endIdx < total
 
+	// Enrich books with denormalized display fields.
+	enrichedBooks, err := s.enricher.EnrichBooks(ctx, pageBooks)
+	if err != nil {
+		return nil, fmt.Errorf("failed to enrich books: %w", err)
+	}
+
 	response := &BooksResponse{
-		Books:   books,
-		HasMore: hasMore,
+		Books:          enrichedBooks,
+		DeletedBookIDs: deletedBookIDs, // Include deleted IDs (usually sent on first page of delta sync)
+		HasMore:        hasMore,
+	}
+
+	// Only send deleted IDs on the first page to avoid duplication
+	if startIdx > 0 {
+		response.DeletedBookIDs = nil
 	}
 
 	// Set next cursor if there are more results
@@ -161,7 +207,9 @@ func (s *SyncService) GetBooksForSync(ctx context.Context, userID string, params
 
 	s.logger.Info("books fetched for sync",
 		"user_id", userID,
-		"count", len(books),
+		"delta_sync", !params.UpdatedAfter.IsZero(),
+		"count", len(pageBooks),
+		"deleted_count", len(deletedBookIDs),
 		"has_more", hasMore,
 	)
 
@@ -175,9 +223,8 @@ type ContributorsResponse struct {
 	HasMore      bool                  `json:"has_more"`
 }
 
-// GetContributorsForSync returns paginated contributors for initial sync.
-// Note: Contributors don't have direct access control - they're visible if any book they contributed to is visible.
-// For simplicity, we return all contributors and rely on client-side filtering based on accessible books.
+// GetContributorsForSync returns paginated contributors for sync.
+// Supports both full sync and delta sync (contributors updated after timestamp).
 func (s *SyncService) GetContributorsForSync(ctx context.Context, userID string, params store.PaginationParams) (*ContributorsResponse, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -185,21 +232,75 @@ func (s *SyncService) GetContributorsForSync(ctx context.Context, userID string,
 
 	params.Validate()
 
-	result, err := s.store.ListContributors(ctx, params)
-	if err != nil {
-		return nil, err
+	var contributors []*domain.Contributor
+	var err error
+
+	// DELTA SYNC: If UpdatedAfter is set, fetch only changed items.
+	if !params.UpdatedAfter.IsZero() {
+		contributors, err = s.store.GetContributorsUpdatedAfter(ctx, params.UpdatedAfter)
+		if err != nil {
+			return nil, err
+		}
+
+		// Note: Contributor deletions are not currently tracked for delta sync.
+		// Clients will need a full sync to detect deleted contributors.
+	} else {
+		// FULL SYNC: Get all contributors
+		// We use the existing list method which supports pagination
+		result, err := s.store.ListContributors(ctx, params)
+		if err != nil {
+			return nil, err
+		}
+
+		return &ContributorsResponse{
+			Contributors: result.Items,
+			NextCursor:   result.NextCursor,
+			HasMore:      result.HasMore,
+		}, nil
 	}
 
+	// Apply manual pagination for delta sync results
+	total := len(contributors)
+	startIdx := 0
+	if params.Cursor != "" {
+		decoded, err := store.DecodeCursor(params.Cursor)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := fmt.Sscanf(decoded, "%d", &startIdx); err != nil {
+			return nil, err
+		}
+	}
+
+	if startIdx >= total {
+		return &ContributorsResponse{
+			Contributors: []*domain.Contributor{},
+			HasMore:      false,
+		}, nil
+	}
+
+	endIdx := startIdx + params.Limit
+	if endIdx > total {
+		endIdx = total
+	}
+
+	pageItems := contributors[startIdx:endIdx]
+	hasMore := endIdx < total
+
 	response := &ContributorsResponse{
-		Contributors: result.Items,
-		NextCursor:   result.NextCursor,
-		HasMore:      result.HasMore,
+		Contributors: pageItems,
+		HasMore:      hasMore,
+	}
+
+	if hasMore {
+		response.NextCursor = store.EncodeCursor(fmt.Sprintf("%d", endIdx))
 	}
 
 	s.logger.Info("contributors fetched for sync",
 		"user_id", userID,
-		"count", len(result.Items),
-		"has_more", result.HasMore,
+		"delta_sync", !params.UpdatedAfter.IsZero(),
+		"count", len(pageItems),
+		"has_more", hasMore,
 	)
 
 	return response, nil
@@ -212,9 +313,8 @@ type SeriesResponse struct {
 	HasMore    bool             `json:"has_more"`
 }
 
-// GetSeriesForSync returns paginated series for initial sync.
-// Note: Series don't have direct access control - they're visible if any book in them is visible.
-// For simplicity, we return all series and rely on client-side filtering based on accessible books.
+// GetSeriesForSync returns paginated series for sync.
+// Supports both full sync and delta sync (series updated after timestamp).
 func (s *SyncService) GetSeriesForSync(ctx context.Context, userID string, params store.PaginationParams) (*SeriesResponse, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -222,21 +322,73 @@ func (s *SyncService) GetSeriesForSync(ctx context.Context, userID string, param
 
 	params.Validate()
 
-	result, err := s.store.ListSeries(ctx, params)
-	if err != nil {
-		return nil, err
+	var seriesList []*domain.Series
+	var err error
+
+	// DELTA SYNC: If UpdatedAfter is set, fetch only changed items.
+	if !params.UpdatedAfter.IsZero() {
+		seriesList, err = s.store.GetSeriesUpdatedAfter(ctx, params.UpdatedAfter)
+		if err != nil {
+			return nil, err
+		}
+
+		// Note: Series deletions are not currently tracked for delta sync.
+	} else {
+		// FULL SYNC: Get all series
+		result, err := s.store.ListSeries(ctx, params)
+		if err != nil {
+			return nil, err
+		}
+
+		return &SeriesResponse{
+			Series:     result.Items,
+			NextCursor: result.NextCursor,
+			HasMore:    result.HasMore,
+		}, nil
 	}
 
+	// Apply manual pagination for delta sync results
+	total := len(seriesList)
+	startIdx := 0
+	if params.Cursor != "" {
+		decoded, err := store.DecodeCursor(params.Cursor)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := fmt.Sscanf(decoded, "%d", &startIdx); err != nil {
+			return nil, err
+		}
+	}
+
+	if startIdx >= total {
+		return &SeriesResponse{
+			Series:  []*domain.Series{},
+			HasMore: false,
+		}, nil
+	}
+
+	endIdx := startIdx + params.Limit
+	if endIdx > total {
+		endIdx = total
+	}
+
+	pageItems := seriesList[startIdx:endIdx]
+	hasMore := endIdx < total
+
 	response := &SeriesResponse{
-		Series:     result.Items,
-		NextCursor: result.NextCursor,
-		HasMore:    result.HasMore,
+		Series:  pageItems,
+		HasMore: hasMore,
+	}
+
+	if hasMore {
+		response.NextCursor = store.EncodeCursor(fmt.Sprintf("%d", endIdx))
 	}
 
 	s.logger.Info("series fetched for sync",
 		"user_id", userID,
-		"count", len(result.Items),
-		"has_more", result.HasMore,
+		"delta_sync", !params.UpdatedAfter.IsZero(),
+		"count", len(pageItems),
+		"has_more", hasMore,
 	)
 
 	return response, nil

@@ -6,9 +6,20 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/scanner"
 	"github.com/listenupapp/listenup-server/internal/watcher"
 )
+
+// BookStore defines the interface for book database operations needed by the event processor.
+type BookStore interface {
+	GetBookByPath(ctx context.Context, path string) (*domain.Book, error)
+	CreateBook(ctx context.Context, book *domain.Book) error
+	UpdateBook(ctx context.Context, book *domain.Book) error
+	BroadcastBookCreated(ctx context.Context, book *domain.Book) error
+	GetOrCreateContributorByName(ctx context.Context, name string) (*domain.Contributor, error)
+	GetOrCreateSeriesByName(ctx context.Context, name string) (*domain.Series, error)
+}
 
 // EventProcessor processes file system events and orchestrates incremental scanning.
 //
@@ -22,6 +33,7 @@ import (
 //   - Non-blocking (TryLock prevents queueing).
 type EventProcessor struct {
 	scanner *scanner.Scanner
+	store   BookStore
 	logger  *slog.Logger
 
 	// folderLocks provides per-folder mutexes to prevent concurrent scans.
@@ -30,9 +42,10 @@ type EventProcessor struct {
 }
 
 // NewEventProcessor creates a new EventProcessor instance.
-func NewEventProcessor(scanner *scanner.Scanner, logger *slog.Logger) *EventProcessor {
+func NewEventProcessor(scanner *scanner.Scanner, store BookStore, logger *slog.Logger) *EventProcessor {
 	return &EventProcessor{
 		scanner:     scanner,
+		store:       store,
 		logger:      logger,
 		folderLocks: NewSyncMap[string, *sync.Mutex](),
 	}
@@ -141,14 +154,109 @@ func (ep *EventProcessor) handleAudioFile(ctx context.Context, bookFolder, fileP
 		return fmt.Errorf("scan folder: %w", err)
 	}
 
-	// For now, just log the results.
-	// TODO: Database integration - create or update book
 	ep.logger.Info("scanned audio file folder",
 		"folder", bookFolder,
 		"audioFiles", len(item.AudioFiles),
 		"imageFiles", len(item.ImageFiles),
 		"metadataFiles", len(item.MetadataFiles),
 	)
+
+	// Check if book already exists at this path
+	existingBook, err := ep.store.GetBookByPath(ctx, item.Path)
+	if err != nil {
+		// Book doesn't exist - create new one
+		book, convertErr := scanner.ConvertToBook(ctx, item, ep.store)
+		if convertErr != nil {
+			ep.logger.Error("failed to convert scanned item to book",
+				"folder", bookFolder,
+				"error", convertErr,
+			)
+			return fmt.Errorf("convert to book: %w", convertErr)
+		}
+
+		if createErr := ep.store.CreateBook(ctx, book); createErr != nil {
+			ep.logger.Error("failed to create book",
+				"folder", bookFolder,
+				"title", book.Title,
+				"error", createErr,
+			)
+			return fmt.Errorf("create book: %w", createErr)
+		}
+
+		ep.logger.Info("created new book",
+			"id", book.ID,
+			"title", book.Title,
+			"path", book.Path,
+		)
+
+		// Extract embedded cover art if present
+		if len(item.AudioFiles) > 0 {
+			firstAudioFile := item.AudioFiles[0].Path
+			if coverPath, extractErr := ep.scanner.ExtractCoverArt(ctx, firstAudioFile, book.ID); extractErr != nil {
+				ep.logger.Warn("failed to extract embedded cover art",
+					"book_id", book.ID,
+					"path", firstAudioFile,
+					"error", extractErr,
+				)
+			} else if coverPath != "" {
+				ep.logger.Info("extracted embedded cover art",
+					"book_id", book.ID,
+					"cover_path", coverPath,
+				)
+			}
+		}
+
+		// Broadcast SSE event AFTER cover extraction to avoid race condition
+		// where clients try to download covers before they're ready
+		if broadcastErr := ep.store.BroadcastBookCreated(ctx, book); broadcastErr != nil {
+			ep.logger.Warn("failed to broadcast book.created event",
+				"book_id", book.ID,
+				"error", broadcastErr,
+			)
+		}
+	} else {
+		// Book exists - update it with new scan data
+		if updateErr := scanner.UpdateBookFromScan(ctx, existingBook, item, ep.store); updateErr != nil {
+			ep.logger.Error("failed to update book from scan",
+				"folder", bookFolder,
+				"book_id", existingBook.ID,
+				"error", updateErr,
+			)
+			return fmt.Errorf("update book: %w", updateErr)
+		}
+
+		if saveErr := ep.store.UpdateBook(ctx, existingBook); saveErr != nil {
+			ep.logger.Error("failed to save updated book",
+				"folder", bookFolder,
+				"book_id", existingBook.ID,
+				"error", saveErr,
+			)
+			return fmt.Errorf("save book: %w", saveErr)
+		}
+
+		ep.logger.Info("updated existing book",
+			"id", existingBook.ID,
+			"title", existingBook.Title,
+			"path", existingBook.Path,
+		)
+
+		// Extract embedded cover art if present (in case cover changed)
+		if len(item.AudioFiles) > 0 {
+			firstAudioFile := item.AudioFiles[0].Path
+			if coverPath, extractErr := ep.scanner.ExtractCoverArt(ctx, firstAudioFile, existingBook.ID); extractErr != nil {
+				ep.logger.Warn("failed to extract embedded cover art",
+					"book_id", existingBook.ID,
+					"path", firstAudioFile,
+					"error", extractErr,
+				)
+			} else if coverPath != "" {
+				ep.logger.Info("extracted embedded cover art",
+					"book_id", existingBook.ID,
+					"cover_path", coverPath,
+				)
+			}
+		}
+	}
 
 	return nil
 }

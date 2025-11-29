@@ -11,6 +11,7 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/dto"
 	"github.com/listenupapp/listenup-server/internal/sse"
 )
 
@@ -105,7 +106,45 @@ func (s *Store) CreateBook(ctx context.Context, book *domain.Book) error {
 		)
 	}
 
-	s.eventEmitter.Emit(sse.NewBookCreatedEvent(book))
+	return nil
+}
+
+// BroadcastBookCreated enriches and broadcasts a book.created SSE event.
+// Should be called AFTER cover extraction to ensure cover is available when clients receive event.
+func (s *Store) BroadcastBookCreated(ctx context.Context, book *domain.Book) error {
+	// Enrich book with denormalized fields before broadcasting SSE event.
+	// This ensures clients receive immediately-renderable data (author names, etc.)
+	// without waiting for separate contributor events or making additional queries.
+	if s.logger != nil {
+		s.logger.Debug("enriching book for SSE",
+			"book_id", book.ID,
+			"contributors_count", len(book.Contributors),
+		)
+	}
+
+	enrichedBook, err := s.enricher.EnrichBook(ctx, book)
+	if err != nil {
+		// Don't fail broadcasting if enrichment fails.
+		// Log warning and send un-enriched book (author will be empty string).
+		if s.logger != nil {
+			s.logger.Warn("failed to enrich book for SSE event",
+				"book_id", book.ID,
+				"error", err,
+			)
+		}
+		// Fallback: wrap domain.Book in dto.Book without enrichment
+		enrichedBook = &dto.Book{Book: book}
+	} else {
+		if s.logger != nil {
+			s.logger.Debug("enrichment complete",
+				"book_id", book.ID,
+				"author", enrichedBook.Author,
+				"narrator", enrichedBook.Narrator,
+			)
+		}
+	}
+
+	s.eventEmitter.Emit(sse.NewBookCreatedEvent(enrichedBook))
 	return nil
 }
 
@@ -162,6 +201,33 @@ func (s *Store) getBookInternal(_ context.Context, id string) (*domain.Book, err
 	}
 
 	return &book, nil
+}
+
+// GetBookByPath retrieves a book by its filesystem path.
+// This is used during file watching to check if a book already exists.
+// No access control - for internal system use only.
+func (s *Store) GetBookByPath(ctx context.Context, path string) (*domain.Book, error) {
+	pathKey := []byte(bookByPathPrefix + path)
+
+	var bookID string
+	err := s.db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get(pathKey)
+		if err != nil {
+			return err
+		}
+
+		return item.Value(func(val []byte) error {
+			bookID = string(val)
+			return nil
+		})
+	})
+	if err != nil {
+		if errors.Is(err, badger.ErrKeyNotFound) {
+			return nil, ErrBookNotFound
+		}
+		return nil, fmt.Errorf("get book by path: %w", err)
+	}
+	return s.getBookInternal(ctx, bookID)
 }
 
 // GetBookByInode retrieves a book by an audio file inode.
@@ -333,7 +399,24 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 		s.logger.Info("book updated", "id", book.ID, "title", book.Title)
 	}
 
-	s.eventEmitter.Emit(sse.NewBookUpdatedEvent(book))
+	// Enrich book with denormalized fields before broadcasting SSE event.
+	// This ensures clients receive immediately-renderable data (author names, etc.)
+	// without waiting for separate contributor events or making additional queries.
+	enrichedBook, err := s.enricher.EnrichBook(ctx, book)
+	if err != nil {
+		// Don't fail book update if enrichment fails.
+		// Log warning and send un-enriched book (author will be empty string).
+		if s.logger != nil {
+			s.logger.Warn("failed to enrich book for SSE event",
+				"book_id", book.ID,
+				"error", err,
+			)
+		}
+		// Fallback: wrap domain.Book in dto.Book without enrichment
+		enrichedBook = &dto.Book{Book: book}
+	}
+
+	s.eventEmitter.Emit(sse.NewBookUpdatedEvent(enrichedBook))
 	return nil
 }
 

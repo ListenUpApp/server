@@ -163,7 +163,7 @@ func main() {
 	}()
 
 	// Initialize event processor.
-	eventProcessor := processor.NewEventProcessor(fileScanner, log.Logger)
+	eventProcessor := processor.NewEventProcessor(fileScanner, db, log.Logger)
 
 	// Process file watcher events in background.
 	go func() {
@@ -186,6 +186,34 @@ func main() {
 	}()
 
 	log.Info("File watcher started", "scan_paths", len(bootstrap.Library.ScanPaths))
+
+	// Start periodic session cleanup job.
+	// Cleans up expired sessions every hour to prevent database bloat.
+	sessionCleanupCtx, sessionCleanupCancel := context.WithCancel(context.Background())
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+
+		// Run initial cleanup on startup.
+		if count, err := db.DeleteExpiredSessions(sessionCleanupCtx); err != nil {
+			log.Warn("Initial session cleanup failed", "error", err)
+		} else if count > 0 {
+			log.Info("Initial session cleanup completed", "deleted", count)
+		}
+
+		for {
+			select {
+			case <-ticker.C:
+				if count, err := db.DeleteExpiredSessions(sessionCleanupCtx); err != nil {
+					log.Warn("Session cleanup failed", "error", err)
+				} else if count > 0 {
+					log.Info("Session cleanup completed", "deleted", count)
+				}
+			case <-sessionCleanupCtx.Done():
+				return
+			}
+		}
+	}()
 
 	// Initialize services.
 	instanceService := service.NewInstanceService(db, log.Logger, cfg)
@@ -237,11 +265,11 @@ func main() {
 
 	// Configure HTTP server.
 	srv := &http.Server{
-		Addr:         ":8080",
+		Addr:         ":" + cfg.Server.Port,
 		Handler:      httpServer,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		ReadTimeout:  cfg.Server.ReadTimeout,
+		WriteTimeout: cfg.Server.WriteTimeout,
+		IdleTimeout:  cfg.Server.IdleTimeout,
 	}
 
 	// Start server in goroutine.
@@ -264,10 +292,14 @@ func main() {
 	log.Info("Shutting down server gracefully...")
 
 	// Shutdown sequence (order matters!):
-	// 1. Stop file watcher (no more file events).
-	// 2. Shutdown SSE manager (no more event broadcasts).
-	// 3. Shutdown HTTP server (no more requests).
-	// 4. Close database (no more data access).
+	// 1. Stop session cleanup job.
+	// 2. Stop file watcher (no more file events).
+	// 3. Shutdown SSE manager (no more event broadcasts).
+	// 4. Shutdown HTTP server (no more requests).
+	// 5. Close database (no more data access).
+
+	// Stop session cleanup job.
+	sessionCleanupCancel()
 
 	// Stop file watcher.
 	watcherCancel()

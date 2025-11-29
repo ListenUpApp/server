@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/dto"
 )
 
 // In ListenUp we primarily use SSE for server-to-client communication.
@@ -51,9 +52,10 @@ const (
 )
 
 // Event represents an SSE event to be sent to clients.
+// The Data field contains the event payload as a JSON object for direct deserialization.
 type Event struct {
 	Timestamp time.Time `json:"timestamp"`
-	Data      any       `json:"data"`
+	Data      any       `json:"data"` // Event-specific data as JSON object
 	Type      EventType `json:"type"`
 
 	// Future fields for filtering (TODO: Add when implementing multi-user)
@@ -64,8 +66,11 @@ type Event struct {
 }
 
 // BookEventData is the data payload for book events.
+// Contains enriched book DTO with denormalized fields for immediate rendering.
+// This ensures SSE events are self-contained and immediately renderable without
+// additional database queries or waiting for related entity events.
 type BookEventData struct {
-	Book *domain.Book `json:"book"`
+	Book *dto.Book `json:"book"`
 }
 
 // BookDeletedEventData is the data payload for book delete events.
@@ -105,7 +110,8 @@ type SeriesEventData struct {
 }
 
 // NewBookCreatedEvent creates a book.created event.
-func NewBookCreatedEvent(book *domain.Book) Event {
+// Expects an enriched dto.Book with denormalized display fields populated.
+func NewBookCreatedEvent(book *dto.Book) Event {
 	return Event{
 		Type:      EventBookCreated,
 		Data:      BookEventData{Book: book},
@@ -114,7 +120,8 @@ func NewBookCreatedEvent(book *domain.Book) Event {
 }
 
 // NewBookUpdatedEvent creates a book.updated event.
-func NewBookUpdatedEvent(book *domain.Book) Event {
+// Expects an enriched dto.Book with denormalized display fields populated.
+func NewBookUpdatedEvent(book *dto.Book) Event {
 	return Event{
 		Type:      EventBookUpdated,
 		Data:      BookEventData{Book: book},
