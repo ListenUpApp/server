@@ -218,9 +218,10 @@ func (s *SyncService) GetBooksForSync(ctx context.Context, userID string, params
 
 // ContributorsResponse represents paginated contributors for sync.
 type ContributorsResponse struct {
-	NextCursor   string                `json:"next_cursor,omitempty"`
-	Contributors []*domain.Contributor `json:"contributors"`
-	HasMore      bool                  `json:"has_more"`
+	NextCursor            string                `json:"next_cursor,omitempty"`
+	Contributors          []*domain.Contributor `json:"contributors"`
+	DeletedContributorIDs []string              `json:"deleted_contributor_ids,omitempty"`
+	HasMore               bool                  `json:"has_more"`
 }
 
 // GetContributorsForSync returns paginated contributors for sync.
@@ -233,17 +234,22 @@ func (s *SyncService) GetContributorsForSync(ctx context.Context, userID string,
 	params.Validate()
 
 	var contributors []*domain.Contributor
+	var deletedContributorIDs []string
 	var err error
 
 	// DELTA SYNC: If UpdatedAfter is set, fetch only changed items.
 	if !params.UpdatedAfter.IsZero() {
+		// 1. Get contributors updated after timestamp
 		contributors, err = s.store.GetContributorsUpdatedAfter(ctx, params.UpdatedAfter)
 		if err != nil {
 			return nil, err
 		}
 
-		// Note: Contributor deletions are not currently tracked for delta sync.
-		// Clients will need a full sync to detect deleted contributors.
+		// 2. Get contributors deleted after timestamp
+		deletedContributorIDs, err = s.store.GetContributorsDeletedAfter(ctx, params.UpdatedAfter)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		// FULL SYNC: Get all contributors
 		// We use the existing list method which supports pagination
@@ -272,7 +278,7 @@ func (s *SyncService) GetContributorsForSync(ctx context.Context, userID string,
 		}
 	}
 
-	if startIdx >= total {
+	if startIdx >= total && len(deletedContributorIDs) == 0 {
 		return &ContributorsResponse{
 			Contributors: []*domain.Contributor{},
 			HasMore:      false,
@@ -288,8 +294,14 @@ func (s *SyncService) GetContributorsForSync(ctx context.Context, userID string,
 	hasMore := endIdx < total
 
 	response := &ContributorsResponse{
-		Contributors: pageItems,
-		HasMore:      hasMore,
+		Contributors:          pageItems,
+		DeletedContributorIDs: deletedContributorIDs, // Include deleted IDs (usually sent on first page of delta sync)
+		HasMore:               hasMore,
+	}
+
+	// Only send deleted IDs on the first page to avoid duplication
+	if startIdx > 0 {
+		response.DeletedContributorIDs = nil
 	}
 
 	if hasMore {
@@ -300,6 +312,7 @@ func (s *SyncService) GetContributorsForSync(ctx context.Context, userID string,
 		"user_id", userID,
 		"delta_sync", !params.UpdatedAfter.IsZero(),
 		"count", len(pageItems),
+		"deleted_count", len(deletedContributorIDs),
 		"has_more", hasMore,
 	)
 
@@ -308,9 +321,10 @@ func (s *SyncService) GetContributorsForSync(ctx context.Context, userID string,
 
 // SeriesResponse represents paginated series for sync.
 type SeriesResponse struct {
-	NextCursor string           `json:"next_cursor,omitempty"`
-	Series     []*domain.Series `json:"series"`
-	HasMore    bool             `json:"has_more"`
+	NextCursor       string           `json:"next_cursor,omitempty"`
+	Series           []*domain.Series `json:"series"`
+	DeletedSeriesIDs []string         `json:"deleted_series_ids,omitempty"`
+	HasMore          bool             `json:"has_more"`
 }
 
 // GetSeriesForSync returns paginated series for sync.
@@ -323,16 +337,22 @@ func (s *SyncService) GetSeriesForSync(ctx context.Context, userID string, param
 	params.Validate()
 
 	var seriesList []*domain.Series
+	var deletedSeriesIDs []string
 	var err error
 
 	// DELTA SYNC: If UpdatedAfter is set, fetch only changed items.
 	if !params.UpdatedAfter.IsZero() {
+		// 1. Get series updated after timestamp
 		seriesList, err = s.store.GetSeriesUpdatedAfter(ctx, params.UpdatedAfter)
 		if err != nil {
 			return nil, err
 		}
 
-		// Note: Series deletions are not currently tracked for delta sync.
+		// 2. Get series deleted after timestamp
+		deletedSeriesIDs, err = s.store.GetSeriesDeletedAfter(ctx, params.UpdatedAfter)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		// FULL SYNC: Get all series
 		result, err := s.store.ListSeries(ctx, params)
@@ -360,7 +380,7 @@ func (s *SyncService) GetSeriesForSync(ctx context.Context, userID string, param
 		}
 	}
 
-	if startIdx >= total {
+	if startIdx >= total && len(deletedSeriesIDs) == 0 {
 		return &SeriesResponse{
 			Series:  []*domain.Series{},
 			HasMore: false,
@@ -376,8 +396,14 @@ func (s *SyncService) GetSeriesForSync(ctx context.Context, userID string, param
 	hasMore := endIdx < total
 
 	response := &SeriesResponse{
-		Series:  pageItems,
-		HasMore: hasMore,
+		Series:           pageItems,
+		DeletedSeriesIDs: deletedSeriesIDs, // Include deleted IDs (usually sent on first page of delta sync)
+		HasMore:          hasMore,
+	}
+
+	// Only send deleted IDs on the first page to avoid duplication
+	if startIdx > 0 {
+		response.DeletedSeriesIDs = nil
 	}
 
 	if hasMore {
@@ -388,6 +414,7 @@ func (s *SyncService) GetSeriesForSync(ctx context.Context, userID string, param
 		"user_id", userID,
 		"delta_sync", !params.UpdatedAfter.IsZero(),
 		"count", len(pageItems),
+		"deleted_count", len(deletedSeriesIDs),
 		"has_more", hasMore,
 	)
 

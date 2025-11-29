@@ -18,6 +18,7 @@ const (
 	seriesPrefix            = "series:"
 	seriesByNamePrefix      = "idx:series:name:"       // For deduplication
 	seriesByUpdatedAtPrefix = "idx:series:updated_at:" // Format: idx:series:updated_at:{RFC3339Nano}:series:{uuid}
+	seriesByDeletedAtPrefix = "idx:series:deleted_at:" // Format: idx:series:deleted_at:{RFC3339Nano}:series:{uuid}
 )
 
 var (
@@ -640,4 +641,101 @@ func normalizeSeriesName(name string) string {
 	// Collapse multiple spaces to single space
 	parts := strings.Fields(name)
 	return strings.Join(parts, " ")
+}
+
+// DeleteSeries soft-deletes a series by setting DeletedAt.
+// The series will no longer appear in normal queries but can be queried
+// via GetSeriesDeletedAfter for sync purposes.
+func (s *Store) DeleteSeries(ctx context.Context, id string) error {
+	key := []byte(seriesPrefix + id)
+
+	// Get existing series
+	series, err := s.GetSeries(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Mark as deleted
+	series.MarkDeleted()
+
+	return s.db.Update(func(txn *badger.Txn) error {
+		// Save updated series
+		data, err := json.Marshal(series)
+		if err != nil {
+			return fmt.Errorf("marshal series: %w", err)
+		}
+
+		if err := txn.Set(key, data); err != nil {
+			return err
+		}
+
+		// Update updated_at index (MarkDeleted also updates UpdatedAt)
+		oldUpdatedAtKey := formatTimestampIndexKey(seriesByUpdatedAtPrefix, series.CreatedAt, "series", series.ID)
+		if err := txn.Delete(oldUpdatedAtKey); err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
+			// Best effort cleanup of old index
+		}
+		newUpdatedAtKey := formatTimestampIndexKey(seriesByUpdatedAtPrefix, series.UpdatedAt, "series", series.ID)
+		if err := txn.Set(newUpdatedAtKey, []byte{}); err != nil {
+			return err
+		}
+
+		// Create deleted_at index for sync
+		deletedAtKey := formatTimestampIndexKey(seriesByDeletedAtPrefix, *series.DeletedAt, "series", series.ID)
+		if err := txn.Set(deletedAtKey, []byte{}); err != nil {
+			return err
+		}
+
+		return nil
+	})
+}
+
+// GetSeriesDeletedAfter queries all series with DeletedAt > timestamp.
+// This is used for delta sync to inform clients which series were deleted.
+// Returns a list of series IDs that were soft-deleted after the given timestamp.
+func (s *Store) GetSeriesDeletedAfter(_ context.Context, timestamp time.Time) ([]string, error) {
+	var seriesIDs []string
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false // Only need keys
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		// Seek to the timestamp
+		seekKey := formatTimestampIndexKey(seriesByDeletedAtPrefix, timestamp, "", "")
+		prefix := []byte(seriesByDeletedAtPrefix)
+
+		it.Seek(seekKey)
+		for it.ValidForPrefix(prefix) {
+			key := it.Item().Key()
+
+			entityType, entityID, err := parseTimestampIndexKey(key, seriesByDeletedAtPrefix)
+			if err != nil {
+				if s.logger != nil {
+					s.logger.Warn("failed to parse deleted_at key", "key", string(key), "error", err)
+				}
+				it.Next()
+				continue
+			}
+
+			if entityType == "series" {
+				seriesIDs = append(seriesIDs, entityID)
+			}
+			it.Next()
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scan deleted_at index: %w", err)
+	}
+
+	if s.logger != nil {
+		s.logger.Info("deleted series query completed",
+			"timestamp", timestamp.Format(time.RFC3339),
+			"series_deleted", len(seriesIDs),
+		)
+	}
+
+	return seriesIDs, nil
 }

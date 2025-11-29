@@ -21,6 +21,7 @@ const (
 	contributorPrefix            = "contributor:"
 	contributorByNamePrefix      = "idx:contributors:name:"       // For deduplication
 	contributorByUpdatedAtPrefix = "idx:contributors:updated_at:" // Format: idx:contributors:updated_at:{RFC3339Nano}:contributor:{uuid}
+	contributorByDeletedAtPrefix = "idx:contributors:deleted_at:" // Format: idx:contributors:deleted_at:{RFC3339Nano}:contributor:{uuid}
 )
 
 var (
@@ -516,4 +517,101 @@ func normalizeContributorName(name string) string {
 	// Collapse multiple spaces to single space
 	parts := strings.Fields(name)
 	return strings.Join(parts, " ")
+}
+
+// DeleteContributor soft-deletes a contributor by setting DeletedAt.
+// The contributor will no longer appear in normal queries but can be queried
+// via GetContributorsDeletedAfter for sync purposes.
+func (s *Store) DeleteContributor(ctx context.Context, id string) error {
+	key := []byte(contributorPrefix + id)
+
+	// Get existing contributor
+	contributor, err := s.GetContributor(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Mark as deleted
+	contributor.MarkDeleted()
+
+	return s.db.Update(func(txn *badger.Txn) error {
+		// Save updated contributor
+		data, err := json.Marshal(contributor)
+		if err != nil {
+			return fmt.Errorf("marshal contributor: %w", err)
+		}
+
+		if err := txn.Set(key, data); err != nil {
+			return err
+		}
+
+		// Update updated_at index (MarkDeleted also updates UpdatedAt)
+		oldUpdatedAtKey := formatTimestampIndexKey(contributorByUpdatedAtPrefix, contributor.CreatedAt, "contributor", contributor.ID)
+		if err := txn.Delete(oldUpdatedAtKey); err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
+			// Best effort cleanup of old index
+		}
+		newUpdatedAtKey := formatTimestampIndexKey(contributorByUpdatedAtPrefix, contributor.UpdatedAt, "contributor", contributor.ID)
+		if err := txn.Set(newUpdatedAtKey, []byte{}); err != nil {
+			return err
+		}
+
+		// Create deleted_at index for sync
+		deletedAtKey := formatTimestampIndexKey(contributorByDeletedAtPrefix, *contributor.DeletedAt, "contributor", contributor.ID)
+		if err := txn.Set(deletedAtKey, []byte{}); err != nil {
+			return err
+		}
+
+		return nil
+	})
+}
+
+// GetContributorsDeletedAfter queries all contributors with DeletedAt > timestamp.
+// This is used for delta sync to inform clients which contributors were deleted.
+// Returns a list of contributor IDs that were soft-deleted after the given timestamp.
+func (s *Store) GetContributorsDeletedAfter(_ context.Context, timestamp time.Time) ([]string, error) {
+	var contributorIDs []string
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false // Only need keys
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		// Seek to the timestamp
+		seekKey := formatTimestampIndexKey(contributorByDeletedAtPrefix, timestamp, "", "")
+		prefix := []byte(contributorByDeletedAtPrefix)
+
+		it.Seek(seekKey)
+		for it.ValidForPrefix(prefix) {
+			key := it.Item().Key()
+
+			entityType, entityID, err := parseTimestampIndexKey(key, contributorByDeletedAtPrefix)
+			if err != nil {
+				if s.logger != nil {
+					s.logger.Warn("failed to parse deleted_at key", "key", string(key), "error", err)
+				}
+				it.Next()
+				continue
+			}
+
+			if entityType == "contributor" {
+				contributorIDs = append(contributorIDs, entityID)
+			}
+			it.Next()
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scan deleted_at index: %w", err)
+	}
+
+	if s.logger != nil {
+		s.logger.Info("deleted contributors query completed",
+			"timestamp", timestamp.Format(time.RFC3339),
+			"contributors_deleted", len(contributorIDs),
+		)
+	}
+
+	return contributorIDs, nil
 }
