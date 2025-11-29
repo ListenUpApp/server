@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json/v2"
 	"image"
 	"image/color"
@@ -17,7 +18,9 @@ import (
 
 	"github.com/listenupapp/listenup-server/internal/auth"
 	"github.com/listenupapp/listenup-server/internal/config"
+	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/http/response"
+	"github.com/listenupapp/listenup-server/internal/id"
 	"github.com/listenupapp/listenup-server/internal/media/images"
 	"github.com/listenupapp/listenup-server/internal/scanner"
 	"github.com/listenupapp/listenup-server/internal/service"
@@ -94,6 +97,43 @@ func setupTestServer(t *testing.T) (server *Server, cleanup func()) {
 	}
 
 	return server, cleanup
+}
+
+// createTestUserWithToken creates a test user and returns an access token.
+func createTestUserWithToken(t *testing.T, server *Server) string {
+	t.Helper()
+
+	ctx := context.Background()
+
+	// Create a test user
+	userID, err := id.Generate("user")
+	require.NoError(t, err)
+
+	now := time.Now()
+	user := &domain.User{
+		Syncable: domain.Syncable{
+			ID:        userID,
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		Email:       "test@example.com",
+		DisplayName: "Test User",
+		IsRoot:      false,
+	}
+
+	err = server.store.CreateUser(ctx, user)
+	require.NoError(t, err)
+
+	// Create token service with same key as setupTestServer
+	testKeyHex := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	tokenService, err := auth.NewTokenService(testKeyHex, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
+
+	// Generate an access token
+	token, err := tokenService.GenerateAccessToken(user)
+	require.NoError(t, err)
+
+	return token
 }
 
 func TestHealthCheck(t *testing.T) {
@@ -307,8 +347,11 @@ func TestGetManifest_Success(t *testing.T) {
 	server, cleanup := setupTestServer(t)
 	defer cleanup()
 
-	// No need to initialize instance for manifest endpoint.
+	// Create a test user and get access token.
+	token := createTestUserWithToken(t, server)
+
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/sync/manifest", http.NoBody)
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -358,7 +401,11 @@ func TestGetSyncBooks_Success(t *testing.T) {
 	server, cleanup := setupTestServer(t)
 	defer cleanup()
 
+	// Create a test user and get access token.
+	token := createTestUserWithToken(t, server)
+
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/sync/books?limit=50", http.NoBody)
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)

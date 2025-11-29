@@ -61,7 +61,7 @@ func (rl *RateLimiter) Allow(key string) bool {
 
 	// Refill tokens based on elapsed time.
 	elapsed := now.Sub(b.lastRefill)
-	tokensToAdd := int(elapsed / rl.interval) * rl.rate
+	tokensToAdd := int(elapsed/rl.interval) * rl.rate
 
 	if tokensToAdd > 0 {
 		b.tokens = min(b.tokens+tokensToAdd, rl.burst)

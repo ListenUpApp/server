@@ -395,11 +395,6 @@ func BenchmarkAnalyzer_Analyze(b *testing.B) {
 		}
 	}
 }
-package scanner
-
-import (
-	"testing"
-)
 
 // TestBuildBookMetadata_UsesAlbumForTitle verifies that buildBookMetadata
 // uses the Album tag (book title) instead of Title tag (track/chapter title).
@@ -412,8 +407,8 @@ func TestBuildBookMetadata_UsesAlbumForTitle(t *testing.T) {
 		{
 			name: "Album tag should be used for book title",
 			audioMetadata: &AudioMetadata{
-				Title: "01 - Prologue", // Track title (wrong)
-				Album: "A Clash of Kings", // Book title (correct)
+				Title:  "01 - Prologue",    // Track title (wrong)
+				Album:  "A Clash of Kings", // Book title (correct)
 				Artist: "George R.R. Martin",
 			},
 			expectedTitle: "A Clash of Kings",
@@ -421,8 +416,8 @@ func TestBuildBookMetadata_UsesAlbumForTitle(t *testing.T) {
 		{
 			name: "Handle missing Title tag (null)",
 			audioMetadata: &AudioMetadata{
-				Title: "", // Empty track title
-				Album: "North! Or Be Eaten", // Book title
+				Title:  "",                   // Empty track title
+				Album:  "North! Or Be Eaten", // Book title
 				Artist: "Andrew Peterson",
 			},
 			expectedTitle: "North! Or Be Eaten",
@@ -430,8 +425,8 @@ func TestBuildBookMetadata_UsesAlbumForTitle(t *testing.T) {
 		{
 			name: "Chapter title should not be used",
 			audioMetadata: &AudioMetadata{
-				Title: "Chapter Four", // Chapter title (wrong)
-				Album: "The Tower of Swallows", // Book title (correct)
+				Title:  "Chapter Four",          // Chapter title (wrong)
+				Album:  "The Tower of Swallows", // Book title (correct)
 				Artist: "Andrzej Sapkowski",
 			},
 			expectedTitle: "The Tower of Swallows",

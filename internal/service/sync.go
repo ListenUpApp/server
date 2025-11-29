@@ -241,7 +241,7 @@ func (s *SyncService) GetContributorsForSync(ctx context.Context, userID string,
 		if err != nil {
 			return nil, err
 		}
-		
+
 		// Note: Contributor deletions are not currently tracked for delta sync.
 		// Clients will need a full sync to detect deleted contributors.
 	} else {
@@ -251,7 +251,7 @@ func (s *SyncService) GetContributorsForSync(ctx context.Context, userID string,
 		if err != nil {
 			return nil, err
 		}
-		
+
 		return &ContributorsResponse{
 			Contributors: result.Items,
 			NextCursor:   result.NextCursor,
@@ -331,7 +331,7 @@ func (s *SyncService) GetSeriesForSync(ctx context.Context, userID string, param
 		if err != nil {
 			return nil, err
 		}
-		
+
 		// Note: Series deletions are not currently tracked for delta sync.
 	} else {
 		// FULL SYNC: Get all series
@@ -339,7 +339,7 @@ func (s *SyncService) GetSeriesForSync(ctx context.Context, userID string, param
 		if err != nil {
 			return nil, err
 		}
-		
+
 		return &SeriesResponse{
 			Series:     result.Items,
 			NextCursor: result.NextCursor,

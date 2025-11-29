@@ -310,10 +310,10 @@ func (s *Store) GetBooksForUserUpdatedAfter(ctx context.Context, userID string, 
 
 		// Seek to the timestamp
 		seekKey := formatTimestampIndexKey(bookByUpdatedAtPrefix, timestamp, "", "")
-		
+
 		for it.Seek(seekKey); it.ValidForPrefix([]byte(bookByUpdatedAtPrefix)); it.Next() {
 			key := it.Item().Key()
-			
+
 			// Parse key to get book ID: idx:books:updated_at:{RFC3339Nano}:book:{uuid}
 			// We can use the existing parseTimestampIndexKey helper or parse manually
 			entityType, bookID, err := parseTimestampIndexKey(key, bookByUpdatedAtPrefix)
