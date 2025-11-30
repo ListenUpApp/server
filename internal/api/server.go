@@ -29,6 +29,7 @@ type Server struct {
 	collectionService *service.CollectionService
 	sharingService    *service.SharingService
 	syncService       *service.SyncService
+	listeningService  *service.ListeningService
 	sseHandler        *sse.Handler
 	imageStorage      *images.Storage
 	router            *chi.Mux
@@ -37,7 +38,7 @@ type Server struct {
 }
 
 // NewServer creates a new HTTP server with all routes configured.
-func NewServer(store *store.Store, instanceService *service.InstanceService, authService *service.AuthService, bookService *service.BookService, collectionService *service.CollectionService, sharingService *service.SharingService, syncService *service.SyncService, sseHandler *sse.Handler, imageStorage *images.Storage, logger *slog.Logger) *Server {
+func NewServer(store *store.Store, instanceService *service.InstanceService, authService *service.AuthService, bookService *service.BookService, collectionService *service.CollectionService, sharingService *service.SharingService, syncService *service.SyncService, listeningService *service.ListeningService, sseHandler *sse.Handler, imageStorage *images.Storage, logger *slog.Logger) *Server {
 	s := &Server{
 		store:             store,
 		instanceService:   instanceService,
@@ -46,6 +47,7 @@ func NewServer(store *store.Store, instanceService *service.InstanceService, aut
 		collectionService: collectionService,
 		sharingService:    sharingService,
 		syncService:       syncService,
+		listeningService:  listeningService,
 		sseHandler:        sseHandler,
 		imageStorage:      imageStorage,
 		router:            chi.NewRouter(),
@@ -174,6 +176,31 @@ func (s *Server) setupRoutes() {
 			r.Get("/series", s.handleSyncSeries)
 			r.Get("/contributors", s.handleSyncContributors)
 			r.Get("/stream", s.sseHandler.ServeHTTP)
+		})
+
+		// Listening events and progress (require auth).
+		r.Route("/listening", func(r chi.Router) {
+			r.Use(s.requireAuth)
+			r.Post("/events", s.handleRecordEvent)
+			r.Get("/continue", s.handleGetContinueListening)
+			r.Get("/progress/{bookID}", s.handleGetProgress)
+			r.Delete("/progress/{bookID}", s.handleResetProgress)
+			r.Get("/stats", s.handleGetUserStats)
+			r.Get("/stats/{bookID}", s.handleGetBookStats)
+		})
+
+		// User settings (require auth).
+		r.Route("/settings", func(r chi.Router) {
+			r.Use(s.requireAuth)
+			r.Get("/", s.handleGetUserSettings)
+			r.Patch("/", s.handleUpdateUserSettings)
+		})
+
+		// Book preferences (require auth).
+		r.Route("/preferences", func(r chi.Router) {
+			r.Use(s.requireAuth)
+			r.Get("/{bookID}", s.handleGetBookPreferences)
+			r.Patch("/{bookID}", s.handleUpdateBookPreferences)
 		})
 
 		// Cover images (public for sharing, cached aggressively).
