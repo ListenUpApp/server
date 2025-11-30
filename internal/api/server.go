@@ -121,6 +121,7 @@ func (s *Server) setupRoutes() {
 			r.Use(s.requireAuth)
 			r.Get("/", s.handleListBooks)
 			r.Get("/{id}", s.handleGetBook)
+			r.Get("/{bookId}/audio/{audioFileId}", s.handleStreamAudio)
 		})
 
 		// Series (require auth for ACL).
