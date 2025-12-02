@@ -113,9 +113,10 @@ func convertMetadata(file *audiometa.File) *Metadata {
 		Codec:      file.Audio.Codec,
 
 		// Standard tags.
-		Title:  file.Tags.Title,
-		Album:  file.Tags.Album,
-		Artist: file.Tags.Artist,
+		Title:    file.Tags.Title,
+		Subtitle: file.Tags.Subtitle,
+		Album:    file.Tags.Album,
+		Artist:   file.Tags.Artist,
 		// Use AlbumArtist if set, otherwise fall back to Artist.
 		AlbumArtist: file.Tags.AlbumArtist,
 		// For multi-value fields, join with comma or use first value.
