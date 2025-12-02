@@ -221,6 +221,7 @@ func main() {
 	collectionService := service.NewCollectionService(db, log.Logger)
 	sharingService := service.NewSharingService(db, log.Logger)
 	syncService := service.NewSyncService(db, log.Logger)
+	listeningService := service.NewListeningService(db, sseManager, log.Logger)
 
 	// Initialize auth services.
 	// Convert key bytes to hex string for token service
@@ -261,7 +262,7 @@ func main() {
 	// Create HTTP server with service layer.
 	// TODO: Future note to self: This is going to get old fast depending on how many
 	// services we need to instantiate. Let's look into a better solution.
-	httpServer := api.NewServer(db, instanceService, authService, bookService, collectionService, sharingService, syncService, sseHandler, imageStorage, log.Logger)
+	httpServer := api.NewServer(db, instanceService, authService, bookService, collectionService, sharingService, syncService, listeningService, sseHandler, imageStorage, log.Logger)
 
 	// Configure HTTP server.
 	srv := &http.Server{
