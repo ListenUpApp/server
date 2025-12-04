@@ -90,8 +90,8 @@ func setupTestServer(t *testing.T) (server *Server, cleanup func()) {
 	imageStorage, err := images.NewStorage(tmpDir)
 	require.NoError(t, err)
 
-	// Create server.
-	server = NewServer(s, instanceService, authService, bookService, collectionService, sharingService, syncService, listeningService, genreService, tagService, sseHandler, imageStorage, logger)
+	// Create server (nil searchService - not testing search in these tests).
+	server = NewServer(s, instanceService, authService, bookService, collectionService, sharingService, syncService, listeningService, genreService, tagService, nil, sseHandler, imageStorage, logger)
 
 	// Return cleanup function.
 	cleanup = func() {

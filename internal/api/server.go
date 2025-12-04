@@ -32,6 +32,7 @@ type Server struct {
 	listeningService  *service.ListeningService
 	genreService      *service.GenreService
 	tagService        *service.TagService
+	searchService     *service.SearchService
 	sseHandler        *sse.Handler
 	imageStorage      *images.Storage
 	router            *chi.Mux
@@ -40,7 +41,7 @@ type Server struct {
 }
 
 // NewServer creates a new HTTP server with all routes configured.
-func NewServer(store *store.Store, instanceService *service.InstanceService, authService *service.AuthService, bookService *service.BookService, collectionService *service.CollectionService, sharingService *service.SharingService, syncService *service.SyncService, listeningService *service.ListeningService, genreService *service.GenreService, tagService *service.TagService, sseHandler *sse.Handler, imageStorage *images.Storage, logger *slog.Logger) *Server {
+func NewServer(store *store.Store, instanceService *service.InstanceService, authService *service.AuthService, bookService *service.BookService, collectionService *service.CollectionService, sharingService *service.SharingService, syncService *service.SyncService, listeningService *service.ListeningService, genreService *service.GenreService, tagService *service.TagService, searchService *service.SearchService, sseHandler *sse.Handler, imageStorage *images.Storage, logger *slog.Logger) *Server {
 	s := &Server{
 		store:             store,
 		instanceService:   instanceService,
@@ -52,6 +53,7 @@ func NewServer(store *store.Store, instanceService *service.InstanceService, aut
 		listeningService:  listeningService,
 		genreService:      genreService,
 		tagService:        tagService,
+		searchService:     searchService,
 		sseHandler:        sseHandler,
 		imageStorage:      imageStorage,
 		router:            chi.NewRouter(),
@@ -235,6 +237,14 @@ func (s *Server) setupRoutes() {
 			r.Patch("/{id}", s.handleUpdateTag)
 			r.Delete("/{id}", s.handleDeleteTag)
 			r.Get("/{id}/books", s.handleGetTagBooks)
+		})
+
+		// Search (require auth for ACL filtering).
+		r.Route("/search", func(r chi.Router) {
+			r.Use(s.requireAuth)
+			r.Get("/", s.handleSearch)
+			r.Get("/stats", s.handleSearchStats)
+			r.Post("/reindex", s.handleReindex)
 		})
 
 		// Book genres and tags (require auth).

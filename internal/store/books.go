@@ -106,6 +106,17 @@ func (s *Store) CreateBook(ctx context.Context, book *domain.Book) error {
 		)
 	}
 
+	// Index for search asynchronously
+	if s.searchIndexer != nil {
+		go func() {
+			if err := s.searchIndexer.IndexBook(context.Background(), book); err != nil {
+				if s.logger != nil {
+					s.logger.Warn("failed to index book for search", "book_id", book.ID, "error", err)
+				}
+			}
+		}()
+	}
+
 	return nil
 }
 
@@ -417,6 +428,18 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 	}
 
 	s.eventEmitter.Emit(sse.NewBookUpdatedEvent(enrichedBook))
+
+	// Reindex for search asynchronously
+	if s.searchIndexer != nil {
+		go func() {
+			if err := s.searchIndexer.IndexBook(context.Background(), book); err != nil {
+				if s.logger != nil {
+					s.logger.Warn("failed to reindex book for search", "book_id", book.ID, "error", err)
+				}
+			}
+		}()
+	}
+
 	return nil
 }
 
@@ -514,6 +537,18 @@ func (s *Store) DeleteBook(ctx context.Context, id string) error {
 	}
 
 	s.eventEmitter.Emit(sse.NewBookDeletedEvent(book.ID, *book.DeletedAt))
+
+	// Remove from search index asynchronously
+	if s.searchIndexer != nil {
+		go func() {
+			if err := s.searchIndexer.DeleteBook(context.Background(), id); err != nil {
+				if s.logger != nil {
+					s.logger.Warn("failed to remove book from search index", "book_id", id, "error", err)
+				}
+			}
+		}()
+	}
+
 	return nil
 }
 

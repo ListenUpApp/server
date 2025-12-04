@@ -40,7 +40,7 @@ func (s *Store) CreateSeries(ctx context.Context, series *domain.Series) error {
 		return ErrSeriesExists
 	}
 
-	return s.db.Update(func(txn *badger.Txn) error {
+	err = s.db.Update(func(txn *badger.Txn) error {
 		// Save series
 		data, err := json.Marshal(series)
 		if err != nil {
@@ -65,6 +65,22 @@ func (s *Store) CreateSeries(ctx context.Context, series *domain.Series) error {
 
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	// Index for search asynchronously
+	if s.searchIndexer != nil {
+		go func() {
+			if err := s.searchIndexer.IndexSeries(context.Background(), series); err != nil {
+				if s.logger != nil {
+					s.logger.Warn("failed to index series for search", "series_id", series.ID, "error", err)
+				}
+			}
+		}()
+	}
+
+	return nil
 }
 
 // GetSeries retrieves a series by ID.
@@ -158,6 +174,17 @@ func (s *Store) UpdateSeries(ctx context.Context, series *domain.Series) error {
 		if s.logger != nil {
 			s.logger.Error("cascade update failed", "series_id", series.ID, "error", err)
 		}
+	}
+
+	// Reindex for search asynchronously
+	if s.searchIndexer != nil {
+		go func() {
+			if err := s.searchIndexer.IndexSeries(context.Background(), series); err != nil {
+				if s.logger != nil {
+					s.logger.Warn("failed to reindex series for search", "series_id", series.ID, "error", err)
+				}
+			}
+		}()
 	}
 
 	return nil
@@ -658,7 +685,7 @@ func (s *Store) DeleteSeries(ctx context.Context, id string) error {
 	// Mark as deleted
 	series.MarkDeleted()
 
-	return s.db.Update(func(txn *badger.Txn) error {
+	err = s.db.Update(func(txn *badger.Txn) error {
 		// Save updated series
 		data, err := json.Marshal(series)
 		if err != nil {
@@ -687,6 +714,76 @@ func (s *Store) DeleteSeries(ctx context.Context, id string) error {
 
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	// Remove from search index asynchronously
+	if s.searchIndexer != nil {
+		go func() {
+			if err := s.searchIndexer.DeleteSeries(context.Background(), id); err != nil {
+				if s.logger != nil {
+					s.logger.Warn("failed to remove series from search index", "series_id", id, "error", err)
+				}
+			}
+		}()
+	}
+
+	return nil
+}
+
+// ListAllSeries returns all non-deleted series without pagination.
+// WARNING: This can be expensive for large libraries. Use for bulk operations like reindexing.
+func (s *Store) ListAllSeries(ctx context.Context) ([]*domain.Series, error) {
+	var seriesList []*domain.Series
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = true
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		prefix := []byte(seriesPrefix)
+		it.Seek(prefix)
+		for it.ValidForPrefix(prefix) {
+			var series domain.Series
+			err := it.Item().Value(func(val []byte) error {
+				return json.Unmarshal(val, &series)
+			})
+			if err != nil {
+				it.Next()
+				continue
+			}
+
+			// Skip soft-deleted
+			if !series.IsDeleted() {
+				seriesList = append(seriesList, &series)
+			}
+			it.Next()
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list all series: %w", err)
+	}
+
+	// Populate total books count
+	if len(seriesList) > 0 {
+		seriesIDs := make([]string, len(seriesList))
+		for i, series := range seriesList {
+			seriesIDs[i] = series.ID
+		}
+
+		counts, err := s.CountBooksForMultipleSeries(ctx, seriesIDs)
+		if err == nil {
+			for _, series := range seriesList {
+				series.TotalBooks = counts[series.ID]
+			}
+		}
+	}
+
+	return seriesList, nil
 }
 
 // GetSeriesDeletedAfter queries all series with DeletedAt > timestamp.

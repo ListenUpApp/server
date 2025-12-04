@@ -18,6 +18,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/media/images"
 	"github.com/listenupapp/listenup-server/internal/processor"
 	"github.com/listenupapp/listenup-server/internal/scanner"
+	"github.com/listenupapp/listenup-server/internal/search"
 	"github.com/listenupapp/listenup-server/internal/service"
 	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
@@ -215,6 +216,22 @@ func main() {
 		}
 	}()
 
+	// Initialize search index.
+	searchIndex, err := search.NewSearchIndex(search.Options{
+		DataPath: cfg.Metadata.BasePath,
+		Logger:   log.Logger,
+	})
+	if err != nil {
+		log.Error("Failed to initialize search index", "error", err)
+		sseCancel()
+		os.Exit(1)
+	}
+	defer func() {
+		if err := searchIndex.Close(); err != nil {
+			log.Error("Failed to close search index (defer)", "error", err)
+		}
+	}()
+
 	// Initialize services.
 	instanceService := service.NewInstanceService(db, log.Logger, cfg)
 	bookService := service.NewBookService(db, fileScanner, log.Logger)
@@ -224,6 +241,10 @@ func main() {
 	listeningService := service.NewListeningService(db, sseManager, log.Logger)
 	genreService := service.NewGenreService(db, log.Logger)
 	tagService := service.NewTagService(db, log.Logger)
+	searchService := service.NewSearchService(searchIndex, db, log.Logger)
+
+	// Wire search service to store for automatic indexing on CRUD operations.
+	db.SetSearchIndexer(searchService)
 
 	// Initialize auth services.
 	// Convert key bytes to hex string for token service
@@ -272,7 +293,7 @@ func main() {
 	// Create HTTP server with service layer.
 	// TODO: Future note to self: This is going to get old fast depending on how many
 	// services we need to instantiate. Let's look into a better solution.
-	httpServer := api.NewServer(db, instanceService, authService, bookService, collectionService, sharingService, syncService, listeningService, genreService, tagService, sseHandler, imageStorage, log.Logger)
+	httpServer := api.NewServer(db, instanceService, authService, bookService, collectionService, sharingService, syncService, listeningService, genreService, tagService, searchService, sseHandler, imageStorage, log.Logger)
 
 	// Configure HTTP server.
 	srv := &http.Server{
@@ -307,7 +328,8 @@ func main() {
 	// 2. Stop file watcher (no more file events).
 	// 3. Shutdown SSE manager (no more event broadcasts).
 	// 4. Shutdown HTTP server (no more requests).
-	// 5. Close database (no more data access).
+	// 5. Close search index (no more search operations).
+	// 6. Close database (no more data access).
 
 	// Stop session cleanup job.
 	sessionCleanupCancel()
@@ -330,6 +352,14 @@ func main() {
 	// Shutdown HTTP server.
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error("Server forced to shutdown", "error", err)
+	}
+
+	// Close search index.
+	log.Info("Closing search index...")
+	if err := searchIndex.Close(); err != nil {
+		log.Error("Failed to close search index", "error", err)
+	} else {
+		log.Info("Search index closed successfully")
 	}
 
 	// Explicitly close database before exit.
