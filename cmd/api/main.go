@@ -222,6 +222,8 @@ func main() {
 	sharingService := service.NewSharingService(db, log.Logger)
 	syncService := service.NewSyncService(db, log.Logger)
 	listeningService := service.NewListeningService(db, sseManager, log.Logger)
+	genreService := service.NewGenreService(db, log.Logger)
+	tagService := service.NewTagService(db, log.Logger)
 
 	// Initialize auth services.
 	// Convert key bytes to hex string for token service
@@ -236,6 +238,14 @@ func main() {
 	authService := service.NewAuthService(db, tokenService, sessionService, instanceService, log.Logger)
 
 	sseHandler := sse.NewHandler(sseManager, log.Logger)
+
+	// Seed default genres (no-op if already seeded).
+	if err := genreService.SeedDefaultGenres(ctx); err != nil {
+		log.Error("Failed to seed default genres", "error", err)
+		// Non-fatal - continue without genres.
+	} else {
+		log.Info("Default genres seeded successfully")
+	}
 
 	// Check if server instance configuration exists, create if not (first run).
 	instanceConfig, err := instanceService.InitializeInstance(ctx)
@@ -262,7 +272,7 @@ func main() {
 	// Create HTTP server with service layer.
 	// TODO: Future note to self: This is going to get old fast depending on how many
 	// services we need to instantiate. Let's look into a better solution.
-	httpServer := api.NewServer(db, instanceService, authService, bookService, collectionService, sharingService, syncService, listeningService, sseHandler, imageStorage, log.Logger)
+	httpServer := api.NewServer(db, instanceService, authService, bookService, collectionService, sharingService, syncService, listeningService, genreService, tagService, sseHandler, imageStorage, log.Logger)
 
 	// Configure HTTP server.
 	srv := &http.Server{

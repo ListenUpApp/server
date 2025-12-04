@@ -10,13 +10,20 @@ import (
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/genre"
 	"github.com/listenupapp/listenup-server/internal/id"
 )
 
-// Storer defines the interface for creating contributors and series during scanning.
+// Storer defines the interface for creating contributors, series, and genres during scanning.
 type Storer interface {
 	GetOrCreateContributorByName(ctx context.Context, name string) (*domain.Contributor, error)
 	GetOrCreateSeriesByName(ctx context.Context, name string) (*domain.Series, error)
+
+	// Genre methods for normalization.
+	GetGenreBySlug(ctx context.Context, slug string) (*domain.Genre, error)
+	GetGenreAliasByRaw(ctx context.Context, raw string) (*domain.GenreAlias, error)
+	TrackUnmappedGenre(ctx context.Context, raw string, bookID string) error
+	AddBookGenre(ctx context.Context, bookID, genreID string) error
 }
 
 // ConvertToBook converts a LibraryItemData (from scanner) to a domain.Book (for database).
@@ -94,8 +101,6 @@ func ConvertToBook(ctx context.Context, item *LibraryItemData, store Storer) (*d
 		book.Publisher = item.Metadata.Publisher
 		book.PublishYear = item.Metadata.PublishYear
 		book.Language = item.Metadata.Language
-		book.Genres = item.Metadata.Genres
-		book.Tags = item.Metadata.Tags
 		book.ISBN = item.Metadata.ISBN
 		book.ASIN = item.Metadata.ASIN
 		book.Explicit = item.Metadata.Explicit
@@ -115,6 +120,16 @@ func ConvertToBook(ctx context.Context, item *LibraryItemData, store Storer) (*d
 		}
 		book.SeriesID = seriesID
 		book.Sequence = sequence
+
+		// Extract and normalize genres
+		if len(item.Metadata.Genres) > 0 {
+			genreIDs, err := extractGenres(ctx, item.Metadata.Genres, book.ID, store)
+			if err != nil {
+				// Log but don't fail - genres are not critical
+				// The unmapped genres will be tracked for later resolution
+			}
+			book.GenreIDs = genreIDs
+		}
 
 		// Convert Chapters.
 		if len(item.Metadata.Chapters) > 0 {
@@ -410,6 +425,56 @@ func extractSeries(ctx context.Context, metadata *BookMetadata, store Storer) (s
 	}
 
 	return series.ID, seriesInfo.Sequence, nil
+}
+
+// extractGenres resolves raw genre strings to normalized genre IDs.
+// Returns genre IDs to assign to the book.
+func extractGenres(ctx context.Context, rawGenres []string, bookID string, store Storer) ([]string, error) {
+	var genreIDs []string
+	seen := make(map[string]bool) // Dedupe
+
+	for _, raw := range rawGenres {
+		if raw == "" {
+			continue
+		}
+
+		// 1. Check user-defined aliases first.
+		alias, err := store.GetGenreAliasByRaw(ctx, raw)
+		if err == nil && alias != nil {
+			for _, gid := range alias.GenreIDs {
+				if !seen[gid] {
+					genreIDs = append(genreIDs, gid)
+					seen[gid] = true
+				}
+			}
+			continue
+		}
+
+		// 2. Try built-in normalization.
+		slugs := genre.NormalizeToSlugs(raw)
+		foundAny := false
+
+		for _, slug := range slugs {
+			g, err := store.GetGenreBySlug(ctx, slug)
+			if err == nil && g != nil {
+				if !seen[g.ID] {
+					genreIDs = append(genreIDs, g.ID)
+					seen[g.ID] = true
+				}
+				foundAny = true
+			}
+		}
+
+		// 3. If nothing matched, track as unmapped.
+		if !foundAny {
+			if err := store.TrackUnmappedGenre(ctx, raw, bookID); err != nil {
+				// Log but don't fail the scan.
+				continue
+			}
+		}
+	}
+
+	return genreIDs, nil
 }
 
 // UpdateBookFromScan updates an existing book with new scan database.

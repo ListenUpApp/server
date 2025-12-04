@@ -75,6 +75,8 @@ func setupTestServer(t *testing.T) (server *Server, cleanup func()) {
 	sharingService := service.NewSharingService(s, logger)
 	syncService := service.NewSyncService(s, logger)
 	listeningService := service.NewListeningService(s, store.NewNoopEmitter(), logger)
+	genreService := service.NewGenreService(s, logger)
+	tagService := service.NewTagService(s, logger)
 
 	// Create auth services.
 	// Use a test key (32 bytes as hex = 64 hex chars)
@@ -89,7 +91,7 @@ func setupTestServer(t *testing.T) (server *Server, cleanup func()) {
 	require.NoError(t, err)
 
 	// Create server.
-	server = NewServer(s, instanceService, authService, bookService, collectionService, sharingService, syncService, listeningService, sseHandler, imageStorage, logger)
+	server = NewServer(s, instanceService, authService, bookService, collectionService, sharingService, syncService, listeningService, genreService, tagService, sseHandler, imageStorage, logger)
 
 	// Return cleanup function.
 	cleanup = func() {

@@ -30,6 +30,8 @@ type Server struct {
 	sharingService    *service.SharingService
 	syncService       *service.SyncService
 	listeningService  *service.ListeningService
+	genreService      *service.GenreService
+	tagService        *service.TagService
 	sseHandler        *sse.Handler
 	imageStorage      *images.Storage
 	router            *chi.Mux
@@ -38,7 +40,7 @@ type Server struct {
 }
 
 // NewServer creates a new HTTP server with all routes configured.
-func NewServer(store *store.Store, instanceService *service.InstanceService, authService *service.AuthService, bookService *service.BookService, collectionService *service.CollectionService, sharingService *service.SharingService, syncService *service.SyncService, listeningService *service.ListeningService, sseHandler *sse.Handler, imageStorage *images.Storage, logger *slog.Logger) *Server {
+func NewServer(store *store.Store, instanceService *service.InstanceService, authService *service.AuthService, bookService *service.BookService, collectionService *service.CollectionService, sharingService *service.SharingService, syncService *service.SyncService, listeningService *service.ListeningService, genreService *service.GenreService, tagService *service.TagService, sseHandler *sse.Handler, imageStorage *images.Storage, logger *slog.Logger) *Server {
 	s := &Server{
 		store:             store,
 		instanceService:   instanceService,
@@ -48,6 +50,8 @@ func NewServer(store *store.Store, instanceService *service.InstanceService, aut
 		sharingService:    sharingService,
 		syncService:       syncService,
 		listeningService:  listeningService,
+		genreService:      genreService,
+		tagService:        tagService,
 		sseHandler:        sseHandler,
 		imageStorage:      imageStorage,
 		router:            chi.NewRouter(),
@@ -202,6 +206,44 @@ func (s *Server) setupRoutes() {
 			r.Use(s.requireAuth)
 			r.Get("/{bookID}", s.handleGetBookPreferences)
 			r.Patch("/{bookID}", s.handleUpdateBookPreferences)
+		})
+
+		// Genres (public for list, auth for mutations).
+		r.Route("/genres", func(r chi.Router) {
+			r.Get("/", s.handleListGenres)           // Public: list all genres
+			r.Get("/{id}", s.handleGetGenre)         // Public: get single genre
+			r.Get("/{id}/books", s.handleGetGenreBooks) // Public: get books in genre
+
+			r.Group(func(r chi.Router) {
+				r.Use(s.requireAuth)
+				r.Post("/", s.handleCreateGenre)               // Create genre
+				r.Put("/{id}", s.handleUpdateGenre)            // Update genre
+				r.Delete("/{id}", s.handleDeleteGenre)         // Delete genre
+				r.Post("/{id}/move", s.handleMoveGenre)        // Move genre in tree
+				r.Post("/merge", s.handleMergeGenres)          // Merge two genres
+				r.Get("/unmapped", s.handleListUnmappedGenres) // List unmapped
+				r.Post("/unmapped/map", s.handleMapUnmappedGenre) // Map unmapped
+			})
+		})
+
+		// Tags (all require auth - user-specific).
+		r.Route("/tags", func(r chi.Router) {
+			r.Use(s.requireAuth)
+			r.Get("/", s.handleListTags)
+			r.Post("/", s.handleCreateTag)
+			r.Get("/{id}", s.handleGetTag)
+			r.Patch("/{id}", s.handleUpdateTag)
+			r.Delete("/{id}", s.handleDeleteTag)
+			r.Get("/{id}/books", s.handleGetTagBooks)
+		})
+
+		// Book genres and tags (require auth).
+		r.Route("/books/{id}", func(r chi.Router) {
+			r.Use(s.requireAuth)
+			r.Post("/genres", s.handleSetBookGenres)
+			r.Get("/tags", s.handleGetBookTags)
+			r.Post("/tags", s.handleAddBookTag)
+			r.Delete("/tags/{tagID}", s.handleRemoveBookTag)
 		})
 
 		// Cover images (public for sharing, cached aggressively).

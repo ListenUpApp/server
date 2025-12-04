@@ -20,8 +20,7 @@ type Book struct {
 	PublishYear   string            `json:"publish_year,omitempty"`
 	Language      string            `json:"language,omitempty"`
 	ASIN          string            `json:"asin,omitempty"`
-	Genres        []string          `json:"genres,omitempty"`
-	Tags          []string          `json:"tags,omitempty"`
+	GenreIDs      []string          `json:"genre_ids,omitempty"` // References to normalized Genre entities
 	Contributors  []BookContributor `json:"contributors"`
 	SeriesID      string            `json:"series_id,omitempty"`
 	Sequence      string            `json:"sequence,omitempty"` // "1", "1.5", "Book Zero" - flexible for edge cases
