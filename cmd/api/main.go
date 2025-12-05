@@ -137,12 +137,6 @@ func main() {
 		sseCancel()
 		os.Exit(1)
 	}
-	defer func() {
-		if err := fileWatcher.Stop(); err != nil {
-			log.Error("Failed to stop file watcher (defer)", "error", err)
-		}
-	}()
-
 	// Watch all library scan paths.
 	for _, scanPath := range bootstrap.Library.ScanPaths {
 		if err := fileWatcher.Watch(scanPath); err != nil {
@@ -226,12 +220,6 @@ func main() {
 		sseCancel()
 		os.Exit(1)
 	}
-	defer func() {
-		if err := searchIndex.Close(); err != nil {
-			log.Error("Failed to close search index (defer)", "error", err)
-		}
-	}()
-
 	// Initialize services.
 	instanceService := service.NewInstanceService(db, log.Logger, cfg)
 	bookService := service.NewBookService(db, fileScanner, log.Logger)

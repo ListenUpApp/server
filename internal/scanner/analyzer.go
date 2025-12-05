@@ -301,6 +301,47 @@ func splitContributors(input string) []string {
 	return result
 }
 
+// resolveBookTitle determines the correct book title based on format and available metadata.
+//
+// For M4B/M4A/MP4 files (single-file audiobooks):
+//   - The Title tag contains the book title
+//   - Chapter information is stored in chapter atoms, not the title
+//
+// For MP3 albums (multi-file audiobooks):
+//   - The Title tag contains the track/chapter name
+//   - The Album tag contains the book title
+//
+// Falls back to Album if Title is empty, or Title if Album is empty.
+func resolveBookTitle(audioMeta *AudioMetadata) string {
+	format := strings.ToLower(audioMeta.Format)
+
+	// M4B, M4A, MP4 formats: prefer Title tag
+	if format == "m4b" || format == "m4a" || format == "mp4" {
+		if audioMeta.Title != "" {
+			return audioMeta.Title
+		}
+		return audioMeta.Album
+	}
+
+	// MP3 and other formats: prefer Album tag (Title is track name)
+	if audioMeta.Album != "" {
+		return audioMeta.Album
+	}
+	return audioMeta.Title
+}
+
+// sanitizeString removes null bytes and other control characters that can cause
+// issues in databases and JSON parsing. Some audio metadata parsers include
+// null terminators in strings.
+func sanitizeString(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == 0 { // null byte
+			return -1 // drop it
+		}
+		return r
+	}, s)
+}
+
 // buildBookMetadata converts AudioMetadata to BookMetadata.
 // This aggregates audio file metadata into item-level metadata for book creation.
 func buildBookMetadata(audioMeta *AudioMetadata) *BookMetadata {
@@ -308,14 +349,19 @@ func buildBookMetadata(audioMeta *AudioMetadata) *BookMetadata {
 		return nil
 	}
 
+	// Determine book title based on format.
+	// For M4B/M4A files, the Title tag is the book title (chapters are in chapter atoms).
+	// For MP3 albums, the Title tag is the track/chapter name, so use Album instead.
+	title := sanitizeString(resolveBookTitle(audioMeta))
+
 	bookMeta := &BookMetadata{
-		Title:       audioMeta.Album, // Use Album tag for book title (not Title which is track/chapter)
-		Subtitle:    audioMeta.Subtitle,
-		Description: audioMeta.Description,
-		Publisher:   audioMeta.Publisher,
-		Language:    audioMeta.Language,
-		ISBN:        audioMeta.ISBN,
-		ASIN:        audioMeta.ASIN,
+		Title:       title,
+		Subtitle:    sanitizeString(audioMeta.Subtitle),
+		Description: sanitizeString(audioMeta.Description),
+		Publisher:   sanitizeString(audioMeta.Publisher),
+		Language:    sanitizeString(audioMeta.Language),
+		ISBN:        sanitizeString(audioMeta.ISBN),
+		ASIN:        sanitizeString(audioMeta.ASIN),
 		Explicit:    false,
 		Abridged:    false,
 		Chapters:    audioMeta.Chapters,
@@ -328,17 +374,17 @@ func buildBookMetadata(audioMeta *AudioMetadata) *BookMetadata {
 
 	// Convert Artist to Authors array (split by semicolon for multiple).
 	if audioMeta.Artist != "" {
-		bookMeta.Authors = splitContributors(audioMeta.Artist)
+		bookMeta.Authors = splitContributors(sanitizeString(audioMeta.Artist))
 	}
 
 	// Convert Narrator to Narrators array (split by semicolon for multiple).
 	if audioMeta.Narrator != "" {
-		bookMeta.Narrators = splitContributors(audioMeta.Narrator)
+		bookMeta.Narrators = splitContributors(sanitizeString(audioMeta.Narrator))
 	}
 
 	// Convert Genre to Genres array (split by semicolon for multiple).
 	if audioMeta.Genre != "" {
-		genres := strings.Split(audioMeta.Genre, ";")
+		genres := strings.Split(sanitizeString(audioMeta.Genre), ";")
 		for _, genre := range genres {
 			if trimmed := strings.TrimSpace(genre); trimmed != "" {
 				bookMeta.Genres = append(bookMeta.Genres, trimmed)
@@ -350,11 +396,16 @@ func buildBookMetadata(audioMeta *AudioMetadata) *BookMetadata {
 	if audioMeta.Series != "" {
 		bookMeta.Series = []SeriesInfo{
 			{
-				Name:     audioMeta.Series,
-				Sequence: audioMeta.SeriesPart,
+				Name:     sanitizeString(audioMeta.Series),
+				Sequence: sanitizeString(audioMeta.SeriesPart),
 			},
 		}
 	}
 
 	return bookMeta
+}
+
+// BuildBookMetadataExported is an exported version of buildBookMetadata for diagnostic tools.
+func BuildBookMetadataExported(audioMeta *AudioMetadata) *BookMetadata {
+	return buildBookMetadata(audioMeta)
 }

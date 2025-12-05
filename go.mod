@@ -11,7 +11,7 @@ require (
 	github.com/go-chi/cors v1.2.2
 	github.com/go-playground/validator/v10 v10.28.0
 	github.com/matoous/go-nanoid/v2 v2.1.0
-	github.com/simonhull/audiometa v0.5.0
+	github.com/simonhull/audiometa v0.6.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.45.0
 	golang.org/x/sys v0.38.0
