@@ -117,6 +117,26 @@ func (s *Store) GetGenre(ctx context.Context, id string) (*domain.Genre, error) 
 	return &g, nil
 }
 
+// GetGenresByIDs retrieves multiple genres by their IDs.
+// Missing or deleted genres are silently skipped (no error returned).
+// This is used by the enricher for batch denormalization.
+func (s *Store) GetGenresByIDs(ctx context.Context, ids []string) ([]*domain.Genre, error) {
+	genres := make([]*domain.Genre, 0, len(ids))
+
+	for _, id := range ids {
+		genre, err := s.GetGenre(ctx, id)
+		if err != nil {
+			if errors.Is(err, ErrGenreNotFound) {
+				continue // Skip missing genres
+			}
+			return nil, err
+		}
+		genres = append(genres, genre)
+	}
+
+	return genres, nil
+}
+
 // GetGenreBySlug retrieves a genre by its slug.
 func (s *Store) GetGenreBySlug(ctx context.Context, slug string) (*domain.Genre, error) {
 	if err := ctx.Err(); err != nil {

@@ -35,7 +35,8 @@ type Book struct {
 
 	// Denormalized fields for immediate rendering
 	// These are populated by Enricher before sending to clients
-	Author     string `json:"author,omitempty"`      // First contributor with role "author"
-	Narrator   string `json:"narrator,omitempty"`    // First contributor with role "narrator"
-	SeriesName string `json:"series_name,omitempty"` // Resolved series name
+	Author     string   `json:"author,omitempty"`      // First contributor with role "author"
+	Narrator   string   `json:"narrator,omitempty"`    // First contributor with role "narrator"
+	SeriesName string   `json:"series_name,omitempty"` // Resolved series name
+	Genres     []string `json:"genres,omitempty"`      // Resolved genre names
 }

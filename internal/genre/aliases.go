@@ -3,6 +3,29 @@ package genre
 // CanonicalAliases maps common variations to canonical slugs.
 // This is the built-in knowledge - users can add more via GenreAlias.
 var CanonicalAliases = map[string][]string{
+	// Audible-style broad categories (e.g., "Literature & Fiction")
+	"literature-fiction":         {"fiction"},
+	"literature":                 {"fiction"},
+	"science-fiction-fantasy":    {"science-fiction", "fantasy"},
+	"mystery-thriller-suspense":  {"mystery-thriller"},
+	"teens-young-adult":          {"young-adult"},
+	"children-s-audiobooks":      {"children-young-adult"},
+	"biographies-memoirs":        {"biography-memoir"},
+	"business-careers":           {"business-finance"},
+	"health-wellness":            {"health-fitness"},
+	"religion-spirituality":      {"religion-spirituality"},
+	"arts-entertainment":         {"fiction"},
+	"comedy-humor":               {"humor"},
+	"erotica-sexuality":          {"romance"},
+	"lgbtq-audiobooks":           {"fiction"},
+	"politics-social-sciences":   {"politics-social"},
+	"relationships-parenting-personal-development": {"self-help"},
+	"education-learning":         {"non-fiction"},
+	"home-garden":                {"non-fiction"},
+	"money-finance":              {"business-finance"},
+	"sports-outdoors":            {"non-fiction"},
+	"travel-tourism":             {"travel"},
+
 	// Science Fiction variations -> science-fiction
 	"sci-fi":          {"science-fiction"},
 	"scifi":           {"science-fiction"},
@@ -16,7 +39,6 @@ var CanonicalAliases = map[string][]string{
 
 	// Combined genres -> multiple
 	"sci-fi-fantasy":          {"science-fiction", "fantasy"},
-	"science-fiction-fantasy": {"science-fiction", "fantasy"},
 	"fantasy-romance":         {"fantasy", "romance"},
 	"romantic-fantasy":        {"romantasy"},
 
