@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -369,6 +370,25 @@ func (s *Server) handleTriggerScan(w http.ResponseWriter, r *http.Request) {
 		s.logger.Error("Failed to trigger scan", "error", err, "library_id", libraryID)
 		response.InternalError(w, "Failed to start library scan", s.logger)
 		return
+	}
+
+	// Trigger search reindex after scan completes to ensure index is in sync.
+	// This handles cases where async per-book indexing may have failed.
+	if s.searchService != nil && (result.Added > 0 || result.Updated > 0) {
+		go func() {
+			// Use background context since HTTP request context will be cancelled
+			reindexCtx := context.Background()
+			s.logger.Info("Triggering search reindex after scan",
+				"added", result.Added,
+				"updated", result.Updated,
+			)
+			if err := s.searchService.ReindexAll(reindexCtx); err != nil {
+				s.logger.Error("Failed to reindex after scan", "error", err)
+			} else {
+				count, _ := s.searchService.DocumentCount()
+				s.logger.Info("Search reindex after scan completed", "documents", count)
+			}
+		}()
 	}
 
 	response.Success(w, result, s.logger)

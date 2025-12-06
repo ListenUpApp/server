@@ -194,9 +194,14 @@ func buildSearchQuery(params SearchParams) query.Query {
 	var queries []query.Query
 
 	// Main text query
+	// Search strategy:
+	// - Books: match on title (name) and series_name only
+	// - Contributors: match on name (their actual name)
+	// - Series: match on name
+	// We DON'T search author/narrator fields on books because that returns
+	// every book by "Peter" when you search for "Peter", when you really
+	// want Peter Pan (the book) or Peter Smith (the contributor).
 	if params.Query != "" {
-		// Build a multi-field query with boosting
-		// Higher boost = more relevance for matches in that field
 		textQueries := []query.Query{}
 
 		// Name/title match with highest boost
@@ -205,29 +210,11 @@ func buildSearchQuery(params SearchParams) query.Query {
 		nameMatch.SetBoost(3.0)
 		textQueries = append(textQueries, nameMatch)
 
-		// Author match with high boost
-		authorMatch := bleve.NewMatchQuery(params.Query)
-		authorMatch.SetField("author")
-		authorMatch.SetBoost(2.0)
-		textQueries = append(textQueries, authorMatch)
-
-		// Narrator match
-		narratorMatch := bleve.NewMatchQuery(params.Query)
-		narratorMatch.SetField("narrator")
-		narratorMatch.SetBoost(1.5)
-		textQueries = append(textQueries, narratorMatch)
-
-		// Series name match
+		// Series name match (for books in a series)
 		seriesMatch := bleve.NewMatchQuery(params.Query)
 		seriesMatch.SetField("series_name")
 		seriesMatch.SetBoost(1.5)
 		textQueries = append(textQueries, seriesMatch)
-
-		// Description match (lower boost, larger text)
-		descMatch := bleve.NewMatchQuery(params.Query)
-		descMatch.SetField("description")
-		descMatch.SetBoost(0.5)
-		textQueries = append(textQueries, descMatch)
 
 		// Add fuzzy matching for typo tolerance on name
 		fuzzyQuery := bleve.NewFuzzyQuery(params.Query)

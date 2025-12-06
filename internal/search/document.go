@@ -62,6 +62,60 @@ type SearchDocument struct {
 	UpdatedAt int64 `json:"updated_at"` // Unix millis
 }
 
+// ToMap converts the document to a map with lowercase field names.
+// This ensures field names match the Bleve index mapping.
+// Bleve by default uses Go struct field names (capitalized), but our
+// mapping uses lowercase names, so we convert explicitly.
+func (d *SearchDocument) ToMap() map[string]interface{} {
+	m := map[string]interface{}{
+		"id":         d.ID,
+		"type":       string(d.Type),
+		"name":       d.Name,
+		"created_at": d.CreatedAt,
+		"updated_at": d.UpdatedAt,
+	}
+
+	// Optional fields - only add if non-empty
+	if d.Subtitle != "" {
+		m["subtitle"] = d.Subtitle
+	}
+	if d.Description != "" {
+		m["description"] = d.Description
+	}
+	if d.Author != "" {
+		m["author"] = d.Author
+	}
+	if d.Narrator != "" {
+		m["narrator"] = d.Narrator
+	}
+	if d.Publisher != "" {
+		m["publisher"] = d.Publisher
+	}
+	if d.SeriesName != "" {
+		m["series_name"] = d.SeriesName
+	}
+	if d.Biography != "" {
+		m["biography"] = d.Biography
+	}
+	if len(d.GenrePaths) > 0 {
+		m["genre_paths"] = d.GenrePaths
+	}
+	if len(d.GenreSlugs) > 0 {
+		m["genre_slugs"] = d.GenreSlugs
+	}
+	if d.Duration > 0 {
+		m["duration"] = d.Duration
+	}
+	if d.PublishYear > 0 {
+		m["publish_year"] = d.PublishYear
+	}
+	if d.BookCount > 0 {
+		m["book_count"] = d.BookCount
+	}
+
+	return m
+}
+
 // BookToSearchDocument converts a domain Book to a SearchDocument.
 // Requires denormalized fields (author, narrator, series name, genre paths)
 // to be provided by the caller, as the search package shouldn't depend on store.

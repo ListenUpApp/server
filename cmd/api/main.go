@@ -234,6 +234,34 @@ func main() {
 	// Wire search service to store for automatic indexing on CRUD operations.
 	db.SetSearchIndexer(searchService)
 
+	// Check if search index needs initial population.
+	// This handles the case where books exist but the index is empty
+	// (e.g., library was scanned before search indexing was implemented).
+	docCount, _ := searchService.DocumentCount()
+	if docCount == 0 {
+		// Check if we have books that need indexing
+		books, err := db.ListAllBooks(ctx)
+		if err == nil && len(books) > 0 {
+			log.Info("Search index is empty but books exist, triggering initial reindex",
+				"book_count", len(books),
+			)
+			go func() {
+				reindexCtx := context.Background()
+				if err := searchService.ReindexAll(reindexCtx); err != nil {
+					log.Error("Initial search reindex failed", "error", err)
+				} else {
+					count, _ := searchService.DocumentCount()
+					log.Info("Initial search reindex completed", "documents", count)
+				}
+			}()
+		}
+	} else {
+		log.Info("Search index ready", "documents", docCount)
+	}
+
+	// Note: Search reindex is also triggered automatically after every library scan.
+	// See handleTriggerScan in server.go for the implementation.
+
 	// Initialize auth services.
 	// Convert key bytes to hex string for token service
 	keyHex := fmt.Sprintf("%x", cfg.Auth.AccessTokenKey)

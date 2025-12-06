@@ -166,12 +166,25 @@ func (s *SearchService) ReindexAll(ctx context.Context) error {
 		return fmt.Errorf("list series: %w", err)
 	}
 
+	// Get book counts for all series in one batch
+	seriesIDs := make([]string, 0, len(allSeries))
+	for _, series := range allSeries {
+		if !series.IsDeleted() {
+			seriesIDs = append(seriesIDs, series.ID)
+		}
+	}
+	seriesBookCounts, _ := s.store.CountBooksForMultipleSeries(ctx, seriesIDs)
+
 	seriesDocs := make([]*search.SearchDocument, 0, len(allSeries))
 	for _, series := range allSeries {
 		if series.IsDeleted() {
 			continue
 		}
 		doc := search.SeriesToSearchDocument(series)
+		// Override TotalBooks with actual count of books we have
+		if count, ok := seriesBookCounts[series.ID]; ok {
+			doc.BookCount = count
+		}
 		seriesDocs = append(seriesDocs, doc)
 	}
 

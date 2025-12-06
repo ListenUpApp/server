@@ -27,9 +27,13 @@ type Options struct {
 	Logger   *slog.Logger // Logger for operations (uses discard if nil)
 }
 
+// mappingVersion is incremented whenever the index mapping changes.
+// This triggers an automatic rebuild on startup when the version doesn't match.
+const mappingVersion = "3"
+
 // NewSearchIndex creates or opens a search index.
 // If an existing index is found, it opens it. Otherwise, creates a new one.
-// If the existing index is corrupted, it's removed and recreated.
+// If the existing index is corrupted or has an outdated mapping, it's removed and recreated.
 func NewSearchIndex(opts Options) (*SearchIndex, error) {
 	logger := opts.Logger
 	if logger == nil {
@@ -37,23 +41,53 @@ func NewSearchIndex(opts Options) (*SearchIndex, error) {
 	}
 
 	indexPath := filepath.Join(opts.DataPath, "search.bleve")
+	versionPath := filepath.Join(opts.DataPath, "search.version")
 
 	var index bleve.Index
 	var err error
+	needsRebuild := false
 
-	// Try to open existing index
+	// Check mapping version - rebuild if version file missing or mismatched
+	indexExists := false
 	if _, statErr := os.Stat(indexPath); statErr == nil {
+		indexExists = true
+	}
+
+	if indexExists {
+		existingVersion, readErr := os.ReadFile(versionPath)
+		if readErr != nil {
+			// Version file missing but index exists - this is an old index
+			logger.Info("search index has no version file, will rebuild with current mapping",
+				"new_version", mappingVersion,
+			)
+			needsRebuild = true
+		} else if string(existingVersion) != mappingVersion {
+			logger.Info("search index mapping version changed, will rebuild",
+				"old_version", string(existingVersion),
+				"new_version", mappingVersion,
+			)
+			needsRebuild = true
+		}
+	}
+
+	// Try to open existing index (if not forcing rebuild)
+	if !needsRebuild && indexExists {
 		index, err = bleve.Open(indexPath)
 		if err != nil {
 			logger.Warn("failed to open existing index, will recreate",
 				"path", indexPath,
 				"error", err,
 			)
-			// Remove corrupted index
-			if removeErr := os.RemoveAll(indexPath); removeErr != nil {
-				return nil, fmt.Errorf("remove corrupted index: %w", removeErr)
-			}
+			needsRebuild = true
 		}
+	}
+
+	// Remove old index if rebuild needed
+	if needsRebuild {
+		if removeErr := os.RemoveAll(indexPath); removeErr != nil {
+			return nil, fmt.Errorf("remove old index: %w", removeErr)
+		}
+		index = nil
 	}
 
 	// Create new index if needed
@@ -63,7 +97,11 @@ func NewSearchIndex(opts Options) (*SearchIndex, error) {
 		if err != nil {
 			return nil, fmt.Errorf("create index: %w", err)
 		}
-		logger.Info("created new search index", "path", indexPath)
+		// Write version file
+		if writeErr := os.WriteFile(versionPath, []byte(mappingVersion), 0644); writeErr != nil {
+			logger.Warn("failed to write search version file", "error", writeErr)
+		}
+		logger.Info("created new search index", "path", indexPath, "mapping_version", mappingVersion)
 	} else {
 		logger.Info("opened existing search index", "path", indexPath)
 	}
@@ -86,7 +124,8 @@ func (s *SearchIndex) Close() error {
 func (s *SearchIndex) IndexDocument(doc *SearchDocument) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.index.Index(doc.ID, doc)
+	// Convert to map to ensure field names match the mapping (lowercase)
+	return s.index.Index(doc.ID, doc.ToMap())
 }
 
 // IndexDocuments indexes multiple documents in a batch.
@@ -108,7 +147,8 @@ func (s *SearchIndex) IndexDocuments(docs []*SearchDocument) error {
 
 		batch := s.index.NewBatch()
 		for _, doc := range chunk {
-			if err := batch.Index(doc.ID, doc); err != nil {
+			// Convert to map to ensure field names match the mapping (lowercase)
+			if err := batch.Index(doc.ID, doc.ToMap()); err != nil {
 				return fmt.Errorf("batch index %s: %w", doc.ID, err)
 			}
 		}

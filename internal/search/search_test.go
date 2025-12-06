@@ -104,10 +104,12 @@ func TestSearchIndex_Search_Basic(t *testing.T) {
 	defer cleanup()
 
 	// Index some test documents
+	// Note: Search only matches on name (title) and series_name, not author/narrator
 	docs := []*SearchDocument{
 		{ID: "book-1", Type: DocTypeBook, Name: "The Hobbit", Author: "J.R.R. Tolkien"},
 		{ID: "book-2", Type: DocTypeBook, Name: "The Lord of the Rings", Author: "J.R.R. Tolkien"},
 		{ID: "book-3", Type: DocTypeBook, Name: "Harry Potter", Author: "J.K. Rowling"},
+		{ID: "contrib-1", Type: DocTypeContributor, Name: "J.R.R. Tolkien"},
 	}
 
 	err := index.IndexDocuments(docs)
@@ -115,14 +117,24 @@ func TestSearchIndex_Search_Basic(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Search for "Tolkien"
+	// Search for "Hobbit" - should find the book by title
 	result, err := index.Search(ctx, SearchParams{
+		Query: "Hobbit",
+		Limit: 10,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, uint64(1), result.Total)
+	assert.Len(t, result.Hits, 1)
+	assert.Equal(t, "book-1", result.Hits[0].ID)
+
+	// Search for "Tolkien" - should find the contributor, not the books
+	result, err = index.Search(ctx, SearchParams{
 		Query: "Tolkien",
 		Limit: 10,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, uint64(2), result.Total)
-	assert.Len(t, result.Hits, 2)
+	assert.Equal(t, uint64(1), result.Total)
+	assert.Equal(t, "contrib-1", result.Hits[0].ID)
 }
 
 func TestSearchIndex_Search_ByType(t *testing.T) {
