@@ -128,7 +128,12 @@ func (s *Server) setupRoutes() {
 			r.Use(s.requireAuth)
 			r.Get("/", s.handleListBooks)
 			r.Get("/{id}", s.handleGetBook)
-			r.Get("/{bookId}/audio/{audioFileId}", s.handleStreamAudio)
+			r.Get("/{id}/audio/{audioFileId}", s.handleStreamAudio)
+			// Book genres and tags
+			r.Post("/{id}/genres", s.handleSetBookGenres)
+			r.Get("/{id}/tags", s.handleGetBookTags)
+			r.Post("/{id}/tags", s.handleAddBookTag)
+			r.Delete("/{id}/tags/{tagID}", s.handleRemoveBookTag)
 		})
 
 		// Series (require auth for ACL).
@@ -246,15 +251,6 @@ func (s *Server) setupRoutes() {
 			r.Get("/", s.handleSearch)
 			r.Get("/stats", s.handleSearchStats)
 			r.Post("/reindex", s.handleReindex)
-		})
-
-		// Book genres and tags (require auth).
-		r.Route("/books/{id}", func(r chi.Router) {
-			r.Use(s.requireAuth)
-			r.Post("/genres", s.handleSetBookGenres)
-			r.Get("/tags", s.handleGetBookTags)
-			r.Post("/tags", s.handleAddBookTag)
-			r.Delete("/tags/{tagID}", s.handleRemoveBookTag)
 		})
 
 		// Cover images (public for sharing, cached aggressively).

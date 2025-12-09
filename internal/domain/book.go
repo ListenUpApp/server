@@ -71,7 +71,7 @@ type Chapter struct {
 func (b *Book) GetAudioFileByID(id string) *AudioFileInfo {
 	for i := range b.AudioFiles {
 		if b.AudioFiles[i].ID == id {
-			return &b.AudioFiles[1]
+			return &b.AudioFiles[i]
 		}
 	}
 	return nil
