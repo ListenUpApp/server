@@ -363,15 +363,42 @@ func (s *Scanner) saveToDatabase(ctx context.Context, items []*LibraryItemData, 
 			continue
 		}
 
-		// Extract and process embedded cover art if present.
-		if s.imageProcessor != nil && len(item.AudioFiles) > 0 {
-			firstAudioFile := item.AudioFiles[0].Path
-			if _, extractErr := s.imageProcessor.ExtractAndProcess(ctx, firstAudioFile, book.ID); extractErr != nil {
-				s.logger.Warn("failed to extract cover",
-					"book_id", book.ID,
-					"path", firstAudioFile,
-					"error", extractErr,
-				)
+		// Extract and process cover art.
+		// Priority: 1) embedded artwork, 2) external cover image files
+		if s.imageProcessor != nil {
+			coverFound := false
+
+			// Try embedded artwork first.
+			if len(item.AudioFiles) > 0 {
+				firstAudioFile := item.AudioFiles[0].Path
+				hash, extractErr := s.imageProcessor.ExtractAndProcess(ctx, firstAudioFile, book.ID)
+				if extractErr != nil {
+					s.logger.Debug("no embedded cover extracted",
+						"book_id", book.ID,
+						"path", firstAudioFile,
+						"error", extractErr,
+					)
+				} else if hash != "" {
+					coverFound = true
+				}
+			}
+
+			// Fallback to external cover image if no embedded artwork.
+			if !coverFound && len(item.ImageFiles) > 0 {
+				// Use the first image file (typically cover.jpg)
+				coverPath := item.ImageFiles[0].Path
+				if _, extractErr := s.imageProcessor.ProcessExternalCover(coverPath, book.ID); extractErr != nil {
+					s.logger.Warn("failed to process external cover",
+						"book_id", book.ID,
+						"path", coverPath,
+						"error", extractErr,
+					)
+				} else {
+					s.logger.Debug("used external cover",
+						"book_id", book.ID,
+						"path", coverPath,
+					)
+				}
 			}
 		}
 
