@@ -92,8 +92,8 @@ type Store struct {
 // The emitter is required and used to broadcast store changes via SSE.
 func New(path string, logger *slog.Logger, emitter EventEmitter) (*Store, error) {
 	opts := badger.DefaultOptions(path)
-	opts.Logger = nil           // Disable Badger's internal logging
-	opts.SyncWrites = true      // Ensure writes are synced to disk to prevent corruption on crashes
+	opts.Logger = nil            // Disable Badger's internal logging
+	opts.SyncWrites = true       // Ensure writes are synced to disk to prevent corruption on crashes
 	opts.CompactL0OnClose = true // Compact L0 tables on close for faster startup
 
 	db, err := badger.Open(opts)

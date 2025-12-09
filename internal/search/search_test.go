@@ -386,7 +386,6 @@ func TestSeriesToSearchDocument(t *testing.T) {
 	assert.Equal(t, 5, doc.BookCount)
 }
 
-
 func TestSearchIndex_LargeBatch(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping large batch test in short mode")

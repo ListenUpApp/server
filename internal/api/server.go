@@ -218,18 +218,18 @@ func (s *Server) setupRoutes() {
 
 		// Genres (public for list, auth for mutations).
 		r.Route("/genres", func(r chi.Router) {
-			r.Get("/", s.handleListGenres)           // Public: list all genres
-			r.Get("/{id}", s.handleGetGenre)         // Public: get single genre
+			r.Get("/", s.handleListGenres)              // Public: list all genres
+			r.Get("/{id}", s.handleGetGenre)            // Public: get single genre
 			r.Get("/{id}/books", s.handleGetGenreBooks) // Public: get books in genre
 
 			r.Group(func(r chi.Router) {
 				r.Use(s.requireAuth)
-				r.Post("/", s.handleCreateGenre)               // Create genre
-				r.Put("/{id}", s.handleUpdateGenre)            // Update genre
-				r.Delete("/{id}", s.handleDeleteGenre)         // Delete genre
-				r.Post("/{id}/move", s.handleMoveGenre)        // Move genre in tree
-				r.Post("/merge", s.handleMergeGenres)          // Merge two genres
-				r.Get("/unmapped", s.handleListUnmappedGenres) // List unmapped
+				r.Post("/", s.handleCreateGenre)                  // Create genre
+				r.Put("/{id}", s.handleUpdateGenre)               // Update genre
+				r.Delete("/{id}", s.handleDeleteGenre)            // Delete genre
+				r.Post("/{id}/move", s.handleMoveGenre)           // Move genre in tree
+				r.Post("/merge", s.handleMergeGenres)             // Merge two genres
+				r.Get("/unmapped", s.handleListUnmappedGenres)    // List unmapped
 				r.Post("/unmapped/map", s.handleMapUnmappedGenre) // Map unmapped
 			})
 		})

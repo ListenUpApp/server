@@ -37,8 +37,8 @@ type SearchDocument struct {
 	// Book-specific fields (empty for other types)
 	Subtitle    string `json:"subtitle,omitempty"`
 	Description string `json:"description,omitempty"`
-	Author      string `json:"author,omitempty"`      // Denormalized for search
-	Narrator    string `json:"narrator,omitempty"`    // Denormalized for search
+	Author      string `json:"author,omitempty"`   // Denormalized for search
+	Narrator    string `json:"narrator,omitempty"` // Denormalized for search
 	Publisher   string `json:"publisher,omitempty"`
 	SeriesName  string `json:"series_name,omitempty"` // Denormalized for search
 
