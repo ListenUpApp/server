@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -30,6 +31,9 @@ type Server struct {
 	sharingService    *service.SharingService
 	syncService       *service.SyncService
 	listeningService  *service.ListeningService
+	genreService      *service.GenreService
+	tagService        *service.TagService
+	searchService     *service.SearchService
 	sseHandler        *sse.Handler
 	imageStorage      *images.Storage
 	router            *chi.Mux
@@ -38,7 +42,7 @@ type Server struct {
 }
 
 // NewServer creates a new HTTP server with all routes configured.
-func NewServer(store *store.Store, instanceService *service.InstanceService, authService *service.AuthService, bookService *service.BookService, collectionService *service.CollectionService, sharingService *service.SharingService, syncService *service.SyncService, listeningService *service.ListeningService, sseHandler *sse.Handler, imageStorage *images.Storage, logger *slog.Logger) *Server {
+func NewServer(store *store.Store, instanceService *service.InstanceService, authService *service.AuthService, bookService *service.BookService, collectionService *service.CollectionService, sharingService *service.SharingService, syncService *service.SyncService, listeningService *service.ListeningService, genreService *service.GenreService, tagService *service.TagService, searchService *service.SearchService, sseHandler *sse.Handler, imageStorage *images.Storage, logger *slog.Logger) *Server {
 	s := &Server{
 		store:             store,
 		instanceService:   instanceService,
@@ -48,6 +52,9 @@ func NewServer(store *store.Store, instanceService *service.InstanceService, aut
 		sharingService:    sharingService,
 		syncService:       syncService,
 		listeningService:  listeningService,
+		genreService:      genreService,
+		tagService:        tagService,
+		searchService:     searchService,
 		sseHandler:        sseHandler,
 		imageStorage:      imageStorage,
 		router:            chi.NewRouter(),
@@ -121,7 +128,12 @@ func (s *Server) setupRoutes() {
 			r.Use(s.requireAuth)
 			r.Get("/", s.handleListBooks)
 			r.Get("/{id}", s.handleGetBook)
-			r.Get("/{bookId}/audio/{audioFileId}", s.handleStreamAudio)
+			r.Get("/{id}/audio/{audioFileId}", s.handleStreamAudio)
+			// Book genres and tags
+			r.Post("/{id}/genres", s.handleSetBookGenres)
+			r.Get("/{id}/tags", s.handleGetBookTags)
+			r.Post("/{id}/tags", s.handleAddBookTag)
+			r.Delete("/{id}/tags/{tagID}", s.handleRemoveBookTag)
 		})
 
 		// Series (require auth for ACL).
@@ -202,6 +214,43 @@ func (s *Server) setupRoutes() {
 			r.Use(s.requireAuth)
 			r.Get("/{bookID}", s.handleGetBookPreferences)
 			r.Patch("/{bookID}", s.handleUpdateBookPreferences)
+		})
+
+		// Genres (public for list, auth for mutations).
+		r.Route("/genres", func(r chi.Router) {
+			r.Get("/", s.handleListGenres)              // Public: list all genres
+			r.Get("/{id}", s.handleGetGenre)            // Public: get single genre
+			r.Get("/{id}/books", s.handleGetGenreBooks) // Public: get books in genre
+
+			r.Group(func(r chi.Router) {
+				r.Use(s.requireAuth)
+				r.Post("/", s.handleCreateGenre)                  // Create genre
+				r.Put("/{id}", s.handleUpdateGenre)               // Update genre
+				r.Delete("/{id}", s.handleDeleteGenre)            // Delete genre
+				r.Post("/{id}/move", s.handleMoveGenre)           // Move genre in tree
+				r.Post("/merge", s.handleMergeGenres)             // Merge two genres
+				r.Get("/unmapped", s.handleListUnmappedGenres)    // List unmapped
+				r.Post("/unmapped/map", s.handleMapUnmappedGenre) // Map unmapped
+			})
+		})
+
+		// Tags (all require auth - user-specific).
+		r.Route("/tags", func(r chi.Router) {
+			r.Use(s.requireAuth)
+			r.Get("/", s.handleListTags)
+			r.Post("/", s.handleCreateTag)
+			r.Get("/{id}", s.handleGetTag)
+			r.Patch("/{id}", s.handleUpdateTag)
+			r.Delete("/{id}", s.handleDeleteTag)
+			r.Get("/{id}/books", s.handleGetTagBooks)
+		})
+
+		// Search (require auth for ACL filtering).
+		r.Route("/search", func(r chi.Router) {
+			r.Use(s.requireAuth)
+			r.Get("/", s.handleSearch)
+			r.Get("/stats", s.handleSearchStats)
+			r.Post("/reindex", s.handleReindex)
 		})
 
 		// Cover images (public for sharing, cached aggressively).
@@ -317,6 +366,25 @@ func (s *Server) handleTriggerScan(w http.ResponseWriter, r *http.Request) {
 		s.logger.Error("Failed to trigger scan", "error", err, "library_id", libraryID)
 		response.InternalError(w, "Failed to start library scan", s.logger)
 		return
+	}
+
+	// Trigger search reindex after scan completes to ensure index is in sync.
+	// This handles cases where async per-book indexing may have failed.
+	if s.searchService != nil && (result.Added > 0 || result.Updated > 0) {
+		go func() {
+			// Use background context since HTTP request context will be cancelled
+			reindexCtx := context.Background()
+			s.logger.Info("Triggering search reindex after scan",
+				"added", result.Added,
+				"updated", result.Updated,
+			)
+			if err := s.searchService.ReindexAll(reindexCtx); err != nil {
+				s.logger.Error("Failed to reindex after scan", "error", err)
+			} else {
+				count, _ := s.searchService.DocumentCount()
+				s.logger.Info("Search reindex after scan completed", "documents", count)
+			}
+		}()
 	}
 
 	response.Success(w, result, s.logger)

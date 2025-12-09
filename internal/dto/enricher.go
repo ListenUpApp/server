@@ -11,6 +11,7 @@ import (
 // This allows Enricher to remain testable and independent of concrete store implementation.
 type Store interface {
 	GetContributorsByIDs(ctx context.Context, ids []string) ([]*domain.Contributor, error)
+	GetGenresByIDs(ctx context.Context, ids []string) ([]*domain.Genre, error)
 	GetSeries(ctx context.Context, id string) (*domain.Series, error)
 }
 
@@ -112,6 +113,19 @@ func (e *Enricher) EnrichBook(ctx context.Context, book *domain.Book) (*Book, er
 		}
 	}
 
+	// Enrich genres (convert IDs to names)
+	if len(book.GenreIDs) > 0 {
+		genres, err := e.store.GetGenresByIDs(ctx, book.GenreIDs)
+		if err != nil {
+			// Don't fail enrichment if genre lookup fails
+		} else {
+			dto.Genres = make([]string, 0, len(genres))
+			for _, g := range genres {
+				dto.Genres = append(dto.Genres, g.Name)
+			}
+		}
+	}
+
 	return dto, nil
 }
 
@@ -160,6 +174,33 @@ func (e *Enricher) EnrichBooks(ctx context.Context, books []*domain.Book) ([]*Bo
 	// Note: We could batch-fetch series here too, but series lookups are rare
 	// compared to contributors (most books don't have series).
 	// Optimize if profiling shows series lookups are a bottleneck.
+
+	// Collect all unique genre IDs across all books
+	genreIDsMap := make(map[string]bool)
+	for _, book := range books {
+		for _, genreID := range book.GenreIDs {
+			genreIDsMap[genreID] = true
+		}
+	}
+
+	// Batch fetch all genres
+	var genreMap map[string]*domain.Genre
+	if len(genreIDsMap) > 0 {
+		genreIDs := make([]string, 0, len(genreIDsMap))
+		for id := range genreIDsMap {
+			genreIDs = append(genreIDs, id)
+		}
+
+		genres, err := e.store.GetGenresByIDs(ctx, genreIDs)
+		if err != nil {
+			// Don't fail enrichment if genre lookup fails
+		} else {
+			genreMap = make(map[string]*domain.Genre, len(genres))
+			for _, genre := range genres {
+				genreMap[genre.ID] = genre
+			}
+		}
+	}
 
 	// Enrich each book
 	enrichedBooks := make([]*Book, len(books))
@@ -214,6 +255,16 @@ func (e *Enricher) EnrichBooks(ctx context.Context, books []*domain.Book) ([]*Bo
 				// Don't fail entire batch if one series lookup fails
 			} else {
 				dto.SeriesName = series.Name
+			}
+		}
+
+		// Enrich genres (use pre-fetched genre map)
+		if len(book.GenreIDs) > 0 && genreMap != nil {
+			dto.Genres = make([]string, 0, len(book.GenreIDs))
+			for _, genreID := range book.GenreIDs {
+				if genre, ok := genreMap[genreID]; ok {
+					dto.Genres = append(dto.Genres, genre.Name)
+				}
 			}
 		}
 

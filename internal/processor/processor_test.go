@@ -118,6 +118,23 @@ func (m *mockBookStore) GetOrCreateSeriesByName(_ context.Context, name string) 
 	return s, nil
 }
 
+// Genre methods for scanner.Storer interface.
+func (m *mockBookStore) GetGenreBySlug(_ context.Context, _ string) (*domain.Genre, error) {
+	return nil, nil // Returns nil to indicate genre not found
+}
+
+func (m *mockBookStore) GetGenreAliasByRaw(_ context.Context, _ string) (*domain.GenreAlias, error) {
+	return nil, nil // Returns nil to indicate alias not found
+}
+
+func (m *mockBookStore) TrackUnmappedGenre(_ context.Context, _ string, _ string) error {
+	return nil
+}
+
+func (m *mockBookStore) AddBookGenre(_ context.Context, _ string, _ string) error {
+	return nil
+}
+
 // TestEventProcessor_ProcessEvent_AudioFile tests processing an audio file event.
 func TestEventProcessor_ProcessEvent_AudioFile(t *testing.T) {
 	// Create temp directory for test.

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
@@ -28,6 +29,44 @@ func NewNoopEmitter() EventEmitter {
 	return NoopEmitter{}
 }
 
+// SearchIndexer is the interface for updating the search index.
+// Store uses this to keep search in sync without depending on search implementation.
+// Index updates are performed asynchronously to not block store operations.
+type SearchIndexer interface {
+	IndexBook(ctx context.Context, book *domain.Book) error
+	DeleteBook(ctx context.Context, bookID string) error
+	IndexContributor(ctx context.Context, c *domain.Contributor) error
+	DeleteContributor(ctx context.Context, contributorID string) error
+	IndexSeries(ctx context.Context, s *domain.Series) error
+	DeleteSeries(ctx context.Context, seriesID string) error
+}
+
+// NoopSearchIndexer is a no-op implementation for testing.
+type NoopSearchIndexer struct{}
+
+// IndexBook is a no-op.
+func (NoopSearchIndexer) IndexBook(context.Context, *domain.Book) error { return nil }
+
+// DeleteBook is a no-op.
+func (NoopSearchIndexer) DeleteBook(context.Context, string) error { return nil }
+
+// IndexContributor is a no-op.
+func (NoopSearchIndexer) IndexContributor(context.Context, *domain.Contributor) error { return nil }
+
+// DeleteContributor is a no-op.
+func (NoopSearchIndexer) DeleteContributor(context.Context, string) error { return nil }
+
+// IndexSeries is a no-op.
+func (NoopSearchIndexer) IndexSeries(context.Context, *domain.Series) error { return nil }
+
+// DeleteSeries is a no-op.
+func (NoopSearchIndexer) DeleteSeries(context.Context, string) error { return nil }
+
+// NewNoopSearchIndexer creates a new no-op search indexer for testing.
+func NewNoopSearchIndexer() SearchIndexer {
+	return NoopSearchIndexer{}
+}
+
 // Store wraps a Badger database instance.
 type Store struct {
 	db     *badger.DB
@@ -35,6 +74,10 @@ type Store struct {
 
 	// SSE event emitter for broadcasting changes.
 	eventEmitter EventEmitter
+
+	// Search indexer for keeping search in sync with store changes.
+	// Set via SetSearchIndexer after store creation to avoid circular dependencies.
+	searchIndexer SearchIndexer
 
 	// Enricher for denormalizing domain models before sending to clients.
 	// Used to populate display fields (author names, series names) in SSE events.
@@ -49,7 +92,9 @@ type Store struct {
 // The emitter is required and used to broadcast store changes via SSE.
 func New(path string, logger *slog.Logger, emitter EventEmitter) (*Store, error) {
 	opts := badger.DefaultOptions(path)
-	opts.Logger = nil // Disable Badger's internal logging
+	opts.Logger = nil            // Disable Badger's internal logging
+	opts.SyncWrites = true       // Ensure writes are synced to disk to prevent corruption on crashes
+	opts.CompactL0OnClose = true // Compact L0 tables on close for faster startup
 
 	db, err := badger.Open(opts)
 	if err != nil {
@@ -83,6 +128,13 @@ func (s *Store) Close() error {
 		s.logger.Info("Closing database connection")
 	}
 	return s.db.Close()
+}
+
+// SetSearchIndexer sets the search indexer for keeping search in sync.
+// This is set after store creation to avoid circular dependencies
+// (store needs to exist before search service can be created).
+func (s *Store) SetSearchIndexer(indexer SearchIndexer) {
+	s.searchIndexer = indexer
 }
 
 // Helper methods for database operations.

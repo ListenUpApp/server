@@ -19,6 +19,12 @@ type BookStore interface {
 	BroadcastBookCreated(ctx context.Context, book *domain.Book) error
 	GetOrCreateContributorByName(ctx context.Context, name string) (*domain.Contributor, error)
 	GetOrCreateSeriesByName(ctx context.Context, name string) (*domain.Series, error)
+
+	// Genre methods for normalization during scanning.
+	GetGenreBySlug(ctx context.Context, slug string) (*domain.Genre, error)
+	GetGenreAliasByRaw(ctx context.Context, raw string) (*domain.GenreAlias, error)
+	TrackUnmappedGenre(ctx context.Context, raw string, bookID string) error
+	AddBookGenre(ctx context.Context, bookID, genreID string) error
 }
 
 // EventProcessor processes file system events and orchestrates incremental scanning.

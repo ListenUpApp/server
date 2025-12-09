@@ -43,7 +43,7 @@ func (s *Store) CreateContributor(ctx context.Context, contributor *domain.Contr
 		return ErrContributorExists
 	}
 
-	return s.db.Update(func(txn *badger.Txn) error {
+	err = s.db.Update(func(txn *badger.Txn) error {
 		// Save contributor
 		data, err := json.Marshal(contributor)
 		if err != nil {
@@ -68,6 +68,22 @@ func (s *Store) CreateContributor(ctx context.Context, contributor *domain.Contr
 
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	// Index for search asynchronously
+	if s.searchIndexer != nil {
+		go func() {
+			if err := s.searchIndexer.IndexContributor(context.Background(), contributor); err != nil {
+				if s.logger != nil {
+					s.logger.Warn("failed to index contributor for search", "contributor_id", contributor.ID, "error", err)
+				}
+			}
+		}()
+	}
+
+	return nil
 }
 
 // GetContributor retrieves a contributor by ID.
@@ -162,6 +178,18 @@ func (s *Store) UpdateContributor(ctx context.Context, contributor *domain.Contr
 	}
 
 	s.eventEmitter.Emit(sse.NewContributorUpdatedEvent(contributor))
+
+	// Reindex for search asynchronously
+	if s.searchIndexer != nil {
+		go func() {
+			if err := s.searchIndexer.IndexContributor(context.Background(), contributor); err != nil {
+				if s.logger != nil {
+					s.logger.Warn("failed to reindex contributor for search", "contributor_id", contributor.ID, "error", err)
+				}
+			}
+		}()
+	}
+
 	return nil
 }
 
@@ -534,7 +562,7 @@ func (s *Store) DeleteContributor(ctx context.Context, id string) error {
 	// Mark as deleted
 	contributor.MarkDeleted()
 
-	return s.db.Update(func(txn *badger.Txn) error {
+	err = s.db.Update(func(txn *badger.Txn) error {
 		// Save updated contributor
 		data, err := json.Marshal(contributor)
 		if err != nil {
@@ -563,6 +591,89 @@ func (s *Store) DeleteContributor(ctx context.Context, id string) error {
 
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	// Remove from search index asynchronously
+	if s.searchIndexer != nil {
+		go func() {
+			if err := s.searchIndexer.DeleteContributor(context.Background(), id); err != nil {
+				if s.logger != nil {
+					s.logger.Warn("failed to remove contributor from search index", "contributor_id", id, "error", err)
+				}
+			}
+		}()
+	}
+
+	return nil
+}
+
+// ListAllContributors returns all non-deleted contributors without pagination.
+// WARNING: This can be expensive for large libraries. Use for bulk operations like reindexing.
+func (s *Store) ListAllContributors(_ context.Context) ([]*domain.Contributor, error) {
+	var contributors []*domain.Contributor
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = true
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		prefix := []byte(contributorPrefix)
+		it.Seek(prefix)
+		for it.ValidForPrefix(prefix) {
+			var contributor domain.Contributor
+			err := it.Item().Value(func(val []byte) error {
+				return json.Unmarshal(val, &contributor)
+			})
+			if err != nil {
+				it.Next()
+				continue
+			}
+
+			// Skip soft-deleted
+			if !contributor.IsDeleted() {
+				contributors = append(contributors, &contributor)
+			}
+			it.Next()
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list all contributors: %w", err)
+	}
+
+	return contributors, nil
+}
+
+// CountBooksForContributor returns the number of books associated with a contributor.
+// This is more efficient than GetBooksByContributor when only the count is needed.
+func (s *Store) CountBooksForContributor(_ context.Context, contributorID string) (int, error) {
+	var count int
+
+	prefix := []byte(bookByContributorPrefix + contributorID + ":")
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false // Only need keys
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		it.Seek(prefix)
+		for it.ValidForPrefix(prefix) {
+			count++
+			it.Next()
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, fmt.Errorf("count books for contributor: %w", err)
+	}
+
+	return count, nil
 }
 
 // GetContributorsDeletedAfter queries all contributors with DeletedAt > timestamp.

@@ -11,11 +11,11 @@ import (
 )
 
 // handleStreamAudio streams an audio file with HTTP Range support for seeking.
-// GET /api/v1/books/{bookId}/audio/{audioFileId}
+// GET /api/v1/books/{id}/audio/{audioFileId}
 func (s *Server) handleStreamAudio(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := getUserID(ctx)
-	bookID := chi.URLParam(r, "bookId")
+	bookID := chi.URLParam(r, "id")
 	audioFileID := chi.URLParam(r, "audioFileId")
 
 	if userID == "" {

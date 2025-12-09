@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 
 	"github.com/simonhull/audiometa"
 )
@@ -76,6 +77,37 @@ func (p *Processor) ExtractAndProcess(ctx context.Context, audioFilePath, bookID
 		"book_id", bookID,
 		"path", audioFilePath,
 		"size", len(artwork.Data),
+		"hash", hash[:8]+"...",
+	)
+
+	return hash, nil
+}
+
+// ProcessExternalCover reads an external cover image file and stores it.
+// This is used as a fallback when no embedded artwork is found.
+// Returns the SHA256 hash of the cover for cache validation.
+func (p *Processor) ProcessExternalCover(coverPath, bookID string) (string, error) {
+	// Read the external cover file.
+	data, err := os.ReadFile(coverPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read external cover: %w", err)
+	}
+
+	// Save to storage.
+	if err := p.storage.Save(bookID, data); err != nil {
+		return "", fmt.Errorf("failed to save external cover: %w", err)
+	}
+
+	// Compute hash for cache validation.
+	hash, err := p.storage.Hash(bookID)
+	if err != nil {
+		return "", fmt.Errorf("failed to compute cover hash: %w", err)
+	}
+
+	p.logger.Debug("processed external cover",
+		"book_id", bookID,
+		"path", coverPath,
+		"size", len(data),
 		"hash", hash[:8]+"...",
 	)
 
