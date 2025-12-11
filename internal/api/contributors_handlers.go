@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/listenupapp/listenup-server/internal/domain"
@@ -106,6 +107,53 @@ func (s *Server) handleGetContributorBooks(w http.ResponseWriter, r *http.Reques
 	response.Success(w, map[string]interface{}{
 		"contributor_id": id,
 		"books":          accessibleBooks,
+	}, s.logger)
+}
+
+// handleSearchContributors searches for contributors by name.
+// Used for autocomplete when editing book contributors.
+// GET /api/v1/contributors/search?q=steven&limit=10
+//
+// Uses Bleve full-text search for O(log n) performance with:
+// - Prefix matching ("bran" → "Brandon Sanderson")
+// - Word matching ("sanderson" in "Brandon Sanderson")
+// - Fuzzy matching for typo tolerance
+func (s *Server) handleSearchContributors(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := getUserID(ctx)
+
+	if userID == "" {
+		response.Unauthorized(w, "Authentication required", s.logger)
+		return
+	}
+
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		response.BadRequest(w, "Query parameter 'q' is required", s.logger)
+		return
+	}
+
+	// Parse limit parameter (default 10, max 50)
+	limit := 10
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
+			limit = parsed
+			if limit > 50 {
+				limit = 50
+			}
+		}
+	}
+
+	// Use Bleve search for O(log n) performance instead of O(n) BadgerDB scan
+	contributors, err := s.searchService.SearchContributors(ctx, query, limit)
+	if err != nil {
+		s.logger.Error("Failed to search contributors", "error", err, "query", query, "user_id", userID)
+		response.InternalError(w, "Failed to search contributors", s.logger)
+		return
+	}
+
+	response.Success(w, map[string]interface{}{
+		"contributors": contributors,
 	}, s.logger)
 }
 

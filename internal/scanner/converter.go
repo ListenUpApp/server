@@ -477,30 +477,83 @@ func extractGenres(ctx context.Context, rawGenres []string, bookID string, store
 	return genreIDs, nil
 }
 
-// UpdateBookFromScan updates an existing book with new scan database.
-// this preserves the book ID and creation timestamp while updating everything else.
-func UpdateBookFromScan(ctx context.Context, existingBook *domain.Book, item *LibraryItemData, store Storer) error {
+// UpdateBookFromScan updates an existing book with new scan data.
+// IMPORTANT: This preserves all user-editable metadata (title, description, contributors, etc.)
+// and only updates structural data that must stay in sync with the filesystem:
+//   - AudioFiles (files may have been added/removed/renamed)
+//   - TotalDuration, TotalSize (recalculated from audio files)
+//   - Path (if folder was moved)
+//   - Chapters (derived from audio files)
+//   - ScannedAt (always updated)
+//
+// User metadata is NEVER overwritten by rescan. The database is truth for metadata.
+// Cover is only updated if the book doesn't have one yet.
+func UpdateBookFromScan(_ context.Context, existingBook *domain.Book, item *LibraryItemData, _ Storer) error {
 	now := time.Now()
 
-	// Preserve ID and creation timestamp.
-	bookID := existingBook.ID
-	createdAt := existingBook.CreatedAt
+	// Update path if the folder was moved
+	existingBook.Path = item.Path
 
-	// convert fresh scan data.
-	// Maybe we should call ourselves the Febreeze brothers cause it's feeling so fresh right now.
-	freshBook, err := ConvertToBook(ctx, item, store)
-	if err != nil {
-		return err
+	// Rebuild audio files from fresh scan
+	existingBook.AudioFiles = make([]domain.AudioFileInfo, 0, len(item.AudioFiles))
+	existingBook.TotalDuration = 0
+	existingBook.TotalSize = 0
+
+	for _, af := range item.AudioFiles {
+		audioFile := domain.AudioFileInfo{
+			ID:       domain.GenerateAudioFileID(af.Inode),
+			Path:     af.Path,
+			Filename: af.Filename,
+			Size:     af.Size,
+			Format:   strings.TrimPrefix(strings.ToLower(af.Ext), "."),
+			Inode:    af.Inode,
+			ModTime:  af.ModTime.UnixMilli(),
+		}
+
+		if af.Metadata != nil {
+			audioFile.Duration = af.Metadata.Duration.Milliseconds()
+			audioFile.Bitrate = af.Metadata.Bitrate
+			audioFile.Codec = af.Metadata.Codec
+			existingBook.TotalDuration += audioFile.Duration
+		}
+
+		existingBook.TotalSize += af.Size
+		existingBook.AudioFiles = append(existingBook.AudioFiles, audioFile)
 	}
 
-	// Copy fresh data to existing book.
-	*existingBook = *freshBook
+	// Sort audio files for consistent ordering
+	sortAudioFilesByFilename(existingBook.AudioFiles)
 
-	// Restore preserved fields.
-	existingBook.ID = bookID
-	existingBook.CreatedAt = createdAt
+	// Update chapters if metadata has them (chapters are structural, derived from audio)
+	if item.Metadata != nil && len(item.Metadata.Chapters) > 0 {
+		existingBook.Chapters = convertChapters(item.Metadata.Chapters, existingBook.AudioFiles)
+	}
+
+	// Only update cover if book doesn't have one yet
+	// User-uploaded covers should never be overwritten
+	if existingBook.CoverImage == nil && len(item.ImageFiles) > 0 {
+		img := item.ImageFiles[0]
+		existingBook.CoverImage = &domain.ImageFileInfo{
+			Path:     img.Path,
+			Filename: img.Filename,
+			Size:     img.Size,
+			Format:   strings.TrimPrefix(strings.ToLower(img.Ext), "."),
+			Inode:    img.Inode,
+			ModTime:  img.ModTime.UnixMilli(),
+		}
+	}
+
+	// Update timestamps
 	existingBook.UpdatedAt = now
 	existingBook.ScannedAt = now
+
+	// User-editable fields are intentionally NOT updated:
+	// - Title, Subtitle, Description
+	// - Contributors, SeriesID, Sequence
+	// - Publisher, PublishYear, Language
+	// - ISBN, ASIN, Explicit, Abridged
+	// - GenreIDs
+	// The database is truth for metadata once a book is imported.
 
 	return nil
 }

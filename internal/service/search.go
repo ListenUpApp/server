@@ -34,6 +34,12 @@ func (s *SearchService) Search(ctx context.Context, params search.SearchParams) 
 	return s.index.Search(ctx, params)
 }
 
+// SearchContributors performs a fast contributor search for autocomplete.
+// Uses Bleve index for O(log n) performance instead of O(n) BadgerDB scan.
+func (s *SearchService) SearchContributors(ctx context.Context, query string, limit int) ([]search.ContributorSearchResult, error) {
+	return s.index.SearchContributors(ctx, query, limit)
+}
+
 // IndexBook indexes a single book.
 // Call this when a book is created or updated.
 func (s *SearchService) IndexBook(ctx context.Context, book *domain.Book) error {

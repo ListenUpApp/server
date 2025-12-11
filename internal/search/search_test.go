@@ -2,6 +2,7 @@ package search
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -421,4 +422,103 @@ func TestSearchParams_Defaults(t *testing.T) {
 	assert.Equal(t, "", params.Query)
 	assert.Nil(t, params.Types)
 	assert.Equal(t, 0, params.Limit) // Caller should set default
+}
+
+func TestSearchIndex_SearchContributors(t *testing.T) {
+	index, cleanup := setupTestIndex(t)
+	defer cleanup()
+
+	// Index some contributors
+	contributors := []*SearchDocument{
+		{ID: "contrib-1", Type: DocTypeContributor, Name: "Brandon Sanderson", BookCount: 50},
+		{ID: "contrib-2", Type: DocTypeContributor, Name: "Brandon Mull", BookCount: 20},
+		{ID: "contrib-3", Type: DocTypeContributor, Name: "Michael Kramer", BookCount: 100},
+		{ID: "contrib-4", Type: DocTypeContributor, Name: "Kate Reading", BookCount: 80},
+		{ID: "contrib-5", Type: DocTypeContributor, Name: "Steven Erikson", BookCount: 10},
+	}
+
+	// Also index some books to verify they're not returned
+	books := []*SearchDocument{
+		{ID: "book-1", Type: DocTypeBook, Name: "Brandon's Story", Author: "Someone"},
+	}
+
+	err := index.IndexDocuments(contributors)
+	require.NoError(t, err)
+	err = index.IndexDocuments(books)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+
+	t.Run("prefix match", func(t *testing.T) {
+		results, err := index.SearchContributors(ctx, "bran", 10)
+		require.NoError(t, err)
+
+		// Should match "Brandon Sanderson" and "Brandon Mull", not "Brandon's Story" (book)
+		assert.Len(t, results, 2)
+		names := []string{results[0].Name, results[1].Name}
+		assert.Contains(t, names, "Brandon Sanderson")
+		assert.Contains(t, names, "Brandon Mull")
+	})
+
+	t.Run("word match", func(t *testing.T) {
+		results, err := index.SearchContributors(ctx, "sanderson", 10)
+		require.NoError(t, err)
+
+		assert.Len(t, results, 1)
+		assert.Equal(t, "Brandon Sanderson", results[0].Name)
+	})
+
+	t.Run("case insensitive", func(t *testing.T) {
+		results, err := index.SearchContributors(ctx, "MICHAEL", 10)
+		require.NoError(t, err)
+
+		assert.Len(t, results, 1)
+		assert.Equal(t, "Michael Kramer", results[0].Name)
+	})
+
+	t.Run("limit respected", func(t *testing.T) {
+		// Index more contributors to test limit
+		moreContribs := make([]*SearchDocument, 20)
+		for i := 0; i < 20; i++ {
+			moreContribs[i] = &SearchDocument{
+				ID:        fmt.Sprintf("contrib-extra-%d", i),
+				Type:      DocTypeContributor,
+				Name:      fmt.Sprintf("Author %d", i),
+				BookCount: i,
+			}
+		}
+		err := index.IndexDocuments(moreContribs)
+		require.NoError(t, err)
+
+		results, err := index.SearchContributors(ctx, "author", 5)
+		require.NoError(t, err)
+
+		assert.Len(t, results, 5)
+	})
+
+	t.Run("empty query returns empty", func(t *testing.T) {
+		results, err := index.SearchContributors(ctx, "", 10)
+		require.NoError(t, err)
+		assert.Empty(t, results)
+	})
+
+	t.Run("whitespace query returns empty", func(t *testing.T) {
+		results, err := index.SearchContributors(ctx, "   ", 10)
+		require.NoError(t, err)
+		assert.Empty(t, results)
+	})
+
+	t.Run("no match returns empty", func(t *testing.T) {
+		results, err := index.SearchContributors(ctx, "zzzznonexistent", 10)
+		require.NoError(t, err)
+		assert.Empty(t, results)
+	})
+
+	t.Run("returns book count", func(t *testing.T) {
+		results, err := index.SearchContributors(ctx, "kramer", 10)
+		require.NoError(t, err)
+
+		require.Len(t, results, 1)
+		assert.Equal(t, 100, results[0].BookCount)
+	})
 }

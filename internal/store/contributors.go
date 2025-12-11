@@ -676,6 +676,68 @@ func (s *Store) CountBooksForContributor(_ context.Context, contributorID string
 	return count, nil
 }
 
+// SearchContributorsByName performs a case-insensitive search for contributors by name.
+// Returns contributors whose names contain the query string, limited to `limit` results.
+// This is used for autocomplete in the contributor editing UI.
+func (s *Store) SearchContributorsByName(_ context.Context, query string, limit int) ([]*domain.Contributor, error) {
+	if limit <= 0 {
+		limit = 10 // Default limit
+	}
+
+	// Normalize query for case-insensitive matching
+	normalizedQuery := normalizeContributorName(query)
+	if normalizedQuery == "" {
+		return []*domain.Contributor{}, nil
+	}
+
+	var contributors []*domain.Contributor
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = true
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		prefix := []byte(contributorPrefix)
+		it.Seek(prefix)
+		for it.ValidForPrefix(prefix) {
+			if len(contributors) >= limit {
+				break
+			}
+
+			var contributor domain.Contributor
+			err := it.Item().Value(func(val []byte) error {
+				return json.Unmarshal(val, &contributor)
+			})
+			if err != nil {
+				it.Next()
+				continue
+			}
+
+			// Skip soft-deleted contributors
+			if contributor.IsDeleted() {
+				it.Next()
+				continue
+			}
+
+			// Check if normalized name contains the query
+			normalizedName := normalizeContributorName(contributor.Name)
+			if strings.Contains(normalizedName, normalizedQuery) {
+				contributors = append(contributors, &contributor)
+			}
+
+			it.Next()
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("search contributors by name: %w", err)
+	}
+
+	return contributors, nil
+}
+
 // GetContributorsDeletedAfter queries all contributors with DeletedAt > timestamp.
 // This is used for delta sync to inform clients which contributors were deleted.
 // Returns a list of contributor IDs that were soft-deleted after the given timestamp.

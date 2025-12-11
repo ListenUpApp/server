@@ -402,7 +402,7 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 	if err := domain.CascadeBookUpdate(ctx, s, book.ID); err != nil {
 		// Log but don't fail the update.
 		if s.logger != nil {
-			s.logger.Error("cascaed uodate failed", "book_id", book.ID, "error", err)
+			s.logger.Error("cascaded update failed", "book_id", book.ID, "error", err)
 		}
 	}
 
@@ -922,4 +922,103 @@ func (s *Store) touchBook(_ context.Context, id string) error {
 
 		return txn.Set(key, data)
 	})
+}
+
+// EnrichBook denormalizes a book with contributor names, series name, and genre names.
+// This is a convenience wrapper around the enricher for API handlers.
+func (s *Store) EnrichBook(ctx context.Context, book *domain.Book) (*dto.Book, error) {
+	return s.enricher.EnrichBook(ctx, book)
+}
+
+// ContributorInput represents a contributor to be set on a book.
+// Used by SetBookContributors to link or create contributors.
+type ContributorInput struct {
+	Name  string                   `json:"name"`
+	Roles []domain.ContributorRole `json:"roles"`
+}
+
+// SetBookContributors replaces all contributors for a book.
+// For each contributor:
+//   - If name matches existing (case-insensitive, normalized) → link to that contributor
+//   - Else → create new contributor and link
+//
+// After linking, checks old contributors for orphan cleanup (soft delete if no books reference them).
+// Returns the updated book.
+func (s *Store) SetBookContributors(ctx context.Context, bookID string, contributors []ContributorInput) (*domain.Book, error) {
+	// Get current book (internal - no ACL check, caller should have already validated)
+	book, err := s.getBookInternal(ctx, bookID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Save old contributor IDs for orphan cleanup
+	oldContributorIDs := make(map[string]bool)
+	for _, bc := range book.Contributors {
+		oldContributorIDs[bc.ContributorID] = true
+	}
+
+	// Build new contributor list
+	newBookContributors := make([]domain.BookContributor, 0, len(contributors))
+	newContributorIDs := make(map[string]bool)
+
+	for _, input := range contributors {
+		// Get or create the contributor by name (handles normalization internally)
+		contributor, err := s.GetOrCreateContributorByName(ctx, input.Name)
+		if err != nil {
+			return nil, fmt.Errorf("get or create contributor %q: %w", input.Name, err)
+		}
+
+		newBookContributors = append(newBookContributors, domain.BookContributor{
+			ContributorID: contributor.ID,
+			Roles:         input.Roles,
+		})
+		newContributorIDs[contributor.ID] = true
+	}
+
+	// Update book with new contributors
+	book.Contributors = newBookContributors
+
+	// Save the book - UpdateBook handles indices, SSE, and search reindex
+	if err := s.UpdateBook(ctx, book); err != nil {
+		return nil, fmt.Errorf("update book contributors: %w", err)
+	}
+
+	// Orphan cleanup: check old contributors that are no longer linked
+	for oldID := range oldContributorIDs {
+		if newContributorIDs[oldID] {
+			continue // Still linked to this book
+		}
+
+		// Check if this contributor has any remaining books
+		count, err := s.CountBooksForContributor(ctx, oldID)
+		if err != nil {
+			// Log but don't fail the operation
+			if s.logger != nil {
+				s.logger.Warn("failed to count books for contributor during orphan cleanup",
+					"contributor_id", oldID,
+					"error", err,
+				)
+			}
+			continue
+		}
+
+		if count == 0 {
+			// Orphan detected - soft delete
+			if err := s.DeleteContributor(ctx, oldID); err != nil {
+				// Log but don't fail
+				if s.logger != nil {
+					s.logger.Warn("failed to delete orphan contributor",
+						"contributor_id", oldID,
+						"error", err,
+					)
+				}
+			} else if s.logger != nil {
+				s.logger.Info("deleted orphan contributor",
+					"contributor_id", oldID,
+				)
+			}
+		}
+	}
+
+	return book, nil
 }

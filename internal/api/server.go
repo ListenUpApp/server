@@ -128,6 +128,9 @@ func (s *Server) setupRoutes() {
 			r.Use(s.requireAuth)
 			r.Get("/", s.handleListBooks)
 			r.Get("/{id}", s.handleGetBook)
+			r.Patch("/{id}", s.handleUpdateBook)
+			r.Put("/{id}/contributors", s.handleSetBookContributors)
+			r.Put("/{id}/cover", s.handleUploadCover)
 			r.Get("/{id}/audio/{audioFileId}", s.handleStreamAudio)
 			// Book genres and tags
 			r.Post("/{id}/genres", s.handleSetBookGenres)
@@ -148,6 +151,7 @@ func (s *Server) setupRoutes() {
 		r.Route("/contributors", func(r chi.Router) {
 			r.Use(s.requireAuth)
 			r.Get("/", s.handleListContributors)
+			r.Get("/search", s.handleSearchContributors)
 			r.Get("/{id}", s.handleGetContributor)
 			r.Get("/{id}/books", s.handleGetContributorBooks)
 		})
