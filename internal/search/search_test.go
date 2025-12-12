@@ -326,8 +326,9 @@ func TestBookToSearchDocument(t *testing.T) {
 		Description:   "A wonderful tale",
 		TotalDuration: 7200,
 		PublishYear:   "2023",
-		SeriesID:      "series-456",
-		Sequence:      "1",
+		Series: []domain.BookSeries{
+			{SeriesID: "series-456", Sequence: "1"},
+		},
 	}
 
 	doc := BookToSearchDocument(

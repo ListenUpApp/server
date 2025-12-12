@@ -319,18 +319,15 @@ func TestConvertToBook_WithSeries(t *testing.T) {
 	book, err := ConvertToBook(ctx, item, mockStore)
 	require.NoError(t, err)
 
-	// We use the first series from metadata
-	assert.NotEmpty(t, book.SeriesID)
-	assert.Equal(t, "3", book.Sequence)
+	// We extract all series from metadata
+	require.Len(t, book.Series, 2)
+	assert.NotEmpty(t, book.Series[0].SeriesID)
+	assert.Equal(t, "3", book.Series[0].Sequence)
+	assert.NotEmpty(t, book.Series[1].SeriesID)
+	assert.Equal(t, "1", book.Series[1].Sequence)
 
-	// Verify series was created in mock store
-	require.Len(t, mockStore.series, 1)
-	var createdSeries *domain.Series
-	for _, s := range mockStore.series {
-		createdSeries = s
-		break
-	}
-	assert.Equal(t, "The Great Series", createdSeries.Name)
+	// Verify both series were created in mock store
+	require.Len(t, mockStore.series, 2)
 }
 
 // TestConvertToBook_WithChapters_SingleFile tests chapter conversion for single-file audiobook.

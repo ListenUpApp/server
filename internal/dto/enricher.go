@@ -102,14 +102,25 @@ func (e *Enricher) EnrichBook(ctx context.Context, book *domain.Book) (*Book, er
 		}
 	}
 
-	// Enrich series name
-	if book.SeriesID != "" {
-		series, err := e.store.GetSeries(ctx, book.SeriesID)
-		if err != nil {
-			// Don't fail enrichment if series lookup fails
-			// Series name remains empty, which is acceptable
-		} else {
-			dto.SeriesName = series.Name
+	// Enrich series info (for all series the book belongs to)
+	if len(book.Series) > 0 {
+		dto.SeriesInfo = make([]BookSeriesInfo, 0, len(book.Series))
+		for _, bs := range book.Series {
+			series, err := e.store.GetSeries(ctx, bs.SeriesID)
+			if err != nil {
+				// Don't fail enrichment if series lookup fails
+				// Skip this series entry
+				continue
+			}
+			dto.SeriesInfo = append(dto.SeriesInfo, BookSeriesInfo{
+				SeriesID: bs.SeriesID,
+				Name:     series.Name,
+				Sequence: bs.Sequence,
+			})
+		}
+		// Set primary series name for backward compatibility
+		if len(dto.SeriesInfo) > 0 {
+			dto.SeriesName = dto.SeriesInfo[0].Name
 		}
 	}
 
@@ -248,13 +259,24 @@ func (e *Enricher) EnrichBooks(ctx context.Context, books []*domain.Book) ([]*Bo
 			}
 		}
 
-		// Enrich series (individual lookup per book with series)
-		if book.SeriesID != "" {
-			series, err := e.store.GetSeries(ctx, book.SeriesID)
-			if err != nil {
-				// Don't fail entire batch if one series lookup fails
-			} else {
-				dto.SeriesName = series.Name
+		// Enrich series info (for all series the book belongs to)
+		if len(book.Series) > 0 {
+			dto.SeriesInfo = make([]BookSeriesInfo, 0, len(book.Series))
+			for _, bs := range book.Series {
+				series, err := e.store.GetSeries(ctx, bs.SeriesID)
+				if err != nil {
+					// Don't fail entire batch if one series lookup fails
+					continue
+				}
+				dto.SeriesInfo = append(dto.SeriesInfo, BookSeriesInfo{
+					SeriesID: bs.SeriesID,
+					Name:     series.Name,
+					Sequence: bs.Sequence,
+				})
+			}
+			// Set primary series name for backward compatibility
+			if len(dto.SeriesInfo) > 0 {
+				dto.SeriesName = dto.SeriesInfo[0].Name
 			}
 		}
 

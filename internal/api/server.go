@@ -130,6 +130,7 @@ func (s *Server) setupRoutes() {
 			r.Get("/{id}", s.handleGetBook)
 			r.Patch("/{id}", s.handleUpdateBook)
 			r.Put("/{id}/contributors", s.handleSetBookContributors)
+			r.Put("/{id}/series", s.handleSetBookSeries)
 			r.Put("/{id}/cover", s.handleUploadCover)
 			r.Get("/{id}/audio/{audioFileId}", s.handleStreamAudio)
 			// Book genres and tags

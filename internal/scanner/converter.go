@@ -114,12 +114,11 @@ func ConvertToBook(ctx context.Context, item *LibraryItemData, store Storer) (*d
 		book.Contributors = contributors
 
 		// Extract and create series
-		seriesID, sequence, err := extractSeries(ctx, item.Metadata, store)
+		bookSeries, err := extractSeries(ctx, item.Metadata, store)
 		if err != nil {
 			return nil, fmt.Errorf("extract series: %w", err)
 		}
-		book.SeriesID = seriesID
-		book.Sequence = sequence
+		book.Series = bookSeries
 
 		// Extract and normalize genres
 		if len(item.Metadata.Genres) > 0 {
@@ -411,20 +410,25 @@ func extractContributors(ctx context.Context, metadata *BookMetadata, store Stor
 }
 
 // extractSeries creates or retrieves series from metadata.
-func extractSeries(ctx context.Context, metadata *BookMetadata, store Storer) (seriesID, sequence string, err error) {
+func extractSeries(ctx context.Context, metadata *BookMetadata, store Storer) ([]domain.BookSeries, error) {
 	if len(metadata.Series) == 0 {
-		return "", "", nil
+		return nil, nil
 	}
 
-	// Use first series (most books are in one series)
-	seriesInfo := metadata.Series[0]
-
-	series, err := store.GetOrCreateSeriesByName(ctx, seriesInfo.Name)
-	if err != nil {
-		return "", "", fmt.Errorf("get/create series: %w", err)
+	// Extract all series from metadata
+	bookSeries := make([]domain.BookSeries, 0, len(metadata.Series))
+	for _, seriesInfo := range metadata.Series {
+		series, err := store.GetOrCreateSeriesByName(ctx, seriesInfo.Name)
+		if err != nil {
+			return nil, fmt.Errorf("get/create series %q: %w", seriesInfo.Name, err)
+		}
+		bookSeries = append(bookSeries, domain.BookSeries{
+			SeriesID: series.ID,
+			Sequence: seriesInfo.Sequence,
+		})
 	}
 
-	return series.ID, seriesInfo.Sequence, nil
+	return bookSeries, nil
 }
 
 // extractGenres resolves raw genre strings to normalized genre IDs.

@@ -16,6 +16,7 @@ import (
 // Only non-nil fields are applied (true PATCH semantics).
 // Note: omitempty is intentionally not used here - we need to distinguish between
 // "field not provided" (nil pointer) and "field set to empty" (pointer to "").
+// Note: Series is managed via PUT /api/v1/books/{id}/series endpoint.
 type BookUpdateRequest struct {
 	Title       *string `json:"title"`
 	Subtitle    *string `json:"subtitle"`
@@ -27,8 +28,6 @@ type BookUpdateRequest struct {
 	ASIN        *string `json:"asin"`
 	Explicit    *bool   `json:"explicit"`
 	Abridged    *bool   `json:"abridged"`
-	SeriesID    *string `json:"series_id"` // empty string to unset
-	Sequence    *string `json:"sequence"`
 }
 
 // handleUpdateBook updates a book's metadata (PATCH semantics).
@@ -97,12 +96,7 @@ func (s *Server) handleUpdateBook(w http.ResponseWriter, r *http.Request) {
 	if req.Abridged != nil {
 		book.Abridged = *req.Abridged
 	}
-	if req.SeriesID != nil {
-		book.SeriesID = *req.SeriesID
-	}
-	if req.Sequence != nil {
-		book.Sequence = *req.Sequence
-	}
+	// Note: Series is managed via PUT /api/v1/books/{id}/series endpoint
 
 	// Update the book - store.UpdateBook handles SSE events and search reindexing.
 	if err := s.store.UpdateBook(ctx, book); err != nil {
@@ -211,6 +205,86 @@ func (s *Server) handleSetBookContributors(w http.ResponseWriter, r *http.Reques
 	enrichedBook, err := s.store.EnrichBook(ctx, book)
 	if err != nil {
 		s.logger.Warn("Failed to enrich book after contributor update", "error", err, "book_id", bookID)
+		response.Success(w, book, s.logger)
+		return
+	}
+
+	response.Success(w, enrichedBook, s.logger)
+}
+
+// SeriesInput represents a series in a SetSeriesRequest.
+type SeriesInput struct {
+	Name     string `json:"name"`
+	Sequence string `json:"sequence"`
+}
+
+// SetSeriesRequest is the request body for PUT /api/v1/books/{id}/series.
+type SetSeriesRequest struct {
+	Series []SeriesInput `json:"series"`
+}
+
+// handleSetBookSeries replaces all series for a book.
+// PUT /api/v1/books/{id}/series
+func (s *Server) handleSetBookSeries(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := getUserID(ctx)
+	bookID := chi.URLParam(r, "id")
+
+	if userID == "" {
+		response.Unauthorized(w, "Authentication required", s.logger)
+		return
+	}
+
+	if bookID == "" {
+		response.BadRequest(w, "Book ID is required", s.logger)
+		return
+	}
+
+	var req SetSeriesRequest
+	if err := json.UnmarshalRead(r.Body, &req); err != nil {
+		response.BadRequest(w, "Invalid request body", s.logger)
+		return
+	}
+
+	// Validate ACL - user must have access to the book
+	_, err := s.bookService.GetBook(ctx, userID, bookID)
+	if err != nil {
+		if errors.Is(err, store.ErrBookNotFound) {
+			response.NotFound(w, "Book not found", s.logger)
+			return
+		}
+		s.logger.Error("Failed to get book for series update", "error", err, "book_id", bookID, "user_id", userID)
+		response.InternalError(w, "Failed to retrieve book", s.logger)
+		return
+	}
+
+	// Convert to store input format
+	storeSeries := make([]store.SeriesInput, 0, len(req.Series))
+	for _, sr := range req.Series {
+		name := strings.TrimSpace(sr.Name)
+		if name == "" {
+			response.BadRequest(w, "Series name is required", s.logger)
+			return
+		}
+
+		storeSeries = append(storeSeries, store.SeriesInput{
+			Name:     name,
+			Sequence: strings.TrimSpace(sr.Sequence),
+		})
+	}
+
+	// Set the series
+	book, err := s.store.SetBookSeries(ctx, bookID, storeSeries)
+	if err != nil {
+		s.logger.Error("Failed to set book series", "error", err, "book_id", bookID, "user_id", userID)
+		response.InternalError(w, "Failed to update series", s.logger)
+		return
+	}
+
+	// Return enriched book
+	enrichedBook, err := s.store.EnrichBook(ctx, book)
+	if err != nil {
+		s.logger.Warn("Failed to enrich book after series update", "error", err, "book_id", bookID)
 		response.Success(w, book, s.logger)
 		return
 	}

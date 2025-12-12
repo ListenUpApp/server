@@ -241,10 +241,10 @@ func (s *SearchService) buildBookDocument(ctx context.Context, book *domain.Book
 		}
 	}
 
-	// Get series name
+	// Get series name (use first/primary series for search)
 	var seriesName string
-	if book.SeriesID != "" {
-		series, err := s.store.GetSeries(ctx, book.SeriesID)
+	if len(book.Series) > 0 {
+		series, err := s.store.GetSeries(ctx, book.Series[0].SeriesID)
 		if err == nil {
 			seriesName = series.Name
 		}
