@@ -357,7 +357,7 @@ func buildBookMetadata(audioMeta *AudioMetadata) *BookMetadata {
 	bookMeta := &BookMetadata{
 		Title:       title,
 		Subtitle:    sanitizeString(audioMeta.Subtitle),
-		Description: sanitizeString(audioMeta.Description),
+		Description: htmlToMarkdown(sanitizeString(audioMeta.Description)),
 		Publisher:   sanitizeString(audioMeta.Publisher),
 		Language:    sanitizeString(audioMeta.Language),
 		ISBN:        sanitizeString(audioMeta.ISBN),
