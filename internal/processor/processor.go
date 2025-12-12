@@ -16,6 +16,7 @@ type BookStore interface {
 	GetBookByPath(ctx context.Context, path string) (*domain.Book, error)
 	CreateBook(ctx context.Context, book *domain.Book) error
 	UpdateBook(ctx context.Context, book *domain.Book) error
+	DeleteBook(ctx context.Context, id string) error
 	BroadcastBookCreated(ctx context.Context, book *domain.Book) error
 	GetOrCreateContributorByName(ctx context.Context, name string) (*domain.Contributor, error)
 	GetOrCreateSeriesByName(ctx context.Context, name string) (*domain.Series, error)
@@ -77,8 +78,9 @@ func (ep *EventProcessor) ProcessEvent(ctx context.Context, event watcher.Event)
 	// Classify file type.
 	fileType := classifyFile(event.Path)
 
-	// Skip ignored files.
-	if fileType == FileTypeIgnored {
+	// Skip ignored files, but NOT for removal events.
+	// Removal events might be for directories (book folders) which have no extension.
+	if fileType == FileTypeIgnored && event.Type != watcher.EventRemoved {
 		ep.logger.Debug("ignoring file",
 			"path", event.Path,
 			"type", fileType.String(),
@@ -331,46 +333,101 @@ func (ep *EventProcessor) handleMetadataFile(ctx context.Context, bookFolder, fi
 	return nil
 }
 
-// handleRemovedFile handles removed files.
-// Rescans the folder to see what remains. If no audio files remain,.
-// the book should be marked as missing.
+// handleRemovedFile handles removed files or folders.
+// For files: Rescans the folder to see what remains. If no audio files remain,
+// the book is deleted from the database.
+// For folders: If the folder was a book folder, deletes the book.
 func (ep *EventProcessor) handleRemovedFile(ctx context.Context, bookFolder, filePath string, fileType FileType) error {
-	ep.logger.Info("handling removed file",
+	ep.logger.Info("handling removed file/folder",
 		"folder", bookFolder,
-		"file", filePath,
+		"path", filePath,
 		"type", fileType.String(),
 	)
+
+	// Check if the removed path itself was a book folder (folder deletion).
+	// This happens when fileType is Ignored (no extension = directory).
+	if fileType == FileTypeIgnored {
+		// The path might be the book folder itself.
+		existingBook, err := ep.store.GetBookByPath(ctx, filePath)
+		if err == nil && existingBook != nil {
+			// Found a book at this exact path - it was a book folder deletion.
+			ep.logger.Info("book folder deleted, removing book",
+				"path", filePath,
+				"book_id", existingBook.ID,
+				"title", existingBook.Title,
+			)
+			if deleteErr := ep.store.DeleteBook(ctx, existingBook.ID); deleteErr != nil {
+				ep.logger.Error("failed to delete book",
+					"book_id", existingBook.ID,
+					"error", deleteErr,
+				)
+				return fmt.Errorf("delete book: %w", deleteErr)
+			}
+			return nil
+		}
+		// Not a book folder, ignore.
+		ep.logger.Debug("removed path is not a known book folder",
+			"path", filePath,
+		)
+		return nil
+	}
+
+	// Regular file removal - check if book folder still has audio files.
+	existingBook, err := ep.store.GetBookByPath(ctx, bookFolder)
+	if err != nil {
+		ep.logger.Debug("no existing book found for folder",
+			"folder", bookFolder,
+			"error", err,
+		)
+		// No book exists for this folder, nothing to do.
+		return nil
+	}
 
 	// Rescan folder to see what remains.
 	item, err := ep.scanner.ScanFolder(ctx, bookFolder, scanner.ScanOptions{
 		Workers: 0, // Use default (runtime.NumCPU)
 	})
 	if err != nil {
-		ep.logger.Error("failed to scan folder after removal",
+		// If folder doesn't exist anymore, delete the book.
+		ep.logger.Info("folder no longer exists, deleting book",
 			"folder", bookFolder,
-			"error", err,
+			"book_id", existingBook.ID,
+			"title", existingBook.Title,
 		)
-		return fmt.Errorf("scan folder: %w", err)
+		if deleteErr := ep.store.DeleteBook(ctx, existingBook.ID); deleteErr != nil {
+			ep.logger.Error("failed to delete book",
+				"book_id", existingBook.ID,
+				"error", deleteErr,
+			)
+			return fmt.Errorf("delete book: %w", deleteErr)
+		}
+		return nil
 	}
 
 	// Check if any audio files remain.
 	if len(item.AudioFiles) == 0 {
-		// No audio files left - book should be marked as missing.
-		// For now, just log.
-		// TODO: Database integration - mark book as missing
-		ep.logger.Info("no audio files remain, book should be marked missing",
+		// No audio files left - delete the book.
+		ep.logger.Info("no audio files remain, deleting book",
 			"folder", bookFolder,
+			"book_id", existingBook.ID,
+			"title", existingBook.Title,
 		)
+		if err := ep.store.DeleteBook(ctx, existingBook.ID); err != nil {
+			ep.logger.Error("failed to delete book",
+				"book_id", existingBook.ID,
+				"error", err,
+			)
+			return fmt.Errorf("delete book: %w", err)
+		}
 	} else {
-		// Some files remain - update book.
-		// For now, just log.
-		// TODO: Database integration - update book
-		ep.logger.Info("audio files remain after removal",
+		// Some files remain - update the book with new file list.
+		ep.logger.Info("audio files remain after removal, updating book",
 			"folder", bookFolder,
+			"book_id", existingBook.ID,
 			"audioFiles", len(item.AudioFiles),
-			"imageFiles", len(item.ImageFiles),
-			"metadataFiles", len(item.MetadataFiles),
 		)
+		// Trigger a re-process of the folder to update the book.
+		return ep.handleFileChange(ctx, bookFolder, filePath, fileType)
 	}
 
 	return nil
