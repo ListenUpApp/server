@@ -26,7 +26,6 @@ type BookUpdateRequest struct {
 	Language    *string `json:"language"`
 	ISBN        *string `json:"isbn"`
 	ASIN        *string `json:"asin"`
-	Explicit    *bool   `json:"explicit"`
 	Abridged    *bool   `json:"abridged"`
 }
 
@@ -89,9 +88,6 @@ func (s *Server) handleUpdateBook(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.ASIN != nil {
 		book.ASIN = *req.ASIN
-	}
-	if req.Explicit != nil {
-		book.Explicit = *req.Explicit
 	}
 	if req.Abridged != nil {
 		book.Abridged = *req.Abridged

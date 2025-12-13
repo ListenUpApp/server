@@ -60,7 +60,6 @@ type BookMetadata struct {
 	Series      []SeriesInfo
 	Chapters    []Chapter
 	Narrators   []string
-	Explicit    bool
 	Abridged    bool
 }
 

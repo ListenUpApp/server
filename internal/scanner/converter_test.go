@@ -148,7 +148,6 @@ func TestConvertToBook_WithFullMetadata(t *testing.T) {
 			Tags:        []string{"thriller", "suspense"},
 			ISBN:        "1234567890",
 			ASIN:        "B00TEST",
-			Explicit:    false,
 			Abridged:    false,
 		},
 	}
@@ -175,7 +174,6 @@ func TestConvertToBook_WithFullMetadata(t *testing.T) {
 	// In tests with mock store returning nil for genre lookups, genres are tracked as unmapped.
 	assert.Equal(t, "1234567890", book.ISBN)
 	assert.Equal(t, "B00TEST", book.ASIN)
-	assert.False(t, book.Explicit)
 	assert.False(t, book.Abridged)
 
 	// Check audio file conversion.

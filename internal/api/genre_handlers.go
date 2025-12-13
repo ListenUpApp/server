@@ -247,6 +247,21 @@ func (s *Server) handleMapUnmappedGenre(w http.ResponseWriter, r *http.Request) 
 	response.Success(w, map[string]string{"status": "mapped"}, s.logger)
 }
 
+// handleGetBookGenres returns genres for a book.
+func (s *Server) handleGetBookGenres(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	bookID := chi.URLParam(r, "id")
+
+	genres, err := s.genreService.GetGenresForBook(ctx, bookID)
+	if err != nil {
+		s.logger.Error("Failed to get book genres", "error", err, "book_id", bookID)
+		response.InternalError(w, "Failed to get genres", s.logger)
+		return
+	}
+
+	response.Success(w, genres, s.logger)
+}
+
 // handleSetBookGenres sets genres for a book.
 func (s *Server) handleSetBookGenres(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

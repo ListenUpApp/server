@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 
@@ -342,6 +343,40 @@ func sanitizeString(s string) string {
 	}, s)
 }
 
+// parseAbridgedFromTitle detects "(Abridged)" or "(Unabridged)" in title text
+// and returns the cleaned title along with the abridged status.
+// Returns (cleanedTitle, isAbridged).
+func parseAbridgedFromTitle(title string) (string, bool) {
+	lower := strings.ToLower(title)
+
+	// Check for explicit abridged indicator
+	if strings.Contains(lower, "(abridged)") {
+		// Remove the indicator (case-insensitive)
+		cleaned := regexp.MustCompile(`(?i)\s*\(abridged\)\s*`).ReplaceAllString(title, " ")
+		return strings.TrimSpace(cleaned), true
+	}
+
+	// Check for unabridged indicator (strip it, book is not abridged)
+	if strings.Contains(lower, "(unabridged)") {
+		cleaned := regexp.MustCompile(`(?i)\s*\(unabridged\)\s*`).ReplaceAllString(title, " ")
+		return strings.TrimSpace(cleaned), false
+	}
+
+	// Also check without parentheses (some titles have "- Unabridged" or similar)
+	if strings.Contains(lower, "unabridged") {
+		cleaned := regexp.MustCompile(`(?i)\s*[-:]\s*unabridged\s*`).ReplaceAllString(title, " ")
+		return strings.TrimSpace(cleaned), false
+	}
+
+	if strings.Contains(lower, "abridged") {
+		cleaned := regexp.MustCompile(`(?i)\s*[-:]\s*abridged\s*`).ReplaceAllString(title, " ")
+		return strings.TrimSpace(cleaned), true
+	}
+
+	// No indicator found - default to unabridged (most audiobooks are)
+	return title, false
+}
+
 // iso639_2to1 maps ISO 639-2 (3-letter) codes to ISO 639-1 (2-letter) codes.
 //
 //nolint:gochecknoglobals // Static lookup table for language normalization
@@ -489,7 +524,11 @@ func buildBookMetadata(audioMeta *AudioMetadata) *BookMetadata {
 	// Determine book title based on format.
 	// For M4B/M4A files, the Title tag is the book title (chapters are in chapter atoms).
 	// For MP3 albums, the Title tag is the track/chapter name, so use Album instead.
-	title := sanitizeString(resolveBookTitle(audioMeta))
+	rawTitle := sanitizeString(resolveBookTitle(audioMeta))
+
+	// Parse abridged status from title (e.g., "Book Name (Unabridged)")
+	// This also cleans the title by removing the indicator.
+	title, abridged := parseAbridgedFromTitle(rawTitle)
 
 	bookMeta := &BookMetadata{
 		Title:       title,
@@ -499,8 +538,7 @@ func buildBookMetadata(audioMeta *AudioMetadata) *BookMetadata {
 		Language:    normalizeLanguage(audioMeta.Language),
 		ISBN:        sanitizeString(audioMeta.ISBN),
 		ASIN:        sanitizeString(audioMeta.ASIN),
-		Explicit:    false,
-		Abridged:    false,
+		Abridged:    abridged,
 		Chapters:    audioMeta.Chapters,
 	}
 
@@ -519,9 +557,13 @@ func buildBookMetadata(audioMeta *AudioMetadata) *BookMetadata {
 		bookMeta.Narrators = splitContributors(sanitizeString(audioMeta.Narrator))
 	}
 
-	// Convert Genre to Genres array (split by semicolon for multiple).
+	// Convert Genre to Genres array (split by semicolon or comma for multiple).
+	// Audio files use various separators: "Fantasy; Science Fiction" or "Fantasy, Science Fiction"
 	if audioMeta.Genre != "" {
-		genres := strings.Split(sanitizeString(audioMeta.Genre), ";")
+		genreStr := sanitizeString(audioMeta.Genre)
+		// Normalize separators: replace semicolons with commas, then split by comma
+		genreStr = strings.ReplaceAll(genreStr, ";", ",")
+		genres := strings.Split(genreStr, ",")
 		for _, genre := range genres {
 			if trimmed := strings.TrimSpace(genre); trimmed != "" {
 				bookMeta.Genres = append(bookMeta.Genres, trimmed)

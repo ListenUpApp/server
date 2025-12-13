@@ -34,7 +34,6 @@ type Book struct {
 	Chapters      []Chapter         `json:"chapters,omitempty"`
 	TotalDuration int64             `json:"total_duration"`
 	TotalSize     int64             `json:"total_size"`
-	Explicit      bool              `json:"explicit,omitempty"`
 	Abridged      bool              `json:"abridged,omitempty"`
 }
 

@@ -318,11 +318,9 @@ func TestHandleUpdateBook_BooleanFields(t *testing.T) {
 	token := createTestUserWithToken(t, server)
 	book := createTestBook(t, server, "Boolean Fields Book")
 
-	// Set explicit and abridged to true.
-	explicit := true
+	// Set abridged to true.
 	abridged := true
 	reqBody := BookUpdateRequest{
-		Explicit: &explicit,
 		Abridged: &abridged,
 	}
 	body, err := json.Marshal(reqBody)
@@ -346,7 +344,6 @@ func TestHandleUpdateBook_BooleanFields(t *testing.T) {
 	data, ok := result.Data.(map[string]any)
 	require.True(t, ok)
 
-	assert.Equal(t, true, data["explicit"])
 	assert.Equal(t, true, data["abridged"])
 }
 

@@ -103,7 +103,6 @@ func ConvertToBook(ctx context.Context, item *LibraryItemData, store Storer) (*d
 		book.Language = item.Metadata.Language
 		book.ISBN = item.Metadata.ISBN
 		book.ASIN = item.Metadata.ASIN
-		book.Explicit = item.Metadata.Explicit
 		book.Abridged = item.Metadata.Abridged
 
 		// Extract and create contributors
@@ -432,7 +431,7 @@ func extractSeries(ctx context.Context, metadata *BookMetadata, store Storer) ([
 }
 
 // extractGenres resolves raw genre strings to normalized genre IDs.
-// Returns genre IDs to assign to the book.
+// Returns genre IDs to assign to the book and creates index entries via AddBookGenre.
 func extractGenres(ctx context.Context, rawGenres []string, bookID string, store Storer) ([]string, error) {
 	var genreIDs []string
 	seen := make(map[string]bool) // Dedupe
@@ -449,6 +448,11 @@ func extractGenres(ctx context.Context, rawGenres []string, bookID string, store
 				if !seen[gid] {
 					genreIDs = append(genreIDs, gid)
 					seen[gid] = true
+					// Create index entry for book-genre association.
+					if err := store.AddBookGenre(ctx, bookID, gid); err != nil {
+						// Log but don't fail - continue with other genres.
+						continue
+					}
 				}
 			}
 			continue
@@ -464,6 +468,11 @@ func extractGenres(ctx context.Context, rawGenres []string, bookID string, store
 				if !seen[g.ID] {
 					genreIDs = append(genreIDs, g.ID)
 					seen[g.ID] = true
+					// Create index entry for book-genre association.
+					if err := store.AddBookGenre(ctx, bookID, g.ID); err != nil {
+						// Log but don't fail - continue with other genres.
+						continue
+					}
 				}
 				foundAny = true
 			}
@@ -555,7 +564,7 @@ func UpdateBookFromScan(_ context.Context, existingBook *domain.Book, item *Libr
 	// - Title, Subtitle, Description
 	// - Contributors, SeriesID, Sequence
 	// - Publisher, PublishYear, Language
-	// - ISBN, ASIN, Explicit, Abridged
+	// - ISBN, ASIN, Abridged
 	// - GenreIDs
 	// The database is truth for metadata once a book is imported.
 
