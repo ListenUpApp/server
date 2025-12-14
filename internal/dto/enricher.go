@@ -79,6 +79,7 @@ func (e *Enricher) EnrichBook(ctx context.Context, book *domain.Book) (*Book, er
 			ContributorID: bc.ContributorID,
 			Name:          name,
 			Roles:         roles,
+			CreditedAs:    bc.CreditedAs,
 		})
 	}
 
@@ -236,6 +237,7 @@ func (e *Enricher) EnrichBooks(ctx context.Context, books []*domain.Book) ([]*Bo
 				ContributorID: bc.ContributorID,
 				Name:          name,
 				Roles:         roles,
+				CreditedAs:    bc.CreditedAs,
 			})
 		}
 

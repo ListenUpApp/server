@@ -155,7 +155,10 @@ func (s *Server) setupRoutes() {
 			r.Get("/", s.handleListContributors)
 			r.Get("/search", s.handleSearchContributors)
 			r.Get("/{id}", s.handleGetContributor)
+			r.Put("/{id}", s.handleUpdateContributor)
 			r.Get("/{id}/books", s.handleGetContributorBooks)
+			r.Post("/{id}/merge", s.handleMergeContributors)
+			r.Post("/{id}/unmerge", s.handleUnmergeContributor)
 		})
 
 		// Collections (require auth).

@@ -11,8 +11,9 @@ import "github.com/listenupapp/listenup-server/internal/domain"
 // Includes the denormalized contributor name for immediate rendering.
 type BookContributor struct {
 	ContributorID string   `json:"contributor_id"`
-	Name          string   `json:"name"`  // Denormalized from Contributor entity
-	Roles         []string `json:"roles"` // String representation of roles
+	Name          string   `json:"name"`                    // Denormalized from Contributor entity
+	Roles         []string `json:"roles"`                   // String representation of roles
+	CreditedAs    string   `json:"credited_as,omitempty"`   // Original attribution (e.g., "Richard Bachman" when contributor is Stephen King)
 }
 
 // BookSeriesInfo is the client-facing representation of a book-series relationship.

@@ -20,6 +20,7 @@ import (
 const (
 	contributorPrefix            = "contributor:"
 	contributorByNamePrefix      = "idx:contributors:name:"       // For deduplication
+	contributorByAliasPrefix     = "idx:contributors:alias:"      // For alias lookup: idx:contributors:alias:{normalized}:{contributorID}
 	contributorByUpdatedAtPrefix = "idx:contributors:updated_at:" // Format: idx:contributors:updated_at:{RFC3339Nano}:contributor:{uuid}
 	contributorByDeletedAtPrefix = "idx:contributors:deleted_at:" // Format: idx:contributors:deleted_at:{RFC3339Nano}:contributor:{uuid}
 )
@@ -58,6 +59,14 @@ func (s *Store) CreateContributor(ctx context.Context, contributor *domain.Contr
 		nameKey := []byte(contributorByNamePrefix + normalizeContributorName(contributor.Name))
 		if err := txn.Set(nameKey, []byte(contributor.ID)); err != nil {
 			return err
+		}
+
+		// Create alias indexes for each alias
+		for _, alias := range contributor.Aliases {
+			aliasKey := []byte(contributorByAliasPrefix + normalizeContributorName(alias))
+			if err := txn.Set(aliasKey, []byte(contributor.ID)); err != nil {
+				return err
+			}
 		}
 
 		// Create updated_at index for sync support
@@ -161,6 +170,36 @@ func (s *Store) UpdateContributor(ctx context.Context, contributor *domain.Contr
 			}
 		}
 
+		// Update alias indexes if aliases changed
+		oldAliasSet := make(map[string]bool)
+		for _, alias := range oldContributor.Aliases {
+			oldAliasSet[normalizeContributorName(alias)] = true
+		}
+		newAliasSet := make(map[string]bool)
+		for _, alias := range contributor.Aliases {
+			newAliasSet[normalizeContributorName(alias)] = true
+		}
+
+		// Delete removed aliases
+		for oldAlias := range oldAliasSet {
+			if !newAliasSet[oldAlias] {
+				aliasKey := []byte(contributorByAliasPrefix + oldAlias)
+				if err := txn.Delete(aliasKey); err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
+					return err
+				}
+			}
+		}
+
+		// Add new aliases
+		for newAlias := range newAliasSet {
+			if !oldAliasSet[newAlias] {
+				aliasKey := []byte(contributorByAliasPrefix + newAlias)
+				if err := txn.Set(aliasKey, []byte(contributor.ID)); err != nil {
+					return err
+				}
+			}
+		}
+
 		// Update updated_at index
 		oldUpdatedAtKey := formatTimestampIndexKey(contributorByUpdatedAtPrefix, oldContributor.UpdatedAt, "contributor", contributor.ID)
 		if err := txn.Delete(oldUpdatedAtKey); err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
@@ -195,14 +234,31 @@ func (s *Store) UpdateContributor(ctx context.Context, contributor *domain.Contr
 
 // GetOrCreateContributorByName finds or creates a contributor by name.
 // No power without control - one entity per person, no matter how metadata spells it.
+//
+// Lookup order:
+//  1. Check name index (exact match on normalized name)
+//  2. Check alias index (pen names merged into canonical contributor)
+//  3. Create new contributor if not found
+//
+// Returns the contributor and a boolean indicating if it was found by alias.
+// When found by alias, the caller should set CreditedAs on the BookContributor.
 func (s *Store) GetOrCreateContributorByName(ctx context.Context, name string) (*domain.Contributor, error) {
+	contributor, _, err := s.GetOrCreateContributorByNameWithAlias(ctx, name)
+	return contributor, err
+}
+
+// GetOrCreateContributorByNameWithAlias is like GetOrCreateContributorByName but also
+// returns whether the contributor was found via an alias lookup.
+// When foundByAlias is true, the original name should be preserved as CreditedAs.
+func (s *Store) GetOrCreateContributorByNameWithAlias(ctx context.Context, name string) (contributor *domain.Contributor, foundByAlias bool, err error) {
 	// Ka is a wheel, and names are its spokes.
 	normalized := normalizeContributorName(name)
 	nameKey := []byte(contributorByNamePrefix + normalized)
+	aliasKey := []byte(contributorByAliasPrefix + normalized)
 
-	// Try to find existing contributor
+	// Try to find existing contributor by name first
 	var contributorID string
-	err := s.db.View(func(txn *badger.Txn) error {
+	err = s.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(nameKey)
 		if err != nil {
 			return err
@@ -215,21 +271,45 @@ func (s *Store) GetOrCreateContributorByName(ctx context.Context, name string) (
 	})
 
 	if err == nil {
-		// Found existing contributor
-		return s.GetContributor(ctx, contributorID)
+		// Found by exact name match
+		c, err := s.GetContributor(ctx, contributorID)
+		return c, false, err
 	}
 
 	if !errors.Is(err, badger.ErrKeyNotFound) {
-		return nil, fmt.Errorf("lookup contributor by name: %w", err)
+		return nil, false, fmt.Errorf("lookup contributor by name: %w", err)
+	}
+
+	// Not found by name - check alias index
+	err = s.db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get(aliasKey)
+		if err != nil {
+			return err
+		}
+
+		return item.Value(func(val []byte) error {
+			contributorID = string(val)
+			return nil
+		})
+	})
+
+	if err == nil {
+		// Found by alias - this is a pen name
+		c, err := s.GetContributor(ctx, contributorID)
+		return c, true, err
+	}
+
+	if !errors.Is(err, badger.ErrKeyNotFound) {
+		return nil, false, fmt.Errorf("lookup contributor by alias: %w", err)
 	}
 
 	// Create new contributor
 	contributorID, err = id.Generate("contributor")
 	if err != nil {
-		return nil, fmt.Errorf("generate contributor ID: %w", err)
+		return nil, false, fmt.Errorf("generate contributor ID: %w", err)
 	}
 
-	contributor := &domain.Contributor{
+	contributor = &domain.Contributor{
 		Syncable: domain.Syncable{
 			ID: contributorID,
 		},
@@ -238,12 +318,12 @@ func (s *Store) GetOrCreateContributorByName(ctx context.Context, name string) (
 	contributor.InitTimestamps()
 
 	if err := s.CreateContributor(ctx, contributor); err != nil {
-		return nil, fmt.Errorf("create contributor: %w", err)
+		return nil, false, fmt.Errorf("create contributor: %w", err)
 	}
 
 	s.eventEmitter.Emit(sse.NewContributorCreatedEvent(contributor))
 
-	return contributor, nil
+	return contributor, false, nil
 }
 
 // ListContributors returns paginated contributors.
@@ -573,6 +653,21 @@ func (s *Store) DeleteContributor(ctx context.Context, id string) error {
 			return err
 		}
 
+		// Remove name index entry so lookups don't find deleted contributor
+		normalizedName := normalizeContributorName(contributor.Name)
+		nameKey := []byte(contributorByNamePrefix + normalizedName)
+		if err := txn.Delete(nameKey); err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
+			// Best effort cleanup
+		}
+
+		// Remove alias index entries
+		for _, alias := range contributor.Aliases {
+			aliasKey := []byte(contributorByAliasPrefix + normalizeContributorName(alias))
+			if err := txn.Delete(aliasKey); err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
+				// Best effort cleanup
+			}
+		}
+
 		// Update updated_at index (MarkDeleted also updates UpdatedAt)
 		oldUpdatedAtKey := formatTimestampIndexKey(contributorByUpdatedAtPrefix, contributor.CreatedAt, "contributor", contributor.ID)
 		if err := txn.Delete(oldUpdatedAtKey); err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
@@ -787,4 +882,287 @@ func (s *Store) GetContributorsDeletedAfter(_ context.Context, timestamp time.Ti
 	}
 
 	return contributorIDs, nil
+}
+
+// MergeContributors merges a source contributor into a target contributor.
+// This is used when a user identifies that two contributors are the same person
+// (e.g., "Richard Bachman" is actually "Stephen King").
+//
+// The merge operation:
+//  1. Re-links all books from source to target, preserving original attribution via CreditedAs
+//  2. Adds source's name to target's Aliases field
+//  3. Soft-deletes the source contributor
+//
+// After merge:
+//   - Books originally by "Richard Bachman" now link to "Stephen King"
+//   - Those books have CreditedAs = "Richard Bachman" to preserve original credit
+//   - Stephen King's Aliases include "Richard Bachman"
+//   - Future book scans for "Richard Bachman" automatically link to Stephen King
+//
+// Returns the updated target contributor.
+func (s *Store) MergeContributors(ctx context.Context, sourceID, targetID string) (*domain.Contributor, error) {
+	// Validate: can't merge contributor into itself
+	if sourceID == targetID {
+		return nil, fmt.Errorf("cannot merge contributor into itself")
+	}
+
+	// Get both contributors
+	source, err := s.GetContributor(ctx, sourceID)
+	if err != nil {
+		return nil, fmt.Errorf("get source contributor: %w", err)
+	}
+
+	target, err := s.GetContributor(ctx, targetID)
+	if err != nil {
+		return nil, fmt.Errorf("get target contributor: %w", err)
+	}
+
+	// Get all books linked to the source contributor
+	books, err := s.GetBooksByContributor(ctx, sourceID)
+	if err != nil {
+		return nil, fmt.Errorf("get books for source contributor: %w", err)
+	}
+
+	// Re-link each book from source to target
+	for _, book := range books {
+		updated := false
+		newContributors := make([]domain.BookContributor, 0, len(book.Contributors))
+
+		// First pass: collect all non-source contributors, noting target's roles if present
+		var existingTargetIdx = -1
+		var sourceRoles []domain.ContributorRole
+		var sourceCreditedAs string
+
+		for _, bc := range book.Contributors {
+			if bc.ContributorID == sourceID {
+				// Remember source's roles and creditedAs for merging
+				sourceRoles = bc.Roles
+				if bc.CreditedAs != "" {
+					sourceCreditedAs = bc.CreditedAs
+				} else {
+					sourceCreditedAs = source.Name
+				}
+				updated = true
+			} else if bc.ContributorID == targetID {
+				// Target already exists in this book
+				existingTargetIdx = len(newContributors)
+				newContributors = append(newContributors, bc)
+			} else {
+				// Other contributors pass through unchanged
+				newContributors = append(newContributors, bc)
+			}
+		}
+
+		// Second pass: merge source into target
+		if updated {
+			if existingTargetIdx >= 0 {
+				// Target already exists - merge roles
+				newContributors[existingTargetIdx].Roles = mergeRoles(newContributors[existingTargetIdx].Roles, sourceRoles)
+				// If target didn't have creditedAs but source did, preserve source's attribution
+				if newContributors[existingTargetIdx].CreditedAs == "" && sourceCreditedAs != "" {
+					newContributors[existingTargetIdx].CreditedAs = sourceCreditedAs
+				}
+			} else {
+				// Target doesn't exist in this book - add it with source's roles
+				newContributors = append(newContributors, domain.BookContributor{
+					ContributorID: targetID,
+					Roles:         sourceRoles,
+					CreditedAs:    sourceCreditedAs,
+				})
+			}
+
+			book.Contributors = newContributors
+			if err := s.UpdateBook(ctx, book); err != nil {
+				return nil, fmt.Errorf("update book %s contributors: %w", book.ID, err)
+			}
+		}
+	}
+
+	// Add source's name to target's aliases (if not already present)
+	aliasExists := false
+	normalizedSourceName := normalizeContributorName(source.Name)
+	for _, alias := range target.Aliases {
+		if normalizeContributorName(alias) == normalizedSourceName {
+			aliasExists = true
+			break
+		}
+	}
+	if !aliasExists {
+		target.Aliases = append(target.Aliases, source.Name)
+	}
+
+	// Also add any aliases that source had
+	for _, sourceAlias := range source.Aliases {
+		normalizedAlias := normalizeContributorName(sourceAlias)
+		exists := false
+		for _, targetAlias := range target.Aliases {
+			if normalizeContributorName(targetAlias) == normalizedAlias {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			target.Aliases = append(target.Aliases, sourceAlias)
+		}
+	}
+
+	// Update target with new aliases
+	if err := s.UpdateContributor(ctx, target); err != nil {
+		return nil, fmt.Errorf("update target contributor aliases: %w", err)
+	}
+
+	// Soft-delete the source contributor
+	if err := s.DeleteContributor(ctx, sourceID); err != nil {
+		return nil, fmt.Errorf("delete source contributor: %w", err)
+	}
+
+	if s.logger != nil {
+		s.logger.Info("merged contributors",
+			"source_id", sourceID,
+			"source_name", source.Name,
+			"target_id", targetID,
+			"target_name", target.Name,
+			"books_relinked", len(books),
+		)
+	}
+
+	return target, nil
+}
+
+// mergeRoles combines two role slices, removing duplicates.
+func mergeRoles(a, b []domain.ContributorRole) []domain.ContributorRole {
+	roleSet := make(map[domain.ContributorRole]bool)
+	for _, r := range a {
+		roleSet[r] = true
+	}
+	for _, r := range b {
+		roleSet[r] = true
+	}
+
+	result := make([]domain.ContributorRole, 0, len(roleSet))
+	for r := range roleSet {
+		result = append(result, r)
+	}
+	return result
+}
+
+// UnmergeContributor splits an alias back into a separate contributor.
+// This is the reverse of MergeContributors - when a user decides that
+// "Richard Bachman" should be a separate contributor from "Stephen King".
+//
+// The unmerge operation:
+//  1. Creates a new contributor with the alias name
+//  2. Finds all books where the source contributor has CreditedAs matching the alias
+//  3. Re-links those books to the new contributor (clears CreditedAs since now linked correctly)
+//  4. Removes the alias from the source contributor's Aliases field
+//
+// Returns the newly created contributor.
+func (s *Store) UnmergeContributor(ctx context.Context, sourceID, aliasName string) (*domain.Contributor, error) {
+	// Get source contributor
+	source, err := s.GetContributor(ctx, sourceID)
+	if err != nil {
+		return nil, fmt.Errorf("get source contributor: %w", err)
+	}
+
+	// Verify the alias exists
+	normalizedAlias := normalizeContributorName(aliasName)
+	aliasFound := false
+	aliasIndex := -1
+	for i, alias := range source.Aliases {
+		if normalizeContributorName(alias) == normalizedAlias {
+			aliasFound = true
+			aliasIndex = i
+			break
+		}
+	}
+	if !aliasFound {
+		return nil, fmt.Errorf("alias %q not found on contributor %s", aliasName, sourceID)
+	}
+
+	// Create a new contributor with the alias name
+	newContributorID, err := id.Generate("contributor")
+	if err != nil {
+		return nil, fmt.Errorf("generate contributor ID: %w", err)
+	}
+
+	newContributor := &domain.Contributor{
+		Syncable: domain.Syncable{
+			ID: newContributorID,
+		},
+		Name: aliasName, // Use the original alias name (preserves casing)
+	}
+	newContributor.InitTimestamps()
+
+	if err := s.CreateContributor(ctx, newContributor); err != nil {
+		return nil, fmt.Errorf("create new contributor: %w", err)
+	}
+
+	// Get all books linked to the source contributor
+	books, err := s.GetBooksByContributor(ctx, sourceID)
+	if err != nil {
+		return nil, fmt.Errorf("get books for source contributor: %w", err)
+	}
+
+	// Re-link books that were credited to the alias
+	booksRelinked := 0
+	for _, book := range books {
+		updated := false
+		newContributors := make([]domain.BookContributor, 0, len(book.Contributors))
+
+		for _, bc := range book.Contributors {
+			if bc.ContributorID == sourceID && bc.CreditedAs != "" {
+				// Check if this book was credited to the alias we're unmerging
+				if normalizeContributorName(bc.CreditedAs) == normalizedAlias {
+					// Re-link to new contributor, clear creditedAs
+					newContributors = append(newContributors, domain.BookContributor{
+						ContributorID: newContributorID,
+						Roles:         bc.Roles,
+						CreditedAs:    "", // Clear - now linked to correct contributor
+					})
+					updated = true
+					booksRelinked++
+				} else {
+					// Keep with source (different alias or no match)
+					newContributors = append(newContributors, bc)
+				}
+			} else {
+				// Keep unchanged
+				newContributors = append(newContributors, bc)
+			}
+		}
+
+		if updated {
+			book.Contributors = newContributors
+			if err := s.UpdateBook(ctx, book); err != nil {
+				return nil, fmt.Errorf("update book %s contributors: %w", book.ID, err)
+			}
+		}
+	}
+
+	// Remove the alias from source contributor
+	newAliases := make([]string, 0, len(source.Aliases)-1)
+	for i, alias := range source.Aliases {
+		if i != aliasIndex {
+			newAliases = append(newAliases, alias)
+		}
+	}
+	source.Aliases = newAliases
+
+	if err := s.UpdateContributor(ctx, source); err != nil {
+		return nil, fmt.Errorf("update source contributor aliases: %w", err)
+	}
+
+	if s.logger != nil {
+		s.logger.Info("unmerged contributor",
+			"source_id", sourceID,
+			"source_name", source.Name,
+			"new_id", newContributorID,
+			"alias_name", aliasName,
+			"books_relinked", booksRelinked,
+		)
+	}
+
+	s.eventEmitter.Emit(sse.NewContributorCreatedEvent(newContributor))
+
+	return newContributor, nil
 }
