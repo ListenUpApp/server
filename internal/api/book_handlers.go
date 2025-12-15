@@ -355,7 +355,7 @@ func (s *Server) handleUploadCover(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Save the cover image (overwrites any existing cover)
-	if err := s.imageStorage.Save(bookID, imgData); err != nil {
+	if err := s.coverStorage.Save(bookID, imgData); err != nil {
 		s.logger.Error("Failed to save cover image", "error", err, "book_id", bookID)
 		response.InternalError(w, "Failed to save cover image", s.logger)
 		return

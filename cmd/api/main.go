@@ -101,14 +101,20 @@ func main() {
 		"inbox_collection", bootstrap.InboxCollection.ID,
 	)
 
-	// Initialize image storage and processor for cover art extraction.
-	imageStorage, err := images.NewStorage(cfg.Metadata.BasePath)
+	// Initialize image storage for book covers and contributor photos.
+	coverStorage, err := images.NewStorage(cfg.Metadata.BasePath)
 	if err != nil {
-		log.Error("Failed to initialize image storage", "error", err)
+		log.Error("Failed to initialize cover storage", "error", err)
 		sseCancel()
 		os.Exit(1)
 	}
-	imageProcessor := images.NewProcessor(imageStorage, log.Logger)
+	contributorImageStorage, err := images.NewStorageWithSubdir(cfg.Metadata.BasePath, "contributors")
+	if err != nil {
+		log.Error("Failed to initialize contributor image storage", "error", err)
+		sseCancel()
+		os.Exit(1)
+	}
+	imageProcessor := images.NewProcessor(coverStorage, log.Logger)
 
 	// Initialize scanner with SSE event emitter and image processor.
 	fileScanner := scanner.NewScanner(db, sseManager, imageProcessor, log.Logger)
@@ -309,7 +315,7 @@ func main() {
 	// Create HTTP server with service layer.
 	// TODO: Future note to self: This is going to get old fast depending on how many
 	// services we need to instantiate. Let's look into a better solution.
-	httpServer := api.NewServer(db, instanceService, authService, bookService, collectionService, sharingService, syncService, listeningService, genreService, tagService, searchService, sseHandler, imageStorage, log.Logger)
+	httpServer := api.NewServer(db, instanceService, authService, bookService, collectionService, sharingService, syncService, listeningService, genreService, tagService, searchService, sseHandler, coverStorage, contributorImageStorage, log.Logger)
 
 	// Configure HTTP server.
 	srv := &http.Server{

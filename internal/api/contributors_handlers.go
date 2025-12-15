@@ -4,6 +4,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"net/http"
+	"os"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
@@ -399,4 +400,166 @@ func (s *Server) handleUpdateContributor(w http.ResponseWriter, r *http.Request)
 	)
 
 	response.Success(w, contributor, s.logger)
+}
+
+// handleUploadContributorImage handles profile photo uploads for a contributor.
+// PUT /api/v1/contributors/{id}/image
+// Content-Type: multipart/form-data with "file" field
+func (s *Server) handleUploadContributorImage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := getUserID(ctx)
+	contributorID := chi.URLParam(r, "id")
+
+	if userID == "" {
+		response.Unauthorized(w, "Authentication required", s.logger)
+		return
+	}
+
+	if contributorID == "" {
+		response.BadRequest(w, "Contributor ID is required", s.logger)
+		return
+	}
+
+	// Validate contributor exists
+	contributor, err := s.store.GetContributor(ctx, contributorID)
+	if err != nil {
+		if errors.Is(err, store.ErrContributorNotFound) {
+			response.NotFound(w, "Contributor not found", s.logger)
+			return
+		}
+		s.logger.Error("Failed to get contributor for image upload", "error", err, "contributor_id", contributorID, "user_id", userID)
+		response.InternalError(w, "Failed to retrieve contributor", s.logger)
+		return
+	}
+
+	// Parse multipart form (limit to 10MB)
+	const maxUploadSize = 10 << 20 // 10MB
+	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
+		response.BadRequest(w, "Failed to parse form data", s.logger)
+		return
+	}
+
+	// Get the uploaded file
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		response.BadRequest(w, "No file uploaded. Use 'file' field in multipart form", s.logger)
+		return
+	}
+	defer file.Close()
+
+	// Validate file size
+	if header.Size > maxUploadSize {
+		response.BadRequest(w, "File too large. Maximum size is 10MB", s.logger)
+		return
+	}
+
+	// Read file content
+	imgData := make([]byte, header.Size)
+	if _, err := file.Read(imgData); err != nil {
+		s.logger.Error("Failed to read uploaded file", "error", err, "contributor_id", contributorID)
+		response.InternalError(w, "Failed to read uploaded file", s.logger)
+		return
+	}
+
+	// Validate it's an image by checking magic bytes
+	contentType := detectImageType(imgData)
+	if contentType == "" {
+		response.BadRequest(w, "Invalid image format. Supported formats: JPEG, PNG, WebP, GIF", s.logger)
+		return
+	}
+
+	// Save the image (overwrites any existing image)
+	if err := s.contributorImageStorage.Save(contributorID, imgData); err != nil {
+		s.logger.Error("Failed to save contributor image", "error", err, "contributor_id", contributorID)
+		response.InternalError(w, "Failed to save image", s.logger)
+		return
+	}
+
+	// Update contributor's ImageURL field
+	contributor.ImageURL = "/api/v1/contributors/" + contributorID + "/image"
+
+	// Save contributor update (this emits SSE event)
+	if err := s.store.UpdateContributor(ctx, contributor); err != nil {
+		s.logger.Error("Failed to update contributor after image upload", "error", err, "contributor_id", contributorID)
+		response.InternalError(w, "Failed to update contributor", s.logger)
+		return
+	}
+
+	s.logger.Info("Contributor image uploaded successfully",
+		"contributor_id", contributorID,
+		"filename", header.Filename,
+		"size", header.Size,
+		"format", contentType,
+	)
+
+	response.Success(w, map[string]string{
+		"image_url": contributor.ImageURL,
+	}, s.logger)
+}
+
+// handleGetContributorImage serves a contributor's profile photo.
+// GET /api/v1/contributors/{id}/image
+func (s *Server) handleGetContributorImage(w http.ResponseWriter, r *http.Request) {
+	contributorID := chi.URLParam(r, "id")
+
+	if contributorID == "" {
+		response.BadRequest(w, "Contributor ID is required", s.logger)
+		return
+	}
+
+	// Check if image exists
+	if !s.contributorImageStorage.Exists(contributorID) {
+		response.NotFound(w, "Image not found for this contributor", s.logger)
+		return
+	}
+
+	// Get image file info for Last-Modified header
+	imagePath := s.contributorImageStorage.Path(contributorID)
+	fileInfo, err := os.Stat(imagePath)
+	if err != nil {
+		s.logger.Error("Failed to stat contributor image file", "contributor_id", contributorID, "error", err)
+		response.InternalError(w, "Failed to retrieve image", s.logger)
+		return
+	}
+
+	// Compute ETag from hash
+	hash, err := s.contributorImageStorage.Hash(contributorID)
+	if err != nil {
+		s.logger.Error("Failed to compute contributor image hash", "contributor_id", contributorID, "error", err)
+		response.InternalError(w, "Failed to retrieve image", s.logger)
+		return
+	}
+	etag := `"` + hash[:16] + `"` // Truncate to reasonable length
+
+	// Handle conditional GET (If-None-Match)
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+
+	// Get image data
+	data, err := s.contributorImageStorage.Get(contributorID)
+	if err != nil {
+		s.logger.Error("Failed to read contributor image file", "contributor_id", contributorID, "error", err)
+		response.InternalError(w, "Failed to retrieve image", s.logger)
+		return
+	}
+
+	// Detect content type from the actual file
+	contentType := detectImageType(data)
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	// Set cache headers
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Length", strconv.FormatInt(int64(len(data)), 10))
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Last-Modified", fileInfo.ModTime().UTC().Format(http.TimeFormat))
+	w.Header().Set("Cache-Control", "public, max-age=86400") // 24 hours
+
+	// Write image data
+	if _, err := w.Write(data); err != nil {
+		s.logger.Error("Failed to write contributor image response", "contributor_id", contributorID, "error", err)
+	}
 }

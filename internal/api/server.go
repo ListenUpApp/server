@@ -23,42 +23,44 @@ import (
 
 // Server holds dependencies for HTTP handlers.
 type Server struct {
-	store             *store.Store
-	instanceService   *service.InstanceService
-	authService       *service.AuthService
-	bookService       *service.BookService
-	collectionService *service.CollectionService
-	sharingService    *service.SharingService
-	syncService       *service.SyncService
-	listeningService  *service.ListeningService
-	genreService      *service.GenreService
-	tagService        *service.TagService
-	searchService     *service.SearchService
-	sseHandler        *sse.Handler
-	imageStorage      *images.Storage
-	router            *chi.Mux
-	logger            *slog.Logger
-	authRateLimiter   *RateLimiter
+	store                   *store.Store
+	instanceService         *service.InstanceService
+	authService             *service.AuthService
+	bookService             *service.BookService
+	collectionService       *service.CollectionService
+	sharingService          *service.SharingService
+	syncService             *service.SyncService
+	listeningService        *service.ListeningService
+	genreService            *service.GenreService
+	tagService              *service.TagService
+	searchService           *service.SearchService
+	sseHandler              *sse.Handler
+	coverStorage            *images.Storage // Book cover images
+	contributorImageStorage *images.Storage // Contributor profile photos
+	router                  *chi.Mux
+	logger                  *slog.Logger
+	authRateLimiter         *RateLimiter
 }
 
 // NewServer creates a new HTTP server with all routes configured.
-func NewServer(store *store.Store, instanceService *service.InstanceService, authService *service.AuthService, bookService *service.BookService, collectionService *service.CollectionService, sharingService *service.SharingService, syncService *service.SyncService, listeningService *service.ListeningService, genreService *service.GenreService, tagService *service.TagService, searchService *service.SearchService, sseHandler *sse.Handler, imageStorage *images.Storage, logger *slog.Logger) *Server {
+func NewServer(store *store.Store, instanceService *service.InstanceService, authService *service.AuthService, bookService *service.BookService, collectionService *service.CollectionService, sharingService *service.SharingService, syncService *service.SyncService, listeningService *service.ListeningService, genreService *service.GenreService, tagService *service.TagService, searchService *service.SearchService, sseHandler *sse.Handler, coverStorage *images.Storage, contributorImageStorage *images.Storage, logger *slog.Logger) *Server {
 	s := &Server{
-		store:             store,
-		instanceService:   instanceService,
-		authService:       authService,
-		bookService:       bookService,
-		collectionService: collectionService,
-		sharingService:    sharingService,
-		syncService:       syncService,
-		listeningService:  listeningService,
-		genreService:      genreService,
-		tagService:        tagService,
-		searchService:     searchService,
-		sseHandler:        sseHandler,
-		imageStorage:      imageStorage,
-		router:            chi.NewRouter(),
-		logger:            logger,
+		store:                   store,
+		instanceService:         instanceService,
+		authService:             authService,
+		bookService:             bookService,
+		collectionService:       collectionService,
+		sharingService:          sharingService,
+		syncService:             syncService,
+		listeningService:        listeningService,
+		genreService:            genreService,
+		tagService:              tagService,
+		searchService:           searchService,
+		sseHandler:              sseHandler,
+		coverStorage:            coverStorage,
+		contributorImageStorage: contributorImageStorage,
+		router:                  chi.NewRouter(),
+		logger:                  logger,
 		// Rate limiter for login endpoint: 20 attempts per minute with burst of 10.
 		// Sensible default for self-hosted - protects against brute force
 		// without impeding legitimate use.
@@ -159,6 +161,8 @@ func (s *Server) setupRoutes() {
 			r.Get("/{id}/books", s.handleGetContributorBooks)
 			r.Post("/{id}/merge", s.handleMergeContributors)
 			r.Post("/{id}/unmerge", s.handleUnmergeContributor)
+			r.Put("/{id}/image", s.handleUploadContributorImage)
+			r.Get("/{id}/image", s.handleGetContributorImage)
 		})
 
 		// Collections (require auth).
@@ -441,13 +445,13 @@ func (s *Server) handleGetCover(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if cover exists.
-	if !s.imageStorage.Exists(bookID) {
+	if !s.coverStorage.Exists(bookID) {
 		response.NotFound(w, "Cover not found for this book", s.logger)
 		return
 	}
 
 	// Get cover file info for Last-Modified header.
-	coverPath := s.imageStorage.Path(bookID)
+	coverPath := s.coverStorage.Path(bookID)
 	fileInfo, err := os.Stat(coverPath)
 	if err != nil {
 		s.logger.Error("Failed to stat cover file", "book_id", bookID, "error", err)
@@ -456,7 +460,7 @@ func (s *Server) handleGetCover(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Compute ETag from hash.
-	hash, err := s.imageStorage.Hash(bookID)
+	hash, err := s.coverStorage.Hash(bookID)
 	if err != nil {
 		s.logger.Error("Failed to compute cover hash", "book_id", bookID, "error", err)
 		response.InternalError(w, "Failed to retrieve cover", s.logger)
@@ -471,7 +475,7 @@ func (s *Server) handleGetCover(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get cover data.
-	data, err := s.imageStorage.Get(bookID)
+	data, err := s.coverStorage.Get(bookID)
 	if err != nil {
 		s.logger.Error("Failed to read cover file", "book_id", bookID, "error", err)
 		response.InternalError(w, "Failed to retrieve cover", s.logger)
