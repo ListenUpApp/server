@@ -114,6 +114,12 @@ func main() {
 		sseCancel()
 		os.Exit(1)
 	}
+	seriesCoversStorage, err := images.NewStorageWithSubdir(cfg.Metadata.BasePath, "covers/series")
+	if err != nil {
+		log.Error("Failed to initialize series cover storage", "error", err)
+		sseCancel()
+		os.Exit(1)
+	}
 	imageProcessor := images.NewProcessor(coverStorage, log.Logger)
 
 	// Initialize scanner with SSE event emitter and image processor.
@@ -328,6 +334,7 @@ func main() {
 	storage := &api.StorageServices{
 		Covers:            coverStorage,
 		ContributorImages: contributorImageStorage,
+		SeriesCovers:      seriesCoversStorage,
 	}
 	httpServer := api.NewServer(db, services, storage, sseHandler, log.Logger)
 

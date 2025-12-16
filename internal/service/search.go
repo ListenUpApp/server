@@ -187,7 +187,7 @@ func (s *SearchService) ReindexAll(ctx context.Context) error {
 			continue
 		}
 		doc := search.SeriesToSearchDocument(series)
-		// Override TotalBooks with actual count of books we have
+		// Set actual count of books we have
 		if count, ok := seriesBookCounts[series.ID]; ok {
 			doc.BookCount = count
 		}

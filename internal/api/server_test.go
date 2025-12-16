@@ -86,10 +86,12 @@ func setupTestServer(t *testing.T) (server *Server, cleanup func()) {
 	sessionService := service.NewSessionService(s, tokenService, logger)
 	authService := service.NewAuthService(s, tokenService, sessionService, instanceService, logger)
 
-	// Create image storage for covers and contributors.
+	// Create image storage for covers, contributors, and series.
 	coverStorage, err := images.NewStorage(tmpDir)
 	require.NoError(t, err)
 	contributorImageStorage, err := images.NewStorageWithSubdir(tmpDir, "contributors")
+	require.NoError(t, err)
+	seriesCoversStorage, err := images.NewStorageWithSubdir(tmpDir, "covers/series")
 	require.NoError(t, err)
 
 	// Create server using Services struct (nil Search - not testing search in these tests).
@@ -108,6 +110,7 @@ func setupTestServer(t *testing.T) (server *Server, cleanup func()) {
 	storage := &StorageServices{
 		Covers:            coverStorage,
 		ContributorImages: contributorImageStorage,
+		SeriesCovers:      seriesCoversStorage,
 	}
 	server = NewServer(s, services, storage, sseHandler, logger)
 

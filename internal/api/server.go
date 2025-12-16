@@ -133,6 +133,9 @@ func (s *Server) setupRoutes() {
 			r.Get("/", s.handleListSeries)
 			r.Get("/{id}", s.handleGetSeries)
 			r.Get("/{id}/books", s.handleGetSeriesBooks)
+			r.Patch("/{id}", s.handleUpdateSeries)
+			r.Put("/{id}/cover", s.handleUploadSeriesCover)
+			r.Delete("/{id}/cover", s.handleDeleteSeriesCover)
 		})
 
 		// Contributors (require auth for ACL).
@@ -252,6 +255,7 @@ func (s *Server) setupRoutes() {
 
 		// Cover images (public for sharing, cached aggressively).
 		r.Get("/covers/{id}", s.handleGetCover)
+		r.Get("/series/{id}/cover", s.handleGetSeriesCover)
 	})
 }
 

@@ -76,8 +76,7 @@ func (m *mockStore) GetOrCreateSeriesByName(_ context.Context, name string) (*do
 		Syncable: domain.Syncable{
 			ID: seriesID,
 		},
-		Name:       name,
-		TotalBooks: 0,
+		Name: name,
 	}
 	series.InitTimestamps()
 

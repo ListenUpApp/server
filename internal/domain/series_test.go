@@ -15,7 +15,6 @@ func TestSeries_JSONMarshaling(t *testing.T) {
 		},
 		Name:        "The Stormlight Archive",
 		Description: "Epic fantasy series by Brandon Sanderson",
-		TotalBooks:  10, // Planned total
 	}
 	series.InitTimestamps()
 
@@ -32,7 +31,6 @@ func TestSeries_JSONMarshaling(t *testing.T) {
 	assert.Equal(t, series.ID, decoded.ID)
 	assert.Equal(t, series.Name, decoded.Name)
 	assert.Equal(t, series.Description, decoded.Description)
-	assert.Equal(t, series.TotalBooks, decoded.TotalBooks)
 	assert.Equal(t, series.CreatedAt.Unix(), decoded.CreatedAt.Unix())
 	assert.Equal(t, series.UpdatedAt.Unix(), decoded.UpdatedAt.Unix())
 }
@@ -45,10 +43,9 @@ func TestSeries_OngoingSeries(t *testing.T) {
 		},
 		Name:        "The Expanse",
 		Description: "Sci-fi series",
-		TotalBooks:  0, // Unknown/ongoing
 	}
 
-	assert.Equal(t, 0, series.TotalBooks, "Ongoing series should have TotalBooks = 0")
+	assert.NotEmpty(t, series.ID, "Series should have an ID")
 }
 
 func TestSeries_CompletedSeries(t *testing.T) {
@@ -59,10 +56,9 @@ func TestSeries_CompletedSeries(t *testing.T) {
 		},
 		Name:        "The Lord of the Rings",
 		Description: "Fantasy trilogy",
-		TotalBooks:  3,
 	}
 
-	assert.Equal(t, 3, series.TotalBooks)
+	assert.Equal(t, "The Lord of the Rings", series.Name)
 }
 
 func TestSeries_EmptyDescription(t *testing.T) {
@@ -71,8 +67,7 @@ func TestSeries_EmptyDescription(t *testing.T) {
 		Syncable: Syncable{
 			ID: "series-no-desc",
 		},
-		Name:       "Minimal Series",
-		TotalBooks: 0,
+		Name: "Minimal Series",
 	}
 	series.InitTimestamps()
 

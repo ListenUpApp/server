@@ -26,7 +26,6 @@ func TestCreateSeries(t *testing.T) {
 		},
 		Name:        "The Stormlight Archive",
 		Description: "Epic fantasy series",
-		TotalBooks:  0, // Will be computed from reverse index
 	}
 	series.InitTimestamps()
 
@@ -38,8 +37,6 @@ func TestCreateSeries(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, series.Name, retrieved.Name)
 	assert.Equal(t, series.Description, retrieved.Description)
-	// TotalBooks should be 0 since no books are linked to this series yet
-	assert.Equal(t, 0, retrieved.TotalBooks)
 }
 
 func TestCreateSeries_AlreadyExists(t *testing.T) {
@@ -90,8 +87,7 @@ func TestUpdateSeries(t *testing.T) {
 		Syncable: domain.Syncable{
 			ID: seriesID,
 		},
-		Name:       "The Expanse",
-		TotalBooks: 0, // Unknown initially
+		Name: "The Expanse",
 	}
 	series.InitTimestamps()
 
@@ -106,8 +102,6 @@ func TestUpdateSeries(t *testing.T) {
 	// Verify update
 	retrieved, err := store.GetSeries(ctx, seriesID)
 	require.NoError(t, err)
-	// TotalBooks should still be 0 since no books are linked
-	assert.Equal(t, 0, retrieved.TotalBooks)
 	assert.Equal(t, "Sci-fi series", retrieved.Description)
 }
 
@@ -152,7 +146,6 @@ func TestGetOrCreateSeriesByName_Create(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, series.ID)
 	assert.Equal(t, "The Stormlight Archive", series.Name)
-	assert.Equal(t, 0, series.TotalBooks) // Default unknown
 }
 
 func TestGetOrCreateSeriesByName_ExistingReturned(t *testing.T) {

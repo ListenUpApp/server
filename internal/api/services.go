@@ -24,4 +24,5 @@ type Services struct {
 type StorageServices struct {
 	Covers            *images.Storage // Book cover images
 	ContributorImages *images.Storage // Contributor profile photos
+	SeriesCovers      *images.Storage // Series cover images
 }

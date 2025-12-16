@@ -376,7 +376,6 @@ func TestSeriesToSearchDocument(t *testing.T) {
 		},
 		Name:        "Epic Series",
 		Description: "An epic tale spanning books",
-		TotalBooks:  5,
 	}
 
 	doc := SeriesToSearchDocument(series)
@@ -385,7 +384,7 @@ func TestSeriesToSearchDocument(t *testing.T) {
 	assert.Equal(t, DocTypeSeries, doc.Type)
 	assert.Equal(t, "Epic Series", doc.Name)
 	assert.Equal(t, "An epic tale spanning books", doc.Description)
-	assert.Equal(t, 5, doc.BookCount)
+	assert.Equal(t, 0, doc.BookCount) // BookCount is set to 0 by default, caller must override
 }
 
 func TestSearchIndex_LargeBatch(t *testing.T) {

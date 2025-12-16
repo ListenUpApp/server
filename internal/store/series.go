@@ -100,16 +100,6 @@ func (s *Store) GetSeries(ctx context.Context, id string) (*domain.Series, error
 		return nil, ErrSeriesNotFound
 	}
 
-	// Populate total books count from reverse index
-	count, err := s.CountBooksInSeries(ctx, id)
-	if err != nil {
-		// Log but don't fail - TotalBooks will be 0
-		if s.logger != nil {
-			s.logger.Warn("failed to count books in series", "series_id", id, "error", err)
-		}
-	}
-	series.TotalBooks = count
-
 	return &series, nil
 }
 
@@ -228,8 +218,7 @@ func (s *Store) GetOrCreateSeriesByName(ctx context.Context, name string) (*doma
 		Syncable: domain.Syncable{
 			ID: seriesID,
 		},
-		Name:       name,
-		TotalBooks: 0, // Unknown total by default
+		Name: name,
 	}
 	series.InitTimestamps()
 
@@ -335,39 +324,6 @@ func (s *Store) ListSeries(ctx context.Context, params PaginationParams) (*Pagin
 		return nil, fmt.Errorf("list series: %w", err)
 	}
 
-	// Populate total books count for all series in a single transaction
-	if len(seriesList) > 0 {
-		seriesIDs := make([]string, len(seriesList))
-		for i, series := range seriesList {
-			// Check for context cancellation
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			default:
-			}
-			seriesIDs[i] = series.ID
-		}
-
-		counts, err := s.CountBooksForMultipleSeries(ctx, seriesIDs)
-		if err != nil {
-			// Log but don't fail - TotalBooks will be 0 for all
-			if s.logger != nil {
-				s.logger.Warn("failed to batch count books for series", "error", err)
-			}
-		} else {
-			// Populate counts from batch result
-			for _, series := range seriesList {
-				// Check for context cancellation
-				select {
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				default:
-				}
-				series.TotalBooks = counts[series.ID]
-			}
-		}
-	}
-
 	// Create result
 	result := &PaginatedResult[*domain.Series]{
 		Items:   seriesList,
@@ -436,39 +392,6 @@ func (s *Store) GetSeriesUpdatedAfter(ctx context.Context, timestamp time.Time) 
 	})
 	if err != nil {
 		return nil, fmt.Errorf("query series by updated_at: %w", err)
-	}
-
-	// Populate total books count for all series in a single transaction
-	if len(seriesList) > 0 {
-		seriesIDs := make([]string, len(seriesList))
-		for i, series := range seriesList {
-			// Check for context cancellation
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			default:
-			}
-			seriesIDs[i] = series.ID
-		}
-
-		counts, err := s.CountBooksForMultipleSeries(ctx, seriesIDs)
-		if err != nil {
-			// Log but don't fail - TotalBooks will be 0 for all
-			if s.logger != nil {
-				s.logger.Warn("failed to batch count books for series", "error", err)
-			}
-		} else {
-			// Populate counts from batch result
-			for _, series := range seriesList {
-				// Check for context cancellation
-				select {
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				default:
-				}
-				series.TotalBooks = counts[series.ID]
-			}
-		}
 	}
 
 	return seriesList, nil
@@ -766,21 +689,6 @@ func (s *Store) ListAllSeries(ctx context.Context) ([]*domain.Series, error) {
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list all series: %w", err)
-	}
-
-	// Populate total books count
-	if len(seriesList) > 0 {
-		seriesIDs := make([]string, len(seriesList))
-		for i, series := range seriesList {
-			seriesIDs[i] = series.ID
-		}
-
-		counts, err := s.CountBooksForMultipleSeries(ctx, seriesIDs)
-		if err == nil {
-			for _, series := range seriesList {
-				series.TotalBooks = counts[series.ID]
-			}
-		}
 	}
 
 	return seriesList, nil
