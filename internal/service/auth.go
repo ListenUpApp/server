@@ -128,7 +128,8 @@ func (s *AuthService) Setup(ctx context.Context, req SetupRequest) (*AuthRespons
 		},
 		Email:        req.Email,
 		PasswordHash: passwordHash,
-		IsRoot:       true, // First user is root
+		IsRoot:       true,             // First user is root
+		Role:         domain.RoleAdmin, // Root user is always admin
 		FirstName:    req.FirstName,
 		LastName:     req.LastName,
 		DisplayName:  req.FirstName + " " + req.LastName, // Auto-generate from names

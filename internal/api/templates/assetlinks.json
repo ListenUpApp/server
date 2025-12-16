@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.calypsan.listenup",
+      "sha256_cert_fingerprints": [
+        "PLACEHOLDER:REPLACE_WITH_YOUR_APP_SIGNING_CERTIFICATE_SHA256_FINGERPRINT"
+      ]
+    }
+  }
+]

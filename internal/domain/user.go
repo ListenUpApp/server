@@ -2,16 +2,34 @@ package domain
 
 import "time"
 
+// Role represents the user's permission level in the system.
+type Role string
+
+const (
+	// RoleAdmin grants full administrative access.
+	RoleAdmin Role = "admin"
+	// RoleMember grants standard user access.
+	RoleMember Role = "member"
+)
+
 // User represents an authenticated user account in the system.
 type User struct {
 	Syncable
 	Email        string    `json:"email"`
 	PasswordHash string    `json:"password_hash,omitempty"` // Stored hashed, filter from API responses
 	IsRoot       bool      `json:"is_root"`
+	Role         Role      `json:"role"`                    // admin or member
+	InvitedBy    string    `json:"invited_by,omitempty"`    // User ID who invited this user
 	DisplayName  string    `json:"display_name"`
 	FirstName    string    `json:"first_name"`
 	LastName     string    `json:"last_name"`
 	LastLoginAt  time.Time `json:"last_login_at"`
+}
+
+// IsAdmin returns true if the user has administrative privileges.
+// Root users are automatically admins, regardless of their role field.
+func (u *User) IsAdmin() bool {
+	return u.IsRoot || u.Role == RoleAdmin
 }
 
 // FullName returns the user's full name, composed from first and last names.

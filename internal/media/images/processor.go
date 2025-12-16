@@ -9,6 +9,13 @@ import (
 	"github.com/simonhull/audiometa"
 )
 
+// CoverInfo contains metadata about an extracted cover image.
+type CoverInfo struct {
+	Hash   string // SHA256 hash of the cover for cache validation
+	Size   int64  // Size in bytes
+	Format string // MIME type (e.g., "image/jpeg")
+}
+
 // Processor extracts and stores cover images from audio files.
 type Processor struct {
 	storage *Storage
@@ -24,13 +31,13 @@ func NewProcessor(storage *Storage, logger *slog.Logger) *Processor {
 }
 
 // ExtractAndProcess extracts cover art from an audio file and stores it.
-// Returns the SHA256 hash of the cover for cache validation.
-// Returns empty string (no error) if the audio file has no embedded cover.
-func (p *Processor) ExtractAndProcess(ctx context.Context, audioFilePath, bookID string) (string, error) {
+// Returns CoverInfo containing the hash, size, and format for database storage.
+// Returns nil (no error) if the audio file has no embedded cover.
+func (p *Processor) ExtractAndProcess(ctx context.Context, audioFilePath, bookID string) (*CoverInfo, error) {
 	// Open audio file.
 	file, err := audiometa.OpenContext(ctx, audioFilePath)
 	if err != nil {
-		return "", fmt.Errorf("failed to open audio file: %w", err)
+		return nil, fmt.Errorf("failed to open audio file: %w", err)
 	}
 	defer file.Close() //nolint:errcheck // Defer close, nothing we can do about errors here
 
@@ -41,7 +48,7 @@ func (p *Processor) ExtractAndProcess(ctx context.Context, audioFilePath, bookID
 			"path", audioFilePath,
 			"error", err,
 		)
-		return "", fmt.Errorf("failed to extract artwork: %w", err)
+		return nil, fmt.Errorf("failed to extract artwork: %w", err)
 	}
 
 	// No artwork found.
@@ -50,7 +57,7 @@ func (p *Processor) ExtractAndProcess(ctx context.Context, audioFilePath, bookID
 			"path", audioFilePath,
 			"format", file.Format.String(),
 		)
-		return "", nil
+		return nil, nil
 	}
 
 	p.logger.Debug("extracted cover art",
@@ -64,14 +71,17 @@ func (p *Processor) ExtractAndProcess(ctx context.Context, audioFilePath, bookID
 
 	// Save original artwork data to storage.
 	if err := p.storage.Save(bookID, artwork.Data); err != nil {
-		return "", fmt.Errorf("failed to save cover: %w", err)
+		return nil, fmt.Errorf("failed to save cover: %w", err)
 	}
 
 	// Compute hash for cache validation.
 	hash, err := p.storage.Hash(bookID)
 	if err != nil {
-		return "", fmt.Errorf("failed to compute cover hash: %w", err)
+		return nil, fmt.Errorf("failed to compute cover hash: %w", err)
 	}
+
+	// Determine MIME type from artwork data.
+	format := detectImageFormat(artwork.Data)
 
 	p.logger.Debug("extracted and saved cover",
 		"book_id", bookID,
@@ -80,29 +90,61 @@ func (p *Processor) ExtractAndProcess(ctx context.Context, audioFilePath, bookID
 		"hash", hash[:8]+"...",
 	)
 
-	return hash, nil
+	return &CoverInfo{
+		Hash:   hash,
+		Size:   int64(len(artwork.Data)),
+		Format: format,
+	}, nil
+}
+
+// detectImageFormat detects the MIME type from image data magic bytes.
+func detectImageFormat(data []byte) string {
+	if len(data) < 4 {
+		return "application/octet-stream"
+	}
+
+	// Check magic bytes
+	switch {
+	case data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF:
+		return "image/jpeg"
+	case data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47:
+		return "image/png"
+	case data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46:
+		return "image/gif"
+	case data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46:
+		// Could be WebP (RIFF....WEBP)
+		if len(data) >= 12 && data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50 {
+			return "image/webp"
+		}
+		return "application/octet-stream"
+	default:
+		return "application/octet-stream"
+	}
 }
 
 // ProcessExternalCover reads an external cover image file and stores it.
 // This is used as a fallback when no embedded artwork is found.
-// Returns the SHA256 hash of the cover for cache validation.
-func (p *Processor) ProcessExternalCover(coverPath, bookID string) (string, error) {
+// Returns CoverInfo containing the hash, size, and format.
+func (p *Processor) ProcessExternalCover(coverPath, bookID string) (*CoverInfo, error) {
 	// Read the external cover file.
 	data, err := os.ReadFile(coverPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to read external cover: %w", err)
+		return nil, fmt.Errorf("failed to read external cover: %w", err)
 	}
 
 	// Save to storage.
 	if err := p.storage.Save(bookID, data); err != nil {
-		return "", fmt.Errorf("failed to save external cover: %w", err)
+		return nil, fmt.Errorf("failed to save external cover: %w", err)
 	}
 
 	// Compute hash for cache validation.
 	hash, err := p.storage.Hash(bookID)
 	if err != nil {
-		return "", fmt.Errorf("failed to compute cover hash: %w", err)
+		return nil, fmt.Errorf("failed to compute cover hash: %w", err)
 	}
+
+	// Determine MIME type from image data.
+	format := detectImageFormat(data)
 
 	p.logger.Debug("processed external cover",
 		"book_id", bookID,
@@ -111,5 +153,9 @@ func (p *Processor) ProcessExternalCover(coverPath, bookID string) (string, erro
 		"hash", hash[:8]+"...",
 	)
 
-	return hash, nil
+	return &CoverInfo{
+		Hash:   hash,
+		Size:   int64(len(data)),
+		Format: format,
+	}, nil
 }

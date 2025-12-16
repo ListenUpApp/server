@@ -18,6 +18,8 @@ type Services struct {
 	Genre      *service.GenreService
 	Tag        *service.TagService
 	Search     *service.SearchService
+	Invite     *service.InviteService
+	Admin      *service.AdminService
 }
 
 // StorageServices groups file storage handlers used by the API server.

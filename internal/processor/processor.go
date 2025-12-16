@@ -200,17 +200,32 @@ func (ep *EventProcessor) handleAudioFile(ctx context.Context, bookFolder, fileP
 		// Extract embedded cover art if present
 		if len(item.AudioFiles) > 0 {
 			firstAudioFile := item.AudioFiles[0].Path
-			if coverPath, extractErr := ep.scanner.ExtractCoverArt(ctx, firstAudioFile, book.ID); extractErr != nil {
+			if coverInfo, extractErr := ep.scanner.ExtractCoverArt(ctx, firstAudioFile, book.ID); extractErr != nil {
 				ep.logger.Warn("failed to extract embedded cover art",
 					"book_id", book.ID,
 					"path", firstAudioFile,
 					"error", extractErr,
 				)
-			} else if coverPath != "" {
+			} else if coverInfo != nil {
 				ep.logger.Info("extracted embedded cover art",
 					"book_id", book.ID,
-					"cover_path", coverPath,
+					"cover_hash", coverInfo.Hash,
 				)
+
+				// Update book with cover image info
+				book.CoverImage = &domain.ImageFileInfo{
+					Filename: "cover.jpg",
+					Format:   coverInfo.Format,
+					Size:     coverInfo.Size,
+				}
+
+				// Save updated book with cover info
+				if updateErr := ep.store.UpdateBook(ctx, book); updateErr != nil {
+					ep.logger.Warn("failed to update book with cover info",
+						"book_id", book.ID,
+						"error", updateErr,
+					)
+				}
 			}
 		}
 
@@ -251,17 +266,32 @@ func (ep *EventProcessor) handleAudioFile(ctx context.Context, bookFolder, fileP
 		// Extract embedded cover art if present (in case cover changed)
 		if len(item.AudioFiles) > 0 {
 			firstAudioFile := item.AudioFiles[0].Path
-			if coverPath, extractErr := ep.scanner.ExtractCoverArt(ctx, firstAudioFile, existingBook.ID); extractErr != nil {
+			if coverInfo, extractErr := ep.scanner.ExtractCoverArt(ctx, firstAudioFile, existingBook.ID); extractErr != nil {
 				ep.logger.Warn("failed to extract embedded cover art",
 					"book_id", existingBook.ID,
 					"path", firstAudioFile,
 					"error", extractErr,
 				)
-			} else if coverPath != "" {
+			} else if coverInfo != nil {
 				ep.logger.Info("extracted embedded cover art",
 					"book_id", existingBook.ID,
-					"cover_path", coverPath,
+					"cover_hash", coverInfo.Hash,
 				)
+
+				// Update book with cover image info
+				existingBook.CoverImage = &domain.ImageFileInfo{
+					Filename: "cover.jpg",
+					Format:   coverInfo.Format,
+					Size:     coverInfo.Size,
+				}
+
+				// Save updated book with cover info
+				if updateErr := ep.store.UpdateBook(ctx, existingBook); updateErr != nil {
+					ep.logger.Warn("failed to update book with cover info",
+						"book_id", existingBook.ID,
+						"error", updateErr,
+					)
+				}
 			}
 		}
 	}

@@ -286,6 +286,11 @@ func main() {
 	sessionService := service.NewSessionService(db, tokenService, log.Logger)
 	authService := service.NewAuthService(db, tokenService, sessionService, instanceService, log.Logger)
 
+	// Initialize invite and admin services.
+	serverURL := fmt.Sprintf("http://localhost:%s", cfg.Server.Port) // TODO: Get from config or auto-detect
+	inviteService := service.NewInviteService(db, sessionService, log.Logger, serverURL)
+	adminService := service.NewAdminService(db, log.Logger)
+
 	sseHandler := sse.NewHandler(sseManager, log.Logger)
 
 	// Seed default genres (no-op if already seeded).
@@ -330,6 +335,8 @@ func main() {
 		Genre:      genreService,
 		Tag:        tagService,
 		Search:     searchService,
+		Invite:     inviteService,
+		Admin:      adminService,
 	}
 	storage := &api.StorageServices{
 		Covers:            coverStorage,
