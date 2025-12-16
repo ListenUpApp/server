@@ -11,9 +11,9 @@ import "github.com/listenupapp/listenup-server/internal/domain"
 // Includes the denormalized contributor name for immediate rendering.
 type BookContributor struct {
 	ContributorID string   `json:"contributor_id"`
-	Name          string   `json:"name"`                    // Denormalized from Contributor entity
-	Roles         []string `json:"roles"`                   // String representation of roles
-	CreditedAs    string   `json:"credited_as,omitempty"`   // Original attribution (e.g., "Richard Bachman" when contributor is Stephen King)
+	Name          string   `json:"name"`                  // Denormalized from Contributor entity
+	Roles         []string `json:"roles"`                 // String representation of roles
+	CreditedAs    string   `json:"credited_as,omitempty"` // Original attribution (e.g., "Richard Bachman" when contributor is Stephen King)
 }
 
 // BookSeriesInfo is the client-facing representation of a book-series relationship.
@@ -44,9 +44,9 @@ type Book struct {
 
 	// Denormalized fields for immediate rendering
 	// These are populated by Enricher before sending to clients
-	Author     string           `json:"author,omitempty"`       // First contributor with role "author"
-	Narrator   string           `json:"narrator,omitempty"`     // First contributor with role "narrator"
-	SeriesInfo []BookSeriesInfo `json:"series_info,omitempty"`  // Resolved series with names and sequences
-	SeriesName string           `json:"series_name,omitempty"`  // Primary series name (first in list, for backward compat)
-	Genres     []string         `json:"genres,omitempty"`       // Resolved genre names
+	Author     string           `json:"author,omitempty"`      // First contributor with role "author"
+	Narrator   string           `json:"narrator,omitempty"`    // First contributor with role "narrator"
+	SeriesInfo []BookSeriesInfo `json:"series_info,omitempty"` // Resolved series with names and sequences
+	SeriesName string           `json:"series_name,omitempty"` // Primary series name (first in list, for backward compat)
+	Genres     []string         `json:"genres,omitempty"`      // Resolved genre names
 }

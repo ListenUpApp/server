@@ -27,7 +27,7 @@ func (s *Server) handleListContributors(w http.ResponseWriter, r *http.Request) 
 
 	params := parsePaginationParams(r)
 
-	contributors, err := s.syncService.GetContributorsForSync(ctx, userID, params)
+	contributors, err := s.services.Sync.GetContributorsForSync(ctx, userID, params)
 	if err != nil {
 		s.logger.Error("Failed to list contributors", "error", err, "user_id", userID)
 		response.InternalError(w, "Failed to retrieve contributors", s.logger)
@@ -147,7 +147,7 @@ func (s *Server) handleSearchContributors(w http.ResponseWriter, r *http.Request
 	}
 
 	// Use Bleve search for O(log n) performance instead of O(n) BadgerDB scan
-	contributors, err := s.searchService.SearchContributors(ctx, query, limit)
+	contributors, err := s.services.Search.SearchContributors(ctx, query, limit)
 	if err != nil {
 		s.logger.Error("Failed to search contributors", "error", err, "query", query, "user_id", userID)
 		response.InternalError(w, "Failed to search contributors", s.logger)
@@ -171,7 +171,7 @@ func (s *Server) handleSyncContributors(w http.ResponseWriter, r *http.Request) 
 
 	params := parsePaginationParams(r)
 
-	contributors, err := s.syncService.GetContributorsForSync(ctx, userID, params)
+	contributors, err := s.services.Sync.GetContributorsForSync(ctx, userID, params)
 	if err != nil {
 		s.logger.Error("Failed to sync contributors", "error", err)
 		response.InternalError(w, "Failed to sync contributors", s.logger)
@@ -469,7 +469,7 @@ func (s *Server) handleUploadContributorImage(w http.ResponseWriter, r *http.Req
 	}
 
 	// Save the image (overwrites any existing image)
-	if err := s.contributorImageStorage.Save(contributorID, imgData); err != nil {
+	if err := s.storage.ContributorImages.Save(contributorID, imgData); err != nil {
 		s.logger.Error("Failed to save contributor image", "error", err, "contributor_id", contributorID)
 		response.InternalError(w, "Failed to save image", s.logger)
 		return
@@ -508,13 +508,13 @@ func (s *Server) handleGetContributorImage(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Check if image exists
-	if !s.contributorImageStorage.Exists(contributorID) {
+	if !s.storage.ContributorImages.Exists(contributorID) {
 		response.NotFound(w, "Image not found for this contributor", s.logger)
 		return
 	}
 
 	// Get image file info for Last-Modified header
-	imagePath := s.contributorImageStorage.Path(contributorID)
+	imagePath := s.storage.ContributorImages.Path(contributorID)
 	fileInfo, err := os.Stat(imagePath)
 	if err != nil {
 		s.logger.Error("Failed to stat contributor image file", "contributor_id", contributorID, "error", err)
@@ -523,7 +523,7 @@ func (s *Server) handleGetContributorImage(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Compute ETag from hash
-	hash, err := s.contributorImageStorage.Hash(contributorID)
+	hash, err := s.storage.ContributorImages.Hash(contributorID)
 	if err != nil {
 		s.logger.Error("Failed to compute contributor image hash", "contributor_id", contributorID, "error", err)
 		response.InternalError(w, "Failed to retrieve image", s.logger)
@@ -538,7 +538,7 @@ func (s *Server) handleGetContributorImage(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Get image data
-	data, err := s.contributorImageStorage.Get(contributorID)
+	data, err := s.storage.ContributorImages.Get(contributorID)
 	if err != nil {
 		s.logger.Error("Failed to read contributor image file", "contributor_id", contributorID, "error", err)
 		response.InternalError(w, "Failed to retrieve image", s.logger)

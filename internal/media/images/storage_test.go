@@ -67,7 +67,7 @@ func TestStorage_Save(t *testing.T) {
 
 		err := storage.Save("", testData)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "book ID cannot be empty")
+		assert.Contains(t, err.Error(), "ID cannot be empty")
 	})
 
 	t.Run("returns error for empty image data", func(t *testing.T) {
@@ -118,7 +118,7 @@ func TestStorage_Get(t *testing.T) {
 		data, err := storage.Get("non-existent-book")
 		assert.Error(t, err)
 		assert.Nil(t, data)
-		assert.Contains(t, err.Error(), "cover not found")
+		assert.Contains(t, err.Error(), "image not found")
 	})
 
 	t.Run("returns error for empty book ID", func(t *testing.T) {
@@ -127,7 +127,7 @@ func TestStorage_Get(t *testing.T) {
 		data, err := storage.Get("")
 		assert.Error(t, err)
 		assert.Nil(t, data)
-		assert.Contains(t, err.Error(), "book ID cannot be empty")
+		assert.Contains(t, err.Error(), "ID cannot be empty")
 	})
 }
 
@@ -181,7 +181,7 @@ func TestStorage_Delete(t *testing.T) {
 
 		err := storage.Delete("")
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "book ID cannot be empty")
+		assert.Contains(t, err.Error(), "ID cannot be empty")
 	})
 }
 

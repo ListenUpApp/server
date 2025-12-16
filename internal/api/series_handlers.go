@@ -24,7 +24,7 @@ func (s *Server) handleListSeries(w http.ResponseWriter, r *http.Request) {
 
 	params := parsePaginationParams(r)
 
-	series, err := s.syncService.GetSeriesForSync(ctx, userID, params)
+	series, err := s.services.Sync.GetSeriesForSync(ctx, userID, params)
 	if err != nil {
 		s.logger.Error("Failed to list series", "error", err, "user_id", userID)
 		response.InternalError(w, "Failed to retrieve series", s.logger)
@@ -121,7 +121,7 @@ func (s *Server) handleSyncSeries(w http.ResponseWriter, r *http.Request) {
 
 	params := parsePaginationParams(r)
 
-	series, err := s.syncService.GetSeriesForSync(ctx, userID, params)
+	series, err := s.services.Sync.GetSeriesForSync(ctx, userID, params)
 	if err != nil {
 		s.logger.Error("Failed to sync series", "error", err)
 		response.InternalError(w, "Failed to sync series", s.logger)

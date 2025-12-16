@@ -34,7 +34,7 @@ func (s *Server) handleStreamAudio(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get book (handles access control).
-	book, err := s.bookService.GetBook(ctx, userID, bookID)
+	book, err := s.services.Book.GetBook(ctx, userID, bookID)
 	if err != nil {
 		if err == store.ErrBookNotFound {
 			response.NotFound(w, "Book not found", s.logger)

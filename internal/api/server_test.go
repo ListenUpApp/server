@@ -92,8 +92,24 @@ func setupTestServer(t *testing.T) (server *Server, cleanup func()) {
 	contributorImageStorage, err := images.NewStorageWithSubdir(tmpDir, "contributors")
 	require.NoError(t, err)
 
-	// Create server (nil searchService - not testing search in these tests).
-	server = NewServer(s, instanceService, authService, bookService, collectionService, sharingService, syncService, listeningService, genreService, tagService, nil, sseHandler, coverStorage, contributorImageStorage, logger)
+	// Create server using Services struct (nil Search - not testing search in these tests).
+	services := &Services{
+		Instance:   instanceService,
+		Auth:       authService,
+		Book:       bookService,
+		Collection: collectionService,
+		Sharing:    sharingService,
+		Sync:       syncService,
+		Listening:  listeningService,
+		Genre:      genreService,
+		Tag:        tagService,
+		Search:     nil,
+	}
+	storage := &StorageServices{
+		Covers:            coverStorage,
+		ContributorImages: contributorImageStorage,
+	}
+	server = NewServer(s, services, storage, sseHandler, logger)
 
 	// Return cleanup function.
 	cleanup = func() {
@@ -165,7 +181,7 @@ func TestGetInstance_Success(t *testing.T) {
 	defer cleanup()
 
 	// Initialize instance first.
-	instanceService := server.instanceService
+	instanceService := server.services.Instance
 	ctx := httptest.NewRequest(http.MethodGet, "/", http.NoBody).Context()
 	createdInstance, err := instanceService.InitializeInstance(ctx)
 	require.NoError(t, err)
@@ -219,7 +235,7 @@ func TestGetInstance_WithRootUser(t *testing.T) {
 	defer cleanup()
 
 	// Initialize instance and set root user.
-	instanceService := server.instanceService
+	instanceService := server.services.Instance
 	ctx := httptest.NewRequest(http.MethodGet, "/", http.NoBody).Context()
 	_, err := instanceService.InitializeInstance(ctx)
 	require.NoError(t, err)
@@ -252,7 +268,7 @@ func TestServer_Routes(t *testing.T) {
 	defer cleanup()
 
 	// Initialize instance for successful tests.
-	instanceService := server.instanceService
+	instanceService := server.services.Instance
 	ctx := httptest.NewRequest(http.MethodGet, "/", http.NoBody).Context()
 	_, err := instanceService.InitializeInstance(ctx)
 	require.NoError(t, err)
@@ -306,7 +322,7 @@ func TestServer_JSONResponse(t *testing.T) {
 	defer cleanup()
 
 	// Initialize instance.
-	instanceService := server.instanceService
+	instanceService := server.services.Instance
 	ctx := httptest.NewRequest(http.MethodGet, "/", http.NoBody).Context()
 	instance, err := instanceService.InitializeInstance(ctx)
 	require.NoError(t, err)
@@ -446,7 +462,7 @@ func TestGetCover_Success(t *testing.T) {
 	// Create a test cover image.
 	bookID := "book-test-123"
 	testCover := createTestJPEG(t, 1200, 1200)
-	err := server.coverStorage.Save(bookID, testCover)
+	err := server.storage.Covers.Save(bookID, testCover)
 	require.NoError(t, err)
 
 	// Request cover.
@@ -499,7 +515,7 @@ func TestGetCover_NotModified(t *testing.T) {
 	// Create a test cover.
 	bookID := "book-cache-test"
 	testCover := createTestJPEG(t, 800, 800)
-	err := server.coverStorage.Save(bookID, testCover)
+	err := server.storage.Covers.Save(bookID, testCover)
 	require.NoError(t, err)
 
 	// First request - get ETag.
@@ -531,7 +547,7 @@ func TestGetCover_ETagConsistency(t *testing.T) {
 	// Create a test cover.
 	bookID := "book-etag-test"
 	testCover := createTestJPEG(t, 600, 600)
-	err := server.coverStorage.Save(bookID, testCover)
+	err := server.storage.Covers.Save(bookID, testCover)
 	require.NoError(t, err)
 
 	// Make multiple requests.
@@ -559,7 +575,7 @@ func TestGetCover_CacheHeaders(t *testing.T) {
 	// Create a test cover.
 	bookID := "book-cache-headers-test"
 	testCover := createTestJPEG(t, 400, 400)
-	err := server.coverStorage.Save(bookID, testCover)
+	err := server.storage.Covers.Save(bookID, testCover)
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/covers/"+bookID, http.NoBody)
@@ -605,7 +621,7 @@ func TestGetCover_ContentLength(t *testing.T) {
 	// Create a test cover.
 	bookID := "book-content-length-test"
 	testCover := createTestJPEG(t, 1200, 1200)
-	err := server.coverStorage.Save(bookID, testCover)
+	err := server.storage.Covers.Save(bookID, testCover)
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/covers/"+bookID, http.NoBody)

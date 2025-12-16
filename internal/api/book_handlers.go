@@ -53,7 +53,7 @@ func (s *Server) handleUpdateBook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get the book with ACL check - ensures user has access.
-	book, err := s.bookService.GetBook(ctx, userID, bookID)
+	book, err := s.services.Book.GetBook(ctx, userID, bookID)
 	if err != nil {
 		if errors.Is(err, store.ErrBookNotFound) {
 			response.NotFound(w, "Book not found", s.logger)
@@ -148,7 +148,7 @@ func (s *Server) handleSetBookContributors(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Validate ACL - user must have access to the book
-	_, err := s.bookService.GetBook(ctx, userID, bookID)
+	_, err := s.services.Book.GetBook(ctx, userID, bookID)
 	if err != nil {
 		if errors.Is(err, store.ErrBookNotFound) {
 			response.NotFound(w, "Book not found", s.logger)
@@ -243,7 +243,7 @@ func (s *Server) handleSetBookSeries(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate ACL - user must have access to the book
-	_, err := s.bookService.GetBook(ctx, userID, bookID)
+	_, err := s.services.Book.GetBook(ctx, userID, bookID)
 	if err != nil {
 		if errors.Is(err, store.ErrBookNotFound) {
 			response.NotFound(w, "Book not found", s.logger)
@@ -307,7 +307,7 @@ func (s *Server) handleUploadCover(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate ACL - user must have access to the book
-	book, err := s.bookService.GetBook(ctx, userID, bookID)
+	book, err := s.services.Book.GetBook(ctx, userID, bookID)
 	if err != nil {
 		if errors.Is(err, store.ErrBookNotFound) {
 			response.NotFound(w, "Book not found", s.logger)
@@ -355,7 +355,7 @@ func (s *Server) handleUploadCover(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Save the cover image (overwrites any existing cover)
-	if err := s.coverStorage.Save(bookID, imgData); err != nil {
+	if err := s.storage.Covers.Save(bookID, imgData); err != nil {
 		s.logger.Error("Failed to save cover image", "error", err, "book_id", bookID)
 		response.InternalError(w, "Failed to save cover image", s.logger)
 		return

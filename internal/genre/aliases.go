@@ -26,11 +26,11 @@ var CanonicalAliases = map[string][]string{
 	"business & careers":   {"business-finance"},
 
 	// Children's Audiobooks
-	"children-s-audiobooks":  {"children-young-adult"},
-	"childrens-audiobooks":   {"children-young-adult"},
-	"children-s-books":       {"children-young-adult"},
-	"childrens-books":        {"children-young-adult"},
-	"children":               {"children-young-adult"},
+	"children-s-audiobooks": {"children-young-adult"},
+	"childrens-audiobooks":  {"children-young-adult"},
+	"children-s-books":      {"children-young-adult"},
+	"childrens-books":       {"children-young-adult"},
+	"children":              {"children-young-adult"},
 
 	// Comedy & Humor
 	"comedy-humor":     {"humor"},
@@ -83,11 +83,11 @@ var CanonicalAliases = map[string][]string{
 	"money & finance":   {"business-finance"},
 
 	// Mystery, Thriller & Suspense
-	"mystery-thriller-suspense":         {"mystery-thriller"},
-	"mystery-thriller-and-suspense":     {"mystery-thriller"},
-	"mystery-thriller & suspense":       {"mystery-thriller"},
-	"mystery, thriller & suspense":      {"mystery-thriller"},
-	"mystery, thriller and suspense":    {"mystery-thriller"},
+	"mystery-thriller-suspense":      {"mystery-thriller"},
+	"mystery-thriller-and-suspense":  {"mystery-thriller"},
+	"mystery-thriller & suspense":    {"mystery-thriller"},
+	"mystery, thriller & suspense":   {"mystery-thriller"},
+	"mystery, thriller and suspense": {"mystery-thriller"},
 
 	// Politics & Social Sciences
 	"politics-social-sciences":     {"politics-social"},
@@ -95,12 +95,12 @@ var CanonicalAliases = map[string][]string{
 	"politics & social sciences":   {"politics-social"},
 
 	// Relationships, Parenting & Personal Development
-	"relationships-parenting-personal-development": {"self-help"},
+	"relationships-parenting-personal-development":     {"self-help"},
 	"relationships-parenting-and-personal-development": {"self-help"},
-	"parenting-families":    {"self-help"},
-	"parenting-and-families": {"self-help"},
-	"parenting & families":  {"self-help"},
-	"personal-development":  {"self-help"},
+	"parenting-families":                               {"self-help"},
+	"parenting-and-families":                           {"self-help"},
+	"parenting & families":                             {"self-help"},
+	"personal-development":                             {"self-help"},
 
 	// Religion & Spirituality
 	"religion-spirituality":     {"religion-spirituality"},
@@ -128,10 +128,10 @@ var CanonicalAliases = map[string][]string{
 	"sports & outdoors":   {"non-fiction"},
 
 	// Teen & Young Adult
-	"teens-young-adult":     {"young-adult"},
-	"teen-young-adult":      {"young-adult"},
-	"teen-and-young-adult":  {"young-adult"},
-	"teen & young adult":    {"young-adult"},
+	"teens-young-adult":    {"young-adult"},
+	"teen-young-adult":     {"young-adult"},
+	"teen-and-young-adult": {"young-adult"},
+	"teen & young adult":   {"young-adult"},
 
 	// Travel & Tourism
 	"travel-tourism":     {"travel"},
@@ -148,8 +148,8 @@ var CanonicalAliases = map[string][]string{
 	"action & adventure":   {"adventure"},
 
 	// African American
-	"african-american":          {"fiction"},
-	"african-american-fiction":  {"fiction"},
+	"african-american":         {"fiction"},
+	"african-american-fiction": {"fiction"},
 
 	// Ancient, Classical & Medieval Literature
 	"ancient-classical-medieval-literature": {"literary-fiction"},
@@ -206,7 +206,7 @@ var CanonicalAliases = map[string][]string{
 	"poetry": {"fiction"},
 
 	// Women's Fiction
-	"womens-fiction": {"fiction"},
+	"womens-fiction":  {"fiction"},
 	"women-s-fiction": {"fiction"},
 
 	// World Literature
@@ -235,19 +235,19 @@ var CanonicalAliases = map[string][]string{
 	// MYSTERY, THRILLER & SUSPENSE SUBCATEGORIES
 	// ===========================================
 
-	"thriller":                {"mystery-thriller"},
-	"suspense":                {"mystery-thriller"},
-	"mystery-thriller":        {"mystery-thriller"},
-	"mystery":                 {"mystery-thriller"},
-	"crime":                   {"crime-fiction"},
-	"crime-fiction":           {"crime-fiction"},
-	"crime fiction":           {"crime-fiction"},
-	"detective":               {"mystery-thriller"},
-	"traditional-detectives":  {"mystery-thriller"},
-	"traditional detectives":  {"mystery-thriller"},
-	"cozy":                    {"cozy-mystery"},
-	"cozy-mystery":            {"cozy-mystery"},
-	"whodunit":                {"mystery-thriller"},
+	"thriller":               {"mystery-thriller"},
+	"suspense":               {"mystery-thriller"},
+	"mystery-thriller":       {"mystery-thriller"},
+	"mystery":                {"mystery-thriller"},
+	"crime":                  {"crime-fiction"},
+	"crime-fiction":          {"crime-fiction"},
+	"crime fiction":          {"crime-fiction"},
+	"detective":              {"mystery-thriller"},
+	"traditional-detectives": {"mystery-thriller"},
+	"traditional detectives": {"mystery-thriller"},
+	"cozy":                   {"cozy-mystery"},
+	"cozy-mystery":           {"cozy-mystery"},
+	"whodunit":               {"mystery-thriller"},
 
 	// ===========================================
 	// YOUNG ADULT VARIATIONS
@@ -261,21 +261,21 @@ var CanonicalAliases = map[string][]string{
 	// NON-FICTION VARIATIONS
 	// ===========================================
 
-	"self-help":  {"self-help"},
-	"selfhelp":   {"self-help"},
-	"self help":  {"self-help"},
+	"self-help": {"self-help"},
+	"selfhelp":  {"self-help"},
+	"self help": {"self-help"},
 
 	// ===========================================
 	// LITRPG / PROGRESSION FANTASY
 	// ===========================================
 
-	"litrpg":               {"litrpg"},
-	"lit-rpg":              {"litrpg"},
-	"lit rpg":              {"litrpg"},
-	"gamelit":              {"litrpg"},
-	"progression":          {"progression-fantasy"},
-	"progression-fantasy":  {"progression-fantasy"},
-	"cultivation":          {"progression-fantasy"},
+	"litrpg":              {"litrpg"},
+	"lit-rpg":             {"litrpg"},
+	"lit rpg":             {"litrpg"},
+	"gamelit":             {"litrpg"},
+	"progression":         {"progression-fantasy"},
+	"progression-fantasy": {"progression-fantasy"},
+	"cultivation":         {"progression-fantasy"},
 
 	// ===========================================
 	// ROMANCE SUBCATEGORIES

@@ -30,7 +30,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if search service is available
-	if s.searchService == nil {
+	if s.services.Search == nil {
 		response.Error(w, http.StatusServiceUnavailable, "Search service not available", s.logger)
 		return
 	}
@@ -51,7 +51,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	// Execute search
-	result, err := s.searchService.Search(searchCtx, params)
+	result, err := s.services.Search.Search(searchCtx, params)
 	if err != nil {
 		if searchCtx.Err() == context.DeadlineExceeded {
 			s.logger.Warn("search timed out", "query", query, "user_id", userID)
@@ -77,7 +77,7 @@ func (s *Server) handleReindex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.searchService == nil {
+	if s.services.Search == nil {
 		response.Error(w, http.StatusServiceUnavailable, "Search service not available", s.logger)
 		return
 	}
@@ -90,10 +90,10 @@ func (s *Server) handleReindex(w http.ResponseWriter, r *http.Request) {
 	// Run reindex in background
 	go func() {
 		reindexCtx := context.Background()
-		if err := s.searchService.ReindexAll(reindexCtx); err != nil {
+		if err := s.services.Search.ReindexAll(reindexCtx); err != nil {
 			s.logger.Error("reindex failed", "error", err)
 		} else {
-			count, _ := s.searchService.DocumentCount()
+			count, _ := s.services.Search.DocumentCount()
 			s.logger.Info("reindex completed", "documents", count)
 		}
 	}()
@@ -114,12 +114,12 @@ func (s *Server) handleSearchStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.searchService == nil {
+	if s.services.Search == nil {
 		response.Error(w, http.StatusServiceUnavailable, "Search service not available", s.logger)
 		return
 	}
 
-	count, err := s.searchService.DocumentCount()
+	count, err := s.services.Search.DocumentCount()
 	if err != nil {
 		s.logger.Error("failed to get document count", "error", err)
 		response.InternalError(w, "Failed to get search statistics", s.logger)

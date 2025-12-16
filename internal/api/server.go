@@ -14,53 +14,37 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/listenupapp/listenup-server/internal/http/response"
-	"github.com/listenupapp/listenup-server/internal/media/images"
 	"github.com/listenupapp/listenup-server/internal/scanner"
-	"github.com/listenupapp/listenup-server/internal/service"
 	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
 // Server holds dependencies for HTTP handlers.
 type Server struct {
-	store                   *store.Store
-	instanceService         *service.InstanceService
-	authService             *service.AuthService
-	bookService             *service.BookService
-	collectionService       *service.CollectionService
-	sharingService          *service.SharingService
-	syncService             *service.SyncService
-	listeningService        *service.ListeningService
-	genreService            *service.GenreService
-	tagService              *service.TagService
-	searchService           *service.SearchService
-	sseHandler              *sse.Handler
-	coverStorage            *images.Storage // Book cover images
-	contributorImageStorage *images.Storage // Contributor profile photos
-	router                  *chi.Mux
-	logger                  *slog.Logger
-	authRateLimiter         *RateLimiter
+	store           *store.Store
+	services        *Services
+	storage         *StorageServices
+	sseHandler      *sse.Handler
+	router          *chi.Mux
+	logger          *slog.Logger
+	authRateLimiter *RateLimiter
 }
 
 // NewServer creates a new HTTP server with all routes configured.
-func NewServer(store *store.Store, instanceService *service.InstanceService, authService *service.AuthService, bookService *service.BookService, collectionService *service.CollectionService, sharingService *service.SharingService, syncService *service.SyncService, listeningService *service.ListeningService, genreService *service.GenreService, tagService *service.TagService, searchService *service.SearchService, sseHandler *sse.Handler, coverStorage *images.Storage, contributorImageStorage *images.Storage, logger *slog.Logger) *Server {
+func NewServer(
+	store *store.Store,
+	services *Services,
+	storage *StorageServices,
+	sseHandler *sse.Handler,
+	logger *slog.Logger,
+) *Server {
 	s := &Server{
-		store:                   store,
-		instanceService:         instanceService,
-		authService:             authService,
-		bookService:             bookService,
-		collectionService:       collectionService,
-		sharingService:          sharingService,
-		syncService:             syncService,
-		listeningService:        listeningService,
-		genreService:            genreService,
-		tagService:              tagService,
-		searchService:           searchService,
-		sseHandler:              sseHandler,
-		coverStorage:            coverStorage,
-		contributorImageStorage: contributorImageStorage,
-		router:                  chi.NewRouter(),
-		logger:                  logger,
+		store:      store,
+		services:   services,
+		storage:    storage,
+		sseHandler: sseHandler,
+		router:     chi.NewRouter(),
+		logger:     logger,
 		// Rate limiter for login endpoint: 20 attempts per minute with burst of 10.
 		// Sensible default for self-hosted - protects against brute force
 		// without impeding legitimate use.
@@ -282,7 +266,7 @@ func (s *Server) handleHealthCheck(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) handleGetInstance(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	instance, err := s.instanceService.GetInstance(ctx)
+	instance, err := s.services.Instance.GetInstance(ctx)
 	if err != nil {
 		s.logger.Error("Failed to get instance", "error", err)
 		response.NotFound(w, "Server instance configuration not found", s.logger)
@@ -319,7 +303,7 @@ func (s *Server) handleListBooks(w http.ResponseWriter, r *http.Request) {
 	// Parse pagination parameters from query string.
 	params := parsePaginationParams(r)
 
-	books, err := s.bookService.ListBooks(ctx, userID, params)
+	books, err := s.services.Book.ListBooks(ctx, userID, params)
 	if err != nil {
 		s.logger.Error("Failed to list books", "error", err, "user_id", userID)
 		response.InternalError(w, "Failed to retrieve books", s.logger)
@@ -345,7 +329,7 @@ func (s *Server) handleGetBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	book, err := s.bookService.GetBook(ctx, userID, id)
+	book, err := s.services.Book.GetBook(ctx, userID, id)
 	if err != nil {
 		if errors.Is(err, store.ErrBookNotFound) {
 			response.NotFound(w, "Book not found", s.logger)
@@ -372,7 +356,7 @@ func (s *Server) handleTriggerScan(w http.ResponseWriter, r *http.Request) {
 	// Parse force parameter.
 	force := r.URL.Query().Get("force") == "true"
 
-	result, err := s.bookService.TriggerScan(ctx, libraryID, scanner.ScanOptions{
+	result, err := s.services.Book.TriggerScan(ctx, libraryID, scanner.ScanOptions{
 		Force: force,
 	})
 	if err != nil {
@@ -383,7 +367,7 @@ func (s *Server) handleTriggerScan(w http.ResponseWriter, r *http.Request) {
 
 	// Trigger search reindex after scan completes to ensure index is in sync.
 	// This handles cases where async per-book indexing may have failed.
-	if s.searchService != nil && (result.Added > 0 || result.Updated > 0) {
+	if s.services.Search != nil && (result.Added > 0 || result.Updated > 0) {
 		go func() {
 			// Use background context since HTTP request context will be cancelled
 			reindexCtx := context.Background()
@@ -391,10 +375,10 @@ func (s *Server) handleTriggerScan(w http.ResponseWriter, r *http.Request) {
 				"added", result.Added,
 				"updated", result.Updated,
 			)
-			if err := s.searchService.ReindexAll(reindexCtx); err != nil {
+			if err := s.services.Search.ReindexAll(reindexCtx); err != nil {
 				s.logger.Error("Failed to reindex after scan", "error", err)
 			} else {
-				count, _ := s.searchService.DocumentCount()
+				count, _ := s.services.Search.DocumentCount()
 				s.logger.Info("Search reindex after scan completed", "documents", count)
 			}
 		}()
@@ -407,7 +391,7 @@ func (s *Server) handleTriggerScan(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGetManifest(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	manifest, err := s.syncService.GetManifest(ctx)
+	manifest, err := s.services.Sync.GetManifest(ctx)
 	if err != nil {
 		s.logger.Error("Failed to get manifest", "error", err)
 		response.InternalError(w, "Failed to retrieve sync manifest", s.logger)
@@ -426,7 +410,7 @@ func (s *Server) handleSyncBooks(w http.ResponseWriter, r *http.Request) {
 	// Parse pagination parameters.
 	params := parsePaginationParams(r)
 
-	books, err := s.syncService.GetBooksForSync(ctx, userID, params)
+	books, err := s.services.Sync.GetBooksForSync(ctx, userID, params)
 	if err != nil {
 		s.logger.Error("Failed to get books for sync", "error", err)
 		response.InternalError(w, "Failed to retrieve books", s.logger)
@@ -445,13 +429,13 @@ func (s *Server) handleGetCover(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if cover exists.
-	if !s.coverStorage.Exists(bookID) {
+	if !s.storage.Covers.Exists(bookID) {
 		response.NotFound(w, "Cover not found for this book", s.logger)
 		return
 	}
 
 	// Get cover file info for Last-Modified header.
-	coverPath := s.coverStorage.Path(bookID)
+	coverPath := s.storage.Covers.Path(bookID)
 	fileInfo, err := os.Stat(coverPath)
 	if err != nil {
 		s.logger.Error("Failed to stat cover file", "book_id", bookID, "error", err)
@@ -460,7 +444,7 @@ func (s *Server) handleGetCover(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Compute ETag from hash.
-	hash, err := s.coverStorage.Hash(bookID)
+	hash, err := s.storage.Covers.Hash(bookID)
 	if err != nil {
 		s.logger.Error("Failed to compute cover hash", "book_id", bookID, "error", err)
 		response.InternalError(w, "Failed to retrieve cover", s.logger)
@@ -475,7 +459,7 @@ func (s *Server) handleGetCover(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get cover data.
-	data, err := s.coverStorage.Get(bookID)
+	data, err := s.storage.Covers.Get(bookID)
 	if err != nil {
 		s.logger.Error("Failed to read cover file", "book_id", bookID, "error", err)
 		response.InternalError(w, "Failed to retrieve cover", s.logger)

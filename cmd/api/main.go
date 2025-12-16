@@ -313,9 +313,23 @@ func main() {
 	}
 
 	// Create HTTP server with service layer.
-	// TODO: Future note to self: This is going to get old fast depending on how many
-	// services we need to instantiate. Let's look into a better solution.
-	httpServer := api.NewServer(db, instanceService, authService, bookService, collectionService, sharingService, syncService, listeningService, genreService, tagService, searchService, sseHandler, coverStorage, contributorImageStorage, log.Logger)
+	services := &api.Services{
+		Instance:   instanceService,
+		Auth:       authService,
+		Book:       bookService,
+		Collection: collectionService,
+		Sharing:    sharingService,
+		Sync:       syncService,
+		Listening:  listeningService,
+		Genre:      genreService,
+		Tag:        tagService,
+		Search:     searchService,
+	}
+	storage := &api.StorageServices{
+		Covers:            coverStorage,
+		ContributorImages: contributorImageStorage,
+	}
+	httpServer := api.NewServer(db, services, storage, sseHandler, log.Logger)
 
 	// Configure HTTP server.
 	srv := &http.Server{

@@ -15,7 +15,7 @@ import (
 func (s *Server) handleListGenres(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	genres, err := s.genreService.ListGenres(ctx)
+	genres, err := s.services.Genre.ListGenres(ctx)
 	if err != nil {
 		s.logger.Error("Failed to list genres", "error", err)
 		response.InternalError(w, "Failed to list genres", s.logger)
@@ -30,7 +30,7 @@ func (s *Server) handleGetGenre(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := chi.URLParam(r, "id")
 
-	genre, err := s.genreService.GetGenre(ctx, id)
+	genre, err := s.services.Genre.GetGenre(ctx, id)
 	if errors.Is(err, store.ErrGenreNotFound) {
 		response.NotFound(w, "Genre not found", s.logger)
 		return
@@ -60,7 +60,7 @@ func (s *Server) handleCreateGenre(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	genre, err := s.genreService.CreateGenre(ctx, req)
+	genre, err := s.services.Genre.CreateGenre(ctx, req)
 	if err != nil {
 		s.logger.Error("Failed to create genre", "error", err)
 		response.BadRequest(w, err.Error(), s.logger)
@@ -87,7 +87,7 @@ func (s *Server) handleUpdateGenre(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	genre, err := s.genreService.UpdateGenre(ctx, id, req)
+	genre, err := s.services.Genre.UpdateGenre(ctx, id, req)
 	if errors.Is(err, store.ErrGenreNotFound) {
 		response.NotFound(w, "Genre not found", s.logger)
 		return
@@ -112,7 +112,7 @@ func (s *Server) handleDeleteGenre(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := s.genreService.DeleteGenre(ctx, id)
+	err := s.services.Genre.DeleteGenre(ctx, id)
 	if errors.Is(err, store.ErrGenreNotFound) {
 		response.NotFound(w, "Genre not found", s.logger)
 		return
@@ -153,7 +153,7 @@ func (s *Server) handleMoveGenre(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	genre, err := s.genreService.MoveGenre(ctx, id, req.ParentID)
+	genre, err := s.services.Genre.MoveGenre(ctx, id, req.ParentID)
 	if err != nil {
 		s.logger.Error("Failed to move genre", "error", err, "id", id)
 		response.BadRequest(w, err.Error(), s.logger)
@@ -179,7 +179,7 @@ func (s *Server) handleMergeGenres(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.genreService.MergeGenres(ctx, req); err != nil {
+	if err := s.services.Genre.MergeGenres(ctx, req); err != nil {
 		s.logger.Error("Failed to merge genres", "error", err)
 		response.BadRequest(w, err.Error(), s.logger)
 		return
@@ -194,7 +194,7 @@ func (s *Server) handleGetGenreBooks(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	includeDescendants := r.URL.Query().Get("include_descendants") == "true"
 
-	bookIDs, err := s.genreService.GetBooksForGenre(ctx, id, includeDescendants)
+	bookIDs, err := s.services.Genre.GetBooksForGenre(ctx, id, includeDescendants)
 	if err != nil {
 		s.logger.Error("Failed to get genre books", "error", err, "id", id)
 		response.InternalError(w, "Failed to get books", s.logger)
@@ -212,7 +212,7 @@ func (s *Server) handleGetGenreBooks(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleListUnmappedGenres(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	unmapped, err := s.genreService.ListUnmappedGenres(ctx)
+	unmapped, err := s.services.Genre.ListUnmappedGenres(ctx)
 	if err != nil {
 		s.logger.Error("Failed to list unmapped genres", "error", err)
 		response.InternalError(w, "Failed to list unmapped genres", s.logger)
@@ -238,7 +238,7 @@ func (s *Server) handleMapUnmappedGenre(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := s.genreService.MapUnmappedGenre(ctx, userID, req); err != nil {
+	if err := s.services.Genre.MapUnmappedGenre(ctx, userID, req); err != nil {
 		s.logger.Error("Failed to map genre", "error", err)
 		response.BadRequest(w, err.Error(), s.logger)
 		return
@@ -252,7 +252,7 @@ func (s *Server) handleGetBookGenres(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	bookID := chi.URLParam(r, "id")
 
-	genres, err := s.genreService.GetGenresForBook(ctx, bookID)
+	genres, err := s.services.Genre.GetGenresForBook(ctx, bookID)
 	if err != nil {
 		s.logger.Error("Failed to get book genres", "error", err, "book_id", bookID)
 		response.InternalError(w, "Failed to get genres", s.logger)
@@ -281,7 +281,7 @@ func (s *Server) handleSetBookGenres(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.genreService.SetBookGenres(ctx, bookID, req.GenreIDs); err != nil {
+	if err := s.services.Genre.SetBookGenres(ctx, bookID, req.GenreIDs); err != nil {
 		s.logger.Error("Failed to set book genres", "error", err, "book_id", bookID)
 		response.InternalError(w, "Failed to set genres", s.logger)
 		return

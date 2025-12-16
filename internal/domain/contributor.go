@@ -4,7 +4,7 @@ package domain
 type Contributor struct {
 	Syncable
 	Name      string   `json:"name"`
-	SortName  string   `json:"sort_name,omitempty"`  // "Sanderson, Brandon" for proper sorting
+	SortName  string   `json:"sort_name,omitempty"` // "Sanderson, Brandon" for proper sorting
 	Biography string   `json:"biography,omitempty"`
 	ImageURL  string   `json:"image_url,omitempty"`
 	ASIN      string   `json:"asin,omitempty"`       // Amazon author ID for future metadata enrichment
