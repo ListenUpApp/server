@@ -135,9 +135,10 @@ func convertMetadata(file *audiometa.File) *Metadata {
 		SeriesPart: metadata.InferSeriesPosition(file),
 		ISBN:       file.Tags.ISBN,
 		ASIN:       file.Tags.ASIN,
+		Language:   file.Tags.Language,
 
-		// Description from comment.
-		Description: file.Tags.Comment,
+		// Description: prefer explicit description, fall back to comment.
+		Description: getDescription(file),
 	}
 
 	// Fall back to Artist if AlbumArtist is not set.
@@ -168,4 +169,13 @@ func joinOrFirst(values []string) string {
 		return values[0]
 	}
 	return strings.Join(values, ", ")
+}
+
+// getDescription returns the description, preferring explicit Description over Comment.
+// AudiobookShelf and other tools treat these as separate fields.
+func getDescription(file *audiometa.File) string {
+	if file.Tags.Description != "" {
+		return file.Tags.Description
+	}
+	return file.Tags.Comment
 }

@@ -58,7 +58,7 @@ func (s *Server) handleCreateCollection(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	collection, err := s.collectionService.CreateCollection(ctx, userID, req.LibraryID, req.Name)
+	collection, err := s.services.Collection.CreateCollection(ctx, userID, req.LibraryID, req.Name)
 	if err != nil {
 		s.logger.Error("Failed to create collection", "error", err, "user_id", userID)
 		response.InternalError(w, "Failed to create collection", s.logger)
@@ -84,7 +84,7 @@ func (s *Server) handleListCollections(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	collections, err := s.collectionService.ListCollections(ctx, userID, libraryID)
+	collections, err := s.services.Collection.ListCollections(ctx, userID, libraryID)
 	if err != nil {
 		s.logger.Error("Failed to list collections", "error", err, "user_id", userID, "library_id", libraryID)
 		response.InternalError(w, "Failed to retrieve collections", s.logger)
@@ -110,7 +110,7 @@ func (s *Server) handleGetCollection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	collection, err := s.collectionService.GetCollection(ctx, userID, id)
+	collection, err := s.services.Collection.GetCollection(ctx, userID, id)
 	if err != nil {
 		if errors.Is(err, store.ErrCollectionNotFound) {
 			response.NotFound(w, "Collection not found", s.logger)
@@ -157,7 +157,7 @@ func (s *Server) handleUpdateCollection(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	collection, err := s.collectionService.UpdateCollection(ctx, userID, id, req.Name)
+	collection, err := s.services.Collection.UpdateCollection(ctx, userID, id, req.Name)
 	if err != nil {
 		if errors.Is(err, store.ErrCollectionNotFound) {
 			response.NotFound(w, "Collection not found", s.logger)
@@ -191,7 +191,7 @@ func (s *Server) handleDeleteCollection(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	err := s.collectionService.DeleteCollection(ctx, userID, id)
+	err := s.services.Collection.DeleteCollection(ctx, userID, id)
 	if err != nil {
 		if errors.Is(err, store.ErrCollectionNotFound) {
 			response.NotFound(w, "Collection not found", s.logger)
@@ -238,7 +238,7 @@ func (s *Server) handleAddBookToCollection(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	err := s.collectionService.AddBookToCollection(ctx, userID, id, req.BookID)
+	err := s.services.Collection.AddBookToCollection(ctx, userID, id, req.BookID)
 	if err != nil {
 		if errors.Is(err, store.ErrCollectionNotFound) {
 			response.NotFound(w, "Collection not found", s.logger)
@@ -284,7 +284,7 @@ func (s *Server) handleRemoveBookFromCollection(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	err := s.collectionService.RemoveBookFromCollection(ctx, userID, id, bookID)
+	err := s.services.Collection.RemoveBookFromCollection(ctx, userID, id, bookID)
 	if err != nil {
 		if errors.Is(err, store.ErrCollectionNotFound) {
 			response.NotFound(w, "Collection not found", s.logger)
@@ -320,7 +320,7 @@ func (s *Server) handleGetCollectionBooks(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	books, err := s.collectionService.GetCollectionBooks(ctx, userID, id)
+	books, err := s.services.Collection.GetCollectionBooks(ctx, userID, id)
 	if err != nil {
 		if errors.Is(err, store.ErrCollectionNotFound) {
 			response.NotFound(w, "Collection not found", s.logger)

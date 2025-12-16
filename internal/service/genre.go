@@ -216,6 +216,26 @@ func (s *GenreService) SetBookGenres(ctx context.Context, bookID string, genreID
 	return s.store.SetBookGenres(ctx, bookID, genreIDs)
 }
 
+// GetGenresForBook returns all genres assigned to a book.
+func (s *GenreService) GetGenresForBook(ctx context.Context, bookID string) ([]*domain.Genre, error) {
+	genreIDs, err := s.store.GetGenreIDsForBook(ctx, bookID)
+	if err != nil {
+		return nil, err
+	}
+
+	var genres []*domain.Genre
+	for _, gid := range genreIDs {
+		g, err := s.store.GetGenre(ctx, gid)
+		if err != nil {
+			// Genre may have been deleted; skip
+			continue
+		}
+		genres = append(genres, g)
+	}
+
+	return genres, nil
+}
+
 // SeedDefaultGenres creates the default genre hierarchy if not already seeded.
 func (s *GenreService) SeedDefaultGenres(ctx context.Context) error {
 	return s.store.SeedDefaultGenres(ctx)

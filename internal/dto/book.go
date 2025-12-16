@@ -11,16 +11,25 @@ import "github.com/listenupapp/listenup-server/internal/domain"
 // Includes the denormalized contributor name for immediate rendering.
 type BookContributor struct {
 	ContributorID string   `json:"contributor_id"`
-	Name          string   `json:"name"`  // Denormalized from Contributor entity
-	Roles         []string `json:"roles"` // String representation of roles
+	Name          string   `json:"name"`                  // Denormalized from Contributor entity
+	Roles         []string `json:"roles"`                 // String representation of roles
+	CreditedAs    string   `json:"credited_as,omitempty"` // Original attribution (e.g., "Richard Bachman" when contributor is Stephen King)
+}
+
+// BookSeriesInfo is the client-facing representation of a book-series relationship.
+// Includes the denormalized series name and sequence for immediate rendering.
+type BookSeriesInfo struct {
+	SeriesID string `json:"series_id"`
+	Name     string `json:"name"`               // Denormalized from Series entity
+	Sequence string `json:"sequence,omitempty"` // Position in this series
 }
 
 // Book is the client-facing representation of a book.
 //
 // Philosophy: SSE events are UI updates, not database replication.
 // Therefore, events must contain everything needed to render immediately:
-//   - Denormalized display fields (Author, Narrator, SeriesName)
-//   - Normalized relationship IDs (Contributors, SeriesID)
+//   - Denormalized display fields (Author, Narrator, SeriesInfo)
+//   - Normalized relationship IDs (Contributors, Series)
 //
 // This eliminates race conditions and "Unknown Author" flashes while still
 // preserving relational integrity for navigation and filtering.
@@ -35,8 +44,9 @@ type Book struct {
 
 	// Denormalized fields for immediate rendering
 	// These are populated by Enricher before sending to clients
-	Author     string   `json:"author,omitempty"`      // First contributor with role "author"
-	Narrator   string   `json:"narrator,omitempty"`    // First contributor with role "narrator"
-	SeriesName string   `json:"series_name,omitempty"` // Resolved series name
-	Genres     []string `json:"genres,omitempty"`      // Resolved genre names
+	Author     string           `json:"author,omitempty"`      // First contributor with role "author"
+	Narrator   string           `json:"narrator,omitempty"`    // First contributor with role "narrator"
+	SeriesInfo []BookSeriesInfo `json:"series_info,omitempty"` // Resolved series with names and sequences
+	SeriesName string           `json:"series_name,omitempty"` // Primary series name (first in list, for backward compat)
+	Genres     []string         `json:"genres,omitempty"`      // Resolved genre names
 }

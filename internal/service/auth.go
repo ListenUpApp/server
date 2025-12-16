@@ -11,6 +11,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/listenupapp/listenup-server/internal/auth"
 	"github.com/listenupapp/listenup-server/internal/domain"
+	domainerrors "github.com/listenupapp/listenup-server/internal/errors"
 	"github.com/listenupapp/listenup-server/internal/id"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
@@ -105,7 +106,7 @@ func (s *AuthService) Setup(ctx context.Context, req SetupRequest) (*AuthRespons
 		return nil, fmt.Errorf("check setup status: %w", err)
 	}
 	if !setupRequired {
-		return nil, fmt.Errorf("server is already configured")
+		return nil, domainerrors.AlreadyConfigured("server is already configured")
 	}
 
 	// Hash password
@@ -138,7 +139,7 @@ func (s *AuthService) Setup(ctx context.Context, req SetupRequest) (*AuthRespons
 	// Save user
 	if err := s.store.CreateUser(ctx, user); err != nil {
 		if errors.Is(err, store.ErrEmailExists) {
-			return nil, fmt.Errorf("email already in use")
+			return nil, domainerrors.AlreadyExists("email already in use")
 		}
 		return nil, fmt.Errorf("create user: %w", err)
 	}
@@ -184,7 +185,7 @@ func (s *AuthService) Login(ctx context.Context, req LoginRequest) (*AuthRespons
 
 	// Validate device info
 	if !req.DeviceInfo.IsValid() {
-		return nil, fmt.Errorf("device_info is required (device_type and platform)")
+		return nil, domainerrors.Validation("device_info is required (device_type and platform)")
 	}
 
 	// Find user by email
@@ -192,7 +193,7 @@ func (s *AuthService) Login(ctx context.Context, req LoginRequest) (*AuthRespons
 	if err != nil {
 		if errors.Is(err, store.ErrUserNotFound) {
 			// Don't leak whether email exists
-			return nil, fmt.Errorf("invalid email or password")
+			return nil, domainerrors.InvalidCredentials("invalid email or password")
 		}
 		return nil, fmt.Errorf("lookup user: %w", err)
 	}
@@ -203,7 +204,7 @@ func (s *AuthService) Login(ctx context.Context, req LoginRequest) (*AuthRespons
 		return nil, fmt.Errorf("verify password: %w", err)
 	}
 	if !valid {
-		return nil, fmt.Errorf("invalid email or password")
+		return nil, domainerrors.InvalidCredentials("invalid email or password")
 	}
 
 	// Update last login
@@ -283,24 +284,24 @@ func (s *AuthService) VerifyAccessToken(ctx context.Context, tokenString string)
 	return user, claims, nil
 }
 
-// formatValidationError converts validator errors to user-friendly messages.
+// formatValidationError converts validator errors to user-friendly domain errors.
 func formatValidationError(err error) error {
 	var validationErrs validator.ValidationErrors
 	if errors.As(err, &validationErrs) {
-		// Return first validation error
+		// Return first validation error as a domain error
 		for _, e := range validationErrs {
 			field := e.Field()
 			switch e.Tag() {
 			case "required":
-				return fmt.Errorf("%s is required", field)
+				return domainerrors.Validationf("%s is required", field)
 			case "email":
-				return fmt.Errorf("%s must be a valid email address", field)
+				return domainerrors.Validationf("%s must be a valid email address", field)
 			case "min":
-				return fmt.Errorf("%s must be at least %s characters", field, e.Param())
+				return domainerrors.Validationf("%s must be at least %s characters", field, e.Param())
 			case "max":
-				return fmt.Errorf("%s exceeds maximum length of %s characters", field, e.Param())
+				return domainerrors.Validationf("%s exceeds maximum length of %s characters", field, e.Param())
 			default:
-				return fmt.Errorf("%s is invalid", field)
+				return domainerrors.Validationf("%s is invalid", field)
 			}
 		}
 	}

@@ -6,6 +6,13 @@ import (
 	"time"
 )
 
+// BookSeries links a book to a series with its sequence position.
+// A book can belong to multiple series (e.g., "Mistborn", "Mistborn Era 1", "The Cosmere").
+type BookSeries struct {
+	SeriesID string `json:"series_id"`
+	Sequence string `json:"sequence,omitempty"` // "1", "1.5", "Book Zero" - flexible for edge cases
+}
+
 // Book represents an audiobook in the library.
 type Book struct {
 	Syncable
@@ -22,13 +29,11 @@ type Book struct {
 	ASIN          string            `json:"asin,omitempty"`
 	GenreIDs      []string          `json:"genre_ids,omitempty"` // References to normalized Genre entities
 	Contributors  []BookContributor `json:"contributors"`
-	SeriesID      string            `json:"series_id,omitempty"`
-	Sequence      string            `json:"sequence,omitempty"` // "1", "1.5", "Book Zero" - flexible for edge cases
+	Series        []BookSeries      `json:"series,omitempty"` // Multiple series with sequence per series
 	AudioFiles    []AudioFileInfo   `json:"audio_files"`
 	Chapters      []Chapter         `json:"chapters,omitempty"`
 	TotalDuration int64             `json:"total_duration"`
 	TotalSize     int64             `json:"total_size"`
-	Explicit      bool              `json:"explicit,omitempty"`
 	Abridged      bool              `json:"abridged,omitempty"`
 }
 

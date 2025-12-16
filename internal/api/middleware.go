@@ -39,7 +39,7 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 		tokenString := parts[1]
 
 		// Verify token
-		user, claims, err := s.authService.VerifyAccessToken(r.Context(), tokenString)
+		user, claims, err := s.services.Auth.VerifyAccessToken(r.Context(), tokenString)
 		if err != nil {
 			response.Unauthorized(w, "Invalid or expired token", s.logger)
 			return

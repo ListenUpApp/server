@@ -83,9 +83,9 @@ func (s *Store) CreateBook(ctx context.Context, book *domain.Book) error {
 			}
 		}
 
-		// Create series reverse index if book belongs to a series.
-		if book.SeriesID != "" {
-			seriesBookKey := []byte(fmt.Sprintf("%s%s:%s", bookBySeriesPrefix, book.SeriesID, book.ID))
+		// Create series reverse indexes for all series the book belongs to.
+		for _, bs := range book.Series {
+			seriesBookKey := []byte(fmt.Sprintf("%s%s:%s", bookBySeriesPrefix, bs.SeriesID, book.ID))
 			if err := txn.Set(seriesBookKey, []byte{}); err != nil {
 				return err
 			}
@@ -374,20 +374,32 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 			}
 		}
 
-		// Update series reverse index if series changed.
-		if oldBook.SeriesID != book.SeriesID {
-			// Delete old series index if it existed.
-			if oldBook.SeriesID != "" {
-				oldSeriesBookKey := []byte(fmt.Sprintf("%s%s:%s", bookBySeriesPrefix, oldBook.SeriesID, book.ID))
-				if err := txn.Delete(oldSeriesBookKey); err != nil {
+		// Update series reverse indexes.
+		// Build maps of old and new series.
+		oldSeries := make(map[string]bool)
+		for _, bs := range oldBook.Series {
+			oldSeries[bs.SeriesID] = true
+		}
+		newSeries := make(map[string]bool)
+		for _, bs := range book.Series {
+			newSeries[bs.SeriesID] = true
+		}
+
+		// Delete removed series.
+		for seriesID := range oldSeries {
+			if !newSeries[seriesID] {
+				seriesBookKey := []byte(fmt.Sprintf("%s%s:%s", bookBySeriesPrefix, seriesID, book.ID))
+				if err := txn.Delete(seriesBookKey); err != nil {
 					return err
 				}
 			}
+		}
 
-			// Create new series index if series is set.
-			if book.SeriesID != "" {
-				newSeriesBookKey := []byte(fmt.Sprintf("%s%s:%s", bookBySeriesPrefix, book.SeriesID, book.ID))
-				if err := txn.Set(newSeriesBookKey, []byte{}); err != nil {
+		// Add new series.
+		for seriesID := range newSeries {
+			if !oldSeries[seriesID] {
+				seriesBookKey := []byte(fmt.Sprintf("%s%s:%s", bookBySeriesPrefix, seriesID, book.ID))
+				if err := txn.Set(seriesBookKey, []byte{}); err != nil {
 					return err
 				}
 			}
@@ -402,7 +414,7 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 	if err := domain.CascadeBookUpdate(ctx, s, book.ID); err != nil {
 		// Log but don't fail the update.
 		if s.logger != nil {
-			s.logger.Error("cascaed uodate failed", "book_id", book.ID, "error", err)
+			s.logger.Error("cascaded update failed", "book_id", book.ID, "error", err)
 		}
 	}
 
@@ -502,9 +514,9 @@ func (s *Store) DeleteBook(ctx context.Context, id string) error {
 			}
 		}
 
-		// Delete series reverse index if book was in a series.
-		if book.SeriesID != "" {
-			seriesBookKey := []byte(fmt.Sprintf("%s%s:%s", bookBySeriesPrefix, book.SeriesID, book.ID))
+		// Delete series reverse indexes for all series the book was in.
+		for _, bs := range book.Series {
+			seriesBookKey := []byte(fmt.Sprintf("%s%s:%s", bookBySeriesPrefix, bs.SeriesID, book.ID))
 			if err := txn.Delete(seriesBookKey); err != nil {
 				return err
 			}
@@ -922,4 +934,196 @@ func (s *Store) touchBook(_ context.Context, id string) error {
 
 		return txn.Set(key, data)
 	})
+}
+
+// EnrichBook denormalizes a book with contributor names, series name, and genre names.
+// This is a convenience wrapper around the enricher for API handlers.
+func (s *Store) EnrichBook(ctx context.Context, book *domain.Book) (*dto.Book, error) {
+	return s.enricher.EnrichBook(ctx, book)
+}
+
+// ContributorInput represents a contributor to be set on a book.
+// Used by SetBookContributors to link or create contributors.
+type ContributorInput struct {
+	Name  string                   `json:"name"`
+	Roles []domain.ContributorRole `json:"roles"`
+}
+
+// SetBookContributors replaces all contributors for a book.
+// For each contributor:
+//   - If name matches existing (case-insensitive, normalized) → link to that contributor
+//   - Else → create new contributor and link
+//
+// After linking, checks old contributors for orphan cleanup (soft delete if no books reference them).
+// Returns the updated book.
+func (s *Store) SetBookContributors(ctx context.Context, bookID string, contributors []ContributorInput) (*domain.Book, error) {
+	// Get current book (internal - no ACL check, caller should have already validated)
+	book, err := s.getBookInternal(ctx, bookID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Save old contributor IDs for orphan cleanup
+	oldContributorIDs := make(map[string]bool)
+	for _, bc := range book.Contributors {
+		oldContributorIDs[bc.ContributorID] = true
+	}
+
+	// Build new contributor list
+	newBookContributors := make([]domain.BookContributor, 0, len(contributors))
+	newContributorIDs := make(map[string]bool)
+
+	for _, input := range contributors {
+		// Get or create the contributor by name (handles normalization internally)
+		contributor, err := s.GetOrCreateContributorByName(ctx, input.Name)
+		if err != nil {
+			return nil, fmt.Errorf("get or create contributor %q: %w", input.Name, err)
+		}
+
+		newBookContributors = append(newBookContributors, domain.BookContributor{
+			ContributorID: contributor.ID,
+			Roles:         input.Roles,
+		})
+		newContributorIDs[contributor.ID] = true
+	}
+
+	// Update book with new contributors
+	book.Contributors = newBookContributors
+
+	// Save the book - UpdateBook handles indices, SSE, and search reindex
+	if err := s.UpdateBook(ctx, book); err != nil {
+		return nil, fmt.Errorf("update book contributors: %w", err)
+	}
+
+	// Orphan cleanup: check old contributors that are no longer linked
+	for oldID := range oldContributorIDs {
+		if newContributorIDs[oldID] {
+			continue // Still linked to this book
+		}
+
+		// Check if this contributor has any remaining books
+		count, err := s.CountBooksForContributor(ctx, oldID)
+		if err != nil {
+			// Log but don't fail the operation
+			if s.logger != nil {
+				s.logger.Warn("failed to count books for contributor during orphan cleanup",
+					"contributor_id", oldID,
+					"error", err,
+				)
+			}
+			continue
+		}
+
+		if count == 0 {
+			// Orphan detected - soft delete
+			if err := s.DeleteContributor(ctx, oldID); err != nil {
+				// Log but don't fail
+				if s.logger != nil {
+					s.logger.Warn("failed to delete orphan contributor",
+						"contributor_id", oldID,
+						"error", err,
+					)
+				}
+			} else if s.logger != nil {
+				s.logger.Info("deleted orphan contributor",
+					"contributor_id", oldID,
+				)
+			}
+		}
+	}
+
+	return book, nil
+}
+
+// SeriesInput represents a series to be set on a book.
+// Used by SetBookSeries to link or create series.
+type SeriesInput struct {
+	Name     string `json:"name"`
+	Sequence string `json:"sequence"`
+}
+
+// SetBookSeries replaces all series for a book.
+// For each series:
+//   - If name matches existing (case-insensitive, normalized) → link to that series
+//   - Else → create new series and link
+//
+// After linking, checks old series for orphan cleanup (soft delete if no books reference them).
+// Returns the updated book.
+func (s *Store) SetBookSeries(ctx context.Context, bookID string, seriesInputs []SeriesInput) (*domain.Book, error) {
+	// Get current book (internal - no ACL check, caller should have already validated)
+	book, err := s.getBookInternal(ctx, bookID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Save old series IDs for orphan cleanup
+	oldSeriesIDs := make(map[string]bool)
+	for _, bs := range book.Series {
+		oldSeriesIDs[bs.SeriesID] = true
+	}
+
+	// Build new series list
+	newBookSeries := make([]domain.BookSeries, 0, len(seriesInputs))
+	newSeriesIDs := make(map[string]bool)
+
+	for _, input := range seriesInputs {
+		// Get or create the series by name (handles normalization internally)
+		series, err := s.GetOrCreateSeriesByName(ctx, input.Name)
+		if err != nil {
+			return nil, fmt.Errorf("get or create series %q: %w", input.Name, err)
+		}
+
+		newBookSeries = append(newBookSeries, domain.BookSeries{
+			SeriesID: series.ID,
+			Sequence: input.Sequence,
+		})
+		newSeriesIDs[series.ID] = true
+	}
+
+	// Update book with new series
+	book.Series = newBookSeries
+
+	// Save the book - UpdateBook handles indices, SSE, and search reindex
+	if err := s.UpdateBook(ctx, book); err != nil {
+		return nil, fmt.Errorf("update book series: %w", err)
+	}
+
+	// Orphan cleanup: check old series that are no longer linked
+	for oldID := range oldSeriesIDs {
+		if newSeriesIDs[oldID] {
+			continue // Still linked to this book
+		}
+
+		// Check if this series has any remaining books
+		count, err := s.CountBooksInSeries(ctx, oldID)
+		if err != nil {
+			// Log but don't fail the operation
+			if s.logger != nil {
+				s.logger.Warn("failed to count books for series during orphan cleanup",
+					"series_id", oldID,
+					"error", err,
+				)
+			}
+			continue
+		}
+
+		if count == 0 {
+			// Orphan detected - soft delete
+			if err := s.DeleteSeries(ctx, oldID); err != nil {
+				// Log but don't fail
+				if s.logger != nil {
+					s.logger.Warn("failed to delete orphan series",
+						"series_id", oldID,
+						"error", err,
+					)
+				}
+			} else if s.logger != nil {
+				s.logger.Info("deleted orphan series",
+					"series_id", oldID,
+				)
+			}
+		}
+	}
+
+	return book, nil
 }

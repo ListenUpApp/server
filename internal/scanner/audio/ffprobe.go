@@ -113,42 +113,56 @@ func (p *FFprobeParser) parseTags(tags map[string]string, metadata *Metadata) {
 		return
 	}
 
+	// Normalize tag keys to lowercase for case-insensitive lookup.
+	// Some audio files have uppercase tags (e.g., "LANGUAGE", "PUBLISHER")
+	// while others use lowercase. This ensures we find tags regardless of case.
+	normalizedTags := make(map[string]string, len(tags))
+	for k, v := range tags {
+		normalizedTags[strings.ToLower(k)] = v
+	}
+
 	// Basic string tags.
-	metadata.Title = tags["title"]
-	metadata.Album = tags["album"]
-	metadata.Artist = tags["artist"]
-	metadata.AlbumArtist = tags["album_artist"]
-	metadata.Composer = tags["composer"]
-	metadata.Genre = tags["genre"]
-	metadata.Publisher = tags["publisher"]
-	metadata.Language = tags["language"]
-	metadata.ISBN = tags["isbn"]
-	metadata.ASIN = tags["asin"]
-	metadata.Subtitle = tags["subtitle"]
-	metadata.Series = tags["series"]
-	metadata.SeriesPart = tags["series-part"]
+	metadata.Title = normalizedTags["title"]
+	metadata.Album = normalizedTags["album"]
+	metadata.Artist = normalizedTags["artist"]
+	metadata.AlbumArtist = normalizedTags["album_artist"]
+	metadata.Composer = normalizedTags["composer"]
+	metadata.Genre = normalizedTags["genre"]
+	metadata.Publisher = normalizedTags["publisher"]
+	metadata.Language = normalizedTags["language"]
+	metadata.ISBN = normalizedTags["isbn"]
+	// ASIN can be stored as "asin" or "audible_asin"
+	if asin := normalizedTags["asin"]; asin != "" {
+		metadata.ASIN = asin
+	} else {
+		metadata.ASIN = normalizedTags["audible_asin"]
+	}
+	metadata.Subtitle = normalizedTags["subtitle"]
+	metadata.Series = normalizedTags["series"]
+	metadata.SeriesPart = normalizedTags["series-part"]
 
 	// Description can come from comment or description tag.
-	p.parseDescription(tags, metadata)
+	p.parseDescription(normalizedTags, metadata)
 
 	// Narrator often stored in composer.
-	if narrator := tags["narrator"]; narrator != "" {
+	if narrator := normalizedTags["narrator"]; narrator != "" {
 		metadata.Narrator = narrator
 	}
 
 	// Parse year/date.
-	p.parseYear(tags, metadata)
+	p.parseYear(normalizedTags, metadata)
 
 	// Parse track/disc numbers.
-	p.parseTrackNumber(tags, metadata)
-	p.parseDiscNumber(tags, metadata)
+	p.parseTrackNumber(normalizedTags, metadata)
+	p.parseDiscNumber(normalizedTags, metadata)
 }
 
-// parseDescription extracts description from comment or description tags.
+// parseDescription extracts description from description or comment tags.
+// Prefers explicit description tag over comment for AudiobookShelf compatibility.
 func (p *FFprobeParser) parseDescription(tags map[string]string, metadata *Metadata) {
-	if desc := tags["comment"]; desc != "" {
+	if desc := tags["description"]; desc != "" {
 		metadata.Description = desc
-	} else if desc := tags["description"]; desc != "" {
+	} else if desc := tags["comment"]; desc != "" {
 		metadata.Description = desc
 	}
 }

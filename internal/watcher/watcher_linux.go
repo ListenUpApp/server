@@ -118,9 +118,10 @@ func (b *linuxBackend) addWatch(path string) error {
 	// IN_CLOSE_WRITE: File closed after writing (perfect for our use case!).
 	// IN_MOVED_TO: File moved into watched directory.
 	// IN_CREATE: Directory created (we need to watch new directories).
-	// IN_DELETE: File/directory deleted.
-	// IN_ONLYDIR: Only watch if path is a directory.
-	mask := unix.IN_CLOSE_WRITE | unix.IN_MOVED_TO | unix.IN_CREATE | unix.IN_DELETE
+	// IN_DELETE: File/directory deleted from within watched directory.
+	// IN_DELETE_SELF: Watched directory itself was deleted.
+	// IN_MOVED_FROM: File/directory moved out of watched directory.
+	mask := unix.IN_CLOSE_WRITE | unix.IN_MOVED_TO | unix.IN_CREATE | unix.IN_DELETE | unix.IN_DELETE_SELF | unix.IN_MOVED_FROM
 
 	wd, err := unix.InotifyAddWatch(b.fd, path, uint32(mask))
 	if err != nil {
@@ -132,6 +133,24 @@ func (b *linuxBackend) addWatch(path string) error {
 	b.logger.Debug("added watch", "path", path, "wd", wd)
 
 	return nil
+}
+
+// removeWatch removes an inotify watch for a path.
+func (b *linuxBackend) removeWatch(path string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	wd, exists := b.watches[path]
+	if !exists {
+		return
+	}
+
+	// Remove from inotify (ignore errors, directory may already be gone).
+	_, _ = unix.InotifyRmWatch(b.fd, uint32(wd))
+
+	delete(b.watches, path)
+	delete(b.wdPaths, wd)
+	b.logger.Debug("removed watch", "path", path, "wd", wd)
 }
 
 // Start begins watching for events.
@@ -229,8 +248,31 @@ func (b *linuxBackend) processEvent(path string, mask uint32) {
 		}
 	}
 
-	// Handle file deletion.
+	// Handle file/directory deletion (something deleted FROM this directory).
 	if mask&unix.IN_DELETE != 0 {
+		b.logger.Debug("IN_DELETE event", "path", path)
+		b.emitEvent(Event{
+			Type: EventRemoved,
+			Path: path,
+		})
+		return
+	}
+
+	// Handle watched directory itself being deleted.
+	if mask&unix.IN_DELETE_SELF != 0 {
+		b.logger.Debug("IN_DELETE_SELF event", "path", path)
+		b.emitEvent(Event{
+			Type: EventRemoved,
+			Path: path,
+		})
+		// Clean up the watch since directory no longer exists.
+		b.removeWatch(path)
+		return
+	}
+
+	// Handle file/directory moved OUT of watched directory.
+	if mask&unix.IN_MOVED_FROM != 0 {
+		b.logger.Debug("IN_MOVED_FROM event", "path", path)
 		b.emitEvent(Event{
 			Type: EventRemoved,
 			Path: path,

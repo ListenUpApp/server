@@ -56,7 +56,7 @@ func (s *Server) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	share, err := s.sharingService.ShareCollection(ctx, userID, req.CollectionID, req.SharedWithUserID, permission)
+	share, err := s.services.Sharing.ShareCollection(ctx, userID, req.CollectionID, req.SharedWithUserID, permission)
 	if err != nil {
 		if errors.Is(err, store.ErrShareAlreadyExists) {
 			response.Conflict(w, "Collection is already shared with this user", s.logger)
@@ -89,7 +89,7 @@ func (s *Server) handleListShares(w http.ResponseWriter, r *http.Request) {
 
 	switch shareType {
 	case "shared_with_me":
-		shares, err := s.sharingService.ListSharedWithMe(ctx, userID)
+		shares, err := s.services.Sharing.ListSharedWithMe(ctx, userID)
 		if err != nil {
 			s.logger.Error("Failed to list shares", "error", err, "user_id", userID)
 			response.InternalError(w, "Failed to retrieve shares", s.logger)
@@ -104,7 +104,7 @@ func (s *Server) handleListShares(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		shares, err := s.sharingService.ListCollectionShares(ctx, userID, collectionID)
+		shares, err := s.services.Sharing.ListCollectionShares(ctx, userID, collectionID)
 		if err != nil {
 			s.logger.Error("Failed to list collection shares", "error", err, "user_id", userID, "collection_id", collectionID)
 			response.InternalError(w, "Failed to retrieve collection shares", s.logger)
@@ -133,7 +133,7 @@ func (s *Server) handleGetShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	share, err := s.sharingService.GetShare(ctx, userID, id)
+	share, err := s.services.Sharing.GetShare(ctx, userID, id)
 	if err != nil {
 		if errors.Is(err, store.ErrShareNotFound) {
 			response.NotFound(w, "Share not found", s.logger)
@@ -176,7 +176,7 @@ func (s *Server) handleUpdateShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	share, err := s.sharingService.UpdateSharePermission(ctx, userID, id, permission)
+	share, err := s.services.Sharing.UpdateSharePermission(ctx, userID, id, permission)
 	if err != nil {
 		if errors.Is(err, store.ErrShareNotFound) {
 			response.NotFound(w, "Share not found", s.logger)
@@ -206,7 +206,7 @@ func (s *Server) handleDeleteShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := s.sharingService.UnshareCollection(ctx, userID, id)
+	err := s.services.Sharing.UnshareCollection(ctx, userID, id)
 	if err != nil {
 		if errors.Is(err, store.ErrShareNotFound) {
 			response.NotFound(w, "Share not found", s.logger)

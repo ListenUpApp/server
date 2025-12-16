@@ -8,6 +8,7 @@ import (
 
 	"github.com/listenupapp/listenup-server/internal/auth"
 	"github.com/listenupapp/listenup-server/internal/domain"
+	domainerrors "github.com/listenupapp/listenup-server/internal/errors"
 	"github.com/listenupapp/listenup-server/internal/id"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
@@ -98,7 +99,7 @@ func (s *SessionService) RefreshSession(
 	tokenHash := auth.HashRefreshToken(refreshToken)
 	session, err := s.store.GetSessionByRefreshToken(ctx, tokenHash)
 	if err != nil {
-		return nil, nil, fmt.Errorf("invalid or expired refresh token: %w", err)
+		return nil, nil, domainerrors.TokenExpired("invalid or expired refresh token").WithCause(err)
 	}
 
 	// Get user
@@ -106,7 +107,7 @@ func (s *SessionService) RefreshSession(
 	if err != nil {
 		// User was deleted, clean up session
 		_ = s.store.DeleteSession(ctx, session.ID)
-		return nil, nil, fmt.Errorf("user not found: %w", err)
+		return nil, nil, domainerrors.NotFound("user not found").WithCause(err)
 	}
 
 	// Generate new tokens

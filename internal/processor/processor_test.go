@@ -76,6 +76,20 @@ func (m *mockBookStore) UpdateBook(_ context.Context, book *domain.Book) error {
 	return nil
 }
 
+func (m *mockBookStore) DeleteBook(_ context.Context, bookID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Find book by ID and delete
+	for path, book := range m.books {
+		if book.ID == bookID {
+			delete(m.books, path)
+			return nil
+		}
+	}
+	return store.ErrBookNotFound
+}
+
 func (m *mockBookStore) GetOrCreateContributorByName(_ context.Context, name string) (*domain.Contributor, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

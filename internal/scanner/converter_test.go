@@ -76,8 +76,7 @@ func (m *mockStore) GetOrCreateSeriesByName(_ context.Context, name string) (*do
 		Syncable: domain.Syncable{
 			ID: seriesID,
 		},
-		Name:       name,
-		TotalBooks: 0,
+		Name: name,
 	}
 	series.InitTimestamps()
 
@@ -148,7 +147,6 @@ func TestConvertToBook_WithFullMetadata(t *testing.T) {
 			Tags:        []string{"thriller", "suspense"},
 			ISBN:        "1234567890",
 			ASIN:        "B00TEST",
-			Explicit:    false,
 			Abridged:    false,
 		},
 	}
@@ -175,7 +173,6 @@ func TestConvertToBook_WithFullMetadata(t *testing.T) {
 	// In tests with mock store returning nil for genre lookups, genres are tracked as unmapped.
 	assert.Equal(t, "1234567890", book.ISBN)
 	assert.Equal(t, "B00TEST", book.ASIN)
-	assert.False(t, book.Explicit)
 	assert.False(t, book.Abridged)
 
 	// Check audio file conversion.
@@ -319,18 +316,15 @@ func TestConvertToBook_WithSeries(t *testing.T) {
 	book, err := ConvertToBook(ctx, item, mockStore)
 	require.NoError(t, err)
 
-	// We use the first series from metadata
-	assert.NotEmpty(t, book.SeriesID)
-	assert.Equal(t, "3", book.Sequence)
+	// We extract all series from metadata
+	require.Len(t, book.Series, 2)
+	assert.NotEmpty(t, book.Series[0].SeriesID)
+	assert.Equal(t, "3", book.Series[0].Sequence)
+	assert.NotEmpty(t, book.Series[1].SeriesID)
+	assert.Equal(t, "1", book.Series[1].Sequence)
 
-	// Verify series was created in mock store
-	require.Len(t, mockStore.series, 1)
-	var createdSeries *domain.Series
-	for _, s := range mockStore.series {
-		createdSeries = s
-		break
-	}
-	assert.Equal(t, "The Great Series", createdSeries.Name)
+	// Verify both series were created in mock store
+	require.Len(t, mockStore.series, 2)
 }
 
 // TestConvertToBook_WithChapters_SingleFile tests chapter conversion for single-file audiobook.
@@ -760,6 +754,7 @@ func TestConvertChapters_MultiFile(t *testing.T) {
 }
 
 // TestUpdateBookFromScan tests updating existing book with new scan data.
+// Phase 5: Scanner respects user edits - only structural data is updated.
 func TestUpdateBookFromScan(t *testing.T) {
 	originalCreatedAt := time.Now().Add(-24 * time.Hour)
 	existingBook := &domain.Book{
@@ -768,9 +763,9 @@ func TestUpdateBookFromScan(t *testing.T) {
 			CreatedAt: originalCreatedAt,
 			UpdatedAt: originalCreatedAt,
 		},
-		Title:        "Old Title",
+		Title:        "User Edited Title",
 		Path:         "/old/path",
-		Contributors: []domain.BookContributor{}, // Old contributors
+		Contributors: []domain.BookContributor{{ContributorID: "existing-author", Roles: []domain.ContributorRole{domain.RoleAuthor}}},
 		ScannedAt:    originalCreatedAt,
 		AudioFiles:   []domain.AudioFileInfo{},
 		CoverImage:   nil,
@@ -791,8 +786,8 @@ func TestUpdateBookFromScan(t *testing.T) {
 			},
 		},
 		Metadata: &BookMetadata{
-			Title:   "New Title",
-			Authors: []string{"New Author"},
+			Title:   "Scanned Title Should Be Ignored",
+			Authors: []string{"Scanned Author Should Be Ignored"},
 		},
 	}
 
@@ -805,13 +800,17 @@ func TestUpdateBookFromScan(t *testing.T) {
 	assert.Equal(t, "book-existing-id", existingBook.ID)
 	assert.Equal(t, originalCreatedAt, existingBook.CreatedAt)
 
-	// Everything else should be updated.
-	assert.Equal(t, "New Title", existingBook.Title)
-	assert.Equal(t, "/new/path", existingBook.Path)
+	// User metadata should be PRESERVED (not overwritten by scan).
+	assert.Equal(t, "User Edited Title", existingBook.Title, "Title should be preserved")
+	assert.Len(t, existingBook.Contributors, 1, "Contributors should be preserved")
+	assert.Equal(t, "existing-author", existingBook.Contributors[0].ContributorID)
 
-	// Verify new contributor was created
-	assert.Len(t, existingBook.Contributors, 1)
+	// Structural data SHOULD be updated.
+	assert.Equal(t, "/new/path", existingBook.Path)
 	assert.Len(t, existingBook.AudioFiles, 1)
+	assert.Equal(t, "/new/path/file.mp3", existingBook.AudioFiles[0].Path)
+	assert.Equal(t, int64(2048000), existingBook.AudioFiles[0].Size)
+	assert.Equal(t, int64(600000), existingBook.TotalDuration) // 10 minutes in ms
 
 	// UpdatedAt and ScannedAt should be refreshed.
 	assert.True(t, existingBook.UpdatedAt.After(originalCreatedAt))
@@ -825,7 +824,7 @@ func TestUpdateBookFromScan_PreservesID(t *testing.T) {
 			ID:        "book-preserve-this-id",
 			CreatedAt: time.Now().Add(-1 * time.Hour),
 		},
-		Title: "Old",
+		Title: "User's Title",
 	}
 
 	newItem := &LibraryItemData{
@@ -839,7 +838,7 @@ func TestUpdateBookFromScan_PreservesID(t *testing.T) {
 				Inode:    1001,
 			},
 		},
-		Metadata: &BookMetadata{Title: "New"},
+		Metadata: &BookMetadata{Title: "Scanned Title"},
 	}
 
 	ctx := context.Background()
@@ -849,6 +848,8 @@ func TestUpdateBookFromScan_PreservesID(t *testing.T) {
 
 	// ID must never change.
 	assert.Equal(t, "book-preserve-this-id", existingBook.ID)
+	// Title (user metadata) must also be preserved.
+	assert.Equal(t, "User's Title", existingBook.Title)
 }
 
 // TestConvertToBook_AudioFileWithoutMetadata tests audio file without metadata.

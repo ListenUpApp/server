@@ -171,7 +171,7 @@ func SeriesToSearchDocument(s *domain.Series) *SearchDocument {
 		Type:        DocTypeSeries,
 		Name:        s.Name,
 		Description: s.Description,
-		BookCount:   s.TotalBooks,
+		BookCount:   0, // BookCount must be provided by caller since TotalBooks was removed from Series
 		CreatedAt:   s.CreatedAt.UnixMilli(),
 		UpdatedAt:   s.UpdatedAt.UnixMilli(),
 	}

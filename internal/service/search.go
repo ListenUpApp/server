@@ -34,6 +34,12 @@ func (s *SearchService) Search(ctx context.Context, params search.SearchParams) 
 	return s.index.Search(ctx, params)
 }
 
+// SearchContributors performs a fast contributor search for autocomplete.
+// Uses Bleve index for O(log n) performance instead of O(n) BadgerDB scan.
+func (s *SearchService) SearchContributors(ctx context.Context, query string, limit int) ([]search.ContributorSearchResult, error) {
+	return s.index.SearchContributors(ctx, query, limit)
+}
+
 // IndexBook indexes a single book.
 // Call this when a book is created or updated.
 func (s *SearchService) IndexBook(ctx context.Context, book *domain.Book) error {
@@ -181,7 +187,7 @@ func (s *SearchService) ReindexAll(ctx context.Context) error {
 			continue
 		}
 		doc := search.SeriesToSearchDocument(series)
-		// Override TotalBooks with actual count of books we have
+		// Set actual count of books we have
 		if count, ok := seriesBookCounts[series.ID]; ok {
 			doc.BookCount = count
 		}
@@ -235,10 +241,10 @@ func (s *SearchService) buildBookDocument(ctx context.Context, book *domain.Book
 		}
 	}
 
-	// Get series name
+	// Get series name (use first/primary series for search)
 	var seriesName string
-	if book.SeriesID != "" {
-		series, err := s.store.GetSeries(ctx, book.SeriesID)
+	if len(book.Series) > 0 {
+		series, err := s.store.GetSeries(ctx, book.Series[0].SeriesID)
 		if err == nil {
 			seriesName = series.Name
 		}

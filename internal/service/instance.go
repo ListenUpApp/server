@@ -8,6 +8,7 @@ import (
 
 	"github.com/listenupapp/listenup-server/internal/config"
 	"github.com/listenupapp/listenup-server/internal/domain"
+	domainerrors "github.com/listenupapp/listenup-server/internal/errors"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
@@ -32,7 +33,7 @@ func (s *InstanceService) GetInstance(ctx context.Context) (*domain.Instance, er
 	instance, err := s.store.GetInstance(ctx)
 	if err != nil {
 		if errors.Is(err, store.ErrServerNotFound) {
-			return nil, fmt.Errorf("instance configuration not found: %w", err)
+			return nil, domainerrors.NotFound("instance configuration not found").WithCause(err)
 		}
 		return nil, fmt.Errorf("failed to get instance: %w", err)
 	}
@@ -100,7 +101,7 @@ func (s *InstanceService) SetRootUser(ctx context.Context, userID string) error 
 	}
 
 	if !instance.IsSetupRequired() {
-		return fmt.Errorf("root user already configured")
+		return domainerrors.AlreadyConfigured("root user already configured")
 	}
 
 	instance.SetRootUser(userID)

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/listenupapp/listenup-server/internal/auth"
+	domainerrors "github.com/listenupapp/listenup-server/internal/errors"
 	"github.com/listenupapp/listenup-server/internal/http/response"
 	"github.com/listenupapp/listenup-server/internal/service"
 )
@@ -26,20 +27,20 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Setup server with root user
-	authResp, err := s.authService.Setup(r.Context(), req)
+	authResp, err := s.services.Auth.Setup(r.Context(), req)
 	if err != nil {
 		s.logger.Error("Setup failed", "error", err)
 
-		// Check for specific errors
-		if strings.Contains(err.Error(), "already configured") {
+		// Check for specific domain errors
+		if domainerrors.Is(err, domainerrors.ErrAlreadyConfigured) {
 			response.Conflict(w, "Server is already set up", s.logger)
 			return
 		}
-		if strings.Contains(err.Error(), "email already in use") {
+		if domainerrors.Is(err, domainerrors.ErrAlreadyExists) {
 			response.Conflict(w, "Email already in use", s.logger)
 			return
 		}
-		if strings.Contains(err.Error(), "password") {
+		if domainerrors.Is(err, domainerrors.ErrValidation) {
 			response.BadRequest(w, err.Error(), s.logger)
 			return
 		}
@@ -80,19 +81,19 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Authenticate
-	authResp, err := s.authService.Login(r.Context(), loginReq)
+	authResp, err := s.services.Auth.Login(r.Context(), loginReq)
 	if err != nil {
 		s.logger.Warn("Login failed",
 			"email", reqBody.Email,
 			"error", err,
 		)
 
-		// Generic error message to avoid leaking user existence
-		if strings.Contains(err.Error(), "invalid email or password") {
+		// Check for specific domain errors
+		if domainerrors.Is(err, domainerrors.ErrInvalidCredentials) {
 			response.Unauthorized(w, "Invalid email or password", s.logger)
 			return
 		}
-		if strings.Contains(err.Error(), "device_info") {
+		if domainerrors.Is(err, domainerrors.ErrValidation) {
 			response.BadRequest(w, err.Error(), s.logger)
 			return
 		}
@@ -130,9 +131,9 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Refresh tokens
-	authResp, err := s.authService.RefreshTokens(r.Context(), refreshReq)
+	authResp, err := s.services.Auth.RefreshTokens(r.Context(), refreshReq)
 	if err != nil {
-		if strings.Contains(err.Error(), "invalid or expired") {
+		if domainerrors.Is(err, domainerrors.ErrTokenExpired) {
 			response.Unauthorized(w, "Invalid or expired refresh token", s.logger)
 			return
 		}
@@ -163,7 +164,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Logout
-	if err := s.authService.Logout(r.Context(), reqBody.SessionID); err != nil {
+	if err := s.services.Auth.Logout(r.Context(), reqBody.SessionID); err != nil {
 		s.logger.Error("Logout failed",
 			"session_id", reqBody.SessionID,
 			"error", err,

@@ -339,6 +339,97 @@ func addFacets(req *bleve.SearchRequest, params SearchParams) {
 	}
 }
 
+// ContributorSearchResult represents contributor search results for autocomplete.
+type ContributorSearchResult struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	BookCount int    `json:"book_count"`
+}
+
+// SearchContributors performs a fast prefix-based search for contributor autocomplete.
+// Optimized for speed: uses prefix matching with minimal fields returned.
+// Returns up to `limit` contributors matching the query.
+func (s *SearchIndex) SearchContributors(ctx context.Context, queryStr string, limit int) ([]ContributorSearchResult, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
+	queryStr = strings.TrimSpace(queryStr)
+	if queryStr == "" {
+		return []ContributorSearchResult{}, nil
+	}
+
+	// Build query: prefix match on name, filtered to contributors only
+	var textQueries []query.Query
+
+	// Prefix query for autocomplete (works well for "bran" → "Brandon")
+	prefixQuery := bleve.NewPrefixQuery(strings.ToLower(queryStr))
+	prefixQuery.SetField("name")
+	prefixQuery.SetBoost(2.0)
+	textQueries = append(textQueries, prefixQuery)
+
+	// Match query for word matches (works for "sanderson" in "Brandon Sanderson")
+	matchQuery := bleve.NewMatchQuery(queryStr)
+	matchQuery.SetField("name")
+	matchQuery.SetBoost(1.5)
+	textQueries = append(textQueries, matchQuery)
+
+	// Fuzzy query for typo tolerance
+	if len(queryStr) >= 3 {
+		fuzzyQuery := bleve.NewFuzzyQuery(queryStr)
+		fuzzyQuery.SetFuzziness(1)
+		fuzzyQuery.SetField("name")
+		fuzzyQuery.SetBoost(0.5)
+		textQueries = append(textQueries, fuzzyQuery)
+	}
+
+	// Combine text queries with OR
+	textDisjunction := bleve.NewDisjunctionQuery(textQueries...)
+
+	// Type filter: contributors only
+	typeQuery := bleve.NewTermQuery(string(DocTypeContributor))
+	typeQuery.SetField("type")
+
+	// Combine with AND: must be contributor AND match text
+	finalQuery := bleve.NewConjunctionQuery(typeQuery, textDisjunction)
+
+	// Create search request - minimal fields for speed
+	searchRequest := bleve.NewSearchRequestOptions(finalQuery, limit, 0, false)
+	searchRequest.Fields = []string{"id", "name", "book_count"}
+	searchRequest.SortBy([]string{"-_score", "-book_count"}) // Best match first, then by popularity
+
+	// Execute search
+	searchResult, err := s.index.SearchInContext(ctx, searchRequest)
+	if err != nil {
+		return nil, fmt.Errorf("search contributors: %w", err)
+	}
+
+	// Convert results
+	results := make([]ContributorSearchResult, 0, len(searchResult.Hits))
+	for _, hit := range searchResult.Hits {
+		result := ContributorSearchResult{
+			ID: hit.ID,
+		}
+
+		if n, ok := hit.Fields["name"].(string); ok {
+			result.Name = n
+		}
+		if bc, ok := hit.Fields["book_count"].(float64); ok {
+			result.BookCount = int(bc)
+		}
+
+		results = append(results, result)
+	}
+
+	return results, nil
+}
+
 // extractFacets converts Bleve facets to our format.
 func extractFacets(result *bleve.SearchResult) SearchFacets {
 	facets := SearchFacets{}

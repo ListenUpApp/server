@@ -28,7 +28,7 @@ func (s *Server) handleRecordEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := s.listeningService.RecordEvent(ctx, userID, req)
+	resp, err := s.services.Listening.RecordEvent(ctx, userID, req)
 	if err != nil {
 		s.logger.Error("Failed to record listening event", "error", err, "user_id", userID)
 		response.InternalError(w, "Failed to record event", s.logger)
@@ -54,7 +54,7 @@ func (s *Server) handleGetProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	progress, err := s.listeningService.GetProgress(ctx, userID, bookID)
+	progress, err := s.services.Listening.GetProgress(ctx, userID, bookID)
 	if errors.Is(err, store.ErrProgressNotFound) {
 		response.NotFound(w, "Progress not found", s.logger)
 		return
@@ -86,7 +86,7 @@ func (s *Server) handleGetContinueListening(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	progress, err := s.listeningService.GetContinueListening(ctx, userID, limit)
+	progress, err := s.services.Listening.GetContinueListening(ctx, userID, limit)
 	if err != nil {
 		s.logger.Error("Failed to get continue listening", "error", err, "user_id", userID)
 		response.InternalError(w, "Failed to get continue listening", s.logger)
@@ -112,7 +112,7 @@ func (s *Server) handleResetProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.listeningService.ResetProgress(ctx, userID, bookID); err != nil {
+	if err := s.services.Listening.ResetProgress(ctx, userID, bookID); err != nil {
 		s.logger.Error("Failed to reset progress", "error", err, "user_id", userID, "book_id", bookID)
 		response.InternalError(w, "Failed to reset progress", s.logger)
 		return
@@ -131,7 +131,7 @@ func (s *Server) handleGetUserSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	settings, err := s.listeningService.GetUserSettings(ctx, userID)
+	settings, err := s.services.Listening.GetUserSettings(ctx, userID)
 	if err != nil {
 		s.logger.Error("Failed to get user settings", "error", err, "user_id", userID)
 		response.InternalError(w, "Failed to get settings", s.logger)
@@ -157,7 +157,7 @@ func (s *Server) handleUpdateUserSettings(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	settings, err := s.listeningService.UpdateUserSettings(ctx, userID, req)
+	settings, err := s.services.Listening.UpdateUserSettings(ctx, userID, req)
 	if err != nil {
 		s.logger.Error("Failed to update user settings", "error", err, "user_id", userID)
 		response.InternalError(w, "Failed to update settings", s.logger)
@@ -183,7 +183,7 @@ func (s *Server) handleGetBookPreferences(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	prefs, err := s.listeningService.GetBookPreferences(ctx, userID, bookID)
+	prefs, err := s.services.Listening.GetBookPreferences(ctx, userID, bookID)
 	if err != nil {
 		s.logger.Error("Failed to get book preferences", "error", err, "user_id", userID, "book_id", bookID)
 		response.InternalError(w, "Failed to get preferences", s.logger)
@@ -215,7 +215,7 @@ func (s *Server) handleUpdateBookPreferences(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	prefs, err := s.listeningService.UpdateBookPreferences(ctx, userID, bookID, req)
+	prefs, err := s.services.Listening.UpdateBookPreferences(ctx, userID, bookID, req)
 	if err != nil {
 		s.logger.Error("Failed to update book preferences", "error", err, "user_id", userID, "book_id", bookID)
 		response.InternalError(w, "Failed to update preferences", s.logger)
@@ -235,7 +235,7 @@ func (s *Server) handleGetUserStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stats, err := s.listeningService.GetUserStats(ctx, userID)
+	stats, err := s.services.Listening.GetUserStats(ctx, userID)
 	if err != nil {
 		s.logger.Error("Failed to get user stats", "error", err, "user_id", userID)
 		response.InternalError(w, "Failed to get stats", s.logger)
@@ -261,7 +261,7 @@ func (s *Server) handleGetBookStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stats, err := s.listeningService.GetBookStats(ctx, bookID)
+	stats, err := s.services.Listening.GetBookStats(ctx, bookID)
 	if err != nil {
 		s.logger.Error("Failed to get book stats", "error", err, "book_id", bookID)
 		response.InternalError(w, "Failed to get stats", s.logger)

@@ -130,11 +130,13 @@ func (e *Entity[T]) Get(ctx context.Context, id string) (*T, error) {
 		return nil, err
 	}
 
-	key := e.prefix + id
+	key := buildKey(e.prefix, id)
+	defer releaseKey(key)
+
 	var entity T
 
 	err := e.store.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte(key))
+		item, err := txn.Get(key)
 		if errors.Is(err, badger.ErrKeyNotFound) {
 			return ErrNotFound
 		}
@@ -173,7 +175,8 @@ func (e *Entity[T]) GetByIndex(ctx context.Context, indexName, value string) (*T
 		}
 	}
 
-	indexKey := []byte(e.prefix + "idx:" + indexName + ":" + transformedValue)
+	indexKey := buildIndexKey(e.prefix, indexName, transformedValue)
+	defer releaseKey(indexKey)
 
 	var id string
 	err := e.store.db.View(func(txn *badger.Txn) error {

@@ -21,7 +21,7 @@ func (s *Server) handleListTags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tags, err := s.tagService.ListTags(ctx, userID)
+	tags, err := s.services.Tag.ListTags(ctx, userID)
 	if err != nil {
 		s.logger.Error("Failed to list tags", "error", err, "user_id", userID)
 		response.InternalError(w, "Failed to list tags", s.logger)
@@ -42,7 +42,7 @@ func (s *Server) handleGetTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tag, err := s.tagService.GetTag(ctx, userID, id)
+	tag, err := s.services.Tag.GetTag(ctx, userID, id)
 	if errors.Is(err, store.ErrTagNotFound) {
 		response.NotFound(w, "Tag not found", s.logger)
 		return
@@ -72,7 +72,7 @@ func (s *Server) handleCreateTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tag, err := s.tagService.CreateTag(ctx, userID, req)
+	tag, err := s.services.Tag.CreateTag(ctx, userID, req)
 	if err != nil {
 		s.logger.Error("Failed to create tag", "error", err, "user_id", userID)
 		response.BadRequest(w, err.Error(), s.logger)
@@ -99,7 +99,7 @@ func (s *Server) handleUpdateTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tag, err := s.tagService.UpdateTag(ctx, userID, id, req)
+	tag, err := s.services.Tag.UpdateTag(ctx, userID, id, req)
 	if errors.Is(err, store.ErrTagNotFound) {
 		response.NotFound(w, "Tag not found", s.logger)
 		return
@@ -124,7 +124,7 @@ func (s *Server) handleDeleteTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := s.tagService.DeleteTag(ctx, userID, id)
+	err := s.services.Tag.DeleteTag(ctx, userID, id)
 	if errors.Is(err, store.ErrTagNotFound) {
 		response.NotFound(w, "Tag not found", s.logger)
 		return
@@ -157,7 +157,7 @@ func (s *Server) handleAddBookTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.tagService.AddTagToBook(ctx, userID, bookID, req.TagID); err != nil {
+	if err := s.services.Tag.AddTagToBook(ctx, userID, bookID, req.TagID); err != nil {
 		s.logger.Error("Failed to add tag to book", "error", err)
 		response.BadRequest(w, err.Error(), s.logger)
 		return
@@ -178,7 +178,7 @@ func (s *Server) handleRemoveBookTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.tagService.RemoveTagFromBook(ctx, userID, bookID, tagID); err != nil {
+	if err := s.services.Tag.RemoveTagFromBook(ctx, userID, bookID, tagID); err != nil {
 		s.logger.Error("Failed to remove tag from book", "error", err)
 		response.InternalError(w, "Failed to remove tag", s.logger)
 		return
@@ -198,7 +198,7 @@ func (s *Server) handleGetBookTags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tags, err := s.tagService.GetTagsForBook(ctx, userID, bookID)
+	tags, err := s.services.Tag.GetTagsForBook(ctx, userID, bookID)
 	if err != nil {
 		s.logger.Error("Failed to get book tags", "error", err, "book_id", bookID)
 		response.InternalError(w, "Failed to get tags", s.logger)
@@ -219,7 +219,7 @@ func (s *Server) handleGetTagBooks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bookIDs, err := s.tagService.GetBooksForTag(ctx, userID, tagID)
+	bookIDs, err := s.services.Tag.GetBooksForTag(ctx, userID, tagID)
 	if err != nil {
 		s.logger.Error("Failed to get tag books", "error", err, "tag_id", tagID)
 		response.InternalError(w, "Failed to get books", s.logger)
