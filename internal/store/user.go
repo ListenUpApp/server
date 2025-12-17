@@ -179,6 +179,51 @@ func (s *Store) UpdateUser(ctx context.Context, user *domain.User) error {
 	})
 }
 
+// ListUsers returns all non-deleted users (for admin view).
+func (s *Store) ListUsers(_ context.Context) ([]*domain.User, error) {
+	prefix := []byte(userPrefix)
+	var users []*domain.User
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = prefix
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+
+			err := item.Value(func(val []byte) error {
+				var user domain.User
+				if unmarshalErr := json.Unmarshal(val, &user); unmarshalErr != nil {
+					// Skip malformed users
+					return nil //nolint:nilerr // intentionally skip malformed entries
+				}
+
+				// Skip deleted users
+				if user.IsDeleted() {
+					return nil
+				}
+
+				users = append(users, &user)
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("list users: %w", err)
+	}
+
+	return users, nil
+}
+
 // normalizeEmail normalizes an email address for consistent lookups.
 // Lowercases and trims whitespace.
 func normalizeEmail(email string) string {

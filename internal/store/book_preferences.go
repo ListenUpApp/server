@@ -12,6 +12,7 @@ import (
 
 const bookPreferencesPrefix = "bookprefs:"
 
+// ErrBookPreferencesNotFound is returned when book preferences are not found.
 var ErrBookPreferencesNotFound = ErrNotFound.WithMessage("book preferences not found")
 
 // GetBookPreferences retrieves preferences for a user+book.

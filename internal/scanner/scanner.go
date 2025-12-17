@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/media/images"
 	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
@@ -371,33 +372,47 @@ func (s *Scanner) saveToDatabase(ctx context.Context, items []*LibraryItemData, 
 			// Try embedded artwork first.
 			if len(item.AudioFiles) > 0 {
 				firstAudioFile := item.AudioFiles[0].Path
-				hash, extractErr := s.imageProcessor.ExtractAndProcess(ctx, firstAudioFile, book.ID)
+				coverInfo, extractErr := s.imageProcessor.ExtractAndProcess(ctx, firstAudioFile, book.ID)
 				if extractErr != nil {
 					s.logger.Debug("no embedded cover extracted",
 						"book_id", book.ID,
 						"path", firstAudioFile,
 						"error", extractErr,
 					)
-				} else if hash != "" {
+				} else if coverInfo != nil {
 					coverFound = true
+
+					// Update book with cover image info
+					book.CoverImage = &domain.ImageFileInfo{
+						Filename: "cover.jpg",
+						Format:   coverInfo.Format,
+						Size:     coverInfo.Size,
+					}
 				}
 			}
 
 			// Fallback to external cover image if no embedded artwork.
 			if !coverFound && len(item.ImageFiles) > 0 {
 				// Use the first image file (typically cover.jpg)
-				coverPath := item.ImageFiles[0].Path
-				if _, extractErr := s.imageProcessor.ProcessExternalCover(coverPath, book.ID); extractErr != nil {
+				extCoverPath := item.ImageFiles[0].Path
+				if coverInfo, extractErr := s.imageProcessor.ProcessExternalCover(extCoverPath, book.ID); extractErr != nil {
 					s.logger.Warn("failed to process external cover",
 						"book_id", book.ID,
-						"path", coverPath,
+						"path", extCoverPath,
 						"error", extractErr,
 					)
-				} else {
+				} else if coverInfo != nil {
 					s.logger.Debug("used external cover",
 						"book_id", book.ID,
-						"path", coverPath,
+						"path", extCoverPath,
 					)
+
+					// Update book with cover image info
+					book.CoverImage = &domain.ImageFileInfo{
+						Filename: filepath.Base(extCoverPath),
+						Format:   coverInfo.Format,
+						Size:     coverInfo.Size,
+					}
 				}
 			}
 		}
@@ -430,18 +445,18 @@ func (s *Scanner) saveToDatabase(ctx context.Context, items []*LibraryItemData, 
 }
 
 // ExtractCoverArt extracts embedded cover art from an audio file and processes it.
-// Returns the path to the processed cover image, or empty string if no cover found.
-func (s *Scanner) ExtractCoverArt(ctx context.Context, audioFilePath, bookID string) (string, error) {
+// Returns CoverInfo containing the hash, size, and format, or nil if no cover found.
+func (s *Scanner) ExtractCoverArt(ctx context.Context, audioFilePath, bookID string) (*images.CoverInfo, error) {
 	if s.imageProcessor == nil {
-		return "", nil // No image processor configured
+		return nil, nil // No image processor configured
 	}
 
-	coverPath, err := s.imageProcessor.ExtractAndProcess(ctx, audioFilePath, bookID)
+	coverInfo, err := s.imageProcessor.ExtractAndProcess(ctx, audioFilePath, bookID)
 	if err != nil {
-		return "", fmt.Errorf("extract and process cover: %w", err)
+		return nil, fmt.Errorf("extract and process cover: %w", err)
 	}
 
-	return coverPath, nil
+	return coverInfo, nil
 }
 
 // ScanFolder scans a specific folder incrementally.

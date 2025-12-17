@@ -80,9 +80,9 @@ func (s *TokenService) GenerateAccessToken(user *domain.User) (string, error) {
 	token.SetJti(tokenID)
 
 	// Our custom claims
-	//nolint:errcheck // Token.Set only errors on invalid types, which we control
+
 	_ = token.Set("user_id", user.ID)
-	//nolint:errcheck // Token.Set only errors on invalid types, which we control
+
 	_ = token.Set("email", user.Email)
 
 	// Let's encrypt.

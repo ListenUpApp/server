@@ -125,12 +125,10 @@ func (e *Enricher) EnrichBook(ctx context.Context, book *domain.Book) (*Book, er
 		}
 	}
 
-	// Enrich genres (convert IDs to names)
+	// Enrich genres (convert IDs to names).
+	// Genre lookup failures are non-fatal - just skip genres.
 	if len(book.GenreIDs) > 0 {
-		genres, err := e.store.GetGenresByIDs(ctx, book.GenreIDs)
-		if err != nil {
-			// Don't fail enrichment if genre lookup fails
-		} else {
+		if genres, err := e.store.GetGenresByIDs(ctx, book.GenreIDs); err == nil {
 			dto.Genres = make([]string, 0, len(genres))
 			for _, g := range genres {
 				dto.Genres = append(dto.Genres, g.Name)

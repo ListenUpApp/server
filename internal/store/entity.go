@@ -424,7 +424,7 @@ func (e *Entity[T]) Delete(ctx context.Context, id string) error {
 // List returns an iterator over all entities.
 func (e *Entity[T]) List(ctx context.Context) iter.Seq2[*T, error] {
 	return func(yield func(*T, error) bool) {
-		e.store.db.View(func(txn *badger.Txn) error {
+		_ = e.store.db.View(func(txn *badger.Txn) error {
 			opts := badger.DefaultIteratorOptions
 			opts.Prefix = []byte(e.prefix)
 			opts.PrefetchValues = true

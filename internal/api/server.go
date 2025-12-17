@@ -87,6 +87,10 @@ func (s *Server) setupRoutes() {
 	// Health check.
 	s.router.Get("/health", s.handleHealthCheck)
 
+	// Web routes (outside API for App Links).
+	s.router.Get("/.well-known/assetlinks.json", s.handleAssetLinks)
+	s.router.Get("/join/{code}", s.handleJoinPage)
+
 	// API v1.
 	s.router.Route("/api/v1", func(r chi.Router) {
 		r.Get("/instance", s.handleGetInstance)
@@ -101,6 +105,31 @@ func (s *Server) setupRoutes() {
 			r.With(RateLimitMiddleware(s.authRateLimiter, s.logger)).Post("/login", s.handleLogin)
 			r.Post("/refresh", s.handleRefresh)
 			r.Post("/logout", s.handleLogout)
+		})
+
+		// Public invite endpoints (rate limited for security).
+		r.Route("/invites", func(r chi.Router) {
+			r.Get("/{code}", s.handleGetInviteDetails)
+			r.With(RateLimitMiddleware(s.authRateLimiter, s.logger)).Post("/{code}/claim", s.handleClaimInvite)
+		})
+
+		// Admin endpoints (require auth + admin role).
+		r.Route("/admin", func(r chi.Router) {
+			r.Use(s.requireAuth)
+			r.Use(s.requireAdmin)
+
+			r.Route("/invites", func(r chi.Router) {
+				r.Post("/", s.handleCreateInvite)
+				r.Get("/", s.handleListInvites)
+				r.Delete("/{id}", s.handleDeleteInvite)
+			})
+
+			r.Route("/users", func(r chi.Router) {
+				r.Get("/", s.handleListUsers)
+				r.Get("/{id}", s.handleGetAdminUser)
+				r.Patch("/{id}", s.handleUpdateAdminUser)
+				r.Delete("/{id}", s.handleDeleteAdminUser)
+			})
 		})
 
 		// Protected user endpoints.
@@ -373,7 +402,7 @@ func (s *Server) handleTriggerScan(w http.ResponseWriter, r *http.Request) {
 	// This handles cases where async per-book indexing may have failed.
 	if s.services.Search != nil && (result.Added > 0 || result.Updated > 0) {
 		go func() {
-			// Use background context since HTTP request context will be cancelled
+			// Use background context since HTTP request context will be canceled
 			reindexCtx := context.Background()
 			s.logger.Info("Triggering search reindex after scan",
 				"added", result.Added,

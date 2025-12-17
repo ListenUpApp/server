@@ -56,6 +56,34 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 	})
 }
 
+// requireAdmin is middleware that checks for administrative privileges.
+// Must be used after requireAuth. Checks if the user is root or has admin role.
+func (s *Server) requireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		userID := getUserID(ctx)
+
+		if userID == "" {
+			response.Unauthorized(w, "Authentication required", s.logger)
+			return
+		}
+
+		// Get user to check admin status
+		user, err := s.store.GetUser(ctx, userID)
+		if err != nil {
+			response.Unauthorized(w, "User not found", s.logger)
+			return
+		}
+
+		if !user.IsAdmin() {
+			response.Forbidden(w, "Admin access required", s.logger)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 // getUserID extracts the authenticated user ID from request context.
 // Returns empty string if not authenticated.
 func getUserID(ctx context.Context) string {

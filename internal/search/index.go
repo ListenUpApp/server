@@ -220,9 +220,3 @@ func (s *SearchIndex) Rebuild() error {
 
 	return nil
 }
-
-// getIndex returns the underlying bleve index for advanced queries.
-// This is package-private and used by the query functions.
-func (s *SearchIndex) getIndex() bleve.Index {
-	return s.index
-}

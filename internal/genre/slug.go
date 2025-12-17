@@ -17,9 +17,9 @@ var (
 )
 
 // Slugify converts a string to a URL-safe slug.
-// "Science Fiction" -> "science-fiction"
-// "LitRPG" -> "litrpg"
-// "Sci-Fi/Fantasy" -> "sci-fi-fantasy"
+// "Science Fiction" -> "science-fiction".
+// "LitRPG" -> "litrpg".
+// "Sci-Fi/Fantasy" -> "sci-fi-fantasy".
 func Slugify(s string) string {
 	// Normalize unicode (decompose accented characters).
 	s = norm.NFKD.String(s)

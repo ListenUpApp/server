@@ -38,8 +38,6 @@ type AnalyzeOptions struct {
 }
 
 // Analyze analyzes audio files and extracts metadata concurrently.
-//
-//nolint:gocyclo // Acceptable complexity for concurrent worker pool coordination
 func (a *Analyzer) Analyze(ctx context.Context, files []AudioFileData, opts AnalyzeOptions) ([]AudioFileData, error) {
 	// Handle empty input.
 	if len(files) == 0 {

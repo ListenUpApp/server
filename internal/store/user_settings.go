@@ -12,6 +12,7 @@ import (
 
 const userSettingsPrefix = "settings:"
 
+// ErrUserSettingsNotFound is returned when user settings are not found.
 var ErrUserSettingsNotFound = ErrNotFound.WithMessage("user settings not found")
 
 // GetUserSettings retrieves settings for a user.

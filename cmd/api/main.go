@@ -15,6 +15,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/auth"
 	"github.com/listenupapp/listenup-server/internal/config"
 	"github.com/listenupapp/listenup-server/internal/logger"
+	"github.com/listenupapp/listenup-server/internal/mdns"
 	"github.com/listenupapp/listenup-server/internal/media/images"
 	"github.com/listenupapp/listenup-server/internal/processor"
 	"github.com/listenupapp/listenup-server/internal/scanner"
@@ -286,6 +287,11 @@ func main() {
 	sessionService := service.NewSessionService(db, tokenService, log.Logger)
 	authService := service.NewAuthService(db, tokenService, sessionService, instanceService, log.Logger)
 
+	// Initialize invite and admin services.
+	serverURL := fmt.Sprintf("http://localhost:%s", cfg.Server.Port) // TODO: Get from config or auto-detect
+	inviteService := service.NewInviteService(db, sessionService, log.Logger, serverURL)
+	adminService := service.NewAdminService(db, log.Logger)
+
 	sseHandler := sse.NewHandler(sseManager, log.Logger)
 
 	// Seed default genres (no-op if already seeded).
@@ -330,6 +336,8 @@ func main() {
 		Genre:      genreService,
 		Tag:        tagService,
 		Search:     searchService,
+		Invite:     inviteService,
+		Admin:      adminService,
 	}
 	storage := &api.StorageServices{
 		Covers:            coverStorage,
@@ -359,6 +367,23 @@ func main() {
 
 	log.Info("Server running", "addr", srv.Addr)
 
+	// Start mDNS advertisement for local network discovery.
+	var mdnsService *mdns.Service
+	if cfg.Server.AdvertiseMDNS {
+		mdnsService = mdns.NewService(log.Logger)
+		// Parse port as int for mDNS
+		port := 8080
+		if _, err := fmt.Sscanf(cfg.Server.Port, "%d", &port); err != nil {
+			log.Warn("Failed to parse server port for mDNS, using default", "port", cfg.Server.Port)
+		}
+		if err := mdnsService.Start(instanceConfig, port); err != nil {
+			log.Warn("mDNS advertisement unavailable", "error", err)
+			// Non-fatal: server works without mDNS (e.g., Docker, cloud)
+		}
+	} else {
+		log.Info("mDNS advertisement disabled by configuration")
+	}
+
 	// Wait for interrupt signal.
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -370,9 +395,10 @@ func main() {
 	// 1. Stop session cleanup job.
 	// 2. Stop file watcher (no more file events).
 	// 3. Shutdown SSE manager (no more event broadcasts).
-	// 4. Shutdown HTTP server (no more requests).
-	// 5. Close search index (no more search operations).
-	// 6. Close database (no more data access).
+	// 4. Stop mDNS advertisement.
+	// 5. Shutdown HTTP server (no more requests).
+	// 6. Close search index (no more search operations).
+	// 7. Close database (no more data access).
 
 	// Stop session cleanup job.
 	sessionCleanupCancel()
@@ -390,6 +416,11 @@ func main() {
 	sseCancel() // Cancel SSE context to stop broadcast loop
 	if err := sseManager.Shutdown(shutdownCtx); err != nil {
 		log.Error("Failed to shutdown SSE manager", "error", err)
+	}
+
+	// Stop mDNS advertisement.
+	if mdnsService != nil {
+		mdnsService.Stop()
 	}
 
 	// Shutdown HTTP server.

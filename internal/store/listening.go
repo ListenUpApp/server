@@ -19,6 +19,7 @@ const (
 	progressPrefix        = "progress:"
 )
 
+// Sentinel errors for listening operations.
 var (
 	ErrEventNotFound    = ErrNotFound.WithMessage("listening event not found")
 	ErrProgressNotFound = ErrNotFound.WithMessage("playback progress not found")

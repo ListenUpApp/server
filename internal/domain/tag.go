@@ -2,7 +2,7 @@ package domain
 
 // Tag represents a user-created label for personal organization.
 // Tags are flat (no hierarchy) and scoped to a single user.
-// Example: "beach read", "book club 2024", "gift for dad"
+// Example: "beach read", "book club 2024", "gift for dad".
 type Tag struct {
 	Syncable
 	Name      string `json:"name"`            // Display name

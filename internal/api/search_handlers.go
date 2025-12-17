@@ -140,10 +140,7 @@ func (s *Server) parseSearchParams(r *http.Request) search.SearchParams {
 
 	// Parse types
 	if types := r.URL.Query().Get("types"); types != "" {
-		// Split by comma
-		for _, t := range splitAndTrim(types, ",") {
-			params.Types = append(params.Types, t)
-		}
+		params.Types = append(params.Types, splitAndTrim(types, ",")...)
 	}
 
 	// Parse genre slugs

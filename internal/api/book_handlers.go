@@ -125,7 +125,7 @@ type SetContributorsRequest struct {
 }
 
 // handleSetBookContributors replaces all contributors for a book.
-// PUT /api/v1/books/{id}/contributors
+// PUT /api/v1/books/{id}/contributors.
 func (s *Server) handleSetBookContributors(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := getUserID(ctx)
@@ -220,7 +220,7 @@ type SetSeriesRequest struct {
 }
 
 // handleSetBookSeries replaces all series for a book.
-// PUT /api/v1/books/{id}/series
+// PUT /api/v1/books/{id}/series.
 func (s *Server) handleSetBookSeries(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := getUserID(ctx)
@@ -289,8 +289,8 @@ func (s *Server) handleSetBookSeries(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleUploadCover handles cover image uploads for a book.
-// PUT /api/v1/books/{id}/cover
-// Content-Type: multipart/form-data with "file" field
+// PUT /api/v1/books/{id}/cover.
+// Content-Type: multipart/form-data with "file" field.
 func (s *Server) handleUploadCover(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := getUserID(ctx)

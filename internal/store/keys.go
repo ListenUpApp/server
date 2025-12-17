@@ -26,7 +26,7 @@ var keyPool = sync.Pool{
 //	defer releaseKey(key)
 //	item, err := txn.Get(key)
 func buildKey(prefix, suffix string) []byte {
-	buf := keyPool.Get().([]byte)
+	buf, _ := keyPool.Get().([]byte)
 	buf = buf[:0] // Reset length, keep capacity
 	buf = append(buf, prefix...)
 	buf = append(buf, suffix...)
@@ -43,7 +43,7 @@ func buildKey(prefix, suffix string) []byte {
 //	defer releaseKey(key)
 //	item, err := txn.Get(key)
 func buildIndexKey(prefix, indexName, value string) []byte {
-	buf := keyPool.Get().([]byte)
+	buf, _ := keyPool.Get().([]byte)
 	buf = buf[:0] // Reset length, keep capacity
 	buf = append(buf, prefix...)
 	buf = append(buf, "idx:"...)

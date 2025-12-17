@@ -215,8 +215,8 @@ func (s *Server) handleUpdateSeries(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleUploadSeriesCover handles cover image uploads for a series.
-// PUT /api/v1/series/{id}/cover
-// Content-Type: multipart/form-data with "file" field
+// PUT /api/v1/series/{id}/cover.
+// Content-Type: multipart/form-data with "file" field.
 func (s *Server) handleUploadSeriesCover(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := getUserID(ctx)
@@ -317,7 +317,7 @@ func (s *Server) handleUploadSeriesCover(w http.ResponseWriter, r *http.Request)
 }
 
 // handleGetSeriesCover serves cover images for series.
-// GET /api/v1/series/{id}/cover
+// GET /api/v1/series/{id}/cover.
 func (s *Server) handleGetSeriesCover(w http.ResponseWriter, r *http.Request) {
 	seriesID := chi.URLParam(r, "id")
 	if seriesID == "" {
@@ -378,7 +378,7 @@ func (s *Server) handleGetSeriesCover(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDeleteSeriesCover deletes a series cover image.
-// DELETE /api/v1/series/{id}/cover
+// DELETE /api/v1/series/{id}/cover.
 func (s *Server) handleDeleteSeriesCover(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := getUserID(ctx)
