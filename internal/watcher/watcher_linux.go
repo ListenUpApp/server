@@ -146,6 +146,7 @@ func (b *linuxBackend) removeWatch(path string) {
 	}
 
 	// Remove from inotify (ignore errors, directory may already be gone).
+	//nolint:gosec // G115: wd is always a small non-negative int from inotify
 	_, _ = unix.InotifyRmWatch(b.fd, uint32(wd))
 
 	delete(b.watches, path)

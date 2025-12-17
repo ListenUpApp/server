@@ -198,7 +198,7 @@ func (s *Store) ListUsers(_ context.Context) ([]*domain.User, error) {
 				var user domain.User
 				if unmarshalErr := json.Unmarshal(val, &user); unmarshalErr != nil {
 					// Skip malformed users
-					return nil
+					return nil //nolint:nilerr // intentionally skip malformed entries
 				}
 
 				// Skip deleted users

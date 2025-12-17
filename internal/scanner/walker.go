@@ -123,8 +123,6 @@ func (w *Walker) Walk(ctx context.Context, rootPath string) <-chan WalkResult {
 
 // WalkFolder walks a single folder non-recursively.
 // Returns a channel that will receive results for files in just this folder.
-//
-//nolint:gocyclo // Acceptable complexity for filesystem edge case handling
 func (w *Walker) WalkFolder(ctx context.Context, folderPath string) <-chan WalkResult {
 	results := make(chan WalkResult, 100)
 

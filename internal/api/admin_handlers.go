@@ -15,7 +15,7 @@ import (
 // Admin Invite Handlers
 
 // handleCreateInvite creates a new invite.
-// POST /api/v1/admin/invites
+// POST /api/v1/admin/invites.
 func (s *Server) handleCreateInvite(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := getUserID(ctx)
@@ -36,7 +36,7 @@ func (s *Server) handleCreateInvite(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleListInvites returns all invites.
-// GET /api/v1/admin/invites
+// GET /api/v1/admin/invites.
 func (s *Server) handleListInvites(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -72,7 +72,7 @@ func (s *Server) handleListInvites(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDeleteInvite revokes an unclaimed invite.
-// DELETE /api/v1/admin/invites/{id}
+// DELETE /api/v1/admin/invites/{id}.
 func (s *Server) handleDeleteInvite(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	inviteID := chi.URLParam(r, "id")
@@ -93,7 +93,7 @@ func (s *Server) handleDeleteInvite(w http.ResponseWriter, r *http.Request) {
 // Admin User Handlers
 
 // handleListUsers returns all users.
-// GET /api/v1/admin/users
+// GET /api/v1/admin/users.
 func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -105,18 +105,18 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Filter out sensitive fields
-	var sanitizedUsers []map[string]interface{}
+	sanitizedUsers := make([]map[string]interface{}, 0, len(users))
 	for _, u := range users {
 		sanitizedUsers = append(sanitizedUsers, map[string]interface{}{
-			"id":           u.ID,
-			"email":        u.Email,
-			"display_name": u.DisplayName,
-			"first_name":   u.FirstName,
-			"last_name":    u.LastName,
-			"is_root":      u.IsRoot,
-			"role":         u.Role,
-			"invited_by":   u.InvitedBy,
-			"created_at":   u.CreatedAt,
+			"id":            u.ID,
+			"email":         u.Email,
+			"display_name":  u.DisplayName,
+			"first_name":    u.FirstName,
+			"last_name":     u.LastName,
+			"is_root":       u.IsRoot,
+			"role":          u.Role,
+			"invited_by":    u.InvitedBy,
+			"created_at":    u.CreatedAt,
 			"last_login_at": u.LastLoginAt,
 		})
 	}
@@ -127,7 +127,7 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetAdminUser returns a single user.
-// GET /api/v1/admin/users/{id}
+// GET /api/v1/admin/users/{id}.
 func (s *Server) handleGetAdminUser(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	targetUserID := chi.URLParam(r, "id")
@@ -145,15 +145,15 @@ func (s *Server) handleGetAdminUser(w http.ResponseWriter, r *http.Request) {
 
 	// Filter out sensitive fields
 	sanitizedUser := map[string]interface{}{
-		"id":           user.ID,
-		"email":        user.Email,
-		"display_name": user.DisplayName,
-		"first_name":   user.FirstName,
-		"last_name":    user.LastName,
-		"is_root":      user.IsRoot,
-		"role":         user.Role,
-		"invited_by":   user.InvitedBy,
-		"created_at":   user.CreatedAt,
+		"id":            user.ID,
+		"email":         user.Email,
+		"display_name":  user.DisplayName,
+		"first_name":    user.FirstName,
+		"last_name":     user.LastName,
+		"is_root":       user.IsRoot,
+		"role":          user.Role,
+		"invited_by":    user.InvitedBy,
+		"created_at":    user.CreatedAt,
 		"last_login_at": user.LastLoginAt,
 	}
 
@@ -161,7 +161,7 @@ func (s *Server) handleGetAdminUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleUpdateAdminUser updates a user's details.
-// PATCH /api/v1/admin/users/{id}
+// PATCH /api/v1/admin/users/{id}.
 func (s *Server) handleUpdateAdminUser(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	adminUserID := getUserID(ctx)
@@ -186,15 +186,15 @@ func (s *Server) handleUpdateAdminUser(w http.ResponseWriter, r *http.Request) {
 
 	// Filter out sensitive fields
 	sanitizedUser := map[string]interface{}{
-		"id":           user.ID,
-		"email":        user.Email,
-		"display_name": user.DisplayName,
-		"first_name":   user.FirstName,
-		"last_name":    user.LastName,
-		"is_root":      user.IsRoot,
-		"role":         user.Role,
-		"invited_by":   user.InvitedBy,
-		"created_at":   user.CreatedAt,
+		"id":            user.ID,
+		"email":         user.Email,
+		"display_name":  user.DisplayName,
+		"first_name":    user.FirstName,
+		"last_name":     user.LastName,
+		"is_root":       user.IsRoot,
+		"role":          user.Role,
+		"invited_by":    user.InvitedBy,
+		"created_at":    user.CreatedAt,
 		"last_login_at": user.LastLoginAt,
 	}
 
@@ -202,7 +202,7 @@ func (s *Server) handleUpdateAdminUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDeleteAdminUser soft-deletes a user.
-// DELETE /api/v1/admin/users/{id}
+// DELETE /api/v1/admin/users/{id}.
 func (s *Server) handleDeleteAdminUser(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	adminUserID := getUserID(ctx)
@@ -225,6 +225,7 @@ func (s *Server) handleDeleteAdminUser(w http.ResponseWriter, r *http.Request) {
 func handleServiceError(w http.ResponseWriter, err error, logger *slog.Logger) {
 	var domainErr *domainerrors.Error
 	if errors.As(err, &domainErr) {
+		//nolint:exhaustive // default case handles all other error codes
 		switch domainErr.Code {
 		case domainerrors.CodeNotFound:
 			response.NotFound(w, domainErr.Message, logger)

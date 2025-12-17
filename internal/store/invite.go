@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	invitePrefix         = "invite:"
-	inviteByCodePrefix   = "idx:invites:code:"   // For public code lookups
+	invitePrefix          = "invite:"
+	inviteByCodePrefix    = "idx:invites:code:"    // For public code lookups
 	inviteByCreatorPrefix = "idx:invites:creator:" // For listing by admin
 )
 
@@ -202,7 +202,7 @@ func (s *Store) ListInvites(ctx context.Context) ([]*domain.Invite, error) {
 				var invite domain.Invite
 				if unmarshalErr := json.Unmarshal(val, &invite); unmarshalErr != nil {
 					// Skip malformed invites
-					return nil
+					return nil //nolint:nilerr // intentionally skip malformed entries
 				}
 
 				invites = append(invites, &invite)

@@ -48,10 +48,10 @@ func NewInviteService(
 
 // CreateInviteRequest contains the data needed to create an invite.
 type CreateInviteRequest struct {
-	Name         string      `json:"name" validate:"required,max=100"`
-	Email        string      `json:"email" validate:"required,email"`
-	Role         domain.Role `json:"role" validate:"required,oneof=admin member"`
-	ExpiresInDays int        `json:"expires_in_days"` // 0 = use default (7 days)
+	Name          string      `json:"name" validate:"required,max=100"`
+	Email         string      `json:"email" validate:"required,email"`
+	Role          domain.Role `json:"role" validate:"required,oneof=admin member"`
+	ExpiresInDays int         `json:"expires_in_days"` // 0 = use default (7 days)
 }
 
 // InviteResponse is returned after creating an invite.

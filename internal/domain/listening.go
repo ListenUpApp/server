@@ -37,7 +37,7 @@ type PlaybackProgress struct {
 	UpdatedAt         time.Time  `json:"updated_at"`
 }
 
-// ProgressID generates composite key: "userID:bookID"
+// ProgressID generates composite key: "userID:bookID".
 func ProgressID(userID, bookID string) string {
 	return userID + ":" + bookID
 }

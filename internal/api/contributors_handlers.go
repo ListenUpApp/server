@@ -114,12 +114,12 @@ func (s *Server) handleGetContributorBooks(w http.ResponseWriter, r *http.Reques
 
 // handleSearchContributors searches for contributors by name.
 // Used for autocomplete when editing book contributors.
-// GET /api/v1/contributors/search?q=steven&limit=10
+// GET /api/v1/contributors/search?q=steven&limit=10.
 //
 // Uses Bleve full-text search for O(log n) performance with:
-// - Prefix matching ("bran" → "Brandon Sanderson")
-// - Word matching ("sanderson" in "Brandon Sanderson")
-// - Fuzzy matching for typo tolerance
+// - Prefix matching ("bran" → "Brandon Sanderson").
+// - Word matching ("sanderson" in "Brandon Sanderson").
+// - Fuzzy matching for typo tolerance.
 func (s *Server) handleSearchContributors(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := getUserID(ctx)
@@ -403,8 +403,8 @@ func (s *Server) handleUpdateContributor(w http.ResponseWriter, r *http.Request)
 }
 
 // handleUploadContributorImage handles profile photo uploads for a contributor.
-// PUT /api/v1/contributors/{id}/image
-// Content-Type: multipart/form-data with "file" field
+// PUT /api/v1/contributors/{id}/image.
+// Content-Type: multipart/form-data with "file" field.
 func (s *Server) handleUploadContributorImage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := getUserID(ctx)
@@ -498,7 +498,7 @@ func (s *Server) handleUploadContributorImage(w http.ResponseWriter, r *http.Req
 }
 
 // handleGetContributorImage serves a contributor's profile photo.
-// GET /api/v1/contributors/{id}/image
+// GET /api/v1/contributors/{id}/image.
 func (s *Server) handleGetContributorImage(w http.ResponseWriter, r *http.Request) {
 	contributorID := chi.URLParam(r, "id")
 

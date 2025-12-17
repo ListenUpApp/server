@@ -13,7 +13,7 @@ import (
 // Public Invite Handlers
 
 // handleGetInviteDetails returns invite details by code.
-// GET /api/v1/invites/{code}
+// GET /api/v1/invites/{code}.
 func (s *Server) handleGetInviteDetails(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	code := chi.URLParam(r, "code")
@@ -33,7 +33,7 @@ func (s *Server) handleGetInviteDetails(w http.ResponseWriter, r *http.Request) 
 }
 
 // handleClaimInvite claims an invite and creates a new user.
-// POST /api/v1/invites/{code}/claim
+// POST /api/v1/invites/{code}/claim.
 func (s *Server) handleClaimInvite(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	code := chi.URLParam(r, "code")

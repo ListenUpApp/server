@@ -27,8 +27,8 @@ func NewStorage(basePath string) (*Storage, error) {
 
 // NewStorageWithSubdir creates a new Storage instance with a custom subdirectory.
 // basePath should be the metadata directory (e.g., ~/ListenUp/metadata).
-// Images will be stored in {basePath}/{subdir}/
-// Example: NewStorageWithSubdir("/data", "contributors") -> /data/contributors/
+// Images will be stored in {basePath}/{subdir}/.
+// Example: NewStorageWithSubdir("/data", "contributors") -> /data/contributors/.
 func NewStorageWithSubdir(basePath, subdir string) (*Storage, error) {
 	if basePath == "" {
 		return nil, fmt.Errorf("base path cannot be empty")
@@ -50,7 +50,7 @@ func NewStorageWithSubdir(basePath, subdir string) (*Storage, error) {
 }
 
 // Save stores image data for an entity.
-// Filename format: {id}.jpg
+// Filename format: {id}.jpg.
 func (s *Storage) Save(id string, imgData []byte) error {
 	if id == "" {
 		return fmt.Errorf("ID cannot be empty")

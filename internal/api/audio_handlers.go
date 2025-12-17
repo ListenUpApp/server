@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"os"
 	"strings"
@@ -11,7 +12,7 @@ import (
 )
 
 // handleStreamAudio streams an audio file with HTTP Range support for seeking.
-// GET /api/v1/books/{id}/audio/{audioFileId}
+// GET /api/v1/books/{id}/audio/{audioFileId}.
 func (s *Server) handleStreamAudio(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := getUserID(ctx)
@@ -36,7 +37,7 @@ func (s *Server) handleStreamAudio(w http.ResponseWriter, r *http.Request) {
 	// Get book (handles access control).
 	book, err := s.services.Book.GetBook(ctx, userID, bookID)
 	if err != nil {
-		if err == store.ErrBookNotFound {
+		if errors.Is(err, store.ErrBookNotFound) {
 			response.NotFound(w, "Book not found", s.logger)
 			return
 		}

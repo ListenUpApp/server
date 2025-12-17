@@ -96,7 +96,7 @@ func LoadConfig() (*Config, error) {
 	flag.Parse()
 
 	// Load .env file if it exists (silently ignore if not found).
-	_ = loadEnvFile(*envFile) //nolint:errcheck // Intentionally ignoring error, .env file is optional
+	_ = loadEnvFile(*envFile)
 
 	// Build config with proper precedence.
 	cfg := &Config{
@@ -327,7 +327,7 @@ func loadEnvFile(path string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close() //nolint:errcheck // Defer close, nothing we can do about errors here
+	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
 	lineNum := 0

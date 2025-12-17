@@ -266,24 +266,24 @@ func buildSearchQuery(params SearchParams) query.Query {
 
 	// Duration range filter
 	if params.MinDuration > 0 || params.MaxDuration > 0 {
-		min := float64(params.MinDuration)
-		max := float64(params.MaxDuration)
+		minVal := float64(params.MinDuration)
+		maxVal := float64(params.MaxDuration)
 		if params.MaxDuration == 0 {
-			max = math.MaxFloat64
+			maxVal = math.MaxFloat64
 		}
-		rangeQuery := bleve.NewNumericRangeQuery(&min, &max)
+		rangeQuery := bleve.NewNumericRangeQuery(&minVal, &maxVal)
 		rangeQuery.SetField("duration")
 		queries = append(queries, rangeQuery)
 	}
 
 	// Year range filter
 	if params.MinYear > 0 || params.MaxYear > 0 {
-		min := float64(params.MinYear)
-		max := float64(params.MaxYear)
+		minVal := float64(params.MinYear)
+		maxVal := float64(params.MaxYear)
 		if params.MaxYear == 0 {
-			max = 3000 // Far future
+			maxVal = 3000 // Far future
 		}
-		rangeQuery := bleve.NewNumericRangeQuery(&min, &max)
+		rangeQuery := bleve.NewNumericRangeQuery(&minVal, &maxVal)
 		rangeQuery.SetField("publish_year")
 		queries = append(queries, rangeQuery)
 	}

@@ -402,7 +402,7 @@ func (s *Server) handleTriggerScan(w http.ResponseWriter, r *http.Request) {
 	// This handles cases where async per-book indexing may have failed.
 	if s.services.Search != nil && (result.Added > 0 || result.Updated > 0) {
 		go func() {
-			// Use background context since HTTP request context will be cancelled
+			// Use background context since HTTP request context will be canceled
 			reindexCtx := context.Background()
 			s.logger.Info("Triggering search reindex after scan",
 				"added", result.Added,

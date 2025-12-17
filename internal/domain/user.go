@@ -18,8 +18,8 @@ type User struct {
 	Email        string    `json:"email"`
 	PasswordHash string    `json:"password_hash,omitempty"` // Stored hashed, filter from API responses
 	IsRoot       bool      `json:"is_root"`
-	Role         Role      `json:"role"`                    // admin or member
-	InvitedBy    string    `json:"invited_by,omitempty"`    // User ID who invited this user
+	Role         Role      `json:"role"`                 // admin or member
+	InvitedBy    string    `json:"invited_by,omitempty"` // User ID who invited this user
 	DisplayName  string    `json:"display_name"`
 	FirstName    string    `json:"first_name"`
 	LastName     string    `json:"last_name"`

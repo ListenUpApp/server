@@ -145,14 +145,12 @@ func (s *Store) BroadcastBookCreated(ctx context.Context, book *domain.Book) err
 		}
 		// Fallback: wrap domain.Book in dto.Book without enrichment
 		enrichedBook = &dto.Book{Book: book}
-	} else {
-		if s.logger != nil {
-			s.logger.Debug("enrichment complete",
-				"book_id", book.ID,
-				"author", enrichedBook.Author,
-				"narrator", enrichedBook.Narrator,
-			)
-		}
+	} else if s.logger != nil {
+		s.logger.Debug("enrichment complete",
+			"book_id", book.ID,
+			"author", enrichedBook.Author,
+			"narrator", enrichedBook.Narrator,
+		)
 	}
 
 	s.eventEmitter.Emit(sse.NewBookCreatedEvent(enrichedBook))
@@ -628,6 +626,7 @@ func (s *Store) BookExists(ctx context.Context, id string) (bool, error) {
 	return book != nil, nil
 }
 
+// ListBooks returns a paginated list of all books.
 func (s *Store) ListBooks(ctx context.Context, params PaginationParams) (*PaginatedResult[*domain.Book], error) {
 	params.Validate()
 

@@ -26,7 +26,7 @@ func (p *NativeParser) Parse(ctx context.Context, path string) (*Metadata, error
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close() //nolint:errcheck // Defer close, nothing we can do about errors here
+	defer file.Close() //nolint:errcheck // Read-only file, Close error is benign
 
 	return convertMetadata(file), nil
 }
@@ -49,7 +49,7 @@ func (p *NativeParser) ParseMultiFile(ctx context.Context, paths []string) (*Met
 		}
 		defer func() {
 			for _, f := range files {
-				_ = f.Close() //nolint:errcheck // Defer close in cleanup, nothing we can do about errors
+				_ = f.Close()
 			}
 		}()
 
@@ -93,7 +93,7 @@ func (p *NativeParser) ParseMultiFile(ctx context.Context, paths []string) (*Met
 		if err != nil {
 			return nil, err
 		}
-		defer file.Close() //nolint:errcheck // Defer close, nothing we can do about errors here
+		defer file.Close() //nolint:errcheck // Read-only file, Close error is benign
 
 		return convertMetadata(file), nil
 

@@ -16,7 +16,7 @@ type BookPreferences struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// BookPreferencesID generates composite key: "userID:prefs:bookID"
+// BookPreferencesID generates composite key: "userID:prefs:bookID".
 func BookPreferencesID(userID, bookID string) string {
 	return userID + ":prefs:" + bookID
 }

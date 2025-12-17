@@ -53,7 +53,7 @@ func (s *Service) Start(instance *domain.Instance, port int) error {
 
 	// Stop existing server if running (for restart scenarios)
 	if s.server != nil {
-		s.server.Shutdown()
+		_ = s.server.Shutdown()
 		s.server = nil
 	}
 
@@ -117,7 +117,7 @@ func (s *Service) Stop() {
 	defer s.mu.Unlock()
 
 	if s.server != nil {
-		s.server.Shutdown()
+		_ = s.server.Shutdown()
 		s.server = nil
 		s.logger.Info("mDNS advertisement stopped")
 	}

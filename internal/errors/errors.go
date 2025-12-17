@@ -58,6 +58,7 @@ const (
 
 // HTTPStatus returns the appropriate HTTP status code for an error code.
 func (c Code) HTTPStatus() int {
+	//nolint:exhaustive // default case handles CodeInternal
 	switch c {
 	case CodeNotFound:
 		return http.StatusNotFound

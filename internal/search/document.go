@@ -12,6 +12,7 @@ import (
 // DocType represents the type of document in the unified index.
 type DocType string
 
+// Document types for the search index.
 const (
 	DocTypeBook        DocType = "book"
 	DocTypeContributor DocType = "contributor"

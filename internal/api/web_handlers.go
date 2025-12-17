@@ -12,7 +12,7 @@ import (
 var templates embed.FS
 
 // handleAssetLinks serves the Android App Links verification file.
-// GET /.well-known/assetlinks.json
+// GET /.well-known/assetlinks.json.
 func (s *Server) handleAssetLinks(w http.ResponseWriter, _ *http.Request) {
 	data, err := templates.ReadFile("templates/assetlinks.json")
 	if err != nil {
@@ -28,19 +28,19 @@ func (s *Server) handleAssetLinks(w http.ResponseWriter, _ *http.Request) {
 
 // joinPageData contains data for the invite landing page template.
 type joinPageData struct {
-	Valid      bool
-	Claimed    bool
-	Expired    bool
-	Name       string
-	Email      string
-	ServerName string
+	Valid       bool
+	Claimed     bool
+	Expired     bool
+	Name        string
+	Email       string
+	ServerName  string
 	InviterName string
-	ServerURL  string
-	Code       string
+	ServerURL   string
+	Code        string
 }
 
 // handleJoinPage serves the invite landing page.
-// GET /join/{code}
+// GET /join/{code}.
 func (s *Server) handleJoinPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	code := chi.URLParam(r, "code")

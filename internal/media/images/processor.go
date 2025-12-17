@@ -9,6 +9,9 @@ import (
 	"github.com/simonhull/audiometa"
 )
 
+// MIME type for unknown binary data.
+const mimeOctetStream = "mimeOctetStream"
+
 // CoverInfo contains metadata about an extracted cover image.
 type CoverInfo struct {
 	Hash   string // SHA256 hash of the cover for cache validation
@@ -100,7 +103,7 @@ func (p *Processor) ExtractAndProcess(ctx context.Context, audioFilePath, bookID
 // detectImageFormat detects the MIME type from image data magic bytes.
 func detectImageFormat(data []byte) string {
 	if len(data) < 4 {
-		return "application/octet-stream"
+		return mimeOctetStream
 	}
 
 	// Check magic bytes
@@ -116,9 +119,9 @@ func detectImageFormat(data []byte) string {
 		if len(data) >= 12 && data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50 {
 			return "image/webp"
 		}
-		return "application/octet-stream"
+		return mimeOctetStream
 	default:
-		return "application/octet-stream"
+		return mimeOctetStream
 	}
 }
 
