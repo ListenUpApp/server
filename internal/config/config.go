@@ -45,13 +45,14 @@ type LibraryConfig struct {
 
 // ServerConfig holds server configuration.
 type ServerConfig struct {
-	Name         string
-	LocalURL     string        // Optional
-	RemoteURL    string        // Optional
-	Port         string        // Server port (default: 8080)
-	ReadTimeout  time.Duration // HTTP read timeout (default: 15s)
-	WriteTimeout time.Duration // HTTP write timeout (default: 15s)
-	IdleTimeout  time.Duration // HTTP idle timeout (default: 60s)
+	Name          string
+	LocalURL      string        // Optional
+	RemoteURL     string        // Optional
+	Port          string        // Server port (default: 8080)
+	ReadTimeout   time.Duration // HTTP read timeout (default: 15s)
+	WriteTimeout  time.Duration // HTTP write timeout (default: 15s)
+	IdleTimeout   time.Duration // HTTP idle timeout (default: 60s)
+	AdvertiseMDNS bool          // Advertise via mDNS/Zeroconf (default: true)
 }
 
 // AuthConfig holds authentication configuration.
@@ -87,6 +88,7 @@ func LoadConfig() (*Config, error) {
 	readTimeout := flag.String("read-timeout", "", "HTTP read timeout (default: 15s)")
 	writeTimeout := flag.String("write-timeout", "", "HTTP write timeout (default: 15s)")
 	idleTimeout := flag.String("idle-timeout", "", "HTTP idle timeout (default: 60s)")
+	advertiseMDNS := flag.String("advertise-mdns", "", "Advertise via mDNS/Zeroconf (default: true)")
 
 	envFile := flag.String("env-file", ".env", "Path to .env file")
 
@@ -113,10 +115,11 @@ func LoadConfig() (*Config, error) {
 		},
 
 		Server: ServerConfig{
-			Name:      getConfigValue(*serverName, "SERVER_NAME", "ListenUp Server"),
-			LocalURL:  getConfigValue(*serverLocalURL, "SERVER_LOCAL_URL", ""),
-			RemoteURL: getConfigValue(*serverRemoteURL, "SERVER_REMOTE_URL", ""),
-			Port:      getConfigValue(*serverPort, "SERVER_PORT", "8080"),
+			Name:          getConfigValue(*serverName, "SERVER_NAME", "ListenUp Server"),
+			LocalURL:      getConfigValue(*serverLocalURL, "SERVER_LOCAL_URL", ""),
+			RemoteURL:     getConfigValue(*serverRemoteURL, "SERVER_REMOTE_URL", ""),
+			Port:          getConfigValue(*serverPort, "SERVER_PORT", "8080"),
+			AdvertiseMDNS: getBoolConfigValue(*advertiseMDNS, "ADVERTISE_MDNS", true),
 		},
 
 		Auth: AuthConfig{
@@ -304,6 +307,17 @@ func getConfigValue(flagValue, envKey, defaultValue string) string {
 
 	// Priority 3: Default value.
 	return defaultValue
+}
+
+// getBoolConfigValue returns a bool from flag, env var, or default.
+// Accepts: "true", "1", "yes" (case-insensitive) as true; anything else is false.
+func getBoolConfigValue(flagValue, envKey string, defaultValue bool) bool {
+	strValue := getConfigValue(flagValue, envKey, "")
+	if strValue == "" {
+		return defaultValue
+	}
+	strValue = strings.ToLower(strValue)
+	return strValue == "true" || strValue == "1" || strValue == "yes"
 }
 
 // loadEnvFile loads environment variables from a .env file.
