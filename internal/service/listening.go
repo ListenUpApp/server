@@ -152,10 +152,16 @@ func (s *ListeningService) GetContinueListening(ctx context.Context, userID stri
 		// Get author name by looking up contributor IDs with author role
 		authorName := s.getAuthorName(ctx, book)
 
-		// Get cover path from CoverImage if present
+		// Get cover path and BlurHash from CoverImage if present
 		var coverPath *string
-		if book.CoverImage != nil && book.CoverImage.Path != "" {
-			coverPath = &book.CoverImage.Path
+		var coverBlurHash *string
+		if book.CoverImage != nil {
+			if book.CoverImage.Path != "" {
+				coverPath = &book.CoverImage.Path
+			}
+			if book.CoverImage.BlurHash != "" {
+				coverBlurHash = &book.CoverImage.BlurHash
+			}
 		}
 
 		items = append(items, &domain.ContinueListeningItem{
@@ -166,6 +172,7 @@ func (s *ListeningService) GetContinueListening(ctx context.Context, userID stri
 			Title:             book.Title,
 			AuthorName:        authorName,
 			CoverPath:         coverPath,
+			CoverBlurHash:     coverBlurHash,
 			TotalDurationMs:   book.TotalDuration,
 		})
 	}

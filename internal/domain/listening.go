@@ -152,5 +152,6 @@ type ContinueListeningItem struct {
 	Title           string  `json:"title"`
 	AuthorName      string  `json:"author_name"`
 	CoverPath       *string `json:"cover_path,omitempty"`
+	CoverBlurHash   *string `json:"cover_blur_hash,omitempty"`
 	TotalDurationMs int64   `json:"total_duration_ms"`
 }
