@@ -1,0 +1,39 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Build artifacts
+bin/
+tmp/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test files
+*_test.go
+coverage.txt
+*.test
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Development
+.env
+.env.local
+.air.toml
+
+# CI/CD
+.github/
+
+# Claude Code
+.claude/

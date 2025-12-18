@@ -14,12 +14,13 @@ import (
 
 // Config holds the application configuration.
 type Config struct {
-	App      AppConfig
-	Logger   LoggerConfig
-	Metadata MetadataConfig
-	Library  LibraryConfig
-	Server   ServerConfig
-	Auth     AuthConfig
+	App       AppConfig
+	Logger    LoggerConfig
+	Metadata  MetadataConfig
+	Library   LibraryConfig
+	Server    ServerConfig
+	Auth      AuthConfig
+	Transcode TranscodeConfig
 }
 
 // AppConfig holds application-level configuration.
@@ -64,6 +65,18 @@ type AuthConfig struct {
 	RefreshTokenDuration time.Duration // e.g., 720h (30 days)
 }
 
+// TranscodeConfig holds audio transcoding configuration.
+type TranscodeConfig struct {
+	// Enabled allows disabling transcoding entirely (default: true)
+	Enabled bool
+	// CachePath is the directory for cached transcodes (default: {metadata}/cache/transcode)
+	CachePath string
+	// MaxConcurrent is the maximum simultaneous transcode jobs (default: 2)
+	MaxConcurrent int
+	// FFmpegPath overrides auto-detection of ffmpeg location (default: auto-detect)
+	FFmpegPath string
+}
+
 // LoadConfig loads configuration from multiple sources with precedence:
 // 1. Command-line flags (highest priority).
 // 2. Environment variables.
@@ -91,6 +104,12 @@ func LoadConfig() (*Config, error) {
 	advertiseMDNS := flag.String("advertise-mdns", "", "Advertise via mDNS/Zeroconf (default: true)")
 
 	envFile := flag.String("env-file", ".env", "Path to .env file")
+
+	// Transcode flags
+	transcodeEnabled := flag.String("transcode-enabled", "", "Enable audio transcoding (default: true)")
+	transcodeCachePath := flag.String("transcode-cache-path", "", "Path for transcode cache")
+	transcodeMaxConcurrent := flag.String("transcode-max-concurrent", "", "Max concurrent transcode jobs (default: 2)")
+	transcodeFFmpegPath := flag.String("ffmpeg-path", "", "Path to ffmpeg binary (default: auto-detect)")
 
 	// Parse flags but don't exit on error - we want to handle it gracefully.
 	flag.Parse()
@@ -124,6 +143,13 @@ func LoadConfig() (*Config, error) {
 
 		Auth: AuthConfig{
 			AccessTokenKey: nil, // Will be set by auth.LoadOrGenerateKey in main
+		},
+
+		Transcode: TranscodeConfig{
+			Enabled:       getBoolConfigValue(*transcodeEnabled, "TRANSCODE_ENABLED", true),
+			CachePath:     getConfigValue(*transcodeCachePath, "TRANSCODE_CACHE_PATH", ""),
+			MaxConcurrent: getIntConfigValue(*transcodeMaxConcurrent, "TRANSCODE_MAX_CONCURRENT", 2),
+			FFmpegPath:    getConfigValue(*transcodeFFmpegPath, "FFMPEG_PATH", ""),
 		},
 	}
 
@@ -172,6 +198,11 @@ func LoadConfig() (*Config, error) {
 	// Expand and validate audiobook path.
 	if err := cfg.expandAudiobookPath(); err != nil {
 		return nil, fmt.Errorf("invalid audiobook path: %w", err)
+	}
+
+	// Expand transcode cache path (defaults to {metadata}/cache/transcode).
+	if err := cfg.expandTranscodeCachePath(); err != nil {
+		return nil, fmt.Errorf("invalid transcode cache path: %w", err)
 	}
 
 	// Validate configuration.
@@ -293,6 +324,39 @@ func (c *Config) expandAudiobookPath() error {
 	return nil
 }
 
+// expandTranscodeCachePath expands ~ and makes the path absolute.
+// Defaults to {metadata}/cache/transcode if not specified.
+func (c *Config) expandTranscodeCachePath() error {
+	path := c.Transcode.CachePath
+
+	// If empty, use default under metadata path.
+	if path == "" {
+		c.Transcode.CachePath = filepath.Join(c.Metadata.BasePath, "cache", "transcode")
+		return nil
+	}
+
+	// Expand tilde.
+	if strings.HasPrefix(path, "~/") {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("failed to get home directory: %w", err)
+		}
+		path = filepath.Join(homeDir, path[2:])
+	}
+
+	// Make absolute if needed.
+	if !filepath.IsAbs(path) {
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			return fmt.Errorf("failed to get absolute path: %w", err)
+		}
+		path = absPath
+	}
+
+	c.Transcode.CachePath = filepath.Clean(path)
+	return nil
+}
+
 // getConfigValue returns the first non-empty value from flag, env var, or default.
 func getConfigValue(flagValue, envKey, defaultValue string) string {
 	// Priority 1: Command-line flag.
@@ -318,6 +382,19 @@ func getBoolConfigValue(flagValue, envKey string, defaultValue bool) bool {
 	}
 	strValue = strings.ToLower(strValue)
 	return strValue == "true" || strValue == "1" || strValue == "yes"
+}
+
+// getIntConfigValue returns an int from flag, env var, or default.
+func getIntConfigValue(flagValue, envKey string, defaultValue int) int {
+	strValue := getConfigValue(flagValue, envKey, "")
+	if strValue == "" {
+		return defaultValue
+	}
+	var result int
+	if _, err := fmt.Sscanf(strValue, "%d", &result); err != nil {
+		return defaultValue
+	}
+	return result
 }
 
 // loadEnvFile loads environment variables from a .env file.

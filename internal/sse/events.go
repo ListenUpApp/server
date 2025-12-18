@@ -49,6 +49,13 @@ const (
 	EventSeriesUpdated EventType = "series.updated"
 	// EventSeriesDeleted represents a series deletion event.
 	EventSeriesDeleted EventType = "series.deleted"
+
+	// EventTranscodeProgress represents a transcode job progress update.
+	EventTranscodeProgress EventType = "transcode.progress"
+	// EventTranscodeComplete represents a transcode job completion.
+	EventTranscodeComplete EventType = "transcode.complete"
+	// EventTranscodeFailed represents a transcode job failure.
+	EventTranscodeFailed EventType = "transcode.failed"
 )
 
 // Event represents an SSE event to be sent to clients.
@@ -107,6 +114,29 @@ type ContributorEventData struct {
 // SeriesEventData is the data payload for series events.
 type SeriesEventData struct {
 	Series *domain.Series `json:"series"`
+}
+
+// TranscodeProgressEventData is the data payload for transcode progress events.
+type TranscodeProgressEventData struct {
+	JobID       string `json:"job_id"`
+	BookID      string `json:"book_id"`
+	AudioFileID string `json:"audio_file_id"`
+	Progress    int    `json:"progress"`
+}
+
+// TranscodeCompleteEventData is the data payload for transcode complete events.
+type TranscodeCompleteEventData struct {
+	JobID       string `json:"job_id"`
+	BookID      string `json:"book_id"`
+	AudioFileID string `json:"audio_file_id"`
+}
+
+// TranscodeFailedEventData is the data payload for transcode failure events.
+type TranscodeFailedEventData struct {
+	JobID       string `json:"job_id"`
+	BookID      string `json:"book_id"`
+	AudioFileID string `json:"audio_file_id"`
+	Error       string `json:"error"`
 }
 
 // NewBookCreatedEvent creates a book.created event.
@@ -211,6 +241,47 @@ func NewSeriesUpdatedEvent(series *domain.Series) Event {
 	return Event{
 		Type:      EventSeriesUpdated,
 		Data:      SeriesEventData{Series: series},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewTranscodeProgressEvent creates a transcode.progress event.
+func NewTranscodeProgressEvent(jobID, bookID, audioFileID string, progress int) Event {
+	return Event{
+		Type: EventTranscodeProgress,
+		Data: TranscodeProgressEventData{
+			JobID:       jobID,
+			BookID:      bookID,
+			AudioFileID: audioFileID,
+			Progress:    progress,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewTranscodeCompleteEvent creates a transcode.complete event.
+func NewTranscodeCompleteEvent(jobID, bookID, audioFileID string) Event {
+	return Event{
+		Type: EventTranscodeComplete,
+		Data: TranscodeCompleteEventData{
+			JobID:       jobID,
+			BookID:      bookID,
+			AudioFileID: audioFileID,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewTranscodeFailedEvent creates a transcode.failed event.
+func NewTranscodeFailedEvent(jobID, bookID, audioFileID, errMsg string) Event {
+	return Event{
+		Type: EventTranscodeFailed,
+		Data: TranscodeFailedEventData{
+			JobID:       jobID,
+			BookID:      bookID,
+			AudioFileID: audioFileID,
+			Error:       errMsg,
+		},
 		Timestamp: time.Now(),
 	}
 }

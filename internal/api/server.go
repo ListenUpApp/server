@@ -231,6 +231,19 @@ func (s *Server) setupRoutes() {
 			r.Get("/stats/{bookID}", s.handleGetBookStats)
 		})
 
+		// Playback endpoints (require auth).
+		r.Route("/playback", func(r chi.Router) {
+			r.Use(s.requireAuth)
+			r.Post("/prepare", s.handlePreparePlayback)
+		})
+
+		// HLS transcode streaming endpoints (require auth).
+		r.Route("/transcode", func(r chi.Router) {
+			r.Use(s.requireAuth)
+			r.Get("/{audioFileId}/playlist.m3u8", s.handleHLSPlaylist)
+			r.Get("/{audioFileId}/{segment}", s.handleHLSSegment)
+		})
+
 		// User settings (require auth).
 		r.Route("/settings", func(r chi.Router) {
 			r.Use(s.requireAuth)
