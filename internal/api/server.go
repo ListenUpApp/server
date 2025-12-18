@@ -172,6 +172,7 @@ func (s *Server) setupRoutes() {
 			r.Use(s.requireAuth)
 			r.Get("/", s.handleListContributors)
 			r.Get("/search", s.handleSearchContributors)
+			r.Get("/images/batch", s.handleBatchContributorImages) // Must come before {id}
 			r.Get("/{id}", s.handleGetContributor)
 			r.Put("/{id}", s.handleUpdateContributor)
 			r.Get("/{id}/books", s.handleGetContributorBooks)
@@ -296,6 +297,7 @@ func (s *Server) setupRoutes() {
 		})
 
 		// Cover images (public for sharing, cached aggressively).
+		r.Get("/covers/batch", s.handleBatchCovers)
 		r.Get("/covers/{id}", s.handleGetCover)
 		r.Get("/series/{id}/cover", s.handleGetSeriesCover)
 	})

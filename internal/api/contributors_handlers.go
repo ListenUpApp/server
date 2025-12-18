@@ -1,15 +1,18 @@
 package api
 
 import (
+	"archive/tar"
 	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/http/response"
+	"github.com/listenupapp/listenup-server/internal/media/images"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
@@ -475,8 +478,20 @@ func (s *Server) handleUploadContributorImage(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Update contributor's ImageURL field
+	// Compute BlurHash for the saved image
+	imagePath := s.storage.ContributorImages.Path(contributorID)
+	blurHash, err := images.ComputeBlurHash(imagePath)
+	if err != nil {
+		// Non-fatal - log and continue without BlurHash
+		s.logger.Warn("Failed to compute BlurHash for contributor image",
+			"error", err,
+			"contributor_id", contributorID,
+		)
+	}
+
+	// Update contributor's ImageURL and BlurHash fields
 	contributor.ImageURL = "/api/v1/contributors/" + contributorID + "/image"
+	contributor.ImageBlurHash = blurHash
 
 	// Save contributor update (this emits SSE event)
 	if err := s.store.UpdateContributor(ctx, contributor); err != nil {
@@ -561,5 +576,59 @@ func (s *Server) handleGetContributorImage(w http.ResponseWriter, r *http.Reques
 	// Write image data
 	if _, err := w.Write(data); err != nil {
 		s.logger.Error("Failed to write contributor image response", "contributor_id", contributorID, "error", err)
+	}
+}
+
+// handleBatchContributorImages returns multiple contributor images in a single TAR stream.
+// GET /api/v1/contributors/images/batch?ids=contrib_1,contrib_2,contrib_3
+func (s *Server) handleBatchContributorImages(w http.ResponseWriter, r *http.Request) {
+	idsParam := r.URL.Query().Get("ids")
+	if idsParam == "" {
+		response.BadRequest(w, "ids parameter required", s.logger)
+		return
+	}
+
+	ids := strings.Split(idsParam, ",")
+	if len(ids) > 100 {
+		response.BadRequest(w, "max 100 images per request", s.logger)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/x-tar")
+	tw := tar.NewWriter(w)
+	defer tw.Close()
+
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+
+		imageBytes, err := s.storage.ContributorImages.Get(id)
+		if err != nil {
+			// Skip missing images silently
+			continue
+		}
+
+		err = tw.WriteHeader(&tar.Header{
+			Name: id + ".jpg",
+			Mode: 0644,
+			Size: int64(len(imageBytes)),
+		})
+		if err != nil {
+			s.logger.Error("Failed to write TAR header", "error", err, "contributor_id", id)
+			continue
+		}
+
+		_, err = tw.Write(imageBytes)
+		if err != nil {
+			s.logger.Error("Failed to write TAR data", "error", err, "contributor_id", id)
+			continue
+		}
+
+		// Flush for streaming
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
 	}
 }
