@@ -23,6 +23,7 @@ require (
 	aidanwoods.dev/go-result v0.3.1 // indirect
 	github.com/JohannesKaufmann/dom v0.2.0 // indirect
 	github.com/RoaringBitmap/roaring/v2 v2.14.4 // indirect
+	github.com/bbrks/go-blurhash v1.1.1 // indirect
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
 	github.com/blevesearch/bleve_index_api v1.2.11 // indirect
 	github.com/blevesearch/geo v0.2.4 // indirect
