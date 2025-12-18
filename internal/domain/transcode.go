@@ -12,6 +12,14 @@ const (
 	TranscodeStatusFailed    TranscodeStatus = "failed"
 )
 
+// TranscodeVariant identifies the output format variant.
+type TranscodeVariant string
+
+const (
+	TranscodeVariantStereo  TranscodeVariant = "stereo"  // 2-channel AAC
+	TranscodeVariantSpatial TranscodeVariant = "spatial" // 6-channel AAC (5.1)
+)
+
 // TranscodeJob represents a transcoding operation for an audio file.
 // Jobs are created when the scanner detects audio in a format that some
 // devices cannot play natively (e.g., Dolby AC-3, E-AC-3, DTS).
@@ -29,6 +37,9 @@ type TranscodeJob struct {
 	OutputPath  string `json:"output_path,omitempty"`
 	OutputCodec string `json:"output_codec"` // "aac"
 	OutputSize  int64  `json:"output_size,omitempty"`
+
+	// Output variant (stereo or spatial)
+	Variant TranscodeVariant `json:"variant"` // stereo or spatial
 
 	// Job state
 	Status   TranscodeStatus `json:"status"`
@@ -52,6 +63,7 @@ var ProblematicCodecs = map[string]bool{
 	"ac3":    true, // Dolby Digital
 	"eac3":   true, // Dolby Digital Plus
 	"ac4":    true, // Dolby AC-4 (used for Dolby Atmos) - requires librempeg to decode
+	"ac-4":   true, // Dolby AC-4 (ffprobe reports with hyphen)
 	"truehd": true, // Dolby TrueHD
 	"dts":    true, // DTS
 	"wma":    true, // Windows Media Audio

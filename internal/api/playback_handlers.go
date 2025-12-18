@@ -16,7 +16,8 @@ import (
 type PreparePlaybackRequest struct {
 	BookID       string   `json:"book_id"`
 	AudioFileID  string   `json:"audio_file_id"`
-	Capabilities []string `json:"capabilities"` // Client-supported codecs (e.g., ["aac", "mp3", "opus"])
+	Capabilities []string `json:"capabilities"` // Codecs device can decode (e.g., ["aac", "ac4"])
+	Spatial      bool     `json:"spatial"`      // Client wants spatial/surround audio
 }
 
 // PreparePlaybackResponse is the response from the prepare endpoint.
@@ -95,11 +96,28 @@ func (s *Server) handlePreparePlayback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Determine if client supports the source codec.
+	// Determine playback strategy based on spatial preference and capabilities.
 	clientSupportsSource := s.clientSupportsCodec(req.Capabilities, audioFile.Codec)
+	sourceNeedsTranscode := domain.NeedsTranscode(audioFile.Codec)
 
-	// If client supports source codec, serve original.
-	if clientSupportsSource {
+	s.logger.Debug("PreparePlayback decision",
+		"audio_file_id", audioFile.ID,
+		"source_codec", audioFile.Codec,
+		"client_capabilities", req.Capabilities,
+		"spatial", req.Spatial,
+		"client_supports_source", clientSupportsSource,
+		"source_needs_transcode", sourceNeedsTranscode,
+	)
+
+	// Decision matrix:
+	// 1. Source doesn't need transcode (e.g., AAC) - serve original regardless
+	// 2. Spatial ON + client supports source (e.g., Samsung with AC-4) - serve original
+	// 3. Spatial ON + client doesn't support source - transcode to 5.1
+	// 4. Spatial OFF - transcode to stereo
+
+	if !sourceNeedsTranscode {
+		// Source is already universally playable (AAC, MP3, etc.)
+		// Serve original
 		resp := PreparePlaybackResponse{
 			Ready:     true,
 			StreamURL: s.buildStreamURL(req.BookID, req.AudioFileID, "original"),
@@ -110,13 +128,33 @@ func (s *Server) handlePreparePlayback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Client doesn't support source codec - check for transcode.
-	resp, err := s.prepareTranscodedPlayback(ctx, book, audioFile, req.Capabilities)
+	if req.Spatial && clientSupportsSource {
+		// Client wants spatial AND can decode source natively (Samsung, Apple with Atmos)
+		// Serve original
+		resp := PreparePlaybackResponse{
+			Ready:     true,
+			StreamURL: s.buildStreamURL(req.BookID, req.AudioFileID, "original"),
+			Variant:   "original",
+			Codec:     audioFile.Codec,
+		}
+		response.Success(w, resp, s.logger)
+		return
+	}
+
+	// Need to transcode - determine variant
+	variant := domain.TranscodeVariantStereo
+	if req.Spatial {
+		variant = domain.TranscodeVariantSpatial
+	}
+
+	// Call prepareTranscodedPlayback with variant
+	resp, err := s.prepareTranscodedPlayback(ctx, book, audioFile, variant)
 	if err != nil {
 		s.logger.Error("Failed to prepare transcoded playback",
 			"error", err,
 			"book_id", req.BookID,
 			"audio_file_id", req.AudioFileID,
+			"variant", variant,
 		)
 		response.InternalError(w, "Failed to prepare playback", s.logger)
 		return
@@ -130,7 +168,7 @@ func (s *Server) prepareTranscodedPlayback(
 	ctx context.Context,
 	book *domain.Book,
 	audioFile *domain.AudioFileInfo,
-	capabilities []string,
+	variant domain.TranscodeVariant,
 ) (*PreparePlaybackResponse, error) {
 	// Check if transcoding is disabled.
 	if s.services.Transcode == nil || !s.services.Transcode.IsEnabled() {
@@ -143,9 +181,9 @@ func (s *Server) prepareTranscodedPlayback(
 		}, nil
 	}
 
-	// Check if HLS content is ready (first segment available for early playback).
+	// Check if HLS content is ready for this variant (first segment available for early playback).
 	// This allows streaming to start before transcoding completes.
-	if _, ok := s.services.Transcode.GetHLSPathIfReady(ctx, audioFile.ID); ok {
+	if _, ok := s.services.Transcode.GetHLSPathIfReadyForVariant(ctx, audioFile.ID, variant); ok {
 		return &PreparePlaybackResponse{
 			Ready:     true,
 			StreamURL: s.buildStreamURL(book.ID, audioFile.ID, "transcoded"),
@@ -154,7 +192,7 @@ func (s *Server) prepareTranscodedPlayback(
 		}, nil
 	}
 
-	// Need to transcode - create/get job with high priority (user requested).
+	// Need to transcode - create/get job with high priority (user requested) and specified variant.
 	job, err := s.services.Transcode.CreateJob(
 		ctx,
 		book.ID,
@@ -162,6 +200,7 @@ func (s *Server) prepareTranscodedPlayback(
 		audioFile.Path,
 		audioFile.Codec,
 		10, // High priority for user-requested playback
+		variant,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create transcode job: %w", err)
@@ -185,7 +224,7 @@ func (s *Server) prepareTranscodedPlayback(
 
 	case domain.TranscodeStatusRunning:
 		// Check if HLS is ready for early playback (first segment available).
-		if _, ok := s.services.Transcode.GetHLSPathIfReady(ctx, audioFile.ID); ok {
+		if _, ok := s.services.Transcode.GetHLSPathIfReadyForVariant(ctx, audioFile.ID, variant); ok {
 			return &PreparePlaybackResponse{
 				Ready:     true,
 				StreamURL: s.buildStreamURL(book.ID, audioFile.ID, "transcoded"),

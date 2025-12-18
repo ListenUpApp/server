@@ -120,24 +120,13 @@ func (s *Server) streamTranscodedAudio(w http.ResponseWriter, r *http.Request, a
 	}
 
 	// Check if HLS content is ready (first segment available).
-	hlsPath, ok := s.services.Transcode.GetHLSPathIfReady(ctx, audioFileID)
+	_, ok := s.services.Transcode.GetHLSPathIfReady(ctx, audioFileID)
 	if !ok {
 		// HLS not ready yet - check if transcode is in progress.
 		response.JSON(w, http.StatusAccepted, map[string]any{
 			"status":  "transcoding",
 			"message": "Audio is being transcoded, please try again shortly",
 		}, s.logger)
-		return
-	}
-
-	// Verify HLS playlist exists.
-	playlistPath := hlsPath + "/playlist.m3u8"
-	if _, err := os.Stat(playlistPath); os.IsNotExist(err) {
-		s.logger.Error("HLS playlist missing from disk",
-			"audio_file_id", audioFileID,
-			"path", playlistPath,
-		)
-		response.NotFound(w, "HLS playlist not found on disk", s.logger)
 		return
 	}
 
@@ -148,7 +137,7 @@ func (s *Server) streamTranscodedAudio(w http.ResponseWriter, r *http.Request, a
 }
 
 // handleHLSPlaylist serves the HLS playlist (.m3u8) for transcoded audio.
-// GET /api/v1/transcode/{audioFileId}/playlist.m3u8
+// Generates playlist dynamically from available segments for progressive playback.
 func (s *Server) handleHLSPlaylist(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := getUserID(ctx)
@@ -164,38 +153,26 @@ func (s *Server) handleHLSPlaylist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if HLS is ready.
-	hlsPath, ok := s.services.Transcode.GetHLSPathIfReady(ctx, audioFileID)
-	if !ok {
+	// Generate dynamic playlist from available segments
+	playlist, err := s.services.Transcode.GenerateDynamicPlaylist(ctx, audioFileID)
+	if err != nil {
+		s.logger.Debug("Playlist not ready", "error", err, "audio_file_id", audioFileID)
 		response.NotFound(w, "HLS content not ready", s.logger)
 		return
 	}
 
-	playlistPath := hlsPath + "/playlist.m3u8"
-
-	// Read and rewrite playlist to use our segment URLs.
-	content, err := os.ReadFile(playlistPath)
-	if err != nil {
-		s.logger.Error("Failed to read HLS playlist", "error", err, "path", playlistPath)
-		response.InternalError(w, "Failed to read playlist", s.logger)
-		return
-	}
-
-	// Build base URL from request for full absolute URLs.
-	// ExoPlayer needs full URLs, not just paths.
+	// Build base URL for segment URLs
 	scheme := "http"
 	if r.TLS != nil {
 		scheme = "https"
 	}
 	baseURL := fmt.Sprintf("%s://%s", scheme, r.Host)
 
-	// Rewrite segment paths to use our API endpoint with full URLs.
-	// FFmpeg writes: seg_0000.ts, seg_0001.ts, etc.
-	// We rewrite to: http://host/api/v1/transcode/{audioFileId}/seg_0000.ts
-	rewritten := rewriteHLSPlaylist(string(content), audioFileID, baseURL)
+	// Rewrite segment paths to full API URLs
+	rewritten := rewriteHLSPlaylist(playlist, audioFileID, baseURL)
 
 	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
-	w.Header().Set("Cache-Control", "no-cache") // Playlist may update during transcode
+	w.Header().Set("Cache-Control", "no-cache") // Playlist changes during transcode
 	w.Write([]byte(rewritten))
 }
 

@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -123,9 +124,10 @@ func (s *TranscodeService) CreateJob(
 	ctx context.Context,
 	bookID, audioFileID, sourcePath, sourceCodec string,
 	priority int,
+	variant domain.TranscodeVariant,
 ) (*domain.TranscodeJob, error) {
-	// Check if job already exists for this audio file
-	existing, err := s.store.GetTranscodeJobByAudioFile(ctx, audioFileID)
+	// Check if job already exists for this audio file and variant
+	existing, err := s.store.GetTranscodeJobByAudioFileAndVariant(ctx, audioFileID, variant)
 	if err == nil {
 		// Check if source changed (applies to all statuses)
 		hash, hashErr := s.hashFile(sourcePath)
@@ -135,7 +137,7 @@ func (s *TranscodeService) CreateJob(
 		case domain.TranscodeStatusCompleted:
 			if !sourceChanged {
 				// Verify output files still exist
-				hlsDir := filepath.Join(s.config.CachePath, existing.BookID, existing.AudioFileID)
+				hlsDir := filepath.Join(s.config.CachePath, existing.BookID, existing.AudioFileID, string(existing.Variant))
 				playlistPath := filepath.Join(hlsDir, "playlist.m3u8")
 				if _, statErr := os.Stat(playlistPath); statErr == nil {
 					// Files exist, transcode is valid
@@ -145,6 +147,7 @@ func (s *TranscodeService) CreateJob(
 				s.logger.Warn("completed job missing output files, re-transcoding",
 					slog.String("job_id", existing.ID),
 					slog.String("audio_file_id", audioFileID),
+					slog.String("variant", string(existing.Variant)),
 				)
 			}
 			// Source changed or files missing, delete old job and create new
@@ -211,6 +214,7 @@ func (s *TranscodeService) CreateJob(
 		SourceCodec: sourceCodec,
 		SourceHash:  sourceHash,
 		OutputCodec: "aac",
+		Variant:     variant,
 		Status:      domain.TranscodeStatusPending,
 		Priority:    priority,
 		CreatedAt:   time.Now(),
@@ -272,7 +276,7 @@ func (s *TranscodeService) GetTranscodePath(ctx context.Context, audioFileID str
 
 // GetHLSPathIfReady returns the HLS directory path as soon as first segment is available.
 // This allows progressive playback while transcoding continues.
-// The playlist handler appends #EXT-X-ENDLIST for ExoPlayer compatibility.
+// Playlists are generated dynamically from available segments, not read from disk.
 func (s *TranscodeService) GetHLSPathIfReady(ctx context.Context, audioFileID string) (string, bool) {
 	job, err := s.store.GetTranscodeJobByAudioFile(ctx, audioFileID)
 	if err != nil {
@@ -285,14 +289,8 @@ func (s *TranscodeService) GetHLSPathIfReady(ctx context.Context, audioFileID st
 	}
 
 	// Construct the HLS directory path from job metadata.
-	// OutputPath is only set on completion, so we build it from BookID/AudioFileID.
-	hlsDir := filepath.Join(s.config.CachePath, job.BookID, job.AudioFileID)
-
-	// Check if HLS playlist exists (created early in transcode)
-	playlistPath := filepath.Join(hlsDir, "playlist.m3u8")
-	if _, err := os.Stat(playlistPath); err != nil {
-		return "", false
-	}
+	// OutputPath is only set on completion, so we build it from BookID/AudioFileID/Variant.
+	hlsDir := filepath.Join(s.config.CachePath, job.BookID, job.AudioFileID, string(job.Variant))
 
 	// Check if at least one segment exists
 	segmentPath := filepath.Join(hlsDir, "seg_0000.ts")
@@ -301,6 +299,92 @@ func (s *TranscodeService) GetHLSPathIfReady(ctx context.Context, audioFileID st
 	}
 
 	return hlsDir, true
+}
+
+// GetHLSPathIfReadyForVariant returns the HLS directory path for a specific variant
+// as soon as first segment is available. This allows progressive playback while
+// transcoding continues.
+func (s *TranscodeService) GetHLSPathIfReadyForVariant(ctx context.Context, audioFileID string, variant domain.TranscodeVariant) (string, bool) {
+	job, err := s.store.GetTranscodeJobByAudioFileAndVariant(ctx, audioFileID, variant)
+	if err != nil {
+		return "", false
+	}
+
+	// Job must be running or completed
+	if job.Status != domain.TranscodeStatusRunning && job.Status != domain.TranscodeStatusCompleted {
+		return "", false
+	}
+
+	// Construct the HLS directory path from job metadata.
+	hlsDir := filepath.Join(s.config.CachePath, job.BookID, job.AudioFileID, string(job.Variant))
+
+	// Check if at least one segment exists
+	segmentPath := filepath.Join(hlsDir, "seg_0000.ts")
+	if _, err := os.Stat(segmentPath); err != nil {
+		return "", false
+	}
+
+	return hlsDir, true
+}
+
+// findAvailableSegments returns sorted list of completed segment filenames in a directory.
+func findAvailableSegments(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	var segments []string
+	for _, entry := range entries {
+		name := entry.Name()
+		if strings.HasPrefix(name, "seg_") && strings.HasSuffix(name, ".ts") {
+			segments = append(segments, name)
+		}
+	}
+
+	sort.Strings(segments)
+	return segments, nil
+}
+
+// GenerateDynamicPlaylist builds an HLS playlist from available segments.
+// This allows playback to start before transcoding completes.
+func (s *TranscodeService) GenerateDynamicPlaylist(ctx context.Context, audioFileID string) (string, error) {
+	job, err := s.store.GetTranscodeJobByAudioFile(ctx, audioFileID)
+	if err != nil {
+		return "", fmt.Errorf("get transcode job: %w", err)
+	}
+
+	// Build path to HLS directory
+	hlsDir := filepath.Join(s.config.CachePath, job.BookID, job.AudioFileID, string(job.Variant))
+
+	segments, err := findAvailableSegments(hlsDir)
+	if err != nil {
+		return "", fmt.Errorf("find segments: %w", err)
+	}
+
+	if len(segments) == 0 {
+		return "", fmt.Errorf("no segments available yet")
+	}
+
+	// Build playlist
+	var playlist strings.Builder
+	playlist.WriteString("#EXTM3U\n")
+	playlist.WriteString("#EXT-X-VERSION:3\n")
+	playlist.WriteString("#EXT-X-TARGETDURATION:10\n")
+	playlist.WriteString("#EXT-X-MEDIA-SEQUENCE:0\n")
+
+	for _, seg := range segments {
+		playlist.WriteString("#EXTINF:10.0,\n")
+		playlist.WriteString(seg)
+		playlist.WriteString("\n")
+	}
+
+	// Only add ENDLIST when transcode is complete
+	if job.Status == domain.TranscodeStatusCompleted {
+		playlist.WriteString("#EXT-X-ENDLIST\n")
+	}
+
+	return playlist.String(), nil
 }
 
 // worker processes transcode jobs.
@@ -392,8 +476,8 @@ func (s *TranscodeService) executeTranscode(ctx context.Context, job *domain.Tra
 		return "", fmt.Errorf("FFmpeg cannot decode %s codec - this format requires proprietary decoders", job.SourceCodec)
 	}
 
-	// Build output path: {cache}/{bookID}/{audioFileID}/ (directory for HLS files)
-	outputDir := filepath.Join(s.config.CachePath, job.BookID, job.AudioFileID)
+	// Build output path: {cache}/{bookID}/{audioFileID}/{variant}/ (directory for HLS files)
+	outputDir := filepath.Join(s.config.CachePath, job.BookID, job.AudioFileID, string(job.Variant))
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return "", fmt.Errorf("create output dir: %w", err)
 	}
@@ -433,7 +517,7 @@ func (s *TranscodeService) executeTranscode(ctx context.Context, job *domain.Tra
 	}
 
 	// Build ffmpeg command
-	args := s.buildFFmpegArgs(job.SourcePath, outputPath, bitrate, channels)
+	args := s.buildFFmpegArgs(job.SourcePath, outputPath, bitrate, channels, job.Variant)
 
 	s.logger.Debug("executing ffmpeg",
 		slog.String("job_id", job.ID),
@@ -471,7 +555,20 @@ func (s *TranscodeService) executeTranscode(ctx context.Context, job *domain.Tra
 
 // buildFFmpegArgs constructs the ffmpeg command arguments for HLS output.
 // HLS allows progressive playback - client can start as soon as first segment is ready.
-func (s *TranscodeService) buildFFmpegArgs(input, outputDir string, bitrate, channels int) []string {
+func (s *TranscodeService) buildFFmpegArgs(input, outputDir string, bitrate, channels int, variant domain.TranscodeVariant) []string {
+	// Override channels and bitrate based on variant
+	if variant == domain.TranscodeVariantStereo {
+		channels = 2
+		if bitrate > 128000 {
+			bitrate = 128000
+		}
+	} else if variant == domain.TranscodeVariantSpatial {
+		channels = 6
+		if bitrate < 384000 {
+			bitrate = 384000
+		}
+	}
+
 	playlistPath := filepath.Join(outputDir, "playlist.m3u8")
 	segmentPattern := filepath.Join(outputDir, "seg_%04d.ts")
 
@@ -480,8 +577,8 @@ func (s *TranscodeService) buildFFmpegArgs(input, outputDir string, bitrate, cha
 		"-i", input, // Input file
 		"-vn",       // No video
 		"-c:a", "aac", // AAC codec
-		"-b:a", fmt.Sprintf("%d", bitrate), // Match source bitrate
-		"-ac", fmt.Sprintf("%d", channels), // Preserve channel count
+		"-b:a", fmt.Sprintf("%d", bitrate), // Bitrate based on variant
+		"-ac", fmt.Sprintf("%d", channels), // Channels based on variant
 		"-ar", "48000", // Standard sample rate
 		"-f", "hls",    // HLS format
 		"-hls_time", "10", // 10 second segments
@@ -758,7 +855,7 @@ func (s *TranscodeService) QueueTranscode(ctx context.Context, bookID, audioFile
 		return nil
 	}
 
-	// Create job with background priority (1)
-	_, err := s.CreateJob(ctx, bookID, audioFileID, sourcePath, sourceCodec, 1)
+	// Create job with background priority (1) and spatial variant
+	_, err := s.CreateJob(ctx, bookID, audioFileID, sourcePath, sourceCodec, 1, domain.TranscodeVariantSpatial)
 	return err
 }

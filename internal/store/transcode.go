@@ -167,13 +167,51 @@ func (s *Store) DeleteTranscodeJob(ctx context.Context, id string) error {
 }
 
 // GetTranscodeJobByAudioFile finds a transcode job for a specific audio file.
+// Note: This returns the first job found if multiple variants exist.
+// Use GetTranscodeJobByAudioFileAndVariant for variant-specific lookups.
 func (s *Store) GetTranscodeJobByAudioFile(ctx context.Context, audioFileID string) (*domain.TranscodeJob, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
-	indexKey := buildIndexKey(transcodePrefix, "audiofile", audioFileID)
-	defer releaseKey(indexKey)
+	// Use prefix search to find any variant for this audio file
+	indexPrefix := []byte(transcodePrefix + "idx:audiofile:" + audioFileID + ":")
+
+	var jobID string
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = indexPrefix
+		opts.PrefetchValues = true
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		it.Seek(indexPrefix)
+		if !it.ValidForPrefix(indexPrefix) {
+			return ErrNotFound
+		}
+
+		return it.Item().Value(func(val []byte) error {
+			jobID = string(val)
+			return nil
+		})
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return s.GetTranscodeJob(ctx, jobID)
+}
+
+// GetTranscodeJobByAudioFileAndVariant finds a transcode job by audio file ID and variant.
+func (s *Store) GetTranscodeJobByAudioFileAndVariant(ctx context.Context, audioFileID string, variant domain.TranscodeVariant) (*domain.TranscodeJob, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	// Build the index key manually since buildIndexKey only takes 3 params
+	indexKey := []byte(transcodePrefix + "idx:audiofile:" + audioFileID + ":" + string(variant))
 
 	var jobID string
 	err := s.db.View(func(txn *badger.Txn) error {
@@ -379,8 +417,8 @@ func (s *Store) setTranscodeIndexes(txn *badger.Txn, job *domain.TranscodeJob) e
 		return fmt.Errorf("set book index: %w", err)
 	}
 
-	// Index by audio file ID (unique)
-	audioKey := transcodePrefix + "idx:audiofile:" + job.AudioFileID
+	// Index by audio file ID and variant (unique per variant)
+	audioKey := transcodePrefix + "idx:audiofile:" + job.AudioFileID + ":" + string(job.Variant)
 	if err := txn.Set([]byte(audioKey), []byte(job.ID)); err != nil {
 		return fmt.Errorf("set audiofile index: %w", err)
 	}
@@ -401,8 +439,8 @@ func (s *Store) deleteTranscodeIndexes(txn *badger.Txn, job *domain.TranscodeJob
 		return fmt.Errorf("delete book index: %w", err)
 	}
 
-	// Delete audio file index
-	audioKey := transcodePrefix + "idx:audiofile:" + job.AudioFileID
+	// Delete audio file index (includes variant)
+	audioKey := transcodePrefix + "idx:audiofile:" + job.AudioFileID + ":" + string(job.Variant)
 	if err := txn.Delete([]byte(audioKey)); err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
 		return fmt.Errorf("delete audiofile index: %w", err)
 	}
