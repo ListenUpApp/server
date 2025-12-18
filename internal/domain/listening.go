@@ -138,3 +138,19 @@ func NewListeningEvent(
 		CreatedAt:       time.Now(),
 	}
 }
+
+// ContinueListeningItem is a display-ready item for the Continue Listening section.
+// Combines progress with essential book details to eliminate client-side joins.
+type ContinueListeningItem struct {
+	// Progress fields
+	BookID            string    `json:"book_id"`
+	CurrentPositionMs int64     `json:"current_position_ms"`
+	Progress          float64   `json:"progress"` // 0.0 - 1.0
+	LastPlayedAt      time.Time `json:"last_played_at"`
+
+	// Book fields (denormalized for display)
+	Title           string  `json:"title"`
+	AuthorName      string  `json:"author_name"`
+	CoverPath       *string `json:"cover_path,omitempty"`
+	TotalDurationMs int64   `json:"total_duration_ms"`
+}

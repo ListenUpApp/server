@@ -126,12 +126,82 @@ func (s *ListeningService) GetProgress(ctx context.Context, userID, bookID strin
 	return progress, nil
 }
 
-// GetContinueListening returns in-progress books for the user.
-func (s *ListeningService) GetContinueListening(ctx context.Context, userID string, limit int) ([]*domain.PlaybackProgress, error) {
+// GetContinueListening returns in-progress books with book details for display.
+// Returns a display-ready response that doesn't require client-side joins.
+func (s *ListeningService) GetContinueListening(ctx context.Context, userID string, limit int) ([]*domain.ContinueListeningItem, error) {
 	if limit <= 0 {
 		limit = 10 // Default limit
 	}
-	return s.store.GetContinueListening(ctx, userID, limit)
+
+	// Get progress entries
+	progressList, err := s.store.GetContinueListening(ctx, userID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("get progress: %w", err)
+	}
+
+	// Enrich with book details
+	items := make([]*domain.ContinueListeningItem, 0, len(progressList))
+	for _, progress := range progressList {
+		// Fetch book details
+		book, err := s.store.GetBook(ctx, progress.BookID, userID)
+		if err != nil {
+			s.logger.Warn("Book not found for progress", "book_id", progress.BookID, "error", err)
+			continue // Skip items where book is missing
+		}
+
+		// Get author name by looking up contributor IDs with author role
+		authorName := s.getAuthorName(ctx, book)
+
+		// Get cover path from CoverImage if present
+		var coverPath *string
+		if book.CoverImage != nil && book.CoverImage.Path != "" {
+			coverPath = &book.CoverImage.Path
+		}
+
+		items = append(items, &domain.ContinueListeningItem{
+			BookID:            progress.BookID,
+			CurrentPositionMs: progress.CurrentPositionMs,
+			Progress:          progress.Progress,
+			LastPlayedAt:      progress.LastPlayedAt,
+			Title:             book.Title,
+			AuthorName:        authorName,
+			CoverPath:         coverPath,
+			TotalDurationMs:   book.TotalDuration,
+		})
+	}
+
+	return items, nil
+}
+
+// getAuthorName extracts author name(s) from book contributors.
+func (s *ListeningService) getAuthorName(ctx context.Context, book *domain.Book) string {
+	// Collect author contributor IDs
+	var authorIDs []string
+	for _, contrib := range book.Contributors {
+		for _, role := range contrib.Roles {
+			if role == domain.RoleAuthor {
+				authorIDs = append(authorIDs, contrib.ContributorID)
+				break
+			}
+		}
+	}
+
+	if len(authorIDs) == 0 {
+		return ""
+	}
+
+	// Fetch contributor details
+	contributors, err := s.store.GetContributorsByIDs(ctx, authorIDs)
+	if err != nil || len(contributors) == 0 {
+		return ""
+	}
+
+	// Build author string
+	authorName := contributors[0].Name
+	if len(contributors) > 1 {
+		authorName += " et al."
+	}
+	return authorName
 }
 
 // ResetProgress removes all progress for a user+book.
