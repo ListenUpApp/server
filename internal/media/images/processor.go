@@ -14,9 +14,10 @@ const mimeOctetStream = "mimeOctetStream"
 
 // CoverInfo contains metadata about an extracted cover image.
 type CoverInfo struct {
-	Hash   string // SHA256 hash of the cover for cache validation
-	Size   int64  // Size in bytes
-	Format string // MIME type (e.g., "image/jpeg")
+	Hash     string // SHA256 hash of the cover for cache validation
+	Size     int64  // Size in bytes
+	Format   string // MIME type (e.g., "image/jpeg")
+	BlurHash string // BlurHash placeholder string
 }
 
 // Processor extracts and stores cover images from audio files.
@@ -83,6 +84,14 @@ func (p *Processor) ExtractAndProcess(ctx context.Context, audioFilePath, bookID
 		return nil, fmt.Errorf("failed to compute cover hash: %w", err)
 	}
 
+	// Compute BlurHash for placeholder
+	coverPath := p.storage.Path(bookID)
+	blurHash, err := ComputeBlurHash(coverPath)
+	if err != nil {
+		// Non-fatal: log and continue without BlurHash
+		p.logger.Debug("failed to compute BlurHash", "book_id", bookID, "error", err)
+	}
+
 	// Determine MIME type from artwork data.
 	format := detectImageFormat(artwork.Data)
 
@@ -94,9 +103,10 @@ func (p *Processor) ExtractAndProcess(ctx context.Context, audioFilePath, bookID
 	)
 
 	return &CoverInfo{
-		Hash:   hash,
-		Size:   int64(len(artwork.Data)),
-		Format: format,
+		Hash:     hash,
+		Size:     int64(len(artwork.Data)),
+		Format:   format,
+		BlurHash: blurHash,
 	}, nil
 }
 
@@ -146,6 +156,14 @@ func (p *Processor) ProcessExternalCover(coverPath, bookID string) (*CoverInfo, 
 		return nil, fmt.Errorf("failed to compute cover hash: %w", err)
 	}
 
+	// Compute BlurHash for placeholder
+	storagePath := p.storage.Path(bookID)
+	blurHash, err := ComputeBlurHash(storagePath)
+	if err != nil {
+		// Non-fatal: log and continue without BlurHash
+		p.logger.Debug("failed to compute BlurHash", "book_id", bookID, "error", err)
+	}
+
 	// Determine MIME type from image data.
 	format := detectImageFormat(data)
 
@@ -157,8 +175,9 @@ func (p *Processor) ProcessExternalCover(coverPath, bookID string) (*CoverInfo, 
 	)
 
 	return &CoverInfo{
-		Hash:   hash,
-		Size:   int64(len(data)),
-		Format: format,
+		Hash:     hash,
+		Size:     int64(len(data)),
+		Format:   format,
+		BlurHash: blurHash,
 	}, nil
 }

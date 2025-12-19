@@ -44,6 +44,23 @@ type SearchIndexer interface {
 // NoopSearchIndexer is a no-op implementation for testing.
 type NoopSearchIndexer struct{}
 
+// TranscodeDeleter is the interface for cleaning up transcoded files.
+// Store uses this to delete transcodes when books are removed.
+type TranscodeDeleter interface {
+	DeleteTranscodesForBook(ctx context.Context, bookID string) error
+}
+
+// NoopTranscodeDeleter is a no-op implementation for when transcoding is disabled.
+type NoopTranscodeDeleter struct{}
+
+// DeleteTranscodesForBook is a no-op.
+func (NoopTranscodeDeleter) DeleteTranscodesForBook(context.Context, string) error { return nil }
+
+// NewNoopTranscodeDeleter creates a new no-op transcode deleter.
+func NewNoopTranscodeDeleter() TranscodeDeleter {
+	return NoopTranscodeDeleter{}
+}
+
 // IndexBook is a no-op.
 func (NoopSearchIndexer) IndexBook(context.Context, *domain.Book) error { return nil }
 
@@ -78,6 +95,10 @@ type Store struct {
 	// Search indexer for keeping search in sync with store changes.
 	// Set via SetSearchIndexer after store creation to avoid circular dependencies.
 	searchIndexer SearchIndexer
+
+	// Transcode deleter for cleaning up transcoded files when books are deleted.
+	// Set via SetTranscodeDeleter after store creation to avoid circular dependencies.
+	transcodeDeleter TranscodeDeleter
 
 	// Enricher for denormalizing domain models before sending to clients.
 	// Used to populate display fields (author names, series names) in SSE events.
@@ -135,6 +156,12 @@ func (s *Store) Close() error {
 // (store needs to exist before search service can be created).
 func (s *Store) SetSearchIndexer(indexer SearchIndexer) {
 	s.searchIndexer = indexer
+}
+
+// SetTranscodeDeleter sets the transcode deleter for cleaning up transcoded files.
+// This is set after store creation to avoid circular dependencies.
+func (s *Store) SetTranscodeDeleter(deleter TranscodeDeleter) {
+	s.transcodeDeleter = deleter
 }
 
 // Helper methods for database operations.

@@ -59,6 +59,7 @@ type ImageFileInfo struct {
 	Size     int64  `json:"size"`
 	Inode    uint64 `json:"inode"`
 	ModTime  int64  `json:"mod_time"`
+	BlurHash string `json:"blur_hash,omitempty"`
 }
 
 // Chapter represents a chapter marker within an audiobook.

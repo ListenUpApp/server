@@ -40,12 +40,29 @@ var (
 	}
 )
 
+// TranscodeQueuer is an interface for queueing transcode jobs.
+// This allows the scanner to trigger transcodes without depending on the transcode service directly.
+type TranscodeQueuer interface {
+	// QueueTranscode queues a transcode job for an audio file if needed.
+	// Returns nil if no transcode is needed or if transcoding is disabled.
+	QueueTranscode(ctx context.Context, bookID, audioFileID, sourcePath, sourceCodec string) error
+}
+
+// NoopTranscodeQueuer is a no-op implementation for when transcoding is disabled.
+type NoopTranscodeQueuer struct{}
+
+// QueueTranscode is a no-op.
+func (NoopTranscodeQueuer) QueueTranscode(context.Context, string, string, string, string) error {
+	return nil
+}
+
 // Scanner orchestrates the library scanning process.
 type Scanner struct {
-	store          *store.Store
-	eventEmitter   store.EventEmitter
-	logger         *slog.Logger
-	imageProcessor *images.Processor
+	store           *store.Store
+	eventEmitter    store.EventEmitter
+	logger          *slog.Logger
+	imageProcessor  *images.Processor
+	transcodeQueuer TranscodeQueuer
 
 	walker   *Walker
 	grouper  *Grouper
@@ -56,15 +73,22 @@ type Scanner struct {
 // NewScanner creates a new scanner instance.
 func NewScanner(store *store.Store, emitter store.EventEmitter, imageProcessor *images.Processor, logger *slog.Logger) *Scanner {
 	return &Scanner{
-		store:          store,
-		eventEmitter:   emitter,
-		logger:         logger,
-		imageProcessor: imageProcessor,
-		walker:         NewWalker(logger),
-		grouper:        NewGrouper(logger),
-		analyzer:       NewAnalyzer(logger),
-		differ:         NewDiffer(logger),
+		store:           store,
+		eventEmitter:    emitter,
+		logger:          logger,
+		imageProcessor:  imageProcessor,
+		transcodeQueuer: NoopTranscodeQueuer{}, // Default to no-op
+		walker:          NewWalker(logger),
+		grouper:         NewGrouper(logger),
+		analyzer:        NewAnalyzer(logger),
+		differ:          NewDiffer(logger),
 	}
+}
+
+// SetTranscodeQueuer sets the transcode queuer for the scanner.
+// This is set after scanner creation to avoid circular dependencies.
+func (s *Scanner) SetTranscodeQueuer(queuer TranscodeQueuer) {
+	s.transcodeQueuer = queuer
 }
 
 // ScanOptions configures a scan.
@@ -432,6 +456,9 @@ func (s *Scanner) saveToDatabase(ctx context.Context, items []*LibraryItemData, 
 		}
 
 		result.Added++
+
+		// Queue transcodes for audio files with problematic codecs.
+		s.queueTranscodesForBook(ctx, book)
 	}
 
 	if len(errs) > 0 {
@@ -646,4 +673,28 @@ func classifyMetadataFile(path string) MetadataFileType {
 // IsAudioExt checks if a file extension is for an audio file.
 func IsAudioExt(ext string) bool {
 	return audioExtensions[ext]
+}
+
+// queueTranscodesForBook checks each audio file in a book and queues transcodes if needed.
+func (s *Scanner) queueTranscodesForBook(ctx context.Context, book *domain.Book) {
+	for _, af := range book.AudioFiles {
+		// Check if this codec needs transcoding.
+		if !domain.NeedsTranscode(af.Codec) {
+			continue
+		}
+
+		s.logger.Info("queueing transcode for problematic codec",
+			"book_id", book.ID,
+			"audio_file_id", af.ID,
+			"codec", af.Codec,
+		)
+
+		if err := s.transcodeQueuer.QueueTranscode(ctx, book.ID, af.ID, af.Path, af.Codec); err != nil {
+			s.logger.Warn("failed to queue transcode",
+				"book_id", book.ID,
+				"audio_file_id", af.ID,
+				"error", err,
+			)
+		}
+	}
 }

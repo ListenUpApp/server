@@ -559,6 +559,17 @@ func (s *Store) DeleteBook(ctx context.Context, id string) error {
 		}()
 	}
 
+	// Delete transcoded files asynchronously
+	if s.transcodeDeleter != nil {
+		go func() {
+			if err := s.transcodeDeleter.DeleteTranscodesForBook(context.Background(), id); err != nil {
+				if s.logger != nil {
+					s.logger.Warn("failed to delete transcodes for book", "book_id", id, "error", err)
+				}
+			}
+		}()
+	}
+
 	return nil
 }
 

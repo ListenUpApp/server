@@ -20,6 +20,7 @@ type Services struct {
 	Search     *service.SearchService
 	Invite     *service.InviteService
 	Admin      *service.AdminService
+	Transcode  *service.TranscodeService
 }
 
 // StorageServices groups file storage handlers used by the API server.

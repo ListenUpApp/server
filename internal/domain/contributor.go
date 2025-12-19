@@ -3,15 +3,16 @@ package domain
 // Contributor represents a person who contributed to a book in any capacity.
 type Contributor struct {
 	Syncable
-	Name      string   `json:"name"`
-	SortName  string   `json:"sort_name,omitempty"` // "Sanderson, Brandon" for proper sorting
-	Biography string   `json:"biography,omitempty"`
-	ImageURL  string   `json:"image_url,omitempty"`
-	ASIN      string   `json:"asin,omitempty"`       // Amazon author ID for future metadata enrichment
-	Aliases   []string `json:"aliases,omitempty"`    // Pen names: ["Richard Bachman", "John Swithen"]
-	Website   string   `json:"website,omitempty"`    // Author's website URL
-	BirthDate string   `json:"birth_date,omitempty"` // ISO 8601 date (e.g., "1947-09-21")
-	DeathDate string   `json:"death_date,omitempty"` // ISO 8601 date (e.g., "2024-01-15")
+	Name          string   `json:"name"`
+	SortName      string   `json:"sort_name,omitempty"` // "Sanderson, Brandon" for proper sorting
+	Biography     string   `json:"biography,omitempty"`
+	ImageURL      string   `json:"image_url,omitempty"`
+	ImageBlurHash string   `json:"image_blur_hash,omitempty"` // BlurHash placeholder for image
+	ASIN          string   `json:"asin,omitempty"`            // Amazon author ID for future metadata enrichment
+	Aliases       []string `json:"aliases,omitempty"`         // Pen names: ["Richard Bachman", "John Swithen"]
+	Website       string   `json:"website,omitempty"`         // Author's website URL
+	BirthDate     string   `json:"birth_date,omitempty"`      // ISO 8601 date (e.g., "1947-09-21")
+	DeathDate     string   `json:"death_date,omitempty"`      // ISO 8601 date (e.g., "2024-01-15")
 }
 
 // ContributorRole defines the type of contribution.

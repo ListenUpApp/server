@@ -126,6 +126,19 @@ func main() {
 	// Initialize scanner with SSE event emitter and image processor.
 	fileScanner := scanner.NewScanner(db, sseManager, imageProcessor, log.Logger)
 
+	// Initialize transcode service.
+	transcodeService, err := service.NewTranscodeService(db, sseManager, cfg.Transcode, log.Logger)
+	if err != nil {
+		log.Error("Failed to initialize transcode service", "error", err)
+		sseCancel()
+		os.Exit(1)
+	}
+	// Wire transcode service to scanner and store.
+	fileScanner.SetTranscodeQueuer(transcodeService)
+	db.SetTranscodeDeleter(transcodeService)
+	// Start transcode workers.
+	transcodeService.Start()
+
 	// If new library, trigger initial full scan.
 	if bootstrap.IsNewLibrary {
 		log.Info("New library detected, starting initial scan")
@@ -338,6 +351,7 @@ func main() {
 		Search:     searchService,
 		Invite:     inviteService,
 		Admin:      adminService,
+		Transcode:  transcodeService,
 	}
 	storage := &api.StorageServices{
 		Covers:            coverStorage,
@@ -394,14 +408,18 @@ func main() {
 	// Shutdown sequence (order matters!):
 	// 1. Stop session cleanup job.
 	// 2. Stop file watcher (no more file events).
-	// 3. Shutdown SSE manager (no more event broadcasts).
-	// 4. Stop mDNS advertisement.
-	// 5. Shutdown HTTP server (no more requests).
-	// 6. Close search index (no more search operations).
-	// 7. Close database (no more data access).
+	// 3. Stop transcode service (complete in-flight transcodes).
+	// 4. Shutdown SSE manager (no more event broadcasts).
+	// 5. Stop mDNS advertisement.
+	// 6. Shutdown HTTP server (no more requests).
+	// 7. Close search index (no more search operations).
+	// 8. Close database (no more data access).
 
 	// Stop session cleanup job.
 	sessionCleanupCancel()
+
+	// Stop transcode service.
+	transcodeService.Stop()
 
 	// Stop file watcher.
 	watcherCancel()

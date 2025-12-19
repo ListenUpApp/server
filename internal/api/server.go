@@ -172,6 +172,7 @@ func (s *Server) setupRoutes() {
 			r.Use(s.requireAuth)
 			r.Get("/", s.handleListContributors)
 			r.Get("/search", s.handleSearchContributors)
+			r.Get("/images/batch", s.handleBatchContributorImages) // Must come before {id}
 			r.Get("/{id}", s.handleGetContributor)
 			r.Put("/{id}", s.handleUpdateContributor)
 			r.Get("/{id}/books", s.handleGetContributorBooks)
@@ -231,6 +232,19 @@ func (s *Server) setupRoutes() {
 			r.Get("/stats/{bookID}", s.handleGetBookStats)
 		})
 
+		// Playback endpoints (require auth).
+		r.Route("/playback", func(r chi.Router) {
+			r.Use(s.requireAuth)
+			r.Post("/prepare", s.handlePreparePlayback)
+		})
+
+		// HLS transcode streaming endpoints (require auth).
+		r.Route("/transcode", func(r chi.Router) {
+			r.Use(s.requireAuth)
+			r.Get("/{audioFileId}/playlist.m3u8", s.handleHLSPlaylist)
+			r.Get("/{audioFileId}/{segment}", s.handleHLSSegment)
+		})
+
 		// User settings (require auth).
 		r.Route("/settings", func(r chi.Router) {
 			r.Use(s.requireAuth)
@@ -283,6 +297,7 @@ func (s *Server) setupRoutes() {
 		})
 
 		// Cover images (public for sharing, cached aggressively).
+		r.Get("/covers/batch", s.handleBatchCovers)
 		r.Get("/covers/{id}", s.handleGetCover)
 		r.Get("/series/{id}/cover", s.handleGetSeriesCover)
 	})

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/listenupapp/listenup-server/internal/http/response"
@@ -12,7 +13,35 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
-// handleRecordEvent records a listening event.
+// millisToTime converts milliseconds since epoch to time.Time.
+func millisToTime(millis int64) time.Time {
+	return time.UnixMilli(millis)
+}
+
+// BulkEventsRequest wraps multiple listening events for batch submission.
+type BulkEventsRequest struct {
+	Events []BulkEventItem `json:"events"`
+}
+
+// BulkEventItem represents a single event in a bulk submission.
+type BulkEventItem struct {
+	ID              string  `json:"id"`
+	BookID          string  `json:"book_id"`
+	StartPositionMs int64   `json:"start_position_ms"`
+	EndPositionMs   int64   `json:"end_position_ms"`
+	StartedAt       int64   `json:"started_at"`
+	EndedAt         int64   `json:"ended_at"`
+	PlaybackSpeed   float32 `json:"playback_speed"`
+	DeviceID        string  `json:"device_id"`
+}
+
+// BulkEventsResponse contains acknowledged and failed event IDs.
+type BulkEventsResponse struct {
+	Acknowledged []string `json:"acknowledged"`
+	Failed       []string `json:"failed"`
+}
+
+// handleRecordEvent records listening events (supports both single and bulk).
 func (s *Server) handleRecordEvent(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := getUserID(ctx)
@@ -22,17 +51,59 @@ func (s *Server) handleRecordEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req service.RecordEventRequest
-	if err := json.UnmarshalRead(r.Body, &req); err != nil {
+	// Try to parse as bulk request first (client sends { "events": [...] })
+	var bulkReq BulkEventsRequest
+	if err := json.UnmarshalRead(r.Body, &bulkReq); err != nil {
 		response.BadRequest(w, "Invalid request body", s.logger)
 		return
 	}
 
-	resp, err := s.services.Listening.RecordEvent(ctx, userID, req)
-	if err != nil {
-		s.logger.Error("Failed to record listening event", "error", err, "user_id", userID)
-		response.InternalError(w, "Failed to record event", s.logger)
+	// If we have events, process as bulk
+	if len(bulkReq.Events) > 0 {
+		s.handleBulkEvents(w, r, userID, bulkReq)
 		return
+	}
+
+	// Empty events array - nothing to do
+	response.Success(w, BulkEventsResponse{
+		Acknowledged: []string{},
+		Failed:       []string{},
+	}, s.logger)
+}
+
+// handleBulkEvents processes multiple events and returns acknowledged/failed IDs.
+func (s *Server) handleBulkEvents(w http.ResponseWriter, r *http.Request, userID string, bulkReq BulkEventsRequest) {
+	ctx := r.Context()
+	resp := BulkEventsResponse{
+		Acknowledged: make([]string, 0, len(bulkReq.Events)),
+		Failed:       make([]string, 0),
+	}
+
+	for _, event := range bulkReq.Events {
+		// Convert bulk item to service request
+		req := service.RecordEventRequest{
+			BookID:          event.BookID,
+			StartPositionMs: event.StartPositionMs,
+			EndPositionMs:   event.EndPositionMs,
+			StartedAt:       millisToTime(event.StartedAt),
+			EndedAt:         millisToTime(event.EndedAt),
+			PlaybackSpeed:   event.PlaybackSpeed,
+			DeviceID:        event.DeviceID,
+			DeviceName:      "", // Client doesn't send this in bulk format
+		}
+
+		_, err := s.services.Listening.RecordEvent(ctx, userID, req)
+		if err != nil {
+			s.logger.Warn("Failed to record listening event",
+				"error", err,
+				"user_id", userID,
+				"event_id", event.ID,
+				"book_id", event.BookID,
+			)
+			resp.Failed = append(resp.Failed, event.ID)
+		} else {
+			resp.Acknowledged = append(resp.Acknowledged, event.ID)
+		}
 	}
 
 	response.Success(w, resp, s.logger)
