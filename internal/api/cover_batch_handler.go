@@ -45,14 +45,16 @@ func (s *Server) handleBatchCovers(w http.ResponseWriter, r *http.Request) {
 			Size: int64(len(coverBytes)),
 		})
 		if err != nil {
-			s.logger.Error("Failed to write TAR header", "error", err, "book_id", id)
-			continue
+			// Connection error - client likely disconnected, stop trying
+			s.logger.Warn("Failed to write TAR header, client may have disconnected", "error", err, "book_id", id)
+			return
 		}
 
 		_, err = tw.Write(coverBytes)
 		if err != nil {
-			s.logger.Error("Failed to write TAR data", "error", err, "book_id", id)
-			continue
+			// Connection error - client likely disconnected, stop trying
+			s.logger.Warn("Failed to write TAR data, client may have disconnected", "error", err, "book_id", id)
+			return
 		}
 
 		// Flush for streaming

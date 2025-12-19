@@ -616,14 +616,16 @@ func (s *Server) handleBatchContributorImages(w http.ResponseWriter, r *http.Req
 			Size: int64(len(imageBytes)),
 		})
 		if err != nil {
-			s.logger.Error("Failed to write TAR header", "error", err, "contributor_id", id)
-			continue
+			// Connection error - client likely disconnected, stop trying
+			s.logger.Warn("Failed to write TAR header, client may have disconnected", "error", err, "contributor_id", id)
+			return
 		}
 
 		_, err = tw.Write(imageBytes)
 		if err != nil {
-			s.logger.Error("Failed to write TAR data", "error", err, "contributor_id", id)
-			continue
+			// Connection error - client likely disconnected, stop trying
+			s.logger.Warn("Failed to write TAR data, client may have disconnected", "error", err, "contributor_id", id)
+			return
 		}
 
 		// Flush for streaming
