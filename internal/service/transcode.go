@@ -575,12 +575,12 @@ func (s *TranscodeService) buildFFmpegArgs(input, outputDir string, bitrate, cha
 	args := []string{
 		"-y",        // Overwrite output
 		"-i", input, // Input file
-		"-vn",       // No video
+		"-vn",         // No video
 		"-c:a", "aac", // AAC codec
 		"-b:a", fmt.Sprintf("%d", bitrate), // Bitrate based on variant
 		"-ac", fmt.Sprintf("%d", channels), // Channels based on variant
 		"-ar", "48000", // Standard sample rate
-		"-f", "hls",    // HLS format
+		"-f", "hls", // HLS format
 		"-hls_time", "10", // 10 second segments
 		"-hls_list_size", "0", // Keep all segments in playlist
 		"-hls_playlist_type", "vod", // VOD playlist - adds #EXT-X-ENDLIST when complete
