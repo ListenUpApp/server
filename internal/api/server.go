@@ -341,12 +341,7 @@ func (s *Server) handleGetInstance(w http.ResponseWriter, r *http.Request) {
 // handleListBooks returns a paginated list of books accessible to the authenticated user.
 func (s *Server) handleListBooks(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	// Parse pagination parameters from query string.
 	params := parsePaginationParams(r)
@@ -364,13 +359,8 @@ func (s *Server) handleListBooks(w http.ResponseWriter, r *http.Request) {
 // handleGetBook returns a single book by ID if the user has access.
 func (s *Server) handleGetBook(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	id := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if id == "" {
 		response.BadRequest(w, "Book ID is required", s.logger)
@@ -517,7 +507,7 @@ func (s *Server) handleGetCover(w http.ResponseWriter, r *http.Request) {
 	// Set caching headers.
 	w.Header().Set("Content-Type", "image/jpeg")
 	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
-	w.Header().Set("Cache-Control", "public, max-age=604800") // 1 week
+	w.Header().Set("Cache-Control", CacheOneWeek)
 	w.Header().Set("ETag", etag)
 	w.Header().Set("Last-Modified", fileInfo.ModTime().UTC().Format(http.TimeFormat))
 

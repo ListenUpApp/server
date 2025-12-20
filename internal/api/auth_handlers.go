@@ -181,11 +181,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 // handleGetCurrentUser returns the authenticated user's information.
 // GET /api/v1/users/me.
 func (s *Server) handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
-	userID := getUserID(r.Context())
-	if userID == "" {
-		response.Unauthorized(w, "Not authenticated", s.logger)
-		return
-	}
+	userID := mustGetUserID(r.Context())
 
 	user, err := s.store.GetUser(r.Context(), userID)
 	if err != nil {

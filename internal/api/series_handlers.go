@@ -19,12 +19,7 @@ import (
 // TODO: Filter to only show series with at least one accessible book.
 func (s *Server) handleListSeries(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	params := parsePaginationParams(r)
 
@@ -43,13 +38,8 @@ func (s *Server) handleListSeries(w http.ResponseWriter, r *http.Request) {
 // TODO: Return 404 if user has no access to any books in this series.
 func (s *Server) handleGetSeries(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	id := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if id == "" {
 		response.BadRequest(w, "Series ID is required", s.logger)
@@ -73,13 +63,8 @@ func (s *Server) handleGetSeries(w http.ResponseWriter, r *http.Request) {
 // handleGetSeriesBooks returns all books in a series that the user can access.
 func (s *Server) handleGetSeriesBooks(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	id := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if id == "" {
 		response.BadRequest(w, "Series ID is required", s.logger)
@@ -116,12 +101,7 @@ func (s *Server) handleGetSeriesBooks(w http.ResponseWriter, r *http.Request) {
 // handleSyncSeries handles GET /api/v1/sync/series for syncing series.
 func (s *Server) handleSyncSeries(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	params := parsePaginationParams(r)
 
@@ -152,13 +132,8 @@ type SeriesUpdateRequest struct {
 // Cover image is handled separately via upload endpoint.
 func (s *Server) handleUpdateSeries(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	id := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if id == "" {
 		response.BadRequest(w, "Series ID is required", s.logger)
@@ -219,13 +194,8 @@ func (s *Server) handleUpdateSeries(w http.ResponseWriter, r *http.Request) {
 // Content-Type: multipart/form-data with "file" field.
 func (s *Server) handleUploadSeriesCover(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	seriesID := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if seriesID == "" {
 		response.BadRequest(w, "Series ID is required", s.logger)
@@ -244,9 +214,8 @@ func (s *Server) handleUploadSeriesCover(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Parse multipart form (limit to 10MB)
-	const maxUploadSize = 10 << 20 // 10MB
-	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
+	// Parse multipart form
+	if err := r.ParseMultipartForm(MaxUploadSize); err != nil {
 		response.BadRequest(w, "Failed to parse form data", s.logger)
 		return
 	}
@@ -260,7 +229,7 @@ func (s *Server) handleUploadSeriesCover(w http.ResponseWriter, r *http.Request)
 	defer file.Close()
 
 	// Validate file size
-	if header.Size > maxUploadSize {
+	if header.Size > MaxUploadSize {
 		response.BadRequest(w, "File too large. Maximum size is 10MB", s.logger)
 		return
 	}
@@ -366,7 +335,7 @@ func (s *Server) handleGetSeriesCover(w http.ResponseWriter, r *http.Request) {
 	// Set caching headers
 	w.Header().Set("Content-Type", "image/jpeg")
 	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
-	w.Header().Set("Cache-Control", "public, max-age=604800") // 1 week
+	w.Header().Set("Cache-Control", CacheOneWeek)
 	w.Header().Set("ETag", etag)
 	w.Header().Set("Last-Modified", fileInfo.ModTime().UTC().Format(http.TimeFormat))
 
@@ -381,13 +350,8 @@ func (s *Server) handleGetSeriesCover(w http.ResponseWriter, r *http.Request) {
 // DELETE /api/v1/series/{id}/cover.
 func (s *Server) handleDeleteSeriesCover(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	seriesID := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if seriesID == "" {
 		response.BadRequest(w, "Series ID is required", s.logger)

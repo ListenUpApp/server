@@ -26,12 +26,7 @@ type UpdateShareRequest struct {
 // handleCreateShare creates a new collection share.
 func (s *Server) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	var req CreateShareRequest
 	if err := json.UnmarshalRead(r.Body, &req); err != nil {
@@ -75,12 +70,7 @@ func (s *Server) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 // If "shared_by_collection", requires "collection_id" param.
 func (s *Server) handleListShares(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	shareType := r.URL.Query().Get("type")
 	if shareType == "" {
@@ -120,13 +110,8 @@ func (s *Server) handleListShares(w http.ResponseWriter, r *http.Request) {
 // handleGetShare returns a single share by ID.
 func (s *Server) handleGetShare(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	id := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if id == "" {
 		response.BadRequest(w, "Share ID is required", s.logger)
@@ -150,13 +135,8 @@ func (s *Server) handleGetShare(w http.ResponseWriter, r *http.Request) {
 // handleUpdateShare updates a share's permission.
 func (s *Server) handleUpdateShare(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	id := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if id == "" {
 		response.BadRequest(w, "Share ID is required", s.logger)
@@ -193,13 +173,8 @@ func (s *Server) handleUpdateShare(w http.ResponseWriter, r *http.Request) {
 // handleDeleteShare deletes a share (unshares a collection).
 func (s *Server) handleDeleteShare(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	id := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if id == "" {
 		response.BadRequest(w, "Share ID is required", s.logger)

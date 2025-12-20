@@ -29,12 +29,7 @@ type AddBookRequest struct {
 // handleCreateCollection creates a new collection.
 func (s *Server) handleCreateCollection(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	var req CreateCollectionRequest
 	if err := json.UnmarshalRead(r.Body, &req); err != nil {
@@ -71,12 +66,7 @@ func (s *Server) handleCreateCollection(w http.ResponseWriter, r *http.Request) 
 // handleListCollections returns all collections the user can access in a library.
 func (s *Server) handleListCollections(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	libraryID := r.URL.Query().Get("library_id")
 	if libraryID == "" {
@@ -97,13 +87,8 @@ func (s *Server) handleListCollections(w http.ResponseWriter, r *http.Request) {
 // handleGetCollection returns a single collection by ID.
 func (s *Server) handleGetCollection(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	id := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if id == "" {
 		response.BadRequest(w, "Collection ID is required", s.logger)
@@ -127,13 +112,8 @@ func (s *Server) handleGetCollection(w http.ResponseWriter, r *http.Request) {
 // handleUpdateCollection updates a collection's metadata.
 func (s *Server) handleUpdateCollection(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	id := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if id == "" {
 		response.BadRequest(w, "Collection ID is required", s.logger)
@@ -178,13 +158,8 @@ func (s *Server) handleUpdateCollection(w http.ResponseWriter, r *http.Request) 
 // handleDeleteCollection deletes a collection.
 func (s *Server) handleDeleteCollection(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	id := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if id == "" {
 		response.BadRequest(w, "Collection ID is required", s.logger)
@@ -214,13 +189,8 @@ func (s *Server) handleDeleteCollection(w http.ResponseWriter, r *http.Request) 
 // handleAddBookToCollection adds a book to a collection.
 func (s *Server) handleAddBookToCollection(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	id := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if id == "" {
 		response.BadRequest(w, "Collection ID is required", s.logger)
@@ -265,14 +235,9 @@ func (s *Server) handleAddBookToCollection(w http.ResponseWriter, r *http.Reques
 // handleRemoveBookFromCollection removes a book from a collection.
 func (s *Server) handleRemoveBookFromCollection(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	id := chi.URLParam(r, "id")
 	bookID := chi.URLParam(r, "bookID")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if id == "" {
 		response.BadRequest(w, "Collection ID is required", s.logger)
@@ -307,13 +272,8 @@ func (s *Server) handleRemoveBookFromCollection(w http.ResponseWriter, r *http.R
 // handleGetCollectionBooks returns all books in a collection.
 func (s *Server) handleGetCollectionBooks(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	id := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if id == "" {
 		response.BadRequest(w, "Collection ID is required", s.logger)

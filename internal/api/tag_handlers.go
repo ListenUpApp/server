@@ -14,12 +14,7 @@ import (
 // handleListTags returns all tags for the current user.
 func (s *Server) handleListTags(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	tags, err := s.services.Tag.ListTags(ctx, userID)
 	if err != nil {
@@ -34,13 +29,8 @@ func (s *Server) handleListTags(w http.ResponseWriter, r *http.Request) {
 // handleGetTag returns a single tag.
 func (s *Server) handleGetTag(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	id := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	tag, err := s.services.Tag.GetTag(ctx, userID, id)
 	if errors.Is(err, store.ErrTagNotFound) {
@@ -59,12 +49,7 @@ func (s *Server) handleGetTag(w http.ResponseWriter, r *http.Request) {
 // handleCreateTag creates a new tag.
 func (s *Server) handleCreateTag(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	var req service.CreateTagRequest
 	if err := json.UnmarshalRead(r.Body, &req); err != nil {
@@ -85,13 +70,8 @@ func (s *Server) handleCreateTag(w http.ResponseWriter, r *http.Request) {
 // handleUpdateTag updates a tag.
 func (s *Server) handleUpdateTag(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	id := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	var req service.UpdateTagRequest
 	if err := json.UnmarshalRead(r.Body, &req); err != nil {
@@ -116,13 +96,8 @@ func (s *Server) handleUpdateTag(w http.ResponseWriter, r *http.Request) {
 // handleDeleteTag deletes a tag.
 func (s *Server) handleDeleteTag(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	id := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	err := s.services.Tag.DeleteTag(ctx, userID, id)
 	if errors.Is(err, store.ErrTagNotFound) {
@@ -141,13 +116,8 @@ func (s *Server) handleDeleteTag(w http.ResponseWriter, r *http.Request) {
 // handleAddBookTag adds a tag to a book.
 func (s *Server) handleAddBookTag(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	bookID := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	var req struct {
 		TagID string `json:"tag_id"`
@@ -169,14 +139,9 @@ func (s *Server) handleAddBookTag(w http.ResponseWriter, r *http.Request) {
 // handleRemoveBookTag removes a tag from a book.
 func (s *Server) handleRemoveBookTag(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	bookID := chi.URLParam(r, "id")
 	tagID := chi.URLParam(r, "tagID")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if err := s.services.Tag.RemoveTagFromBook(ctx, userID, bookID, tagID); err != nil {
 		s.logger.Error("Failed to remove tag from book", "error", err)
@@ -190,13 +155,8 @@ func (s *Server) handleRemoveBookTag(w http.ResponseWriter, r *http.Request) {
 // handleGetBookTags returns tags for a book.
 func (s *Server) handleGetBookTags(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	bookID := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	tags, err := s.services.Tag.GetTagsForBook(ctx, userID, bookID)
 	if err != nil {
@@ -211,13 +171,8 @@ func (s *Server) handleGetBookTags(w http.ResponseWriter, r *http.Request) {
 // handleGetTagBooks returns books with a specific tag.
 func (s *Server) handleGetTagBooks(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	tagID := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	bookIDs, err := s.services.Tag.GetBooksForTag(ctx, userID, tagID)
 	if err != nil {

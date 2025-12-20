@@ -54,12 +54,7 @@ type PreparePlaybackResponse struct {
 // - Transcode job info if transcoding is in progress
 func (s *Server) handlePreparePlayback(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	var req PreparePlaybackRequest
 	if err := json.UnmarshalRead(r.Body, &req); err != nil {

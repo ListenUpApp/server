@@ -479,7 +479,7 @@ func TestGetCover_Success(t *testing.T) {
 	assert.Equal(t, "image/jpeg", w.Header().Get("Content-Type"))
 	assert.NotEmpty(t, w.Header().Get("ETag"))
 	assert.NotEmpty(t, w.Header().Get("Last-Modified"))
-	assert.Equal(t, "public, max-age=604800", w.Header().Get("Cache-Control"))
+	assert.Equal(t, CacheOneWeek, w.Header().Get("Cache-Control"))
 
 	// Verify content matches.
 	assert.Equal(t, testCover, w.Body.Bytes())
@@ -589,7 +589,7 @@ func TestGetCover_CacheHeaders(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	// Verify all cache headers are set.
-	assert.Equal(t, "public, max-age=604800", w.Header().Get("Cache-Control"))
+	assert.Equal(t, CacheOneWeek, w.Header().Get("Cache-Control"))
 	assert.NotEmpty(t, w.Header().Get("ETag"))
 	assert.NotEmpty(t, w.Header().Get("Last-Modified"))
 

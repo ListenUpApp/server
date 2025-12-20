@@ -1,9 +1,10 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
@@ -179,8 +180,8 @@ func (s *Store) GetBooksForUser(ctx context.Context, userID string) ([]*domain.B
 	// Sort by ID for deterministic pagination order.
 	// This is critical: Go maps iterate in random order, so without sorting,
 	// paginated sync would return overlapping/missing books across pages.
-	sort.Slice(accessibleBooks, func(i, j int) bool {
-		return accessibleBooks[i].ID < accessibleBooks[j].ID
+	slices.SortFunc(accessibleBooks, func(a, b *domain.Book) int {
+		return cmp.Compare(a.ID, b.ID)
 	})
 
 	return accessibleBooks, nil

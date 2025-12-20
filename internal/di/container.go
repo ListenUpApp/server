@@ -4,9 +4,9 @@ package di
 import (
 	"github.com/samber/do/v2"
 
-	"github.com/listenupapp/listenup-server/internal/di/providers"
 	"github.com/listenupapp/listenup-server/internal/auth"
 	"github.com/listenupapp/listenup-server/internal/config"
+	"github.com/listenupapp/listenup-server/internal/di/providers"
 	"github.com/listenupapp/listenup-server/internal/logger"
 	"github.com/listenupapp/listenup-server/internal/media/images"
 	"github.com/listenupapp/listenup-server/internal/processor"
