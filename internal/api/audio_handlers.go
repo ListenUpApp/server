@@ -17,15 +17,10 @@ import (
 // Optional query param: ?variant=transcoded to serve transcoded version.
 func (s *Server) handleStreamAudio(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	bookID := chi.URLParam(r, "id")
 	audioFileID := chi.URLParam(r, "audioFileId")
 	variant := r.URL.Query().Get("variant")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if bookID == "" {
 		response.BadRequest(w, "Book ID is required", s.logger)
@@ -93,7 +88,7 @@ func (s *Server) streamOriginalAudio(w http.ResponseWriter, r *http.Request, boo
 	w.Header().Set("Content-Type", contentType)
 
 	// Allow caching (audio files don't change).
-	w.Header().Set("Cache-Control", "private, max-age=86400")
+	w.Header().Set("Cache-Control", CacheOneDayPrivate)
 
 	// http.ServeFile handles:
 	// - Range requests (partial content, 206 responses)
@@ -140,13 +135,8 @@ func (s *Server) streamTranscodedAudio(w http.ResponseWriter, r *http.Request, a
 // Generates playlist dynamically from available segments for progressive playback.
 func (s *Server) handleHLSPlaylist(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	_ = mustGetUserID(ctx) // Validates auth; userID not needed for this endpoint
 	audioFileID := chi.URLParam(r, "audioFileId")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if audioFileID == "" {
 		response.BadRequest(w, "Audio file ID is required", s.logger)
@@ -172,7 +162,7 @@ func (s *Server) handleHLSPlaylist(w http.ResponseWriter, r *http.Request) {
 	rewritten := rewriteHLSPlaylist(playlist, audioFileID, baseURL)
 
 	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
-	w.Header().Set("Cache-Control", "no-cache") // Playlist changes during transcode
+	w.Header().Set("Cache-Control", CacheNoStore) // Playlist changes during transcode
 	w.Write([]byte(rewritten))
 }
 
@@ -180,14 +170,9 @@ func (s *Server) handleHLSPlaylist(w http.ResponseWriter, r *http.Request) {
 // GET /api/v1/transcode/{audioFileId}/{segment}
 func (s *Server) handleHLSSegment(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	_ = mustGetUserID(ctx) // Validates auth; userID not needed for this endpoint
 	audioFileID := chi.URLParam(r, "audioFileId")
 	segment := chi.URLParam(r, "segment")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if audioFileID == "" || segment == "" {
 		response.BadRequest(w, "Audio file ID and segment are required", s.logger)
@@ -216,7 +201,7 @@ func (s *Server) handleHLSSegment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "video/MP2T")
-	w.Header().Set("Cache-Control", "private, max-age=86400") // Segments are immutable
+	w.Header().Set("Cache-Control", CacheOneDayPrivate) // Segments are immutable
 	http.ServeFile(w, r, segmentPath)
 }
 

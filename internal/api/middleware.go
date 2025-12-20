@@ -61,12 +61,7 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 func (s *Server) requireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		userID := getUserID(ctx)
-
-		if userID == "" {
-			response.Unauthorized(w, "Authentication required", s.logger)
-			return
-		}
+		userID := mustGetUserID(ctx) // Safe: requireAdmin is always used after requireAuth
 
 		// Get user to check admin status
 		user, err := s.store.GetUser(ctx, userID)
@@ -86,9 +81,22 @@ func (s *Server) requireAdmin(next http.Handler) http.Handler {
 
 // getUserID extracts the authenticated user ID from request context.
 // Returns empty string if not authenticated.
+// Use mustGetUserID for routes protected by requireAuth middleware.
 func getUserID(ctx context.Context) string {
 	if userID, ok := ctx.Value(contextKeyUserID).(string); ok {
 		return userID
 	}
 	return ""
+}
+
+// mustGetUserID extracts the authenticated user ID from request context.
+// Panics if called on an unauthenticated route - this catches configuration
+// bugs during development (forgetting to add requireAuth middleware).
+// Use only on routes protected by requireAuth middleware.
+func mustGetUserID(ctx context.Context) string {
+	userID, ok := ctx.Value(contextKeyUserID).(string)
+	if !ok || userID == "" {
+		panic("mustGetUserID: called without authentication - missing requireAuth middleware on route")
+	}
+	return userID
 }

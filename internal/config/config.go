@@ -252,25 +252,18 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// expandMetadataPath expands ~ and makes the path absolute.
-func (c *Config) expandMetadataPath() error {
-	path := c.Metadata.BasePath
-
-	// If empty, use default.
+// expandPath expands ~ and makes the path absolute.
+// If path is empty and defaultPath is provided, uses the default.
+func expandPath(path, defaultPath string) (string, error) {
 	if path == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("failed to get home directory: %w", err)
-		}
-		c.Metadata.BasePath = filepath.Join(homeDir, "ListenUp", "metadata")
-		return nil
+		return defaultPath, nil
 	}
 
 	// Expand tilde.
 	if strings.HasPrefix(path, "~/") {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
-			return fmt.Errorf("failed to get home directory: %w", err)
+			return "", fmt.Errorf("failed to get home directory: %w", err)
 		}
 		path = filepath.Join(homeDir, path[2:])
 	}
@@ -279,81 +272,56 @@ func (c *Config) expandMetadataPath() error {
 	if !filepath.IsAbs(path) {
 		absPath, err := filepath.Abs(path)
 		if err != nil {
-			return fmt.Errorf("failed to get absolute path: %w", err)
+			return "", fmt.Errorf("failed to get absolute path: %w", err)
 		}
 		path = absPath
 	}
 
-	c.Metadata.BasePath = filepath.Clean(path)
+	return filepath.Clean(path), nil
+}
+
+// expandMetadataPath expands ~ and makes the path absolute.
+func (c *Config) expandMetadataPath() error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %w", err)
+	}
+	defaultPath := filepath.Join(homeDir, "ListenUp", "metadata")
+
+	expanded, err := expandPath(c.Metadata.BasePath, defaultPath)
+	if err != nil {
+		return err
+	}
+	c.Metadata.BasePath = expanded
 	return nil
 }
 
 // expandAudiobookPath expands ~ and makes the path absolute.
 func (c *Config) expandAudiobookPath() error {
-	path := c.Library.AudiobookPath
-
-	// If empty, use default.
-	if path == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("failed to get home directory: %w", err)
-		}
-		c.Library.AudiobookPath = filepath.Join(homeDir, "Audiobooks")
-		return nil
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %w", err)
 	}
+	defaultPath := filepath.Join(homeDir, "Audiobooks")
 
-	// Expand tilde.
-	if strings.HasPrefix(path, "~/") {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("failed to get home directory: %w", err)
-		}
-		path = filepath.Join(homeDir, path[2:])
+	expanded, err := expandPath(c.Library.AudiobookPath, defaultPath)
+	if err != nil {
+		return err
 	}
-
-	// Make absolute if needed.
-	if !filepath.IsAbs(path) {
-		absPath, err := filepath.Abs(path)
-		if err != nil {
-			return fmt.Errorf("failed to get absolute path: %w", err)
-		}
-		path = absPath
-	}
-
-	c.Library.AudiobookPath = filepath.Clean(path)
+	c.Library.AudiobookPath = expanded
 	return nil
 }
 
 // expandTranscodeCachePath expands ~ and makes the path absolute.
 // Defaults to {metadata}/cache/transcode if not specified.
 func (c *Config) expandTranscodeCachePath() error {
-	path := c.Transcode.CachePath
+	defaultPath := filepath.Join(c.Metadata.BasePath, "cache", "transcode")
 
-	// If empty, use default under metadata path.
-	if path == "" {
-		c.Transcode.CachePath = filepath.Join(c.Metadata.BasePath, "cache", "transcode")
-		return nil
+	expanded, err := expandPath(c.Transcode.CachePath, defaultPath)
+	if err != nil {
+		return err
 	}
-
-	// Expand tilde.
-	if strings.HasPrefix(path, "~/") {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("failed to get home directory: %w", err)
-		}
-		path = filepath.Join(homeDir, path[2:])
-	}
-
-	// Make absolute if needed.
-	if !filepath.IsAbs(path) {
-		absPath, err := filepath.Abs(path)
-		if err != nil {
-			return fmt.Errorf("failed to get absolute path: %w", err)
-		}
-		path = absPath
-	}
-
-	c.Transcode.CachePath = filepath.Clean(path)
+	c.Transcode.CachePath = expanded
 	return nil
 }
 

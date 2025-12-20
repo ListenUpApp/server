@@ -47,12 +47,7 @@ func (s *Server) handleGetGenre(w http.ResponseWriter, r *http.Request) {
 // handleCreateGenre creates a new genre.
 func (s *Server) handleCreateGenre(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	_ = mustGetUserID(ctx) // Validates auth
 
 	var req service.CreateGenreRequest
 	if err := json.UnmarshalRead(r.Body, &req); err != nil {
@@ -73,13 +68,8 @@ func (s *Server) handleCreateGenre(w http.ResponseWriter, r *http.Request) {
 // handleUpdateGenre updates a genre.
 func (s *Server) handleUpdateGenre(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	_ = mustGetUserID(ctx) // Validates auth
 	id := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	var req service.UpdateGenreRequest
 	if err := json.UnmarshalRead(r.Body, &req); err != nil {
@@ -104,13 +94,8 @@ func (s *Server) handleUpdateGenre(w http.ResponseWriter, r *http.Request) {
 // handleDeleteGenre deletes a genre.
 func (s *Server) handleDeleteGenre(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	_ = mustGetUserID(ctx) // Validates auth
 	id := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	err := s.services.Genre.DeleteGenre(ctx, id)
 	if errors.Is(err, store.ErrGenreNotFound) {
@@ -137,13 +122,8 @@ func (s *Server) handleDeleteGenre(w http.ResponseWriter, r *http.Request) {
 // handleMoveGenre changes a genre's parent.
 func (s *Server) handleMoveGenre(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	_ = mustGetUserID(ctx) // Validates auth
 	id := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	var req struct {
 		ParentID string `json:"parent_id"` // Empty string for root.
@@ -166,12 +146,7 @@ func (s *Server) handleMoveGenre(w http.ResponseWriter, r *http.Request) {
 // handleMergeGenres merges two genres.
 func (s *Server) handleMergeGenres(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	_ = mustGetUserID(ctx) // Validates auth
 
 	var req service.MergeGenresRequest
 	if err := json.UnmarshalRead(r.Body, &req); err != nil {
@@ -225,12 +200,7 @@ func (s *Server) handleListUnmappedGenres(w http.ResponseWriter, r *http.Request
 // handleMapUnmappedGenre creates an alias for an unmapped genre.
 func (s *Server) handleMapUnmappedGenre(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	var req service.MapUnmappedGenreRequest
 	if err := json.UnmarshalRead(r.Body, &req); err != nil {
@@ -265,13 +235,8 @@ func (s *Server) handleGetBookGenres(w http.ResponseWriter, r *http.Request) {
 // handleSetBookGenres sets genres for a book.
 func (s *Server) handleSetBookGenres(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	_ = mustGetUserID(ctx) // Validates auth
 	bookID := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	var req struct {
 		GenreIDs []string `json:"genre_ids"`

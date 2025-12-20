@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/http/response"
@@ -22,12 +23,7 @@ import (
 //   - offset: pagination offset
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	// Check if search service is available
 	if s.services.Search == nil {
@@ -70,12 +66,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 // This is an admin operation that rebuilds the search index from scratch.
 func (s *Server) handleReindex(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	if s.services.Search == nil {
 		response.Error(w, http.StatusServiceUnavailable, "Search service not available", s.logger)
@@ -107,12 +98,7 @@ func (s *Server) handleReindex(w http.ResponseWriter, r *http.Request) {
 // handleSearchStats returns search index statistics.
 func (s *Server) handleSearchStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	_ = mustGetUserID(ctx) // Validates auth
 
 	if s.services.Search == nil {
 		response.Error(w, http.StatusServiceUnavailable, "Search service not available", s.logger)
@@ -185,45 +171,13 @@ func (s *Server) parseSearchParams(r *http.Request) search.SearchParams {
 	return params
 }
 
-// splitAndTrim splits a string and trims whitespace from each part.
+// splitAndTrim splits a string by separator and trims whitespace, filtering empty parts.
 func splitAndTrim(s, sep string) []string {
 	var result []string
-	for _, part := range split(s, sep) {
-		trimmed := trim(part)
-		if trimmed != "" {
+	for _, part := range strings.Split(s, sep) {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
 			result = append(result, trimmed)
 		}
 	}
 	return result
-}
-
-// split is a simple string split helper.
-func split(s, sep string) []string {
-	if s == "" {
-		return nil
-	}
-	var result []string
-	start := 0
-	for i := 0; i <= len(s)-len(sep); i++ {
-		if s[i:i+len(sep)] == sep {
-			result = append(result, s[start:i])
-			start = i + len(sep)
-			i += len(sep) - 1
-		}
-	}
-	result = append(result, s[start:])
-	return result
-}
-
-// trim removes leading and trailing whitespace.
-func trim(s string) string {
-	start := 0
-	end := len(s)
-	for start < end && (s[start] == ' ' || s[start] == '\t') {
-		start++
-	}
-	for end > start && (s[end-1] == ' ' || s[end-1] == '\t') {
-		end--
-	}
-	return s[start:end]
 }

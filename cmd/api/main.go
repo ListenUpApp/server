@@ -2,464 +2,64 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
-	"time"
 
-	"github.com/listenupapp/listenup-server/internal/api"
-	"github.com/listenupapp/listenup-server/internal/auth"
-	"github.com/listenupapp/listenup-server/internal/config"
+	"github.com/samber/do/v2"
+
+	"github.com/listenupapp/listenup-server/internal/di"
+	"github.com/listenupapp/listenup-server/internal/di/providers"
 	"github.com/listenupapp/listenup-server/internal/logger"
-	"github.com/listenupapp/listenup-server/internal/mdns"
-	"github.com/listenupapp/listenup-server/internal/media/images"
-	"github.com/listenupapp/listenup-server/internal/processor"
-	"github.com/listenupapp/listenup-server/internal/scanner"
-	"github.com/listenupapp/listenup-server/internal/search"
-	"github.com/listenupapp/listenup-server/internal/service"
-	"github.com/listenupapp/listenup-server/internal/sse"
-	"github.com/listenupapp/listenup-server/internal/store"
-	"github.com/listenupapp/listenup-server/internal/watcher"
 )
 
-//nolint:gocyclo,gocritic // gocyclo: Main has high complexity; gocritic: os.Exit is intentional, critical cleanup done explicitly
 func main() {
-	// Load configuration.
-	cfg, err := config.LoadConfig()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
+	// Create DI container
+	injector := di.NewContainer()
+
+	// Bootstrap all services
+	if err := di.Bootstrap(injector); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to bootstrap server: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Initialize logger.
-	log := logger.New(logger.Config{
-		Level:       logger.ParseLevel(cfg.Logger.Level),
-		AddSource:   cfg.App.Environment == "development",
-		Environment: cfg.App.Environment,
-	})
+	// Get logger for shutdown messages
+	log := do.MustInvoke[*logger.Logger](injector)
 
-	log.Info("Starting ListenUp Server",
-		"environment", cfg.App.Environment,
-		"log_level", cfg.Logger.Level,
-		"metadata_path", cfg.Metadata.BasePath,
-		"audiobook_path", cfg.Library.AudiobookPath,
-	)
-
-	// Load or generate authentication key.
-	authKey, err := auth.LoadOrGenerateKey(cfg.Metadata.BasePath)
-	if err != nil {
-		log.Error("Failed to load authentication key", "error", err)
-		os.Exit(1)
-	}
-	cfg.Auth.AccessTokenKey = authKey
-	log.Info("Authentication key loaded",
-		"access_token_duration", cfg.Auth.AccessTokenDuration,
-		"refresh_token_duration", cfg.Auth.RefreshTokenDuration,
-	)
-
-	// Initialize SSE manager first (required by store).
-	sseManager := sse.NewManager(log.Logger)
-	sseCtx, sseCancel := context.WithCancel(context.Background())
-	go sseManager.Start(sseCtx)
-
-	// Initialize database with SSE manager for event broadcasting.
-	dbPath := filepath.Join(cfg.Metadata.BasePath, "db")
-	db, err := store.New(dbPath, log.Logger, sseManager)
-	if err != nil {
-		log.Error("Failed to initialize database", "error", err)
-		sseCancel() // Cancel SSE context before exit
-		os.Exit(1)
-	}
-	// Defer close as safety net (also explicitly closed in shutdown sequence).
-	defer func() {
-		if err := db.Close(); err != nil {
-			// Only log if not already closed.
-			log.Error("Failed to close database (defer)", "error", err)
-		}
-	}()
-
-	// Bootstrap library and collections (ensures they exist).
-	// Note: Use placeholder owner ID "system" for initial bootstrap.
-	// This will be updated to the actual root user ID when setup completes.
-	ctx := context.Background()
-	bootstrap, err := db.EnsureLibrary(ctx, cfg.Library.AudiobookPath, "system")
-	if err != nil {
-		log.Error("Failed to bootstrap library", "error", err)
-		sseCancel()
-		os.Exit(1)
-	}
-
-	log.Info("Library ready",
-		"library_id", bootstrap.Library.ID,
-		"library_name", bootstrap.Library.Name,
-		"owner_id", bootstrap.Library.OwnerID,
-		"scan_paths", len(bootstrap.Library.ScanPaths),
-		"is_new", bootstrap.IsNewLibrary,
-		"inbox_collection", bootstrap.InboxCollection.ID,
-	)
-
-	// Initialize image storage for book covers and contributor photos.
-	coverStorage, err := images.NewStorage(cfg.Metadata.BasePath)
-	if err != nil {
-		log.Error("Failed to initialize cover storage", "error", err)
-		sseCancel()
-		os.Exit(1)
-	}
-	contributorImageStorage, err := images.NewStorageWithSubdir(cfg.Metadata.BasePath, "contributors")
-	if err != nil {
-		log.Error("Failed to initialize contributor image storage", "error", err)
-		sseCancel()
-		os.Exit(1)
-	}
-	seriesCoversStorage, err := images.NewStorageWithSubdir(cfg.Metadata.BasePath, "covers/series")
-	if err != nil {
-		log.Error("Failed to initialize series cover storage", "error", err)
-		sseCancel()
-		os.Exit(1)
-	}
-	imageProcessor := images.NewProcessor(coverStorage, log.Logger)
-
-	// Initialize scanner with SSE event emitter and image processor.
-	fileScanner := scanner.NewScanner(db, sseManager, imageProcessor, log.Logger)
-
-	// Initialize transcode service.
-	transcodeService, err := service.NewTranscodeService(db, sseManager, cfg.Transcode, log.Logger)
-	if err != nil {
-		log.Error("Failed to initialize transcode service", "error", err)
-		sseCancel()
-		os.Exit(1)
-	}
-	// Wire transcode service to scanner and store.
-	fileScanner.SetTranscodeQueuer(transcodeService)
-	db.SetTranscodeDeleter(transcodeService)
-	// Start transcode workers.
-	transcodeService.Start()
-
-	// If new library, trigger initial full scan.
-	if bootstrap.IsNewLibrary {
-		log.Info("New library detected, starting initial scan")
-		go func() {
-			for _, scanPath := range bootstrap.Library.ScanPaths {
-				log.Info("Running initial scan", "path", scanPath)
-				if _, err := fileScanner.Scan(ctx, scanPath, scanner.ScanOptions{
-					LibraryID: bootstrap.Library.ID,
-				}); err != nil {
-					log.Error("Initial scan failed", "path", scanPath, "error", err)
-				}
-			}
-		}()
-	}
-
-	// Initialize file watcher.
-	fileWatcher, err := watcher.New(log.Logger, watcher.Options{
-		IgnoreHidden: true,
-	})
-	if err != nil {
-		log.Error("Failed to create file watcher", "error", err)
-		sseCancel()
-		os.Exit(1)
-	}
-	// Watch all library scan paths.
-	for _, scanPath := range bootstrap.Library.ScanPaths {
-		if err := fileWatcher.Watch(scanPath); err != nil {
-			log.Error("Failed to watch scan path", "path", scanPath, "error", err)
-			sseCancel()
-			os.Exit(1)
-		}
-		log.Info("Watching scan path", "path", scanPath)
-	}
-
-	// Start watcher in background.
-	watcherCtx, watcherCancel := context.WithCancel(context.Background())
-	defer watcherCancel()
-
-	go func() {
-		if err := fileWatcher.Start(watcherCtx); err != nil {
-			log.Error("File watcher error", "error", err)
-		}
-	}()
-
-	// Initialize event processor.
-	eventProcessor := processor.NewEventProcessor(fileScanner, db, log.Logger)
-
-	// Process file watcher events in background.
-	go func() {
-		for {
-			select {
-			case event := <-fileWatcher.Events():
-				if err := eventProcessor.ProcessEvent(watcherCtx, event); err != nil {
-					log.Warn("failed to process event",
-						"error", err,
-						"type", event.Type,
-						"path", event.Path,
-					)
-				}
-			case err := <-fileWatcher.Errors():
-				log.Warn("file watcher error", "error", err)
-			case <-watcherCtx.Done():
-				return
-			}
-		}
-	}()
-
-	log.Info("File watcher started", "scan_paths", len(bootstrap.Library.ScanPaths))
-
-	// Start periodic session cleanup job.
-	// Cleans up expired sessions every hour to prevent database bloat.
-	sessionCleanupCtx, sessionCleanupCancel := context.WithCancel(context.Background())
-	go func() {
-		ticker := time.NewTicker(1 * time.Hour)
-		defer ticker.Stop()
-
-		// Run initial cleanup on startup.
-		if count, err := db.DeleteExpiredSessions(sessionCleanupCtx); err != nil {
-			log.Warn("Initial session cleanup failed", "error", err)
-		} else if count > 0 {
-			log.Info("Initial session cleanup completed", "deleted", count)
-		}
-
-		for {
-			select {
-			case <-ticker.C:
-				if count, err := db.DeleteExpiredSessions(sessionCleanupCtx); err != nil {
-					log.Warn("Session cleanup failed", "error", err)
-				} else if count > 0 {
-					log.Info("Session cleanup completed", "deleted", count)
-				}
-			case <-sessionCleanupCtx.Done():
-				return
-			}
-		}
-	}()
-
-	// Initialize search index.
-	searchIndex, err := search.NewSearchIndex(search.Options{
-		DataPath: cfg.Metadata.BasePath,
-		Logger:   log.Logger,
-	})
-	if err != nil {
-		log.Error("Failed to initialize search index", "error", err)
-		sseCancel()
-		os.Exit(1)
-	}
-	// Initialize services.
-	instanceService := service.NewInstanceService(db, log.Logger, cfg)
-	bookService := service.NewBookService(db, fileScanner, log.Logger)
-	collectionService := service.NewCollectionService(db, log.Logger)
-	sharingService := service.NewSharingService(db, log.Logger)
-	syncService := service.NewSyncService(db, log.Logger)
-	listeningService := service.NewListeningService(db, sseManager, log.Logger)
-	genreService := service.NewGenreService(db, log.Logger)
-	tagService := service.NewTagService(db, log.Logger)
-	searchService := service.NewSearchService(searchIndex, db, log.Logger)
-
-	// Wire search service to store for automatic indexing on CRUD operations.
-	db.SetSearchIndexer(searchService)
-
-	// Check if search index needs initial population.
-	// This handles the case where books exist but the index is empty
-	// (e.g., library was scanned before search indexing was implemented).
-	docCount, _ := searchService.DocumentCount()
-	if docCount == 0 {
-		// Check if we have books that need indexing
-		books, err := db.ListAllBooks(ctx)
-		if err == nil && len(books) > 0 {
-			log.Info("Search index is empty but books exist, triggering initial reindex",
-				"book_count", len(books),
-			)
-			go func() {
-				reindexCtx := context.Background()
-				if err := searchService.ReindexAll(reindexCtx); err != nil {
-					log.Error("Initial search reindex failed", "error", err)
-				} else {
-					count, _ := searchService.DocumentCount()
-					log.Info("Initial search reindex completed", "documents", count)
-				}
-			}()
-		}
-	} else {
-		log.Info("Search index ready", "documents", docCount)
-	}
-
-	// Note: Search reindex is also triggered automatically after every library scan.
-	// See handleTriggerScan in server.go for the implementation.
-
-	// Initialize auth services.
-	// Convert key bytes to hex string for token service
-	keyHex := fmt.Sprintf("%x", cfg.Auth.AccessTokenKey)
-	tokenService, err := auth.NewTokenService(keyHex, cfg.Auth.AccessTokenDuration, cfg.Auth.RefreshTokenDuration)
-	if err != nil {
-		log.Error("Failed to create token service", "error", err)
-		sseCancel()
-		os.Exit(1)
-	}
-	sessionService := service.NewSessionService(db, tokenService, log.Logger)
-	authService := service.NewAuthService(db, tokenService, sessionService, instanceService, log.Logger)
-
-	// Initialize invite and admin services.
-	serverURL := fmt.Sprintf("http://localhost:%s", cfg.Server.Port) // TODO: Get from config or auto-detect
-	inviteService := service.NewInviteService(db, sessionService, log.Logger, serverURL)
-	adminService := service.NewAdminService(db, log.Logger)
-
-	sseHandler := sse.NewHandler(sseManager, log.Logger)
-
-	// Seed default genres (no-op if already seeded).
-	if err := genreService.SeedDefaultGenres(ctx); err != nil {
-		log.Error("Failed to seed default genres", "error", err)
-		// Non-fatal - continue without genres.
-	} else {
-		log.Info("Default genres seeded successfully")
-	}
-
-	// Check if server instance configuration exists, create if not (first run).
-	instanceConfig, err := instanceService.InitializeInstance(ctx)
-	if err != nil {
-		log.Error("Failed to initialize server instance configuration", "error", err)
-		sseCancel()
-		os.Exit(1)
-	}
-
-	// Log server instance state.
-	if !instanceConfig.IsSetupRequired() {
-		log.Info("Server instance is configured and ready",
-			"instance_id", instanceConfig.ID,
-			"root_user_id", instanceConfig.RootUserID,
-			"created_at", instanceConfig.CreatedAt,
-		)
-	} else {
-		log.Warn("Server instance needs setup - no root user configured",
-			"instance_id", instanceConfig.ID,
-			"setup_required", true,
-		)
-	}
-
-	// Create HTTP server with service layer.
-	services := &api.Services{
-		Instance:   instanceService,
-		Auth:       authService,
-		Book:       bookService,
-		Collection: collectionService,
-		Sharing:    sharingService,
-		Sync:       syncService,
-		Listening:  listeningService,
-		Genre:      genreService,
-		Tag:        tagService,
-		Search:     searchService,
-		Invite:     inviteService,
-		Admin:      adminService,
-		Transcode:  transcodeService,
-	}
-	storage := &api.StorageServices{
-		Covers:            coverStorage,
-		ContributorImages: contributorImageStorage,
-		SeriesCovers:      seriesCoversStorage,
-	}
-	httpServer := api.NewServer(db, services, storage, sseHandler, log.Logger)
-
-	// Configure HTTP server.
-	srv := &http.Server{
-		Addr:         ":" + cfg.Server.Port,
-		Handler:      httpServer,
-		ReadTimeout:  cfg.Server.ReadTimeout,
-		WriteTimeout: cfg.Server.WriteTimeout,
-		IdleTimeout:  cfg.Server.IdleTimeout,
-	}
-
-	// Start server in goroutine.
-	go func() {
-		log.Info("HTTP server starting", "addr", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Error("HTTP server error", "error", err)
-			sseCancel()
-			os.Exit(1)
-		}
-	}()
-
-	log.Info("Server running", "addr", srv.Addr)
-
-	// Start mDNS advertisement for local network discovery.
-	var mdnsService *mdns.Service
-	if cfg.Server.AdvertiseMDNS {
-		mdnsService = mdns.NewService(log.Logger)
-		// Parse port as int for mDNS
-		port := 8080
-		if _, err := fmt.Sscanf(cfg.Server.Port, "%d", &port); err != nil {
-			log.Warn("Failed to parse server port for mDNS, using default", "port", cfg.Server.Port)
-		}
-		if err := mdnsService.Start(instanceConfig, port); err != nil {
-			log.Warn("mDNS advertisement unavailable", "error", err)
-			// Non-fatal: server works without mDNS (e.g., Docker, cloud)
-		}
-	} else {
-		log.Info("mDNS advertisement disabled by configuration")
-	}
-
-	// Wait for interrupt signal.
+	// Wait for shutdown signal
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
 	log.Info("Shutting down server gracefully...")
 
-	// Shutdown sequence (order matters!):
-	// 1. Stop session cleanup job.
-	// 2. Stop file watcher (no more file events).
-	// 3. Stop transcode service (complete in-flight transcodes).
-	// 4. Shutdown SSE manager (no more event broadcasts).
-	// 5. Stop mDNS advertisement.
-	// 6. Shutdown HTTP server (no more requests).
-	// 7. Close search index (no more search operations).
-	// 8. Close database (no more data access).
-
-	// Stop session cleanup job.
-	sessionCleanupCancel()
-
-	// Stop transcode service.
-	transcodeService.Stop()
-
-	// Stop file watcher.
-	watcherCancel()
-	if err := fileWatcher.Stop(); err != nil {
-		log.Error("Failed to stop file watcher", "error", err)
+	// Shutdown all services in reverse order
+	// The DI container handles shutdown order automatically
+	if err := injector.Shutdown(); err != nil {
+		log.Error("Shutdown error", "error", err)
 	}
 
-	// Shutdown SSE manager gracefully.
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	// Manually shutdown remaining services that need explicit cleanup
+	// (services that implement do.Shutdownable are handled automatically)
 
-	sseCancel() // Cancel SSE context to stop broadcast loop
-	if err := sseManager.Shutdown(shutdownCtx); err != nil {
-		log.Error("Failed to shutdown SSE manager", "error", err)
+	// Database and search index need explicit shutdown since they use wrapper types
+	if storeHandle, err := do.Invoke[*providers.StoreHandle](injector); err == nil {
+		log.Info("Closing database...")
+		if err := storeHandle.Shutdown(); err != nil {
+			log.Error("Failed to close database", "error", err)
+		} else {
+			log.Info("Database closed successfully")
+		}
 	}
 
-	// Stop mDNS advertisement.
-	if mdnsService != nil {
-		mdnsService.Stop()
-	}
-
-	// Shutdown HTTP server.
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Error("Server forced to shutdown", "error", err)
-	}
-
-	// Close search index.
-	log.Info("Closing search index...")
-	if err := searchIndex.Close(); err != nil {
-		log.Error("Failed to close search index", "error", err)
-	} else {
-		log.Info("Search index closed successfully")
-	}
-
-	// Explicitly close database before exit.
-	log.Info("Closing database...")
-	if err := db.Close(); err != nil {
-		log.Error("Failed to close database", "error", err)
-	} else {
-		log.Info("Database closed successfully")
+	if searchHandle, err := do.Invoke[*providers.SearchIndexHandle](injector); err == nil {
+		log.Info("Closing search index...")
+		if err := searchHandle.Shutdown(); err != nil {
+			log.Error("Failed to close search index", "error", err)
+		} else {
+			log.Info("Search index closed successfully")
+		}
 	}
 
 	log.Info("See you space cowboy...")

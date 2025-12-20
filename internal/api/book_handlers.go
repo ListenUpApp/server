@@ -33,13 +33,8 @@ type BookUpdateRequest struct {
 // Only fields present in the request body are updated.
 func (s *Server) handleUpdateBook(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	bookID := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if bookID == "" {
 		response.BadRequest(w, "Book ID is required", s.logger)
@@ -128,13 +123,8 @@ type SetContributorsRequest struct {
 // PUT /api/v1/books/{id}/contributors.
 func (s *Server) handleSetBookContributors(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	bookID := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if bookID == "" {
 		response.BadRequest(w, "Book ID is required", s.logger)
@@ -223,13 +213,8 @@ type SetSeriesRequest struct {
 // PUT /api/v1/books/{id}/series.
 func (s *Server) handleSetBookSeries(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	bookID := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if bookID == "" {
 		response.BadRequest(w, "Book ID is required", s.logger)
@@ -293,13 +278,8 @@ func (s *Server) handleSetBookSeries(w http.ResponseWriter, r *http.Request) {
 // Content-Type: multipart/form-data with "file" field.
 func (s *Server) handleUploadCover(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	bookID := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if bookID == "" {
 		response.BadRequest(w, "Book ID is required", s.logger)
@@ -318,9 +298,8 @@ func (s *Server) handleUploadCover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse multipart form (limit to 10MB)
-	const maxUploadSize = 10 << 20 // 10MB
-	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
+	// Parse multipart form
+	if err := r.ParseMultipartForm(MaxUploadSize); err != nil {
 		response.BadRequest(w, "Failed to parse form data", s.logger)
 		return
 	}
@@ -334,7 +313,7 @@ func (s *Server) handleUploadCover(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	// Validate file size
-	if header.Size > maxUploadSize {
+	if header.Size > MaxUploadSize {
 		response.BadRequest(w, "File too large. Maximum size is 10MB", s.logger)
 		return
 	}

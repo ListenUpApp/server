@@ -1,11 +1,13 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"iter"
+	"slices"
 	"strings"
 
 	"github.com/dgraph-io/badger/v4"
@@ -332,14 +334,9 @@ func (s *Store) ListPendingTranscodeJobs(ctx context.Context) ([]*domain.Transco
 	}
 
 	// Sort by priority descending (higher priority first)
-	// Using simple bubble sort since job lists are typically small
-	for i := 0; i < len(jobs); i++ {
-		for j := i + 1; j < len(jobs); j++ {
-			if jobs[j].Priority > jobs[i].Priority {
-				jobs[i], jobs[j] = jobs[j], jobs[i]
-			}
-		}
-	}
+	slices.SortFunc(jobs, func(a, b *domain.TranscodeJob) int {
+		return cmp.Compare(b.Priority, a.Priority)
+	})
 
 	return jobs, nil
 }

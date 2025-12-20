@@ -44,12 +44,7 @@ type BulkEventsResponse struct {
 // handleRecordEvent records listening events (supports both single and bulk).
 func (s *Server) handleRecordEvent(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	// Try to parse as bulk request first (client sends { "events": [...] })
 	var bulkReq BulkEventsRequest
@@ -112,12 +107,7 @@ func (s *Server) handleBulkEvents(w http.ResponseWriter, r *http.Request, userID
 // handleGetProgress retrieves playback progress for a book.
 func (s *Server) handleGetProgress(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	bookID := chi.URLParam(r, "bookID")
 	if bookID == "" {
@@ -142,12 +132,7 @@ func (s *Server) handleGetProgress(w http.ResponseWriter, r *http.Request) {
 // handleGetContinueListening returns books the user is currently listening to.
 func (s *Server) handleGetContinueListening(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	// Parse limit from query params (default 10)
 	limit := 10
@@ -170,12 +155,7 @@ func (s *Server) handleGetContinueListening(w http.ResponseWriter, r *http.Reque
 // handleResetProgress removes progress for a book.
 func (s *Server) handleResetProgress(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	bookID := chi.URLParam(r, "bookID")
 	if bookID == "" {
@@ -195,12 +175,7 @@ func (s *Server) handleResetProgress(w http.ResponseWriter, r *http.Request) {
 // handleGetUserSettings retrieves user playback settings.
 func (s *Server) handleGetUserSettings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	settings, err := s.services.Listening.GetUserSettings(ctx, userID)
 	if err != nil {
@@ -215,12 +190,7 @@ func (s *Server) handleGetUserSettings(w http.ResponseWriter, r *http.Request) {
 // handleUpdateUserSettings updates user playback settings.
 func (s *Server) handleUpdateUserSettings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	var req service.UpdateUserSettingsRequest
 	if err := json.UnmarshalRead(r.Body, &req); err != nil {
@@ -241,12 +211,7 @@ func (s *Server) handleUpdateUserSettings(w http.ResponseWriter, r *http.Request
 // handleGetBookPreferences retrieves per-book preferences.
 func (s *Server) handleGetBookPreferences(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	bookID := chi.URLParam(r, "bookID")
 	if bookID == "" {
@@ -267,12 +232,7 @@ func (s *Server) handleGetBookPreferences(w http.ResponseWriter, r *http.Request
 // handleUpdateBookPreferences updates per-book preferences.
 func (s *Server) handleUpdateBookPreferences(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	bookID := chi.URLParam(r, "bookID")
 	if bookID == "" {
@@ -299,12 +259,7 @@ func (s *Server) handleUpdateBookPreferences(w http.ResponseWriter, r *http.Requ
 // handleGetUserStats retrieves listening statistics for the user.
 func (s *Server) handleGetUserStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	stats, err := s.services.Listening.GetUserStats(ctx, userID)
 	if err != nil {
@@ -319,12 +274,7 @@ func (s *Server) handleGetUserStats(w http.ResponseWriter, r *http.Request) {
 // handleGetBookStats retrieves listening statistics for a book.
 func (s *Server) handleGetBookStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	_ = mustGetUserID(ctx) // Validates auth
 
 	bookID := chi.URLParam(r, "bookID")
 	if bookID == "" {

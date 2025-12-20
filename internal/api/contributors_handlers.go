@@ -21,12 +21,7 @@ import (
 // TODO: Filter to only show contributors with at least one accessible book.
 func (s *Server) handleListContributors(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	params := parsePaginationParams(r)
 
@@ -45,13 +40,8 @@ func (s *Server) handleListContributors(w http.ResponseWriter, r *http.Request) 
 // TODO: Return 404 if user has no access to any books by this contributor.
 func (s *Server) handleGetContributor(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	id := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if id == "" {
 		response.BadRequest(w, "Contributor ID is required", s.logger)
@@ -75,13 +65,8 @@ func (s *Server) handleGetContributor(w http.ResponseWriter, r *http.Request) {
 // handleGetContributorBooks returns all books by a contributor that the user can access.
 func (s *Server) handleGetContributorBooks(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	id := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if id == "" {
 		response.BadRequest(w, "Contributor ID is required", s.logger)
@@ -125,12 +110,7 @@ func (s *Server) handleGetContributorBooks(w http.ResponseWriter, r *http.Reques
 // - Fuzzy matching for typo tolerance.
 func (s *Server) handleSearchContributors(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	query := r.URL.Query().Get("q")
 	if query == "" {
@@ -165,12 +145,7 @@ func (s *Server) handleSearchContributors(w http.ResponseWriter, r *http.Request
 // handleSyncContributors handles GET /api/v1/sync/contributors for syncing contributors.
 func (s *Server) handleSyncContributors(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
+	userID := mustGetUserID(ctx)
 
 	params := parsePaginationParams(r)
 
@@ -203,13 +178,8 @@ type MergeContributorsRequest struct {
 // After merge, future book scans for the source name will automatically link to the target.
 func (s *Server) handleMergeContributors(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	targetID := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if targetID == "" {
 		response.BadRequest(w, "Target contributor ID is required", s.logger)
@@ -277,13 +247,8 @@ type UnmergeContributorRequest struct {
 // Returns the newly created contributor.
 func (s *Server) handleUnmergeContributor(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	sourceID := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if sourceID == "" {
 		response.BadRequest(w, "Contributor ID is required", s.logger)
@@ -345,13 +310,8 @@ type UpdateContributorRequest struct {
 // Image is handled separately via upload endpoint.
 func (s *Server) handleUpdateContributor(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	id := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if id == "" {
 		response.BadRequest(w, "Contributor ID is required", s.logger)
@@ -410,13 +370,8 @@ func (s *Server) handleUpdateContributor(w http.ResponseWriter, r *http.Request)
 // Content-Type: multipart/form-data with "file" field.
 func (s *Server) handleUploadContributorImage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := getUserID(ctx)
+	userID := mustGetUserID(ctx)
 	contributorID := chi.URLParam(r, "id")
-
-	if userID == "" {
-		response.Unauthorized(w, "Authentication required", s.logger)
-		return
-	}
 
 	if contributorID == "" {
 		response.BadRequest(w, "Contributor ID is required", s.logger)
@@ -435,9 +390,8 @@ func (s *Server) handleUploadContributorImage(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Parse multipart form (limit to 10MB)
-	const maxUploadSize = 10 << 20 // 10MB
-	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
+	// Parse multipart form
+	if err := r.ParseMultipartForm(MaxUploadSize); err != nil {
 		response.BadRequest(w, "Failed to parse form data", s.logger)
 		return
 	}
@@ -451,7 +405,7 @@ func (s *Server) handleUploadContributorImage(w http.ResponseWriter, r *http.Req
 	defer file.Close()
 
 	// Validate file size
-	if header.Size > maxUploadSize {
+	if header.Size > MaxUploadSize {
 		response.BadRequest(w, "File too large. Maximum size is 10MB", s.logger)
 		return
 	}
@@ -571,7 +525,7 @@ func (s *Server) handleGetContributorImage(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Length", strconv.FormatInt(int64(len(data)), 10))
 	w.Header().Set("ETag", etag)
 	w.Header().Set("Last-Modified", fileInfo.ModTime().UTC().Format(http.TimeFormat))
-	w.Header().Set("Cache-Control", "public, max-age=86400") // 24 hours
+	w.Header().Set("Cache-Control", CacheOneDay)
 
 	// Write image data
 	if _, err := w.Write(data); err != nil {
