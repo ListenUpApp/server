@@ -64,7 +64,7 @@ func setupPlaybackTestServer(t *testing.T) (*Server, *store.Store, func()) {
 	require.NoError(t, err)
 
 	// Create minimal services needed for playback.
-	bookService := service.NewBookService(s, nil, logger)
+	bookService := service.NewBookService(s, nil, nil, nil, logger)
 
 	// Create server.
 	sseHandler := sse.NewHandler(sseManager, logger)

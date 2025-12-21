@@ -70,7 +70,7 @@ func setupTestServer(t *testing.T) (server *Server, cleanup func()) {
 
 	// Create services.
 	instanceService := service.NewInstanceService(s, logger, cfg)
-	bookService := service.NewBookService(s, fileScanner, logger)
+	bookService := service.NewBookService(s, fileScanner, nil, nil, logger)
 	collectionService := service.NewCollectionService(s, logger)
 	sharingService := service.NewSharingService(s, logger)
 	syncService := service.NewSyncService(s, logger)

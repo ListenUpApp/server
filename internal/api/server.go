@@ -144,6 +144,7 @@ func (s *Server) setupRoutes() {
 			r.Get("/", s.handleListBooks)
 			r.Get("/{id}", s.handleGetBook)
 			r.Patch("/{id}", s.handleUpdateBook)
+			r.Post("/{id}/match", s.handleMatchBook)
 			r.Put("/{id}/contributors", s.handleSetBookContributors)
 			r.Put("/{id}/series", s.handleSetBookSeries)
 			r.Put("/{id}/cover", s.handleUploadCover)
@@ -154,6 +155,14 @@ func (s *Server) setupRoutes() {
 			r.Get("/{id}/tags", s.handleGetBookTags)
 			r.Post("/{id}/tags", s.handleAddBookTag)
 			r.Delete("/{id}/tags/{tagID}", s.handleRemoveBookTag)
+		})
+
+		// Metadata endpoints (Audible lookup, require auth).
+		r.Route("/metadata", func(r chi.Router) {
+			r.Use(s.requireAuth)
+			r.Get("/search", s.handleMetadataSearch)
+			r.Get("/book/{asin}", s.handleGetMetadataBook)
+			r.Get("/chapters/{asin}", s.handleGetMetadataChapters)
 		})
 
 		// Series (require auth for ACL).

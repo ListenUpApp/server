@@ -46,9 +46,17 @@ func ProvideAuthService(i do.Injector) (*service.AuthService, error) {
 func ProvideBookService(i do.Injector) (*service.BookService, error) {
 	storeHandle := do.MustInvoke[*StoreHandle](i)
 	fileScanner := do.MustInvoke[*scanner.Scanner](i)
+	metadataHandle := do.MustInvoke[*MetadataServiceHandle](i)
+	storages := do.MustInvoke[*ImageStorages](i)
 	log := do.MustInvoke[*logger.Logger](i)
 
-	return service.NewBookService(storeHandle.Store, fileScanner, log.Logger), nil
+	return service.NewBookService(
+		storeHandle.Store,
+		fileScanner,
+		metadataHandle.MetadataService,
+		storages.Covers,
+		log.Logger,
+	), nil
 }
 
 // ProvideCollectionService provides the collection service.
