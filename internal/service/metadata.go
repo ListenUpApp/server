@@ -31,17 +31,86 @@ func NewMetadataService(
 	}
 }
 
-// Search searches the Audible catalog.
-// Results are not cached as they are transient.
+// Search searches the Audible catalog with caching.
 func (s *MetadataService) Search(ctx context.Context, region *audible.Region, params audible.SearchParams) ([]audible.SearchResult, error) {
 	r := s.resolveRegion(region)
+
+	// Only cache keyword searches (most common case)
+	cacheKey := params.Keywords
+	if cacheKey != "" {
+		cached, err := s.store.GetCachedSearch(ctx, r, cacheKey)
+		if err != nil {
+			s.logger.Warn("search cache lookup failed",
+				"error", err,
+				"query", cacheKey,
+			)
+		}
+
+		if cached != nil {
+			s.logger.Debug("cache hit for search",
+				"query", cacheKey,
+				"region", r,
+				"results", len(cached.Results),
+			)
+			return cached.Results, nil
+		}
+	}
 
 	s.logger.Debug("searching Audible",
 		"region", r,
 		"keywords", params.Keywords,
 	)
 
-	return s.client.Search(ctx, r, params)
+	results, err := s.client.Search(ctx, r, params)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache the results
+	if cacheKey != "" {
+		if err := s.store.SetCachedSearch(ctx, r, cacheKey, results); err != nil {
+			s.logger.Warn("failed to cache search results",
+				"error", err,
+				"query", cacheKey,
+			)
+		}
+	}
+
+	return results, nil
+}
+
+// SearchWithFallback searches with fallback to US region.
+// Returns results, the region that succeeded, and any error.
+func (s *MetadataService) SearchWithFallback(ctx context.Context, params audible.SearchParams) ([]audible.SearchResult, audible.Region, error) {
+	// Try default region first
+	results, err := s.Search(ctx, &s.defaultRegion, params)
+	if err == nil && len(results) > 0 {
+		return results, s.defaultRegion, nil
+	}
+
+	// Log if we got an error (but continue to fallback)
+	if err != nil {
+		s.logger.Warn("default region search failed, trying fallback",
+			"error", err,
+			"defaultRegion", s.defaultRegion,
+		)
+	}
+
+	// Fall back to US if different from default
+	if s.defaultRegion != audible.RegionUS {
+		s.logger.Debug("falling back to US region",
+			"defaultRegion", s.defaultRegion,
+		)
+
+		usRegion := audible.RegionUS
+		results, err = s.Search(ctx, &usRegion, params)
+		if err == nil && len(results) > 0 {
+			return results, audible.RegionUS, nil
+		}
+	}
+
+	// Return empty with the original error (if any)
+	return nil, s.defaultRegion, err
 }
 
 // GetBook fetches book metadata, using cache if fresh.
@@ -163,6 +232,38 @@ func (s *MetadataService) RefreshBook(ctx context.Context, region audible.Region
 	}
 
 	return book, nil
+}
+
+// RefreshChapters forces a fresh fetch, bypassing and updating cache.
+func (s *MetadataService) RefreshChapters(ctx context.Context, region audible.Region, asin string) ([]audible.Chapter, error) {
+	s.logger.Info("refreshing chapters",
+		"asin", asin,
+		"region", region,
+	)
+
+	// Delete existing cache
+	if err := s.store.DeleteCachedChapters(ctx, region, asin); err != nil {
+		s.logger.Warn("failed to delete cached chapters",
+			"error", err,
+			"asin", asin,
+		)
+	}
+
+	// Fetch fresh
+	chapters, err := s.client.GetChapters(ctx, region, asin)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache the result
+	if err := s.store.SetCachedChapters(ctx, region, asin, chapters); err != nil {
+		s.logger.Warn("failed to cache chapters",
+			"error", err,
+			"asin", asin,
+		)
+	}
+
+	return chapters, nil
 }
 
 // resolveRegion returns the provided region or falls back to default.
