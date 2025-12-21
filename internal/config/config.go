@@ -21,6 +21,7 @@ type Config struct {
 	Server    ServerConfig
 	Auth      AuthConfig
 	Transcode TranscodeConfig
+	Audible   AudibleConfig
 }
 
 // AppConfig holds application-level configuration.
@@ -75,6 +76,13 @@ type TranscodeConfig struct {
 	MaxConcurrent int
 	// FFmpegPath overrides auto-detection of ffmpeg location (default: auto-detect)
 	FFmpegPath string
+}
+
+// AudibleConfig holds Audible API configuration.
+type AudibleConfig struct {
+	// DefaultRegion is the default Audible marketplace (default: us)
+	// Valid values: us, uk, de, fr, au, ca, jp, it, in, es
+	DefaultRegion string
 }
 
 // LoadConfig loads configuration from multiple sources with precedence:
@@ -150,6 +158,10 @@ func LoadConfig() (*Config, error) {
 			CachePath:     getConfigValue(*transcodeCachePath, "TRANSCODE_CACHE_PATH", ""),
 			MaxConcurrent: getIntConfigValue(*transcodeMaxConcurrent, "TRANSCODE_MAX_CONCURRENT", 2),
 			FFmpegPath:    getConfigValue(*transcodeFFmpegPath, "FFMPEG_PATH", ""),
+		},
+
+		Audible: AudibleConfig{
+			DefaultRegion: getConfigValue("", "AUDIBLE_DEFAULT_REGION", "us"),
 		},
 	}
 
