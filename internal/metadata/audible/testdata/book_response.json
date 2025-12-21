@@ -1,0 +1,41 @@
+{
+  "product": {
+    "asin": "B08G9PRS1K",
+    "title": "The Way of Kings",
+    "subtitle": "The Stormlight Archive, Book 1",
+    "publisher_name": "Macmillan Audio",
+    "release_date": "2020-08-04",
+    "runtime_length_min": 2713,
+    "merchandising_summary": "<p>Roshar is a world of stone and storms.</p><p>An epic fantasy masterpiece.</p>",
+    "product_images": {
+      "500": "https://m.media-amazon.com/images/I/91KzZWpgmyL._SL500_.jpg",
+      "1024": "https://m.media-amazon.com/images/I/91KzZWpgmyL._SL1024_.jpg"
+    },
+    "authors": [
+      {"asin": "B001IGFHW6", "name": "Brandon Sanderson", "role": "author"}
+    ],
+    "narrators": [
+      {"asin": "B003VWPBV2", "name": "Michael Kramer", "role": "narrator"},
+      {"asin": "B003VWPHWQ", "name": "Kate Reading", "role": "narrator"}
+    ],
+    "series": [
+      {"asin": "B01CKIXDCS", "title": "The Stormlight Archive", "sequence": "1"}
+    ],
+    "category_ladders": [
+      {
+        "ladder": [
+          {"id": "18580606011", "name": "Literature & Fiction"},
+          {"id": "18580628011", "name": "Genre Fiction"},
+          {"id": "18580629011", "name": "Fantasy"}
+        ]
+      }
+    ],
+    "language": "english",
+    "rating": {
+      "overall_distribution": {
+        "display_average_rating": 4.8,
+        "num_reviews": 12543
+      }
+    }
+  }
+}
