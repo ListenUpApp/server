@@ -224,3 +224,41 @@ type rawChapter struct {
 	StartOffsetSec int64  `json:"start_offset_sec"`
 	LengthMs       int64  `json:"length_ms"`
 }
+
+// doRequestWithURL executes an HTTP request without rate limiting (for testing).
+func (c *Client) doRequestWithURL(ctx context.Context, fullURL string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "ListenUp/1.0")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return body, nil
+	case http.StatusNotFound:
+		return nil, ErrNotFound
+	case http.StatusTooManyRequests:
+		return nil, ErrRateLimited
+	case http.StatusBadRequest:
+		return nil, ErrBadRequest
+	default:
+		if resp.StatusCode >= 500 {
+			return nil, ErrServer
+		}
+		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
+	}
+}
