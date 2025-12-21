@@ -2,98 +2,26 @@ package api
 
 import (
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/http/response"
+	"github.com/listenupapp/listenup-server/internal/ratelimit"
 )
 
-// RateLimiter implements a simple in-memory rate limiter using the token bucket algorithm.
-// For self-hosted deployments, this provides sensible default protection against brute-force
-// attacks without requiring external dependencies like Redis.
-type RateLimiter struct {
-	mu       sync.Mutex
-	buckets  map[string]*bucket
-	rate     int           // tokens per interval
-	interval time.Duration // refill interval
-	burst    int           // max tokens (bucket size)
-}
-
-type bucket struct {
-	tokens     int
-	lastRefill time.Time
-}
+// RateLimiter wraps KeyedRateLimiter for API use.
+// Kept for backward compatibility with existing code.
+type RateLimiter = ratelimit.KeyedRateLimiter
 
 // NewRateLimiter creates a new rate limiter.
 // rate: number of requests allowed per interval
 // interval: time period for rate (e.g., time.Minute)
-// burst: maximum burst size (allows short bursts above rate).
-func NewRateLimiter(rate int, interval time.Duration, burst int) *RateLimiter {
-	rl := &RateLimiter{
-		buckets:  make(map[string]*bucket),
-		rate:     rate,
-		interval: interval,
-		burst:    burst,
-	}
-
-	// Cleanup old buckets periodically to prevent memory leaks.
-	go rl.cleanup()
-
-	return rl
-}
-
-// Allow checks if a request from the given key should be allowed.
-func (rl *RateLimiter) Allow(key string) bool {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-
-	now := time.Now()
-	b, exists := rl.buckets[key]
-
-	if !exists {
-		// New client, create bucket with full tokens.
-		rl.buckets[key] = &bucket{
-			tokens:     rl.burst - 1, // Use one token for this request
-			lastRefill: now,
-		}
-		return true
-	}
-
-	// Refill tokens based on elapsed time.
-	elapsed := now.Sub(b.lastRefill)
-	tokensToAdd := int(elapsed/rl.interval) * rl.rate
-
-	if tokensToAdd > 0 {
-		b.tokens = min(b.tokens+tokensToAdd, rl.burst)
-		b.lastRefill = now
-	}
-
-	// Check if we have tokens available.
-	if b.tokens > 0 {
-		b.tokens--
-		return true
-	}
-
-	return false
-}
-
-// cleanup removes stale buckets to prevent memory growth.
-func (rl *RateLimiter) cleanup() {
-	ticker := time.NewTicker(10 * time.Minute)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		rl.mu.Lock()
-		now := time.Now()
-		staleThreshold := 30 * time.Minute
-
-		for key, b := range rl.buckets {
-			if now.Sub(b.lastRefill) > staleThreshold {
-				delete(rl.buckets, key)
-			}
-		}
-		rl.mu.Unlock()
-	}
+// burst: maximum burst size
+func NewRateLimiter(ratePerInterval int, interval time.Duration, burst int) *RateLimiter {
+	// Convert rate/interval to requests per second
+	// The old API used rate per interval, new API uses RPS
+	// For example: 20 per minute = 20/60 = 0.333 rps
+	rps := float64(ratePerInterval) / interval.Seconds()
+	return ratelimit.New(rps, burst)
 }
 
 // RateLimitMiddleware creates a middleware that rate limits requests by IP.
