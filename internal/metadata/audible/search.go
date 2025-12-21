@@ -60,9 +60,10 @@ func (c *Client) Search(ctx context.Context, region Region, params SearchParams)
 		return nil, wrapError("search", region, "", fmt.Errorf("parse response: %w", err))
 	}
 
-	// Convert to SearchResult
+	// Convert to SearchResult.
 	results := make([]SearchResult, 0, len(resp.Products))
-	for _, p := range resp.Products {
+	for i := range resp.Products {
+		p := &resp.Products[i]
 		authors, narrators := parseContributors(append(p.Authors, p.Narrators...))
 
 		var releaseDate time.Time

@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// ASIN format: 10 alphanumeric characters, typically starting with B
+// ASIN format: 10 alphanumeric characters, typically starting with B.
 var asinRegex = regexp.MustCompile(`^[A-Z0-9]{10}$`)
 
 // ValidateASIN checks if an ASIN has valid format.

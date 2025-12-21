@@ -40,6 +40,10 @@ func NewContainer() *do.RootScope {
 	do.Provide(injector, providers.ProvideSearchIndex)
 	do.Provide(injector, providers.ProvideSearchService)
 
+	// Metadata layer
+	do.Provide(injector, providers.ProvideAudibleClient)
+	do.Provide(injector, providers.ProvideMetadataService)
+
 	// Auth layer
 	do.Provide(injector, providers.ProvideTokenService)
 
@@ -85,6 +89,8 @@ func Bootstrap(injector *do.RootScope) error {
 	_ = do.MustInvoke[*processor.EventProcessor](injector)
 	_ = do.MustInvoke[*providers.SearchIndexHandle](injector)
 	_ = do.MustInvoke[*service.SearchService](injector)
+	_ = do.MustInvoke[*providers.AudibleClientHandle](injector)
+	_ = do.MustInvoke[*providers.MetadataServiceHandle](injector)
 	_ = do.MustInvoke[*auth.TokenService](injector)
 
 	// Business services

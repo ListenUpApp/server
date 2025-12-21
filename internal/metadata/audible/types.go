@@ -6,6 +6,7 @@ import "time"
 // Region represents an Audible marketplace.
 type Region string
 
+// Audible marketplace regions.
 const (
 	RegionUS Region = "us"
 	RegionUK Region = "uk"

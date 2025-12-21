@@ -13,14 +13,14 @@ import (
 )
 
 const (
-	// Rate limit: 1 request per second per region, burst of 3
+	// Rate limit: 1 request per second per region, burst of 3.
 	defaultRPS   = 1.0
 	defaultBurst = 3
 
-	// HTTP client settings
+	// HTTP client settings.
 	defaultTimeout = 30 * time.Second
 
-	// API settings
+	// API settings.
 	defaultNumResults = 25
 	maxNumResults     = 50
 )
@@ -122,21 +122,14 @@ func imageSizes() string {
 // parseContributors extracts authors and narrators from the API response.
 func parseContributors(raw []rawContributor) (authors, narrators []Contributor) {
 	for _, c := range raw {
-		contrib := Contributor{
-			ASIN: c.ASIN,
-			Name: c.Name,
-			Role: c.Role,
-		}
+		contrib := Contributor(c)
 		switch c.Role {
 		case "author":
 			authors = append(authors, contrib)
 		case "narrator":
 			narrators = append(narrators, contrib)
 		default:
-			// Include other roles as authors for now
-			if c.Role != "" {
-				contrib.Role = c.Role
-			}
+			// Include other roles as authors for now.
 			authors = append(authors, contrib)
 		}
 	}
