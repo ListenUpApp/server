@@ -59,6 +59,19 @@ func ProvideBookService(i do.Injector) (*service.BookService, error) {
 	), nil
 }
 
+// ProvideChapterService provides the chapter service.
+func ProvideChapterService(i do.Injector) (*service.ChapterService, error) {
+	storeHandle := do.MustInvoke[*StoreHandle](i)
+	metadataHandle := do.MustInvoke[*MetadataServiceHandle](i)
+	log := do.MustInvoke[*logger.Logger](i)
+
+	return service.NewChapterService(
+		storeHandle.Store,
+		metadataHandle.MetadataService,
+		log.Logger,
+	), nil
+}
+
 // ProvideCollectionService provides the collection service.
 func ProvideCollectionService(i do.Injector) (*service.CollectionService, error) {
 	storeHandle := do.MustInvoke[*StoreHandle](i)

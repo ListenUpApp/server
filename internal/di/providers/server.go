@@ -50,6 +50,7 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 	adminService := do.MustInvoke[*service.AdminService](i)
 	transcodeHandle := do.MustInvoke[*TranscodeServiceHandle](i)
 	metadataHandle := do.MustInvoke[*MetadataServiceHandle](i)
+	chapterService := do.MustInvoke[*service.ChapterService](i)
 
 	sseHandler := sse.NewHandler(sseHandle.Manager, log.Logger)
 
@@ -68,6 +69,7 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 		Admin:      adminService,
 		Transcode:  transcodeHandle.TranscodeService,
 		Metadata:   metadataHandle.MetadataService,
+		Chapter:    chapterService,
 	}
 
 	storage := &api.StorageServices{

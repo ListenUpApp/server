@@ -22,6 +22,7 @@ type Services struct {
 	Admin      *service.AdminService
 	Transcode  *service.TranscodeService
 	Metadata   *service.MetadataService // Audible metadata fetching
+	Chapter    *service.ChapterService  // Chapter name alignment
 }
 
 // StorageServices groups file storage handlers used by the API server.

@@ -145,6 +145,8 @@ func (s *Server) setupRoutes() {
 			r.Get("/{id}", s.handleGetBook)
 			r.Patch("/{id}", s.handleUpdateBook)
 			r.Post("/{id}/match", s.handleMatchBook)
+			r.Get("/{id}/chapters/suggest", s.handleSuggestChapterNames)
+			r.Post("/{id}/chapters/apply", s.handleApplyChapterNames)
 			r.Put("/{id}/contributors", s.handleSetBookContributors)
 			r.Put("/{id}/series", s.handleSetBookSeries)
 			r.Put("/{id}/cover", s.handleUploadCover)
