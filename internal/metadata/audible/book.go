@@ -41,7 +41,37 @@ func (c *Client) GetBook(ctx context.Context, region Region, asin string) (*Book
 		Product rawProduct `json:"product"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
+		// Log raw response body on parse failure for debugging
+		c.logger.Error("failed to parse audible response",
+			"asin", asin,
+			"region", region,
+			"body_length", len(body),
+			"body_preview", string(body[:min(len(body), 500)]),
+			"error", err,
+		)
 		return nil, wrapError("getBook", region, asin, fmt.Errorf("parse response: %w", err))
+	}
+
+	// Debug: log raw response data (also log body length to detect truncated responses)
+	c.logger.Debug("raw audible book response",
+		"body_length", len(body),
+		"asin", asin,
+		"title", resp.Product.Title,
+		"authors_count", len(resp.Product.Authors),
+		"narrators_count", len(resp.Product.Narrators),
+		"series_count", len(resp.Product.SeriesPrimary),
+		"has_images", len(resp.Product.ProductImages) > 0,
+		"has_description", resp.Product.MerchandisingSummary != "",
+	)
+
+	// Warn if response appears empty (might indicate API issue or region restriction)
+	if resp.Product.Title == "" && len(resp.Product.Authors) == 0 {
+		c.logger.Warn("audible returned empty product data",
+			"asin", asin,
+			"region", region,
+			"body_length", len(body),
+			"body_preview", string(body[:min(len(body), 500)]),
+		)
 	}
 
 	return rawProductToBook(&resp.Product), nil
@@ -49,7 +79,7 @@ func (c *Client) GetBook(ctx context.Context, region Region, asin string) (*Book
 
 // rawProductToBook converts a raw API response to a Book.
 func rawProductToBook(p *rawProduct) *Book {
-	authors, narrators := parseContributors(append(p.Authors, p.Narrators...))
+	authors, narrators := separateContributorsByRole(p.Authors, p.Narrators)
 
 	var releaseDate time.Time
 	if p.ReleaseDate != "" {
@@ -59,7 +89,7 @@ func rawProductToBook(p *rawProduct) *Book {
 	var rating float32
 	var ratingCount int
 	if p.Rating != nil {
-		rating = p.Rating.OverallDistribution.DisplayAverageRating
+		rating = float32(p.Rating.OverallDistribution.DisplayAverageRating)
 		ratingCount = p.Rating.OverallDistribution.NumReviews
 	}
 

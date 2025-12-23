@@ -2,15 +2,47 @@ package audible
 
 import (
 	"context"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/ratelimit"
 )
+
+// FlexibleFloat32 handles JSON values that can be either a number or a string.
+// Audible API sometimes returns rating values as strings like "4.8" instead of 4.8.
+type FlexibleFloat32 float32
+
+func (f *FlexibleFloat32) UnmarshalJSON(data []byte) error {
+	// Try unmarshaling as a number first
+	var num float32
+	if err := json.Unmarshal(data, &num); err == nil {
+		*f = FlexibleFloat32(num)
+		return nil
+	}
+
+	// Try unmarshaling as a string
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		if str == "" {
+			*f = 0
+			return nil
+		}
+		parsed, err := strconv.ParseFloat(str, 32)
+		if err != nil {
+			return fmt.Errorf("cannot parse %q as float: %w", str, err)
+		}
+		*f = FlexibleFloat32(parsed)
+		return nil
+	}
+
+	return fmt.Errorf("cannot unmarshal %s into FlexibleFloat32", string(data))
+}
 
 const (
 	// Rate limit: 1 request per second per region, burst of 3.
@@ -119,21 +151,57 @@ func imageSizes() string {
 	return "500,1024"
 }
 
-// parseContributors extracts authors and narrators from the API response.
-func parseContributors(raw []rawContributor) (authors, narrators []Contributor) {
-	for _, c := range raw {
-		contrib := Contributor(c)
+// separateContributorsByRole takes all contributors and separates them by role.
+// The Audible API sometimes puts narrators in the authors array with role="narrator",
+// so we need to check the role field to properly categorize them.
+func separateContributorsByRole(authors, narrators []rawContributor) ([]Contributor, []Contributor) {
+	var resultAuthors, resultNarrators []Contributor
+	seen := make(map[string]bool) // Track by ASIN or name to avoid duplicates
+
+	// Process the authors array - check role to separate
+	for _, c := range authors {
+		key := c.ASIN
+		if key == "" {
+			key = c.Name
+		}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+
+		contrib := Contributor{
+			ASIN: c.ASIN,
+			Name: c.Name,
+		}
+
+		// Check role to determine where to put this contributor
 		switch c.Role {
-		case "author":
-			authors = append(authors, contrib)
 		case "narrator":
-			narrators = append(narrators, contrib)
+			resultNarrators = append(resultNarrators, contrib)
 		default:
-			// Include other roles as authors for now.
-			authors = append(authors, contrib)
+			// "author", "writer", or empty role goes to authors
+			resultAuthors = append(resultAuthors, contrib)
 		}
 	}
-	return
+
+	// Process the narrators array - these are definitely narrators
+	for _, c := range narrators {
+		key := c.ASIN
+		if key == "" {
+			key = c.Name
+		}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+
+		resultNarrators = append(resultNarrators, Contributor{
+			ASIN: c.ASIN,
+			Name: c.Name,
+		})
+	}
+
+	return resultAuthors, resultNarrators
 }
 
 // parseSeries extracts series information from the API response.
@@ -202,8 +270,8 @@ type rawCategory struct {
 
 type rawRating struct {
 	OverallDistribution struct {
-		DisplayAverageRating float32 `json:"display_average_rating"`
-		NumReviews           int     `json:"num_reviews"`
+		DisplayAverageRating FlexibleFloat32 `json:"display_average_rating"`
+		NumReviews           int             `json:"num_reviews"`
 	} `json:"overall_distribution"`
 }
 

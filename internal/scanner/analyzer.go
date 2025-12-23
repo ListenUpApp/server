@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/listenupapp/listenup-server/internal/normalize"
 	"github.com/listenupapp/listenup-server/internal/scanner/audio"
@@ -51,6 +52,8 @@ func (a *Analyzer) Analyze(ctx context.Context, files []AudioFileData, opts Anal
 		workers = runtime.NumCPU()
 	}
 
+	a.logger.Debug("starting analysis", "files", len(files), "workers", workers)
+
 	// Create job and result channels.
 	type job struct {
 		file  AudioFileData
@@ -58,9 +61,10 @@ func (a *Analyzer) Analyze(ctx context.Context, files []AudioFileData, opts Anal
 	}
 
 	type result struct {
-		err   error
-		file  AudioFileData
-		index int
+		err      error
+		file     AudioFileData
+		index    int
+		duration time.Duration
 	}
 
 	jobs := make(chan job, len(files))
@@ -70,6 +74,8 @@ func (a *Analyzer) Analyze(ctx context.Context, files []AudioFileData, opts Anal
 	for range workers {
 		go func() {
 			for j := range jobs {
+				start := time.Now()
+
 				// Check context cancellation.
 				select {
 				case <-ctx.Done():
@@ -80,16 +86,23 @@ func (a *Analyzer) Analyze(ctx context.Context, files []AudioFileData, opts Anal
 
 				// Parse metadata.
 				metadata, err := a.parser.Parse(ctx, j.file.Path)
+				duration := time.Since(start)
+
 				if err != nil {
-					a.logger.Error("failed to parse file", "path", j.file.Path, "error", err)
+					a.logger.Error("failed to parse file", "path", j.file.Path, "error", err, "duration", duration)
 					// Continue without metadata rather than failing.
-					results <- result{file: j.file, index: j.index, err: err}
+					results <- result{file: j.file, index: j.index, err: err, duration: duration}
 					continue
+				}
+
+				// Log slow parses
+				if duration > 2*time.Second {
+					a.logger.Warn("slow file parse", "path", j.file.Path, "duration", duration)
 				}
 
 				// Convert audio.Metadata to AudioMetadata.
 				j.file.Metadata = convertMetadata(metadata)
-				results <- result{file: j.file, index: j.index}
+				results <- result{file: j.file, index: j.index, duration: duration}
 			}
 		}()
 	}

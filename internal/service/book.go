@@ -223,6 +223,31 @@ func (s *BookService) ApplyMatch(
 		return nil, fmt.Errorf("fetch audible metadata: %w", err)
 	}
 
+	// Validate Audible response has usable data
+	// Sometimes the API returns empty responses for region-locked or unavailable content
+	if audibleBook.Title == "" && len(audibleBook.Authors) == 0 && len(audibleBook.Narrators) == 0 {
+		s.logger.Warn("Audible returned empty metadata",
+			"asin", asin,
+			"region", region,
+			"book_id", bookID,
+		)
+		return nil, fmt.Errorf("audible returned empty metadata for ASIN %s - the book may be unavailable in region %s", asin, region)
+	}
+
+	// Warn if selected contributors don't exist in the Audible response
+	if len(opts.Authors) > 0 && len(audibleBook.Authors) == 0 {
+		s.logger.Warn("User selected authors but Audible returned none",
+			"asin", asin,
+			"selected_authors", opts.Authors,
+		)
+	}
+	if len(opts.Narrators) > 0 && len(audibleBook.Narrators) == 0 {
+		s.logger.Warn("User selected narrators but Audible returned none",
+			"asin", asin,
+			"selected_narrators", opts.Narrators,
+		)
+	}
+
 	// Apply simple fields
 	if opts.Fields.Title {
 		book.Title = audibleBook.Title
@@ -249,11 +274,15 @@ func (s *BookService) ApplyMatch(
 		book.AudibleRegion = string(*audibleRegion)
 	}
 
-	// Apply contributors
+	// Apply contributors using smart merge:
+	// - If authors selected: replace existing authors with selected Audible authors
+	// - If no authors selected: preserve existing authors
+	// - Same logic for narrators
+	// - Always preserve other roles (editor, translator, etc.)
 	if len(opts.Authors) > 0 || len(opts.Narrators) > 0 {
-		contributors, err := s.resolveContributors(ctx, audibleBook, opts.Authors, opts.Narrators)
+		contributors, err := s.mergeContributors(ctx, book.Contributors, audibleBook, opts.Authors, opts.Narrators)
 		if err != nil {
-			return nil, fmt.Errorf("resolve contributors: %w", err)
+			return nil, fmt.Errorf("merge contributors: %w", err)
 		}
 		book.Contributors = contributors
 	}
@@ -298,9 +327,120 @@ func (s *BookService) ApplyMatch(
 	return book, nil
 }
 
+// mergeContributors performs a smart merge of Audible contributors with existing book contributors.
+// Rules:
+//   - If authorASINs is non-empty: replace all existing authors with resolved Audible authors
+//   - If authorASINs is empty: preserve all existing authors
+//   - Same logic applies to narrators
+//   - Other roles (editor, translator, etc.) are always preserved
+//   - Deduplicates by contributor ID to avoid duplicates
+func (s *BookService) mergeContributors(
+	ctx context.Context,
+	existing []domain.BookContributor,
+	audibleBook *audible.Book,
+	authorASINs, narratorASINs []string,
+) ([]domain.BookContributor, error) {
+	var result []domain.BookContributor
+	seen := make(map[string]int) // maps contributor ID to index in result for role merging
+
+	// Helper to add or merge a contributor
+	addContributor := func(contributorID string, role domain.ContributorRole) {
+		if idx, exists := seen[contributorID]; exists {
+			// Contributor already in result, merge roles if not already present
+			hasRole := false
+			for _, r := range result[idx].Roles {
+				if r == role {
+					hasRole = true
+					break
+				}
+			}
+			if !hasRole {
+				result[idx].Roles = append(result[idx].Roles, role)
+			}
+		} else {
+			// New contributor
+			seen[contributorID] = len(result)
+			result = append(result, domain.BookContributor{
+				ContributorID: contributorID,
+				Roles:         []domain.ContributorRole{role},
+			})
+		}
+	}
+
+	// Step 1: Handle authors
+	if len(authorASINs) > 0 {
+		// Replace: resolve selected Audible authors
+		selectedAuthors := make(map[string]bool)
+		for _, asin := range authorASINs {
+			selectedAuthors[asin] = true
+		}
+		for _, author := range audibleBook.Authors {
+			if !selectedAuthors[author.ASIN] {
+				continue
+			}
+			contributor, err := s.resolveContributor(ctx, author)
+			if err != nil {
+				return nil, err
+			}
+			addContributor(contributor.ID, domain.RoleAuthor)
+		}
+	} else {
+		// Preserve: keep existing authors
+		for _, bc := range existing {
+			for _, role := range bc.Roles {
+				if role == domain.RoleAuthor {
+					addContributor(bc.ContributorID, domain.RoleAuthor)
+					break
+				}
+			}
+		}
+	}
+
+	// Step 2: Handle narrators
+	if len(narratorASINs) > 0 {
+		// Replace: resolve selected Audible narrators
+		selectedNarrators := make(map[string]bool)
+		for _, asin := range narratorASINs {
+			selectedNarrators[asin] = true
+		}
+		for _, narrator := range audibleBook.Narrators {
+			if !selectedNarrators[narrator.ASIN] {
+				continue
+			}
+			contributor, err := s.resolveContributor(ctx, narrator)
+			if err != nil {
+				return nil, err
+			}
+			addContributor(contributor.ID, domain.RoleNarrator)
+		}
+	} else {
+		// Preserve: keep existing narrators
+		for _, bc := range existing {
+			for _, role := range bc.Roles {
+				if role == domain.RoleNarrator {
+					addContributor(bc.ContributorID, domain.RoleNarrator)
+					break
+				}
+			}
+		}
+	}
+
+	// Step 3: Preserve other roles (editor, translator, etc.)
+	for _, bc := range existing {
+		for _, role := range bc.Roles {
+			if role != domain.RoleAuthor && role != domain.RoleNarrator {
+				addContributor(bc.ContributorID, role)
+			}
+		}
+	}
+
+	return result, nil
+}
+
 // resolveContributors resolves Audible contributors to local entities.
 // Uses ASIN-first matching: check ASIN → check name → create new.
 // If found by name, enriches existing contributor with ASIN.
+// Deprecated: Use mergeContributors for smart merge behavior.
 func (s *BookService) resolveContributors(
 	ctx context.Context,
 	audibleBook *audible.Book,

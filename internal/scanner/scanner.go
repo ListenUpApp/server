@@ -130,19 +130,31 @@ func (s *Scanner) Scan(ctx context.Context, folderPath string, opts ScanOptions)
 		opts.Workers = runtime.NumCPU()
 	}
 
-	// Execute scan phases.
+	// Execute scan phases with timing.
+	walkStart := time.Now()
 	files := s.walkFilesystem(ctx, folderPath, tracker, result)
+	walkDuration := time.Since(walkStart)
+	s.logger.Info("walk phase complete", "duration", walkDuration, "files", len(files))
 
+	groupStart := time.Now()
 	grouped := s.groupFiles(ctx, files, tracker)
+	groupDuration := time.Since(groupStart)
+	s.logger.Info("group phase complete", "duration", groupDuration, "items", len(grouped))
 
+	buildStart := time.Now()
 	items, err := s.buildLibraryItems(ctx, grouped, tracker, result, opts)
+	buildDuration := time.Since(buildStart)
+	s.logger.Info("build phase complete", "duration", buildDuration, "items", len(items))
 	if err != nil {
 		return nil, err
 	}
 
+	saveStart := time.Now()
 	if err := s.saveToDatabase(ctx, items, tracker, result, opts); err != nil {
 		return nil, err
 	}
+	saveDuration := time.Since(saveStart)
+	s.logger.Info("save phase complete", "duration", saveDuration)
 
 	// Complete scan.
 	result.CompletedAt = time.Now()

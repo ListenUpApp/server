@@ -55,7 +55,7 @@ func (c *Client) searchWithHost(ctx context.Context, baseURL string, params Sear
 	results := make([]SearchResult, 0, len(resp.Products))
 	for i := range resp.Products {
 		p := &resp.Products[i]
-		authors, narrators := parseContributors(append(p.Authors, p.Narrators...))
+		authors, narrators := separateContributorsByRole(p.Authors, p.Narrators)
 		var releaseDate time.Time
 		if p.ReleaseDate != "" {
 			releaseDate, _ = time.Parse("2006-01-02", p.ReleaseDate)
