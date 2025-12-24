@@ -1,189 +1,276 @@
 package api
 
 import (
-	"encoding/json/v2"
-	"errors"
+	"context"
 	"net/http"
+	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/listenupapp/listenup-server/internal/http/response"
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/listenupapp/listenup-server/internal/service"
-	"github.com/listenupapp/listenup-server/internal/store"
 )
 
-// handleListTags returns all tags for the current user.
-func (s *Server) handleListTags(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
+func (s *Server) registerTagRoutes() {
+	huma.Register(s.api, huma.Operation{
+		OperationID: "listTags",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/tags",
+		Summary:     "List tags",
+		Description: "Returns all tags for the current user",
+		Tags:        []string{"Tags"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleListTags)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "createTag",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/tags",
+		Summary:     "Create tag",
+		Description: "Creates a new tag",
+		Tags:        []string{"Tags"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleCreateTag)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getTag",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/tags/{id}",
+		Summary:     "Get tag",
+		Description: "Returns a tag by ID",
+		Tags:        []string{"Tags"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetTag)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "updateTag",
+		Method:      http.MethodPatch,
+		Path:        "/api/v1/tags/{id}",
+		Summary:     "Update tag",
+		Description: "Updates a tag",
+		Tags:        []string{"Tags"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleUpdateTag)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "deleteTag",
+		Method:      http.MethodDelete,
+		Path:        "/api/v1/tags/{id}",
+		Summary:     "Delete tag",
+		Description: "Deletes a tag",
+		Tags:        []string{"Tags"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleDeleteTag)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getTagBooks",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/tags/{id}/books",
+		Summary:     "Get tag books",
+		Description: "Returns book IDs with this tag",
+		Tags:        []string{"Tags"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetTagBooks)
+
+}
+
+// === DTOs ===
+
+type ListTagsInput struct {
+	Authorization string `header:"Authorization"`
+}
+
+type TagResponse struct {
+	ID        string    `json:"id" doc:"Tag ID"`
+	Name      string    `json:"name" doc:"Tag name"`
+	Slug      string    `json:"slug" doc:"URL-safe slug"`
+	Color     string    `json:"color,omitempty" doc:"Display color"`
+	CreatedAt time.Time `json:"created_at" doc:"Creation time"`
+	UpdatedAt time.Time `json:"updated_at" doc:"Last update time"`
+}
+
+type ListTagsResponse struct {
+	Tags []TagResponse `json:"tags" doc:"List of tags"`
+}
+
+type ListTagsOutput struct {
+	Body ListTagsResponse
+}
+
+type CreateTagRequest struct {
+	Name  string `json:"name" validate:"required,min=1,max=50" doc:"Tag name"`
+	Color string `json:"color,omitempty" doc:"Display color"`
+}
+
+type CreateTagInput struct {
+	Authorization string `header:"Authorization"`
+	Body          CreateTagRequest
+}
+
+type TagOutput struct {
+	Body TagResponse
+}
+
+type GetTagInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Tag ID"`
+}
+
+type UpdateTagRequest struct {
+	Name  *string `json:"name,omitempty" doc:"Tag name"`
+	Color *string `json:"color,omitempty" doc:"Display color"`
+}
+
+type UpdateTagInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Tag ID"`
+	Body          UpdateTagRequest
+}
+
+type DeleteTagInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Tag ID"`
+}
+
+type GetTagBooksInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Tag ID"`
+}
+
+type TagBooksResponse struct {
+	BookIDs []string `json:"book_ids" doc:"Book IDs with this tag"`
+}
+
+type TagBooksOutput struct {
+	Body TagBooksResponse
+}
+
+
+// === Handlers ===
+
+func (s *Server) handleListTags(ctx context.Context, input *ListTagsInput) (*ListTagsOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
 
 	tags, err := s.services.Tag.ListTags(ctx, userID)
 	if err != nil {
-		s.logger.Error("Failed to list tags", "error", err, "user_id", userID)
-		response.InternalError(w, "Failed to list tags", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, tags, s.logger)
+	resp := make([]TagResponse, len(tags))
+	for i, t := range tags {
+		resp[i] = TagResponse{
+			ID:        t.ID,
+			Name:      t.Name,
+			Slug:      t.Slug,
+			Color:     t.Color,
+			CreatedAt: t.CreatedAt,
+			UpdatedAt: t.UpdatedAt,
+		}
+	}
+
+	return &ListTagsOutput{Body: ListTagsResponse{Tags: resp}}, nil
 }
 
-// handleGetTag returns a single tag.
-func (s *Server) handleGetTag(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-	id := chi.URLParam(r, "id")
-
-	tag, err := s.services.Tag.GetTag(ctx, userID, id)
-	if errors.Is(err, store.ErrTagNotFound) {
-		response.NotFound(w, "Tag not found", s.logger)
-		return
-	}
+func (s *Server) handleCreateTag(ctx context.Context, input *CreateTagInput) (*TagOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
 	if err != nil {
-		s.logger.Error("Failed to get tag", "error", err, "id", id)
-		response.InternalError(w, "Failed to get tag", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, tag, s.logger)
-}
-
-// handleCreateTag creates a new tag.
-func (s *Server) handleCreateTag(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-
-	var req service.CreateTagRequest
-	if err := json.UnmarshalRead(r.Body, &req); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
-	}
-
-	tag, err := s.services.Tag.CreateTag(ctx, userID, req)
+	t, err := s.services.Tag.CreateTag(ctx, userID, service.CreateTagRequest{
+		Name:  input.Body.Name,
+		Color: input.Body.Color,
+	})
 	if err != nil {
-		s.logger.Error("Failed to create tag", "error", err, "user_id", userID)
-		response.BadRequest(w, err.Error(), s.logger)
-		return
+		return nil, err
 	}
 
-	response.Created(w, tag, s.logger)
+	return &TagOutput{
+		Body: TagResponse{
+			ID:        t.ID,
+			Name:      t.Name,
+			Slug:      t.Slug,
+			Color:     t.Color,
+			CreatedAt: t.CreatedAt,
+			UpdatedAt: t.UpdatedAt,
+		},
+	}, nil
 }
 
-// handleUpdateTag updates a tag.
-func (s *Server) handleUpdateTag(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-	id := chi.URLParam(r, "id")
-
-	var req service.UpdateTagRequest
-	if err := json.UnmarshalRead(r.Body, &req); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
-	}
-
-	tag, err := s.services.Tag.UpdateTag(ctx, userID, id, req)
-	if errors.Is(err, store.ErrTagNotFound) {
-		response.NotFound(w, "Tag not found", s.logger)
-		return
-	}
+func (s *Server) handleGetTag(ctx context.Context, input *GetTagInput) (*TagOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
 	if err != nil {
-		s.logger.Error("Failed to update tag", "error", err, "id", id)
-		response.InternalError(w, "Failed to update tag", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, tag, s.logger)
-}
-
-// handleDeleteTag deletes a tag.
-func (s *Server) handleDeleteTag(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-	id := chi.URLParam(r, "id")
-
-	err := s.services.Tag.DeleteTag(ctx, userID, id)
-	if errors.Is(err, store.ErrTagNotFound) {
-		response.NotFound(w, "Tag not found", s.logger)
-		return
-	}
+	t, err := s.services.Tag.GetTag(ctx, userID, input.ID)
 	if err != nil {
-		s.logger.Error("Failed to delete tag", "error", err, "id", id)
-		response.InternalError(w, "Failed to delete tag", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, map[string]string{"status": "deleted"}, s.logger)
+	return &TagOutput{
+		Body: TagResponse{
+			ID:        t.ID,
+			Name:      t.Name,
+			Slug:      t.Slug,
+			Color:     t.Color,
+			CreatedAt: t.CreatedAt,
+			UpdatedAt: t.UpdatedAt,
+		},
+	}, nil
 }
 
-// handleAddBookTag adds a tag to a book.
-func (s *Server) handleAddBookTag(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-	bookID := chi.URLParam(r, "id")
-
-	var req struct {
-		TagID string `json:"tag_id"`
-	}
-	if err := json.UnmarshalRead(r.Body, &req); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
-	}
-
-	if err := s.services.Tag.AddTagToBook(ctx, userID, bookID, req.TagID); err != nil {
-		s.logger.Error("Failed to add tag to book", "error", err)
-		response.BadRequest(w, err.Error(), s.logger)
-		return
-	}
-
-	response.Success(w, map[string]string{"status": "ok"}, s.logger)
-}
-
-// handleRemoveBookTag removes a tag from a book.
-func (s *Server) handleRemoveBookTag(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-	bookID := chi.URLParam(r, "id")
-	tagID := chi.URLParam(r, "tagID")
-
-	if err := s.services.Tag.RemoveTagFromBook(ctx, userID, bookID, tagID); err != nil {
-		s.logger.Error("Failed to remove tag from book", "error", err)
-		response.InternalError(w, "Failed to remove tag", s.logger)
-		return
-	}
-
-	response.Success(w, map[string]string{"status": "ok"}, s.logger)
-}
-
-// handleGetBookTags returns tags for a book.
-func (s *Server) handleGetBookTags(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-	bookID := chi.URLParam(r, "id")
-
-	tags, err := s.services.Tag.GetTagsForBook(ctx, userID, bookID)
+func (s *Server) handleUpdateTag(ctx context.Context, input *UpdateTagInput) (*TagOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
 	if err != nil {
-		s.logger.Error("Failed to get book tags", "error", err, "book_id", bookID)
-		response.InternalError(w, "Failed to get tags", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, tags, s.logger)
-}
-
-// handleGetTagBooks returns books with a specific tag.
-func (s *Server) handleGetTagBooks(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-	tagID := chi.URLParam(r, "id")
-
-	bookIDs, err := s.services.Tag.GetBooksForTag(ctx, userID, tagID)
+	t, err := s.services.Tag.UpdateTag(ctx, userID, input.ID, service.UpdateTagRequest{
+		Name:  input.Body.Name,
+		Color: input.Body.Color,
+	})
 	if err != nil {
-		s.logger.Error("Failed to get tag books", "error", err, "tag_id", tagID)
-		response.InternalError(w, "Failed to get books", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, map[string]interface{}{
-		"tag_id":   tagID,
-		"book_ids": bookIDs,
-		"count":    len(bookIDs),
-	}, s.logger)
+	return &TagOutput{
+		Body: TagResponse{
+			ID:        t.ID,
+			Name:      t.Name,
+			Slug:      t.Slug,
+			Color:     t.Color,
+			CreatedAt: t.CreatedAt,
+			UpdatedAt: t.UpdatedAt,
+		},
+	}, nil
 }
+
+func (s *Server) handleDeleteTag(ctx context.Context, input *DeleteTagInput) (*MessageOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.services.Tag.DeleteTag(ctx, userID, input.ID); err != nil {
+		return nil, err
+	}
+
+	return &MessageOutput{Body: MessageResponse{Message: "Tag deleted"}}, nil
+}
+
+func (s *Server) handleGetTagBooks(ctx context.Context, input *GetTagBooksInput) (*TagBooksOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	bookIDs, err := s.services.Tag.GetBooksForTag(ctx, userID, input.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &TagBooksOutput{Body: TagBooksResponse{BookIDs: bookIDs}}, nil
+}
+

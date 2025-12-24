@@ -1,70 +1,97 @@
 package api
 
 import (
-	"encoding/json/v2"
+	"context"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/listenupapp/listenup-server/internal/auth"
-	"github.com/listenupapp/listenup-server/internal/http/response"
 	"github.com/listenupapp/listenup-server/internal/service"
 )
 
-// Public Invite Handlers
+func (s *Server) registerInviteRoutes() {
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getInviteDetails",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/invites/{code}",
+		Summary:     "Get invite details",
+		Description: "Returns details about an invite code",
+		Tags:        []string{"Invites"},
+	}, s.handleGetInviteDetails)
 
-// handleGetInviteDetails returns invite details by code.
-// GET /api/v1/invites/{code}.
-func (s *Server) handleGetInviteDetails(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	code := chi.URLParam(r, "code")
-
-	if code == "" {
-		response.BadRequest(w, "Invite code is required", s.logger)
-		return
-	}
-
-	details, err := s.services.Invite.GetInviteDetails(ctx, code)
-	if err != nil {
-		handleServiceError(w, err, s.logger)
-		return
-	}
-
-	response.Success(w, details, s.logger)
+	huma.Register(s.api, huma.Operation{
+		OperationID: "claimInvite",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/invites/{code}/claim",
+		Summary:     "Claim invite",
+		Description: "Claims an invite code to create a new user account",
+		Tags:        []string{"Invites"},
+	}, s.handleClaimInvite)
 }
 
-// handleClaimInvite claims an invite and creates a new user.
-// POST /api/v1/invites/{code}/claim.
-func (s *Server) handleClaimInvite(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	code := chi.URLParam(r, "code")
+type InviteCodeParam struct {
+	Code string `path:"code" doc:"Invite code"`
+}
 
-	if code == "" {
-		response.BadRequest(w, "Invite code is required", s.logger)
-		return
-	}
+type InviteDetailsResponse struct {
+	Name       string `json:"name" doc:"Invitee name"`
+	Email      string `json:"email" doc:"Invitee email"`
+	ServerName string `json:"server_name" doc:"Server name"`
+	InvitedBy  string `json:"invited_by,omitempty" doc:"Inviter name"`
+	Valid      bool   `json:"valid" doc:"Whether invite is valid"`
+}
 
-	var req struct {
-		Password   string          `json:"password"`
-		DeviceInfo auth.DeviceInfo `json:"device_info"`
-	}
-	if err := json.UnmarshalRead(r.Body, &req); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
-	}
+type InviteDetailsOutput struct {
+	Body InviteDetailsResponse
+}
 
-	// Build claim request
-	claimReq := service.ClaimInviteRequest{
-		Code:       code,
-		Password:   req.Password,
-		DeviceInfo: req.DeviceInfo,
-		IPAddress:  r.RemoteAddr,
-	}
+type ClaimInviteRequest struct {
+	Password   string     `json:"password" validate:"required,min=8" doc:"New user password"`
+	DeviceInfo DeviceInfo `json:"device_info,omitempty" doc:"Device information"`
+}
 
-	authResp, err := s.services.Invite.ClaimInvite(ctx, claimReq)
+type ClaimInviteInput struct {
+	Code string `path:"code" doc:"Invite code to claim"`
+	Body ClaimInviteRequest
+}
+
+func (s *Server) handleGetInviteDetails(ctx context.Context, input *InviteCodeParam) (*InviteDetailsOutput, error) {
+	details, err := s.services.Invite.GetInviteDetails(ctx, input.Code)
 	if err != nil {
-		handleServiceError(w, err, s.logger)
-		return
+		return nil, err
 	}
 
-	response.Created(w, authResp, s.logger)
+	return &InviteDetailsOutput{
+		Body: InviteDetailsResponse{
+			Name:       details.Name,
+			Email:      details.Email,
+			ServerName: details.ServerName,
+			InvitedBy:  details.InvitedBy,
+			Valid:      details.Valid,
+		},
+	}, nil
+}
+
+func (s *Server) handleClaimInvite(ctx context.Context, input *ClaimInviteInput) (*AuthOutput, error) {
+	req := service.ClaimInviteRequest{
+		Code:     input.Code,
+		Password: input.Body.Password,
+		DeviceInfo: auth.DeviceInfo{
+			DeviceType:      input.Body.DeviceInfo.DeviceType,
+			Platform:        input.Body.DeviceInfo.Platform,
+			PlatformVersion: input.Body.DeviceInfo.PlatformVersion,
+			ClientName:      input.Body.DeviceInfo.ClientName,
+			ClientVersion:   input.Body.DeviceInfo.ClientVersion,
+			ClientBuild:     input.Body.DeviceInfo.ClientBuild,
+			DeviceName:      input.Body.DeviceInfo.DeviceName,
+			DeviceModel:     input.Body.DeviceInfo.DeviceModel,
+		},
+	}
+
+	resp, err := s.services.Invite.ClaimInvite(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return &AuthOutput{Body: mapAuthResponse(resp)}, nil
 }

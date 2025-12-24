@@ -1,298 +1,352 @@
 package api
 
 import (
-	"encoding/json/v2"
-	"errors"
+	"context"
 	"net/http"
+	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/listenupapp/listenup-server/internal/http/response"
-	"github.com/listenupapp/listenup-server/internal/store"
+	"github.com/danielgtaylor/huma/v2"
 )
 
-// CreateCollectionRequest represents the request body for creating a collection.
+func (s *Server) registerCollectionRoutes() {
+	huma.Register(s.api, huma.Operation{
+		OperationID: "listCollections",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/libraries/{libraryId}/collections",
+		Summary:     "List collections",
+		Description: "Returns all collections in a library the user can access",
+		Tags:        []string{"Collections"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleListCollections)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "createCollection",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/libraries/{libraryId}/collections",
+		Summary:     "Create collection",
+		Description: "Creates a new collection in a library",
+		Tags:        []string{"Collections"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleCreateCollection)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getCollection",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/collections/{id}",
+		Summary:     "Get collection",
+		Description: "Returns a collection by ID",
+		Tags:        []string{"Collections"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetCollection)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "updateCollection",
+		Method:      http.MethodPatch,
+		Path:        "/api/v1/collections/{id}",
+		Summary:     "Update collection",
+		Description: "Updates a collection",
+		Tags:        []string{"Collections"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleUpdateCollection)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "deleteCollection",
+		Method:      http.MethodDelete,
+		Path:        "/api/v1/collections/{id}",
+		Summary:     "Delete collection",
+		Description: "Deletes a collection",
+		Tags:        []string{"Collections"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleDeleteCollection)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getCollectionBooks",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/collections/{id}/books",
+		Summary:     "Get collection books",
+		Description: "Returns all books in a collection",
+		Tags:        []string{"Collections"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetCollectionBooks)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "addBookToCollection",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/collections/{id}/books/{bookId}",
+		Summary:     "Add book to collection",
+		Description: "Adds a book to a collection",
+		Tags:        []string{"Collections"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleAddBookToCollection)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "removeBookFromCollection",
+		Method:      http.MethodDelete,
+		Path:        "/api/v1/collections/{id}/books/{bookId}",
+		Summary:     "Remove book from collection",
+		Description: "Removes a book from a collection",
+		Tags:        []string{"Collections"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleRemoveBookFromCollection)
+}
+
+// === DTOs ===
+
+type ListCollectionsInput struct {
+	Authorization string `header:"Authorization"`
+	LibraryID     string `path:"libraryId" doc:"Library ID"`
+}
+
+type CollectionResponse struct {
+	ID        string    `json:"id" doc:"Collection ID"`
+	LibraryID string    `json:"library_id" doc:"Library ID"`
+	OwnerID   string    `json:"owner_id" doc:"Owner user ID"`
+	Name      string    `json:"name" doc:"Collection name"`
+	BookCount int       `json:"book_count" doc:"Number of books"`
+	IsInbox   bool      `json:"is_inbox" doc:"Whether this is the inbox collection"`
+	CreatedAt time.Time `json:"created_at" doc:"Creation time"`
+	UpdatedAt time.Time `json:"updated_at" doc:"Last update time"`
+}
+
+type ListCollectionsResponse struct {
+	Collections []CollectionResponse `json:"collections" doc:"List of collections"`
+}
+
+type ListCollectionsOutput struct {
+	Body ListCollectionsResponse
+}
+
 type CreateCollectionRequest struct {
-	LibraryID string `json:"library_id"`
-	Name      string `json:"name"`
+	Name string `json:"name" validate:"required,min=1,max=100" doc:"Collection name"`
 }
 
-// UpdateCollectionRequest represents the request body for updating a collection.
+type CreateCollectionInput struct {
+	Authorization string `header:"Authorization"`
+	LibraryID     string `path:"libraryId" doc:"Library ID"`
+	Body          CreateCollectionRequest
+}
+
+type CollectionOutput struct {
+	Body CollectionResponse
+}
+
+type GetCollectionInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Collection ID"`
+}
+
 type UpdateCollectionRequest struct {
-	Name string `json:"name"`
+	Name string `json:"name" validate:"required,min=1,max=100" doc:"New collection name"`
 }
 
-// AddBookRequest represents the request body for adding a book to a collection.
-type AddBookRequest struct {
-	BookID string `json:"book_id"`
+type UpdateCollectionInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Collection ID"`
+	Body          UpdateCollectionRequest
 }
 
-// handleCreateCollection creates a new collection.
-func (s *Server) handleCreateCollection(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
+type DeleteCollectionInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Collection ID"`
+}
 
-	var req CreateCollectionRequest
-	if err := json.UnmarshalRead(r.Body, &req); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
-	}
+type GetCollectionBooksInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Collection ID"`
+}
 
-	if req.LibraryID == "" {
-		response.BadRequest(w, "Library ID is required", s.logger)
-		return
-	}
+type CollectionBookResponse struct {
+	ID        string  `json:"id" doc:"Book ID"`
+	Title     string  `json:"title" doc:"Book title"`
+	CoverPath *string `json:"cover_path,omitempty" doc:"Cover image path"`
+}
 
-	if req.Name == "" {
-		response.BadRequest(w, "Collection name is required", s.logger)
-		return
-	}
+type CollectionBooksResponse struct {
+	Books []CollectionBookResponse `json:"books" doc:"Books in collection"`
+}
 
-	// Validate collection name length.
-	if len(req.Name) > 255 {
-		response.BadRequest(w, "Collection name must be 255 characters or less", s.logger)
-		return
-	}
+type CollectionBooksOutput struct {
+	Body CollectionBooksResponse
+}
 
-	collection, err := s.services.Collection.CreateCollection(ctx, userID, req.LibraryID, req.Name)
+type AddBookToCollectionInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Collection ID"`
+	BookID        string `path:"bookId" doc:"Book ID"`
+}
+
+type RemoveBookFromCollectionInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Collection ID"`
+	BookID        string `path:"bookId" doc:"Book ID"`
+}
+
+// === Handlers ===
+
+func (s *Server) handleListCollections(ctx context.Context, input *ListCollectionsInput) (*ListCollectionsOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
 	if err != nil {
-		s.logger.Error("Failed to create collection", "error", err, "user_id", userID)
-		response.InternalError(w, "Failed to create collection", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, collection, s.logger)
+	collections, err := s.services.Collection.ListCollections(ctx, userID, input.LibraryID)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := make([]CollectionResponse, len(collections))
+	for i, c := range collections {
+		resp[i] = CollectionResponse{
+			ID:        c.ID,
+			LibraryID: c.LibraryID,
+			OwnerID:   c.OwnerID,
+			Name:      c.Name,
+			BookCount: len(c.BookIDs),
+			IsInbox:   c.IsInbox,
+			CreatedAt: c.CreatedAt,
+			UpdatedAt: c.UpdatedAt,
+		}
+	}
+
+	return &ListCollectionsOutput{Body: ListCollectionsResponse{Collections: resp}}, nil
 }
 
-// handleListCollections returns all collections the user can access in a library.
-func (s *Server) handleListCollections(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-
-	libraryID := r.URL.Query().Get("library_id")
-	if libraryID == "" {
-		response.BadRequest(w, "Library ID is required", s.logger)
-		return
-	}
-
-	collections, err := s.services.Collection.ListCollections(ctx, userID, libraryID)
+func (s *Server) handleCreateCollection(ctx context.Context, input *CreateCollectionInput) (*CollectionOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
 	if err != nil {
-		s.logger.Error("Failed to list collections", "error", err, "user_id", userID, "library_id", libraryID)
-		response.InternalError(w, "Failed to retrieve collections", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, collections, s.logger)
+	c, err := s.services.Collection.CreateCollection(ctx, userID, input.LibraryID, input.Body.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	return &CollectionOutput{
+		Body: CollectionResponse{
+			ID:        c.ID,
+			LibraryID: c.LibraryID,
+			OwnerID:   c.OwnerID,
+			Name:      c.Name,
+			BookCount: len(c.BookIDs),
+			IsInbox:   c.IsInbox,
+			CreatedAt: c.CreatedAt,
+			UpdatedAt: c.UpdatedAt,
+		},
+	}, nil
 }
 
-// handleGetCollection returns a single collection by ID.
-func (s *Server) handleGetCollection(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-	id := chi.URLParam(r, "id")
-
-	if id == "" {
-		response.BadRequest(w, "Collection ID is required", s.logger)
-		return
-	}
-
-	collection, err := s.services.Collection.GetCollection(ctx, userID, id)
+func (s *Server) handleGetCollection(ctx context.Context, input *GetCollectionInput) (*CollectionOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
 	if err != nil {
-		if errors.Is(err, store.ErrCollectionNotFound) {
-			response.NotFound(w, "Collection not found", s.logger)
-			return
-		}
-		s.logger.Error("Failed to get collection", "error", err, "id", id, "user_id", userID)
-		response.InternalError(w, "Failed to retrieve collection", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, collection, s.logger)
+	c, err := s.services.Collection.GetCollection(ctx, userID, input.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &CollectionOutput{
+		Body: CollectionResponse{
+			ID:        c.ID,
+			LibraryID: c.LibraryID,
+			OwnerID:   c.OwnerID,
+			Name:      c.Name,
+			BookCount: len(c.BookIDs),
+			IsInbox:   c.IsInbox,
+			CreatedAt: c.CreatedAt,
+			UpdatedAt: c.UpdatedAt,
+		},
+	}, nil
 }
 
-// handleUpdateCollection updates a collection's metadata.
-func (s *Server) handleUpdateCollection(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-	id := chi.URLParam(r, "id")
-
-	if id == "" {
-		response.BadRequest(w, "Collection ID is required", s.logger)
-		return
-	}
-
-	var req UpdateCollectionRequest
-	if err := json.UnmarshalRead(r.Body, &req); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
-	}
-
-	if req.Name == "" {
-		response.BadRequest(w, "Collection name is required", s.logger)
-		return
-	}
-
-	// Validate collection name length.
-	if len(req.Name) > 255 {
-		response.BadRequest(w, "Collection name must be 255 characters or less", s.logger)
-		return
-	}
-
-	collection, err := s.services.Collection.UpdateCollection(ctx, userID, id, req.Name)
+func (s *Server) handleUpdateCollection(ctx context.Context, input *UpdateCollectionInput) (*CollectionOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
 	if err != nil {
-		if errors.Is(err, store.ErrCollectionNotFound) {
-			response.NotFound(w, "Collection not found", s.logger)
-			return
-		}
-		if errors.Is(err, store.ErrPermissionDenied) {
-			response.Forbidden(w, "You don't have permission to update this collection", s.logger)
-			return
-		}
-		s.logger.Error("Failed to update collection", "error", err, "id", id, "user_id", userID)
-		response.InternalError(w, "Failed to update collection", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, collection, s.logger)
+	c, err := s.services.Collection.UpdateCollection(ctx, userID, input.ID, input.Body.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	return &CollectionOutput{
+		Body: CollectionResponse{
+			ID:        c.ID,
+			LibraryID: c.LibraryID,
+			OwnerID:   c.OwnerID,
+			Name:      c.Name,
+			BookCount: len(c.BookIDs),
+			IsInbox:   c.IsInbox,
+			CreatedAt: c.CreatedAt,
+			UpdatedAt: c.UpdatedAt,
+		},
+	}, nil
 }
 
-// handleDeleteCollection deletes a collection.
-func (s *Server) handleDeleteCollection(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-	id := chi.URLParam(r, "id")
-
-	if id == "" {
-		response.BadRequest(w, "Collection ID is required", s.logger)
-		return
-	}
-
-	err := s.services.Collection.DeleteCollection(ctx, userID, id)
+func (s *Server) handleDeleteCollection(ctx context.Context, input *DeleteCollectionInput) (*MessageOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
 	if err != nil {
-		if errors.Is(err, store.ErrCollectionNotFound) {
-			response.NotFound(w, "Collection not found", s.logger)
-			return
-		}
-		if errors.Is(err, store.ErrPermissionDenied) {
-			response.Forbidden(w, "You don't have permission to delete this collection", s.logger)
-			return
-		}
-		s.logger.Error("Failed to delete collection", "error", err, "id", id, "user_id", userID)
-		response.InternalError(w, "Failed to delete collection", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, map[string]string{
-		"message": "Collection deleted successfully",
-	}, s.logger)
+	if err := s.services.Collection.DeleteCollection(ctx, userID, input.ID); err != nil {
+		return nil, err
+	}
+
+	return &MessageOutput{Body: MessageResponse{Message: "Collection deleted"}}, nil
 }
 
-// handleAddBookToCollection adds a book to a collection.
-func (s *Server) handleAddBookToCollection(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-	id := chi.URLParam(r, "id")
-
-	if id == "" {
-		response.BadRequest(w, "Collection ID is required", s.logger)
-		return
-	}
-
-	var req AddBookRequest
-	if err := json.UnmarshalRead(r.Body, &req); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
-	}
-
-	if req.BookID == "" {
-		response.BadRequest(w, "Book ID is required", s.logger)
-		return
-	}
-
-	err := s.services.Collection.AddBookToCollection(ctx, userID, id, req.BookID)
+func (s *Server) handleGetCollectionBooks(ctx context.Context, input *GetCollectionBooksInput) (*CollectionBooksOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
 	if err != nil {
-		if errors.Is(err, store.ErrCollectionNotFound) {
-			response.NotFound(w, "Collection not found", s.logger)
-			return
-		}
-		if errors.Is(err, store.ErrBookNotFound) {
-			response.NotFound(w, "Book not found", s.logger)
-			return
-		}
-		if errors.Is(err, store.ErrPermissionDenied) {
-			response.Forbidden(w, "You don't have permission to modify this collection", s.logger)
-			return
-		}
-		s.logger.Error("Failed to add book to collection", "error", err, "collection_id", id, "book_id", req.BookID, "user_id", userID)
-		response.InternalError(w, "Failed to add book to collection", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, map[string]string{
-		"message": "Book added to collection successfully",
-	}, s.logger)
+	books, err := s.services.Collection.GetCollectionBooks(ctx, userID, input.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := make([]CollectionBookResponse, len(books))
+	for i, b := range books {
+		book := CollectionBookResponse{
+			ID:    b.ID,
+			Title: b.Title,
+		}
+		if b.CoverImage != nil && b.CoverImage.Path != "" {
+			book.CoverPath = &b.CoverImage.Path
+		}
+		resp[i] = book
+	}
+
+	return &CollectionBooksOutput{Body: CollectionBooksResponse{Books: resp}}, nil
 }
 
-// handleRemoveBookFromCollection removes a book from a collection.
-func (s *Server) handleRemoveBookFromCollection(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-	id := chi.URLParam(r, "id")
-	bookID := chi.URLParam(r, "bookID")
-
-	if id == "" {
-		response.BadRequest(w, "Collection ID is required", s.logger)
-		return
-	}
-
-	if bookID == "" {
-		response.BadRequest(w, "Book ID is required", s.logger)
-		return
-	}
-
-	err := s.services.Collection.RemoveBookFromCollection(ctx, userID, id, bookID)
+func (s *Server) handleAddBookToCollection(ctx context.Context, input *AddBookToCollectionInput) (*MessageOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
 	if err != nil {
-		if errors.Is(err, store.ErrCollectionNotFound) {
-			response.NotFound(w, "Collection not found", s.logger)
-			return
-		}
-		if errors.Is(err, store.ErrPermissionDenied) {
-			response.Forbidden(w, "You don't have permission to modify this collection", s.logger)
-			return
-		}
-		s.logger.Error("Failed to remove book from collection", "error", err, "collection_id", id, "book_id", bookID, "user_id", userID)
-		response.InternalError(w, "Failed to remove book from collection", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, map[string]string{
-		"message": "Book removed from collection successfully",
-	}, s.logger)
+	if err := s.services.Collection.AddBookToCollection(ctx, userID, input.ID, input.BookID); err != nil {
+		return nil, err
+	}
+
+	return &MessageOutput{Body: MessageResponse{Message: "Book added to collection"}}, nil
 }
 
-// handleGetCollectionBooks returns all books in a collection.
-func (s *Server) handleGetCollectionBooks(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-	id := chi.URLParam(r, "id")
-
-	if id == "" {
-		response.BadRequest(w, "Collection ID is required", s.logger)
-		return
-	}
-
-	books, err := s.services.Collection.GetCollectionBooks(ctx, userID, id)
+func (s *Server) handleRemoveBookFromCollection(ctx context.Context, input *RemoveBookFromCollectionInput) (*MessageOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
 	if err != nil {
-		if errors.Is(err, store.ErrCollectionNotFound) {
-			response.NotFound(w, "Collection not found", s.logger)
-			return
-		}
-		s.logger.Error("Failed to get collection books", "error", err, "collection_id", id, "user_id", userID)
-		response.InternalError(w, "Failed to retrieve collection books", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, map[string]interface{}{
-		"collection_id": id,
-		"books":         books,
-	}, s.logger)
+	if err := s.services.Collection.RemoveBookFromCollection(ctx, userID, input.ID, input.BookID); err != nil {
+		return nil, err
+	}
+
+	return &MessageOutput{Body: MessageResponse{Message: "Book removed from collection"}}, nil
 }

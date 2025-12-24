@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/listenupapp/listenup-server/internal/store"
+	domainerrors "github.com/listenupapp/listenup-server/internal/errors"
 	"github.com/listenupapp/listenup-server/internal/validation"
 	"github.com/stretchr/testify/assert"
 )
@@ -86,10 +86,14 @@ func TestValidator_ValidateErrors(t *testing.T) {
 			err := v.Validate(tt.req)
 			assert.Error(t, err)
 
-			var storeErr *store.Error
-			if assert.True(t, errors.As(err, &storeErr)) {
-				assert.Equal(t, tt.wantErrCode, storeErr.HTTPCode())
-				assert.Contains(t, storeErr.Message, tt.wantErrMsg)
+			var domainErr *domainerrors.Error
+			if assert.True(t, errors.As(err, &domainErr)) {
+				assert.Equal(t, tt.wantErrCode, domainErr.Code.HTTPStatus())
+				// Field errors are in the Details map
+				details, ok := domainErr.Details.(map[string]string)
+				assert.True(t, ok, "Details should be map[string]string")
+				_, hasField := details[tt.wantErrMsg]
+				assert.True(t, hasField, "Details should contain field %q", tt.wantErrMsg)
 			}
 		})
 	}
@@ -108,6 +112,13 @@ func TestValidator_JSONFieldNames(t *testing.T) {
 	assert.Error(t, err)
 
 	// Should use JSON tag name "email", not struct field name "Email"
-	assert.Contains(t, err.Error(), "email")
-	assert.NotContains(t, err.Error(), "Email")
+	var domainErr *domainerrors.Error
+	if assert.True(t, errors.As(err, &domainErr)) {
+		details, ok := domainErr.Details.(map[string]string)
+		assert.True(t, ok, "Details should be map[string]string")
+		_, hasEmail := details["email"]
+		assert.True(t, hasEmail, "Details should contain 'email' field (lowercase)")
+		_, hasEmailUpper := details["Email"]
+		assert.False(t, hasEmailUpper, "Details should not contain 'Email' field (uppercase)")
+	}
 }

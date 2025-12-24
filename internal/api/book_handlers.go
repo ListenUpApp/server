@@ -1,398 +1,610 @@
 package api
 
 import (
-	"encoding/json/v2"
-	"errors"
+	"context"
+	"io"
 	"net/http"
-	"strings"
+	"time"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/listenupapp/listenup-server/internal/domain"
-	"github.com/listenupapp/listenup-server/internal/http/response"
+	"github.com/listenupapp/listenup-server/internal/dto"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
-// BookUpdateRequest contains fields that can be updated on a book.
-// Only non-nil fields are applied (true PATCH semantics).
-// Note: omitempty is intentionally not used here - we need to distinguish between
-// "field not provided" (nil pointer) and "field set to empty" (pointer to "").
-// Note: Series is managed via PUT /api/v1/books/{id}/series endpoint.
-type BookUpdateRequest struct {
-	Title       *string `json:"title"`
-	Subtitle    *string `json:"subtitle"`
-	Description *string `json:"description"`
-	Publisher   *string `json:"publisher"`
-	PublishYear *string `json:"publish_year"`
-	Language    *string `json:"language"`
-	ISBN        *string `json:"isbn"`
-	ASIN        *string `json:"asin"`
-	Abridged    *bool   `json:"abridged"`
+func (s *Server) registerBookRoutes() {
+	huma.Register(s.api, huma.Operation{
+		OperationID: "listBooks",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/books",
+		Summary:     "List books",
+		Description: "Returns paginated list of books",
+		Tags:        []string{"Books"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleListBooks)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getBook",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/books/{id}",
+		Summary:     "Get book",
+		Description: "Returns a single book by ID",
+		Tags:        []string{"Books"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetBook)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "updateBook",
+		Method:      http.MethodPatch,
+		Path:        "/api/v1/books/{id}",
+		Summary:     "Update book",
+		Description: "Updates book metadata",
+		Tags:        []string{"Books"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleUpdateBook)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "setBookContributors",
+		Method:      http.MethodPut,
+		Path:        "/api/v1/books/{id}/contributors",
+		Summary:     "Set book contributors",
+		Description: "Sets the contributors for a book",
+		Tags:        []string{"Books"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleSetBookContributors)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "setBookSeries",
+		Method:      http.MethodPut,
+		Path:        "/api/v1/books/{id}/series",
+		Summary:     "Set book series",
+		Description: "Sets the series for a book",
+		Tags:        []string{"Books"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleSetBookSeries)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getBookGenres",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/books/{id}/genres",
+		Summary:     "Get book genres",
+		Description: "Returns genres for a book",
+		Tags:        []string{"Books"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetBookGenres)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "setBookGenres",
+		Method:      http.MethodPut,
+		Path:        "/api/v1/books/{id}/genres",
+		Summary:     "Set book genres",
+		Description: "Sets genres for a book",
+		Tags:        []string{"Books"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleSetBookGenres)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getBookTags",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/books/{id}/tags",
+		Summary:     "Get book tags",
+		Description: "Returns tags for a book",
+		Tags:        []string{"Books"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetBookTags)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "addBookTag",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/books/{id}/tags",
+		Summary:     "Add book tag",
+		Description: "Adds a tag to a book",
+		Tags:        []string{"Books"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleAddBookTag)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "removeBookTag",
+		Method:      http.MethodDelete,
+		Path:        "/api/v1/books/{id}/tags/{tagId}",
+		Summary:     "Remove book tag",
+		Description: "Removes a tag from a book",
+		Tags:        []string{"Books"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleRemoveBookTag)
 }
 
-// handleUpdateBook updates a book's metadata (PATCH semantics).
-// Only fields present in the request body are updated.
-func (s *Server) handleUpdateBook(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-	bookID := chi.URLParam(r, "id")
+// === DTOs ===
 
-	if bookID == "" {
-		response.BadRequest(w, "Book ID is required", s.logger)
-		return
-	}
-
-	var req BookUpdateRequest
-	if err := json.UnmarshalRead(r.Body, &req); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
-	}
-
-	// Get the book with ACL check - ensures user has access.
-	book, err := s.services.Book.GetBook(ctx, userID, bookID)
-	if err != nil {
-		if errors.Is(err, store.ErrBookNotFound) {
-			response.NotFound(w, "Book not found", s.logger)
-			return
-		}
-		s.logger.Error("Failed to get book for update", "error", err, "book_id", bookID, "user_id", userID)
-		response.InternalError(w, "Failed to retrieve book", s.logger)
-		return
-	}
-
-	// Apply only the fields that were provided (PATCH semantics).
-	if req.Title != nil {
-		book.Title = *req.Title
-	}
-	if req.Subtitle != nil {
-		book.Subtitle = *req.Subtitle
-	}
-	if req.Description != nil {
-		book.Description = *req.Description
-	}
-	if req.Publisher != nil {
-		book.Publisher = *req.Publisher
-	}
-	if req.PublishYear != nil {
-		book.PublishYear = *req.PublishYear
-	}
-	if req.Language != nil {
-		book.Language = *req.Language
-	}
-	if req.ISBN != nil {
-		book.ISBN = *req.ISBN
-	}
-	if req.ASIN != nil {
-		book.ASIN = *req.ASIN
-	}
-	if req.Abridged != nil {
-		book.Abridged = *req.Abridged
-	}
-	// Note: Series is managed via PUT /api/v1/books/{id}/series endpoint
-
-	// Update the book - store.UpdateBook handles SSE events and search reindexing.
-	if err := s.store.UpdateBook(ctx, book); err != nil {
-		s.logger.Error("Failed to update book", "error", err, "book_id", bookID, "user_id", userID)
-		response.InternalError(w, "Failed to update book", s.logger)
-		return
-	}
-
-	// Return the enriched book (with denormalized contributor names, series name, etc.).
-	enrichedBook, err := s.store.EnrichBook(ctx, book)
-	if err != nil {
-		// Log but don't fail - return the raw book if enrichment fails.
-		s.logger.Warn("Failed to enrich book after update", "error", err, "book_id", bookID)
-		response.Success(w, book, s.logger)
-		return
-	}
-
-	response.Success(w, enrichedBook, s.logger)
+type ListBooksInput struct {
+	Authorization string `header:"Authorization"`
+	Limit         int    `query:"limit" default:"50" minimum:"1" maximum:"100" doc:"Items per page"`
+	Cursor        string `query:"cursor" doc:"Pagination cursor"`
+	UpdatedAfter  string `query:"updated_after" doc:"Filter by updated time (RFC3339)"`
 }
 
-// ContributorInput represents a contributor in a SetContributorsRequest.
-type ContributorInput struct {
-	Name  string   `json:"name"`
-	Roles []string `json:"roles"`
+type BookResponse struct {
+	ID            string                    `json:"id" doc:"Book ID"`
+	Title         string                    `json:"title" doc:"Book title"`
+	Subtitle      string                    `json:"subtitle,omitempty" doc:"Book subtitle"`
+	Description   string                    `json:"description,omitempty" doc:"Book description"`
+	Publisher     string                    `json:"publisher,omitempty" doc:"Publisher name"`
+	PublishYear   string                    `json:"publish_year,omitempty" doc:"Publication year"`
+	Language      string                    `json:"language,omitempty" doc:"Language code"`
+	Duration      int64                     `json:"duration" doc:"Total duration in milliseconds"`
+	Size          int64                     `json:"size" doc:"Total size in bytes"`
+	ASIN          string                    `json:"asin,omitempty" doc:"Amazon ASIN"`
+	ISBN          string                    `json:"isbn,omitempty" doc:"ISBN"`
+	Contributors  []BookContributorResponse `json:"contributors" doc:"Book contributors"`
+	Series        []BookSeriesResponse      `json:"series,omitempty" doc:"Series memberships"`
+	GenreIDs      []string                  `json:"genre_ids,omitempty" doc:"Genre IDs"`
+	AudioFiles    []AudioFileResponse       `json:"audio_files" doc:"Audio files"`
+	CreatedAt     time.Time                 `json:"created_at" doc:"Creation time"`
+	UpdatedAt     time.Time                 `json:"updated_at" doc:"Last update time"`
 }
 
-// SetContributorsRequest is the request body for PUT /api/v1/books/{id}/contributors.
+type BookContributorResponse struct {
+	ContributorID string   `json:"contributor_id" doc:"Contributor ID"`
+	Name          string   `json:"name" doc:"Contributor name"`
+	Roles         []string `json:"roles" doc:"Roles (author, narrator, etc.)"`
+}
+
+type BookSeriesResponse struct {
+	SeriesID string `json:"series_id" doc:"Series ID"`
+	Name     string `json:"name" doc:"Series name"`
+	Sequence string `json:"sequence,omitempty" doc:"Sequence in series"`
+}
+
+type AudioFileResponse struct {
+	ID       string `json:"id" doc:"Audio file ID"`
+	Path     string `json:"path" doc:"File path"`
+	Duration int64  `json:"duration" doc:"Duration in milliseconds"`
+	Size     int64  `json:"size" doc:"Size in bytes"`
+	Format   string `json:"format" doc:"Audio format"`
+	Codec    string `json:"codec" doc:"Audio codec"`
+	Bitrate  int    `json:"bitrate" doc:"Bitrate in bps"`
+}
+
+type ListBooksResponse struct {
+	Items      []BookResponse `json:"items" doc:"Books"`
+	Total      int            `json:"total" doc:"Total count"`
+	NextCursor string         `json:"next_cursor,omitempty" doc:"Next page cursor"`
+}
+
+type ListBooksOutput struct {
+	Body ListBooksResponse
+}
+
+type GetBookInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Book ID"`
+}
+
+type BookOutput struct {
+	Body BookResponse
+}
+
+type UpdateBookRequest struct {
+	Title       *string `json:"title,omitempty" doc:"Book title"`
+	Subtitle    *string `json:"subtitle,omitempty" doc:"Book subtitle"`
+	Description *string `json:"description,omitempty" doc:"Book description"`
+	Publisher   *string `json:"publisher,omitempty" doc:"Publisher name"`
+	PublishYear *string `json:"publish_year,omitempty" doc:"Publication year"`
+	Language    *string `json:"language,omitempty" doc:"Language code"`
+	ASIN        *string `json:"asin,omitempty" doc:"Amazon ASIN"`
+	ISBN        *string `json:"isbn,omitempty" doc:"ISBN"`
+}
+
+type UpdateBookInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Book ID"`
+	Body          UpdateBookRequest
+}
+
 type SetContributorsRequest struct {
-	Contributors []ContributorInput `json:"contributors"`
+	Contributors []ContributorInput `json:"contributors" validate:"required" doc:"Contributors"`
 }
 
-// handleSetBookContributors replaces all contributors for a book.
-// PUT /api/v1/books/{id}/contributors.
-func (s *Server) handleSetBookContributors(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-	bookID := chi.URLParam(r, "id")
-
-	if bookID == "" {
-		response.BadRequest(w, "Book ID is required", s.logger)
-		return
-	}
-
-	var req SetContributorsRequest
-	if err := json.UnmarshalRead(r.Body, &req); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
-	}
-
-	// Validate ACL - user must have access to the book
-	_, err := s.services.Book.GetBook(ctx, userID, bookID)
-	if err != nil {
-		if errors.Is(err, store.ErrBookNotFound) {
-			response.NotFound(w, "Book not found", s.logger)
-			return
-		}
-		s.logger.Error("Failed to get book for contributor update", "error", err, "book_id", bookID, "user_id", userID)
-		response.InternalError(w, "Failed to retrieve book", s.logger)
-		return
-	}
-
-	// Convert and validate roles
-	storeContributors := make([]store.ContributorInput, 0, len(req.Contributors))
-	for _, c := range req.Contributors {
-		name := strings.TrimSpace(c.Name)
-		if name == "" {
-			response.BadRequest(w, "Contributor name is required", s.logger)
-			return
-		}
-
-		roles := make([]domain.ContributorRole, 0, len(c.Roles))
-		for _, roleStr := range c.Roles {
-			role := domain.ContributorRole(roleStr)
-			if !role.IsValid() {
-				response.BadRequest(w, "Invalid role: "+roleStr, s.logger)
-				return
-			}
-			roles = append(roles, role)
-		}
-
-		if len(roles) == 0 {
-			response.BadRequest(w, "At least one role is required for contributor: "+name, s.logger)
-			return
-		}
-
-		storeContributors = append(storeContributors, store.ContributorInput{
-			Name:  name,
-			Roles: roles,
-		})
-	}
-
-	// Set the contributors
-	book, err := s.store.SetBookContributors(ctx, bookID, storeContributors)
-	if err != nil {
-		s.logger.Error("Failed to set book contributors", "error", err, "book_id", bookID, "user_id", userID)
-		response.InternalError(w, "Failed to update contributors", s.logger)
-		return
-	}
-
-	// Return enriched book
-	enrichedBook, err := s.store.EnrichBook(ctx, book)
-	if err != nil {
-		s.logger.Warn("Failed to enrich book after contributor update", "error", err, "book_id", bookID)
-		response.Success(w, book, s.logger)
-		return
-	}
-
-	response.Success(w, enrichedBook, s.logger)
+type ContributorInput struct {
+	Name  string   `json:"name" validate:"required" doc:"Contributor name"`
+	Roles []string `json:"roles" validate:"required" doc:"Roles"`
 }
 
-// SeriesInput represents a series in a SetSeriesRequest.
-type SeriesInput struct {
-	Name     string `json:"name"`
-	Sequence string `json:"sequence"`
+type SetContributorsInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Book ID"`
+	Body          SetContributorsRequest
 }
 
-// SetSeriesRequest is the request body for PUT /api/v1/books/{id}/series.
 type SetSeriesRequest struct {
-	Series []SeriesInput `json:"series"`
+	Series []SeriesInput `json:"series" doc:"Series memberships"`
 }
 
-// handleSetBookSeries replaces all series for a book.
-// PUT /api/v1/books/{id}/series.
-func (s *Server) handleSetBookSeries(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-	bookID := chi.URLParam(r, "id")
+type SeriesInput struct {
+	Name     string `json:"name" validate:"required" doc:"Series name"`
+	Sequence string `json:"sequence,omitempty" doc:"Sequence in series"`
+}
 
-	if bookID == "" {
-		response.BadRequest(w, "Book ID is required", s.logger)
-		return
-	}
+type SetSeriesInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Book ID"`
+	Body          SetSeriesRequest
+}
 
-	var req SetSeriesRequest
-	if err := json.UnmarshalRead(r.Body, &req); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
-	}
+type GenreIDsResponse struct {
+	GenreIDs []string `json:"genre_ids" doc:"Genre IDs"`
+}
 
-	// Validate ACL - user must have access to the book
-	_, err := s.services.Book.GetBook(ctx, userID, bookID)
+type GenresOutput struct {
+	Body GenreIDsResponse
+}
+
+type GetBookGenresInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Book ID"`
+}
+
+type SetGenresRequest struct {
+	GenreIDs []string `json:"genre_ids" validate:"required" doc:"Genre IDs"`
+}
+
+type SetGenresInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Book ID"`
+	Body          SetGenresRequest
+}
+
+type TagIDsResponse struct {
+	TagIDs []string `json:"tag_ids" doc:"Tag IDs"`
+}
+
+type TagsOutput struct {
+	Body TagIDsResponse
+}
+
+type GetBookTagsInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Book ID"`
+}
+
+type AddTagRequest struct {
+	TagID string `json:"tag_id" validate:"required" doc:"Tag ID"`
+}
+
+type AddTagInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Book ID"`
+	Body          AddTagRequest
+}
+
+type RemoveTagInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Book ID"`
+	TagID         string `path:"tagId" doc:"Tag ID"`
+}
+
+// === Handlers ===
+
+func (s *Server) handleListBooks(ctx context.Context, input *ListBooksInput) (*ListBooksOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
 	if err != nil {
-		if errors.Is(err, store.ErrBookNotFound) {
-			response.NotFound(w, "Book not found", s.logger)
-			return
+		return nil, err
+	}
+
+	params := store.PaginationParams{
+		Limit:  input.Limit,
+		Cursor: input.Cursor,
+	}
+	if input.UpdatedAfter != "" {
+		if t, err := time.Parse(time.RFC3339, input.UpdatedAfter); err == nil {
+			params.UpdatedAfter = t
 		}
-		s.logger.Error("Failed to get book for series update", "error", err, "book_id", bookID, "user_id", userID)
-		response.InternalError(w, "Failed to retrieve book", s.logger)
-		return
+	}
+
+	result, err := s.services.Book.ListBooks(ctx, userID, params)
+	if err != nil {
+		return nil, err
+	}
+
+	books := make([]BookResponse, len(result.Items))
+	for i, b := range result.Items {
+		enriched, err := s.store.EnrichBook(ctx, b)
+		if err != nil {
+			return nil, err
+		}
+		books[i] = mapEnrichedBookResponse(enriched)
+	}
+
+	return &ListBooksOutput{
+		Body: ListBooksResponse{
+			Items:      books,
+			Total:      result.Total,
+			NextCursor: result.NextCursor,
+		},
+	}, nil
+}
+
+func (s *Server) handleGetBook(ctx context.Context, input *GetBookInput) (*BookOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	book, err := s.services.Book.GetBook(ctx, userID, input.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	enriched, err := s.store.EnrichBook(ctx, book)
+	if err != nil {
+		return nil, err
+	}
+
+	return &BookOutput{Body: mapEnrichedBookResponse(enriched)}, nil
+}
+
+func (s *Server) handleUpdateBook(ctx context.Context, input *UpdateBookInput) (*BookOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get existing book
+	book, err := s.store.GetBook(ctx, input.ID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply updates
+	if input.Body.Title != nil {
+		book.Title = *input.Body.Title
+	}
+	if input.Body.Subtitle != nil {
+		book.Subtitle = *input.Body.Subtitle
+	}
+	if input.Body.Description != nil {
+		book.Description = *input.Body.Description
+	}
+	if input.Body.Publisher != nil {
+		book.Publisher = *input.Body.Publisher
+	}
+	if input.Body.PublishYear != nil {
+		book.PublishYear = *input.Body.PublishYear
+	}
+	if input.Body.Language != nil {
+		book.Language = *input.Body.Language
+	}
+	if input.Body.ASIN != nil {
+		book.ASIN = *input.Body.ASIN
+	}
+	if input.Body.ISBN != nil {
+		book.ISBN = *input.Body.ISBN
+	}
+
+	if err := s.store.UpdateBook(ctx, book); err != nil {
+		return nil, err
+	}
+
+	enriched, err := s.store.EnrichBook(ctx, book)
+	if err != nil {
+		return nil, err
+	}
+
+	return &BookOutput{Body: mapEnrichedBookResponse(enriched)}, nil
+}
+
+func (s *Server) handleSetBookContributors(ctx context.Context, input *SetContributorsInput) (*BookOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
 	}
 
 	// Convert to store input format
-	storeSeries := make([]store.SeriesInput, 0, len(req.Series))
-	for _, sr := range req.Series {
-		name := strings.TrimSpace(sr.Name)
-		if name == "" {
-			response.BadRequest(w, "Series name is required", s.logger)
-			return
+	contributors := make([]store.ContributorInput, len(input.Body.Contributors))
+	for i, c := range input.Body.Contributors {
+		roles := make([]domain.ContributorRole, len(c.Roles))
+		for j, r := range c.Roles {
+			roles[j] = domain.ContributorRole(r)
 		}
-
-		storeSeries = append(storeSeries, store.SeriesInput{
-			Name:     name,
-			Sequence: strings.TrimSpace(sr.Sequence),
-		})
-	}
-
-	// Set the series
-	book, err := s.store.SetBookSeries(ctx, bookID, storeSeries)
-	if err != nil {
-		s.logger.Error("Failed to set book series", "error", err, "book_id", bookID, "user_id", userID)
-		response.InternalError(w, "Failed to update series", s.logger)
-		return
-	}
-
-	// Return enriched book
-	enrichedBook, err := s.store.EnrichBook(ctx, book)
-	if err != nil {
-		s.logger.Warn("Failed to enrich book after series update", "error", err, "book_id", bookID)
-		response.Success(w, book, s.logger)
-		return
-	}
-
-	response.Success(w, enrichedBook, s.logger)
-}
-
-// handleUploadCover handles cover image uploads for a book.
-// PUT /api/v1/books/{id}/cover.
-// Content-Type: multipart/form-data with "file" field.
-func (s *Server) handleUploadCover(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-	bookID := chi.URLParam(r, "id")
-
-	if bookID == "" {
-		response.BadRequest(w, "Book ID is required", s.logger)
-		return
-	}
-
-	// Validate ACL - user must have access to the book
-	book, err := s.services.Book.GetBook(ctx, userID, bookID)
-	if err != nil {
-		if errors.Is(err, store.ErrBookNotFound) {
-			response.NotFound(w, "Book not found", s.logger)
-			return
+		contributors[i] = store.ContributorInput{
+			Name:  c.Name,
+			Roles: roles,
 		}
-		s.logger.Error("Failed to get book for cover upload", "error", err, "book_id", bookID, "user_id", userID)
-		response.InternalError(w, "Failed to retrieve book", s.logger)
-		return
 	}
 
-	// Parse multipart form
-	if err := r.ParseMultipartForm(MaxUploadSize); err != nil {
-		response.BadRequest(w, "Failed to parse form data", s.logger)
-		return
-	}
-
-	// Get the uploaded file
-	file, header, err := r.FormFile("file")
+	book, err := s.store.SetBookContributors(ctx, input.ID, contributors)
 	if err != nil {
-		response.BadRequest(w, "No file uploaded. Use 'file' field in multipart form", s.logger)
-		return
-	}
-	defer file.Close()
-
-	// Validate file size
-	if header.Size > MaxUploadSize {
-		response.BadRequest(w, "File too large. Maximum size is 10MB", s.logger)
-		return
+		return nil, err
 	}
 
-	// Read file content
-	imgData := make([]byte, header.Size)
-	if _, err := file.Read(imgData); err != nil {
-		s.logger.Error("Failed to read uploaded file", "error", err, "book_id", bookID)
-		response.InternalError(w, "Failed to read uploaded file", s.logger)
-		return
+	// Verify user access
+	if _, err := s.store.GetBook(ctx, input.ID, userID); err != nil {
+		return nil, err
 	}
 
-	// Validate it's an image by checking magic bytes
-	contentType := detectImageType(imgData)
-	if contentType == "" {
-		response.BadRequest(w, "Invalid image format. Supported formats: JPEG, PNG, WebP, GIF", s.logger)
-		return
+	enriched, err := s.store.EnrichBook(ctx, book)
+	if err != nil {
+		return nil, err
 	}
 
-	// Save the cover image (overwrites any existing cover)
-	if err := s.storage.Covers.Save(bookID, imgData); err != nil {
-		s.logger.Error("Failed to save cover image", "error", err, "book_id", bookID)
-		response.InternalError(w, "Failed to save cover image", s.logger)
-		return
-	}
-
-	// Update book's CoverImage field to mark it has a custom cover
-	book.CoverImage = &domain.ImageFileInfo{
-		Filename: header.Filename,
-		Format:   contentType,
-		Size:     header.Size,
-	}
-
-	// Save book update
-	if err := s.store.UpdateBook(ctx, book); err != nil {
-		s.logger.Error("Failed to update book after cover upload", "error", err, "book_id", bookID)
-		response.InternalError(w, "Failed to update book", s.logger)
-		return
-	}
-
-	s.logger.Info("Cover uploaded successfully",
-		"book_id", bookID,
-		"filename", header.Filename,
-		"size", header.Size,
-		"format", contentType,
-	)
-
-	response.Success(w, map[string]string{
-		"cover_url": "/api/v1/covers/" + bookID,
-	}, s.logger)
+	return &BookOutput{Body: mapEnrichedBookResponse(enriched)}, nil
 }
 
-// detectImageType checks magic bytes to determine image format.
-// Returns empty string if not a recognized image format.
-func detectImageType(data []byte) string {
-	if len(data) < 8 {
-		return ""
+func (s *Server) handleSetBookSeries(ctx context.Context, input *SetSeriesInput) (*BookOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
 	}
 
-	// JPEG: starts with FF D8 FF
-	if data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF {
-		return "image/jpeg"
+	// Convert to store input format
+	seriesInputs := make([]store.SeriesInput, len(input.Body.Series))
+	for i, s := range input.Body.Series {
+		seriesInputs[i] = store.SeriesInput{
+			Name:     s.Name,
+			Sequence: s.Sequence,
+		}
 	}
 
-	// PNG: starts with 89 50 4E 47 0D 0A 1A 0A
-	if data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47 {
-		return "image/png"
+	book, err := s.store.SetBookSeries(ctx, input.ID, seriesInputs)
+	if err != nil {
+		return nil, err
 	}
 
-	// GIF: starts with GIF87a or GIF89a
-	if data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46 {
-		return "image/gif"
+	// Verify user access
+	if _, err := s.store.GetBook(ctx, input.ID, userID); err != nil {
+		return nil, err
 	}
 
-	// WebP: starts with RIFF....WEBP
-	if data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
-		len(data) >= 12 && data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50 {
-		return "image/webp"
+	enriched, err := s.store.EnrichBook(ctx, book)
+	if err != nil {
+		return nil, err
 	}
 
-	return ""
+	return &BookOutput{Body: mapEnrichedBookResponse(enriched)}, nil
 }
+
+func (s *Server) handleGetBookGenres(ctx context.Context, input *GetBookGenresInput) (*GenresOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	// Verify user access
+	if _, err := s.store.GetBook(ctx, input.ID, userID); err != nil {
+		return nil, err
+	}
+
+	genres, err := s.store.GetGenreIDsForBook(ctx, input.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &GenresOutput{Body: GenreIDsResponse{GenreIDs: genres}}, nil
+}
+
+func (s *Server) handleSetBookGenres(ctx context.Context, input *SetGenresInput) (*GenresOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	// Verify user access
+	if _, err := s.store.GetBook(ctx, input.ID, userID); err != nil {
+		return nil, err
+	}
+
+	if err := s.store.SetBookGenres(ctx, input.ID, input.Body.GenreIDs); err != nil {
+		return nil, err
+	}
+
+	return &GenresOutput{Body: GenreIDsResponse{GenreIDs: input.Body.GenreIDs}}, nil
+}
+
+func (s *Server) handleGetBookTags(ctx context.Context, input *GetBookTagsInput) (*TagsOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	tags, err := s.services.Tag.GetTagsForBook(ctx, userID, input.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	tagIDs := make([]string, len(tags))
+	for i, t := range tags {
+		tagIDs[i] = t.ID
+	}
+
+	return &TagsOutput{Body: TagIDsResponse{TagIDs: tagIDs}}, nil
+}
+
+func (s *Server) handleAddBookTag(ctx context.Context, input *AddTagInput) (*MessageOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.services.Tag.AddTagToBook(ctx, userID, input.ID, input.Body.TagID); err != nil {
+		return nil, err
+	}
+
+	return &MessageOutput{Body: MessageResponse{Message: "Tag added"}}, nil
+}
+
+func (s *Server) handleRemoveBookTag(ctx context.Context, input *RemoveTagInput) (*MessageOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.services.Tag.RemoveTagFromBook(ctx, userID, input.ID, input.TagID); err != nil {
+		return nil, err
+	}
+
+	return &MessageOutput{Body: MessageResponse{Message: "Tag removed"}}, nil
+}
+
+// === Helpers ===
+
+func mapEnrichedBookResponse(b *dto.Book) BookResponse {
+	contributors := make([]BookContributorResponse, len(b.Contributors))
+	for i, c := range b.Contributors {
+		contributors[i] = BookContributorResponse{
+			ContributorID: c.ContributorID,
+			Name:          c.Name,
+			Roles:         c.Roles,
+		}
+	}
+
+	series := make([]BookSeriesResponse, len(b.SeriesInfo))
+	for i, s := range b.SeriesInfo {
+		series[i] = BookSeriesResponse{
+			SeriesID: s.SeriesID,
+			Name:     s.Name,
+			Sequence: s.Sequence,
+		}
+	}
+
+	audioFiles := make([]AudioFileResponse, len(b.AudioFiles))
+	for i, af := range b.AudioFiles {
+		audioFiles[i] = AudioFileResponse{
+			ID:       af.ID,
+			Path:     af.Path,
+			Duration: af.Duration,
+			Size:     af.Size,
+			Format:   af.Format,
+			Codec:    af.Codec,
+			Bitrate:  af.Bitrate,
+		}
+	}
+
+	return BookResponse{
+		ID:           b.ID,
+		Title:        b.Title,
+		Subtitle:     b.Subtitle,
+		Description:  b.Description,
+		Publisher:    b.Publisher,
+		PublishYear:  b.PublishYear,
+		Language:     b.Language,
+		Duration:     b.TotalDuration,
+		Size:         b.TotalSize,
+		ASIN:         b.ASIN,
+		ISBN:         b.ISBN,
+		Contributors: contributors,
+		Series:       series,
+		GenreIDs:     b.GenreIDs,
+		AudioFiles:   audioFiles,
+		CreatedAt:    b.CreatedAt,
+		UpdatedAt:    b.UpdatedAt,
+	}
+}
+
+func convertStringRoles(roles []string) []string {
+	result := make([]string, len(roles))
+	copy(result, roles)
+	return result
+}
+
+// Unused but required for potential streaming endpoint
+var _ = io.EOF

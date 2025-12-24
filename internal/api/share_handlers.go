@@ -1,0 +1,259 @@
+package api
+
+import (
+	"context"
+	"net/http"
+	"time"
+
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/listenupapp/listenup-server/internal/domain"
+)
+
+func (s *Server) registerShareRoutes() {
+	huma.Register(s.api, huma.Operation{
+		OperationID: "shareCollection",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/collections/{id}/shares",
+		Summary:     "Share collection",
+		Description: "Shares a collection with another user",
+		Tags:        []string{"Sharing"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleShareCollection)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "listCollectionShares",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/collections/{id}/shares",
+		Summary:     "List collection shares",
+		Description: "Lists all shares for a collection",
+		Tags:        []string{"Sharing"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleListCollectionShares)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getShare",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/shares/{id}",
+		Summary:     "Get share",
+		Description: "Returns a share by ID",
+		Tags:        []string{"Sharing"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetShare)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "updateShare",
+		Method:      http.MethodPatch,
+		Path:        "/api/v1/shares/{id}",
+		Summary:     "Update share",
+		Description: "Updates share permission",
+		Tags:        []string{"Sharing"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleUpdateShare)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "deleteShare",
+		Method:      http.MethodDelete,
+		Path:        "/api/v1/shares/{id}",
+		Summary:     "Delete share",
+		Description: "Removes a share",
+		Tags:        []string{"Sharing"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleDeleteShare)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "listSharedWithMe",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/shares/received",
+		Summary:     "List shared with me",
+		Description: "Lists collections shared with the current user",
+		Tags:        []string{"Sharing"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleListSharedWithMe)
+}
+
+// === DTOs ===
+
+type ShareCollectionRequest struct {
+	UserID     string `json:"user_id" validate:"required" doc:"User ID to share with"`
+	Permission string `json:"permission" validate:"required,oneof=read write" doc:"Permission level"`
+}
+
+type ShareCollectionInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Collection ID"`
+	Body          ShareCollectionRequest
+}
+
+type ShareResponse struct {
+	ID               string    `json:"id" doc:"Share ID"`
+	CollectionID     string    `json:"collection_id" doc:"Collection ID"`
+	SharedWithUserID string    `json:"shared_with_user_id" doc:"User ID shared with"`
+	SharedByUserID   string    `json:"shared_by_user_id" doc:"User ID who shared"`
+	Permission       string    `json:"permission" doc:"Permission level"`
+	CreatedAt        time.Time `json:"created_at" doc:"Creation time"`
+}
+
+type ShareOutput struct {
+	Body ShareResponse
+}
+
+type ListCollectionSharesInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Collection ID"`
+}
+
+type ListSharesResponse struct {
+	Shares []ShareResponse `json:"shares" doc:"List of shares"`
+}
+
+type ListSharesOutput struct {
+	Body ListSharesResponse
+}
+
+type GetShareInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Share ID"`
+}
+
+type UpdateShareRequest struct {
+	Permission string `json:"permission" validate:"required,oneof=read write" doc:"New permission level"`
+}
+
+type UpdateShareInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Share ID"`
+	Body          UpdateShareRequest
+}
+
+type DeleteShareInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Share ID"`
+}
+
+type ListSharedWithMeInput struct {
+	Authorization string `header:"Authorization"`
+}
+
+// === Handlers ===
+
+func (s *Server) handleShareCollection(ctx context.Context, input *ShareCollectionInput) (*ShareOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	var permission domain.SharePermission
+	switch input.Body.Permission {
+	case "read":
+		permission = domain.PermissionRead
+	case "write":
+		permission = domain.PermissionWrite
+	}
+
+	share, err := s.services.Sharing.ShareCollection(ctx, userID, input.ID, input.Body.UserID, permission)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ShareOutput{Body: mapShareResponse(share)}, nil
+}
+
+func (s *Server) handleListCollectionShares(ctx context.Context, input *ListCollectionSharesInput) (*ListSharesOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	shares, err := s.services.Sharing.ListCollectionShares(ctx, userID, input.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := make([]ShareResponse, len(shares))
+	for i, share := range shares {
+		resp[i] = mapShareResponse(share)
+	}
+
+	return &ListSharesOutput{Body: ListSharesResponse{Shares: resp}}, nil
+}
+
+func (s *Server) handleGetShare(ctx context.Context, input *GetShareInput) (*ShareOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	share, err := s.services.Sharing.GetShare(ctx, userID, input.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ShareOutput{Body: mapShareResponse(share)}, nil
+}
+
+func (s *Server) handleUpdateShare(ctx context.Context, input *UpdateShareInput) (*ShareOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	var permission domain.SharePermission
+	switch input.Body.Permission {
+	case "read":
+		permission = domain.PermissionRead
+	case "write":
+		permission = domain.PermissionWrite
+	}
+
+	share, err := s.services.Sharing.UpdateSharePermission(ctx, userID, input.ID, permission)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ShareOutput{Body: mapShareResponse(share)}, nil
+}
+
+func (s *Server) handleDeleteShare(ctx context.Context, input *DeleteShareInput) (*MessageOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.services.Sharing.UnshareCollection(ctx, userID, input.ID); err != nil {
+		return nil, err
+	}
+
+	return &MessageOutput{Body: MessageResponse{Message: "Share removed"}}, nil
+}
+
+func (s *Server) handleListSharedWithMe(ctx context.Context, input *ListSharedWithMeInput) (*ListSharesOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	shares, err := s.services.Sharing.ListSharedWithMe(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := make([]ShareResponse, len(shares))
+	for i, share := range shares {
+		resp[i] = mapShareResponse(share)
+	}
+
+	return &ListSharesOutput{Body: ListSharesResponse{Shares: resp}}, nil
+}
+
+// === Mappers ===
+
+func mapShareResponse(s *domain.CollectionShare) ShareResponse {
+	return ShareResponse{
+		ID:               s.ID,
+		CollectionID:     s.CollectionID,
+		SharedWithUserID: s.SharedWithUserID,
+		SharedByUserID:   s.SharedByUserID,
+		Permission:       s.Permission.String(),
+		CreatedAt:        s.CreatedAt,
+	}
+}

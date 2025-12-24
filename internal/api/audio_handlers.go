@@ -1,268 +1,262 @@
 package api
 
 import (
-	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/listenupapp/listenup-server/internal/http/response"
-	"github.com/listenupapp/listenup-server/internal/store"
 )
 
-// handleStreamAudio streams an audio file with HTTP Range support for seeking.
-// GET /api/v1/books/{id}/audio/{audioFileId}
-// Optional query param: ?variant=transcoded to serve transcoded version.
+// registerAudioRoutes sets up audio streaming routes.
+// These are handled directly by chi for performance (not huma).
+func (s *Server) registerAudioRoutes() {
+	// Audio streaming with range support
+	s.router.Get("/api/v1/audio/{bookId}/{fileId}", s.handleStreamAudio)
+	s.router.Head("/api/v1/audio/{bookId}/{fileId}", s.handleStreamAudio)
+
+	// Transcoded audio (HLS segments, etc.)
+	s.router.Get("/api/v1/audio/{bookId}/{fileId}/transcode/{*}", s.handleTranscodedAudio)
+}
+
+// handleStreamAudio streams audio files with range request support.
 func (s *Server) handleStreamAudio(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-	bookID := chi.URLParam(r, "id")
-	audioFileID := chi.URLParam(r, "audioFileId")
-	variant := r.URL.Query().Get("variant")
+	bookID := chi.URLParam(r, "bookId")
+	fileID := chi.URLParam(r, "fileId")
 
-	if bookID == "" {
-		response.BadRequest(w, "Book ID is required", s.logger)
+	// Extract token from query or header
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		authHeader := r.Header.Get("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			token = authHeader[7:]
+		}
+	}
+
+	if token == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	if audioFileID == "" {
-		response.BadRequest(w, "Audio file ID is required", s.logger)
-		return
-	}
-
-	// Get book (handles access control).
-	book, err := s.services.Book.GetBook(ctx, userID, bookID)
+	// Verify token
+	user, _, err := s.services.Auth.VerifyAccessToken(r.Context(), token)
 	if err != nil {
-		if errors.Is(err, store.ErrBookNotFound) {
-			response.NotFound(w, "Book not found", s.logger)
+		http.Error(w, "invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	// Get book to verify access
+	book, err := s.store.GetBook(r.Context(), bookID, user.ID)
+	if err != nil {
+		http.Error(w, "book not found", http.StatusNotFound)
+		return
+	}
+
+	// Find the audio file
+	audioFile := book.GetAudioFileByID(fileID)
+	if audioFile == nil {
+		http.Error(w, "file not found", http.StatusNotFound)
+		return
+	}
+
+	// Open the file directly from the filesystem
+	file, err := os.Open(audioFile.Path)
+	if err != nil {
+		http.Error(w, "failed to open file", http.StatusInternalServerError)
+		return
+	}
+	defer file.Close()
+
+	// Get file info for size
+	fileInfo, err := file.Stat()
+	if err != nil {
+		http.Error(w, "failed to stat file", http.StatusInternalServerError)
+		return
+	}
+
+	// Set content type based on format
+	contentType := getMimeType(audioFile.Format)
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Accept-Ranges", "bytes")
+
+	// Handle range requests
+	rangeHeader := r.Header.Get("Range")
+	if rangeHeader != "" {
+		s.handleRangeRequest(w, r, file, fileInfo.Size(), rangeHeader)
+		return
+	}
+
+	// Full file
+	w.Header().Set("Content-Length", strconv.FormatInt(fileInfo.Size(), 10))
+	if r.Method != http.MethodHead {
+		io.Copy(w, file)
+	}
+}
+
+func (s *Server) handleRangeRequest(w http.ResponseWriter, r *http.Request, reader io.ReadSeeker, fileSize int64, rangeHeader string) {
+	// Parse range header: "bytes=start-end"
+	if !strings.HasPrefix(rangeHeader, "bytes=") {
+		http.Error(w, "invalid range header", http.StatusBadRequest)
+		return
+	}
+
+	rangeSpec := strings.TrimPrefix(rangeHeader, "bytes=")
+	parts := strings.Split(rangeSpec, "-")
+	if len(parts) != 2 {
+		http.Error(w, "invalid range format", http.StatusBadRequest)
+		return
+	}
+
+	var start, end int64
+	var err error
+
+	if parts[0] == "" {
+		// Suffix range: -500 means last 500 bytes
+		end = fileSize - 1
+		suffixLen, err := strconv.ParseInt(parts[1], 10, 64)
+		if err != nil {
+			http.Error(w, "invalid range", http.StatusBadRequest)
 			return
 		}
-		s.logger.Error("Failed to get book", "error", err, "book_id", bookID)
-		response.InternalError(w, "Failed to retrieve book", s.logger)
-		return
-	}
+		start = fileSize - suffixLen
+		if start < 0 {
+			start = 0
+		}
+	} else {
+		start, err = strconv.ParseInt(parts[0], 10, 64)
+		if err != nil {
+			http.Error(w, "invalid range start", http.StatusBadRequest)
+			return
+		}
 
-	// Find the audio file.
-	var audioFilePath string
-	var audioFormat string
-	for _, af := range book.AudioFiles {
-		if af.ID == audioFileID {
-			audioFilePath = af.Path
-			audioFormat = af.Format
-			break
+		if parts[1] == "" {
+			end = fileSize - 1
+		} else {
+			end, err = strconv.ParseInt(parts[1], 10, 64)
+			if err != nil {
+				http.Error(w, "invalid range end", http.StatusBadRequest)
+				return
+			}
 		}
 	}
 
-	if audioFilePath == "" {
-		response.NotFound(w, "Audio file not found", s.logger)
+	// Validate range
+	if start < 0 || start >= fileSize || end < start || end >= fileSize {
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", fileSize))
+		http.Error(w, "range not satisfiable", http.StatusRequestedRangeNotSatisfiable)
 		return
 	}
 
-	// Check if requesting transcoded variant.
-	if variant == "transcoded" {
-		s.streamTranscodedAudio(w, r, audioFileID, audioFilePath)
+	// Seek to start position
+	if _, err := reader.Seek(start, io.SeekStart); err != nil {
+		http.Error(w, "seek failed", http.StatusInternalServerError)
 		return
 	}
 
-	// Serve original file.
-	s.streamOriginalAudio(w, r, bookID, audioFileID, audioFilePath, audioFormat)
+	// Set headers
+	contentLength := end - start + 1
+	w.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
+	w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, fileSize))
+	w.WriteHeader(http.StatusPartialContent)
+
+	if r.Method != http.MethodHead {
+		io.CopyN(w, reader, contentLength)
+	}
 }
 
-// streamOriginalAudio serves the original audio file.
-func (s *Server) streamOriginalAudio(w http.ResponseWriter, r *http.Request, bookID, audioFileID, path, format string) {
-	// Verify file exists on disk.
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		s.logger.Error("Audio file missing from disk",
-			"book_id", bookID,
-			"audio_file_id", audioFileID,
-			"path", path,
-		)
-		response.NotFound(w, "Audio file not found on disk", s.logger)
+func (s *Server) handleTranscodedAudio(w http.ResponseWriter, r *http.Request) {
+	bookID := chi.URLParam(r, "bookId")
+	fileID := chi.URLParam(r, "fileId")
+	transcodePath := chi.URLParam(r, "*")
+
+	// Extract token
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		authHeader := r.Header.Get("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			token = authHeader[7:]
+		}
+	}
+
+	if token == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	// Set content type based on format.
-	contentType := getAudioContentType(format)
-	w.Header().Set("Content-Type", contentType)
-
-	// Allow caching (audio files don't change).
-	w.Header().Set("Cache-Control", CacheOneDayPrivate)
-
-	// http.ServeFile handles:
-	// - Range requests (partial content, 206 responses)
-	// - Content-Length and Content-Range headers
-	// - Accept-Ranges: bytes header
-	// - If-Range conditional requests
-	// - Last-Modified based caching
-	http.ServeFile(w, r, path)
-}
-
-// streamTranscodedAudio redirects to the HLS playlist for transcoded content.
-// HLS allows progressive playback - client can start as soon as first segment is ready.
-func (s *Server) streamTranscodedAudio(w http.ResponseWriter, r *http.Request, audioFileID, originalPath string) {
-	ctx := r.Context()
-
-	// Check if transcoding is available.
-	if s.services.Transcode == nil || !s.services.Transcode.IsEnabled() {
-		// Fallback to original if transcoding disabled.
-		s.logger.Warn("Transcode requested but transcoding is disabled",
-			"audio_file_id", audioFileID,
-		)
-		response.NotFound(w, "Transcoded variant not available", s.logger)
-		return
-	}
-
-	// Check if HLS content is ready (first segment available).
-	_, ok := s.services.Transcode.GetHLSPathIfReady(ctx, audioFileID)
-	if !ok {
-		// HLS not ready yet - check if transcode is in progress.
-		response.JSON(w, http.StatusAccepted, map[string]any{
-			"status":  "transcoding",
-			"message": "Audio is being transcoded, please try again shortly",
-		}, s.logger)
-		return
-	}
-
-	// Redirect to HLS playlist endpoint.
-	// Client should use: /api/v1/transcode/{audioFileID}/playlist.m3u8
-	redirectURL := fmt.Sprintf("/api/v1/transcode/%s/playlist.m3u8", audioFileID)
-	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
-}
-
-// handleHLSPlaylist serves the HLS playlist (.m3u8) for transcoded audio.
-// Generates playlist dynamically from available segments for progressive playback.
-func (s *Server) handleHLSPlaylist(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	_ = mustGetUserID(ctx) // Validates auth; userID not needed for this endpoint
-	audioFileID := chi.URLParam(r, "audioFileId")
-
-	if audioFileID == "" {
-		response.BadRequest(w, "Audio file ID is required", s.logger)
-		return
-	}
-
-	// Generate dynamic playlist from available segments
-	playlist, err := s.services.Transcode.GenerateDynamicPlaylist(ctx, audioFileID)
+	// Verify token
+	user, _, err := s.services.Auth.VerifyAccessToken(r.Context(), token)
 	if err != nil {
-		s.logger.Debug("Playlist not ready", "error", err, "audio_file_id", audioFileID)
-		response.NotFound(w, "HLS content not ready", s.logger)
+		http.Error(w, "invalid token", http.StatusUnauthorized)
 		return
 	}
 
-	// Build base URL for segment URLs
-	scheme := "http"
-	if r.TLS != nil {
-		scheme = "https"
-	}
-	baseURL := fmt.Sprintf("%s://%s", scheme, r.Host)
-
-	// Rewrite segment paths to full API URLs
-	rewritten := rewriteHLSPlaylist(playlist, audioFileID, baseURL)
-
-	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
-	w.Header().Set("Cache-Control", CacheNoStore) // Playlist changes during transcode
-	w.Write([]byte(rewritten))
-}
-
-// handleHLSSegment serves an HLS segment (.ts) for transcoded audio.
-// GET /api/v1/transcode/{audioFileId}/{segment}
-func (s *Server) handleHLSSegment(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	_ = mustGetUserID(ctx) // Validates auth; userID not needed for this endpoint
-	audioFileID := chi.URLParam(r, "audioFileId")
-	segment := chi.URLParam(r, "segment")
-
-	if audioFileID == "" || segment == "" {
-		response.BadRequest(w, "Audio file ID and segment are required", s.logger)
+	// Verify book access
+	_, err = s.store.GetBook(r.Context(), bookID, user.ID)
+	if err != nil {
+		http.Error(w, "book not found", http.StatusNotFound)
 		return
 	}
 
-	// Validate segment filename (prevent path traversal).
-	if !isValidSegmentName(segment) {
-		response.BadRequest(w, "Invalid segment name", s.logger)
-		return
-	}
-
-	// Get HLS path.
-	hlsPath, ok := s.services.Transcode.GetHLSPathIfReady(ctx, audioFileID)
+	// Get HLS path from transcode service
+	hlsPath, ok := s.services.Transcode.GetHLSPathIfReady(r.Context(), fileID)
 	if !ok {
-		response.NotFound(w, "HLS content not ready", s.logger)
+		http.Error(w, "transcoded file not ready", http.StatusNotFound)
 		return
 	}
 
-	segmentPath := hlsPath + "/" + segment
+	// Serve the requested file from the HLS directory
+	filePath := filepath.Join(hlsPath, transcodePath)
 
-	// Verify segment exists.
-	if _, err := os.Stat(segmentPath); os.IsNotExist(err) {
-		response.NotFound(w, "Segment not found", s.logger)
+	// Validate the file is within the HLS directory (security check)
+	cleanPath := filepath.Clean(filePath)
+	if !strings.HasPrefix(cleanPath, hlsPath) {
+		http.Error(w, "invalid path", http.StatusBadRequest)
 		return
 	}
 
-	w.Header().Set("Content-Type", "video/MP2T")
-	w.Header().Set("Cache-Control", CacheOneDayPrivate) // Segments are immutable
-	http.ServeFile(w, r, segmentPath)
+	file, err := os.Open(filePath)
+	if err != nil {
+		http.Error(w, "transcoded file not found", http.StatusNotFound)
+		return
+	}
+	defer file.Close()
+
+	// Determine content type
+	contentType := "application/octet-stream"
+	ext := strings.ToLower(filepath.Ext(transcodePath))
+	switch ext {
+	case ".m3u8":
+		contentType = "application/vnd.apple.mpegurl"
+	case ".ts":
+		contentType = "video/mp2t"
+	case ".m4s":
+		contentType = "video/iso.segment"
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	io.Copy(w, file)
 }
 
-// rewriteHLSPlaylist rewrites segment paths in the playlist to use full API URLs.
-// Also ensures #EXT-X-ENDLIST is present for ExoPlayer compatibility during progressive transcoding.
-func rewriteHLSPlaylist(content, audioFileID, baseURL string) string {
-	lines := strings.Split(content, "\n")
-	var result []string
-	hasEndList := false
-
-	for _, line := range lines {
-		if strings.HasSuffix(line, ".ts") && !strings.HasPrefix(line, "#") {
-			// Rewrite segment path to full API URL.
-			segmentName := strings.TrimSpace(line)
-			line = fmt.Sprintf("%s/api/v1/transcode/%s/%s", baseURL, audioFileID, segmentName)
-		}
-		if strings.TrimSpace(line) == "#EXT-X-ENDLIST" {
-			hasEndList = true
-		}
-		result = append(result, line)
-	}
-
-	// Append #EXT-X-ENDLIST if not present.
-	// This allows ExoPlayer to play the stream as VOD even during transcoding.
-	if !hasEndList {
-		result = append(result, "#EXT-X-ENDLIST")
-	}
-
-	return strings.Join(result, "\n")
-}
-
-// isValidSegmentName validates HLS segment filenames.
-func isValidSegmentName(name string) bool {
-	// Only allow seg_XXXX.ts format.
-	if !strings.HasSuffix(name, ".ts") {
-		return false
-	}
-	// Prevent path traversal.
-	if strings.Contains(name, "/") || strings.Contains(name, "\\") || strings.Contains(name, "..") {
-		return false
-	}
-	return true
-}
-
-// getAudioContentType returns the MIME type for an audio format.
-func getAudioContentType(format string) string {
+// getMimeType returns MIME type based on audio format
+func getMimeType(format string) string {
 	switch strings.ToLower(format) {
 	case "mp3":
 		return "audio/mpeg"
-	case "m4a", "m4b", "mp4":
+	case "m4a", "m4b", "mp4", "aac":
 		return "audio/mp4"
-	case "ogg", "oga", "opus":
+	case "opus":
+		return "audio/opus"
+	case "ogg":
 		return "audio/ogg"
 	case "flac":
 		return "audio/flac"
 	case "wav":
 		return "audio/wav"
-	case "aac":
-		return "audio/aac"
-	case "wma":
-		return "audio/x-ms-wma"
 	default:
 		return "application/octet-stream"
 	}

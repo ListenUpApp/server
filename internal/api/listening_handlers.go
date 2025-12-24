@@ -1,293 +1,359 @@
 package api
 
 import (
-	"encoding/json/v2"
-	"errors"
+	"context"
 	"net/http"
-	"strconv"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/listenupapp/listenup-server/internal/http/response"
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/listenupapp/listenup-server/internal/service"
-	"github.com/listenupapp/listenup-server/internal/store"
 )
 
-// millisToTime converts milliseconds since epoch to time.Time.
-func millisToTime(millis int64) time.Time {
-	return time.UnixMilli(millis)
+func (s *Server) registerListeningRoutes() {
+	huma.Register(s.api, huma.Operation{
+		OperationID: "recordListeningEvent",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/listening/events",
+		Summary:     "Record listening event",
+		Description: "Records a listening event and updates playback progress",
+		Tags:        []string{"Listening"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleRecordListeningEvent)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getProgress",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/books/{id}/progress",
+		Summary:     "Get book progress",
+		Description: "Returns playback progress for a book",
+		Tags:        []string{"Listening"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetProgress)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "resetProgress",
+		Method:      http.MethodDelete,
+		Path:        "/api/v1/books/{id}/progress",
+		Summary:     "Reset book progress",
+		Description: "Resets playback progress for a book",
+		Tags:        []string{"Listening"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleResetProgress)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getContinueListening",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/listening/continue",
+		Summary:     "Get continue listening",
+		Description: "Returns in-progress books for continue listening",
+		Tags:        []string{"Listening"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetContinueListening)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getUserStats",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/listening/stats",
+		Summary:     "Get user stats",
+		Description: "Returns listening statistics for the current user",
+		Tags:        []string{"Listening"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetUserStats)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getBookStats",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/books/{id}/stats",
+		Summary:     "Get book stats",
+		Description: "Returns listening statistics for a book",
+		Tags:        []string{"Listening"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetBookStats)
 }
 
-// BulkEventsRequest wraps multiple listening events for batch submission.
-type BulkEventsRequest struct {
-	Events []BulkEventItem `json:"events"`
+// === DTOs ===
+
+type RecordListeningEventRequest struct {
+	BookID          string    `json:"book_id" validate:"required" doc:"Book ID"`
+	StartPositionMs int64     `json:"start_position_ms" validate:"gte=0" doc:"Start position in ms"`
+	EndPositionMs   int64     `json:"end_position_ms" validate:"gtfield=StartPositionMs" doc:"End position in ms"`
+	StartedAt       time.Time `json:"started_at" validate:"required" doc:"When playback started"`
+	EndedAt         time.Time `json:"ended_at" validate:"required" doc:"When playback ended"`
+	PlaybackSpeed   float32   `json:"playback_speed" validate:"gt=0,lte=4" doc:"Playback speed"`
+	DeviceID        string    `json:"device_id" validate:"required" doc:"Device ID"`
+	DeviceName      string    `json:"device_name" doc:"Device name"`
 }
 
-// BulkEventItem represents a single event in a bulk submission.
-type BulkEventItem struct {
-	ID              string  `json:"id"`
-	BookID          string  `json:"book_id"`
-	StartPositionMs int64   `json:"start_position_ms"`
-	EndPositionMs   int64   `json:"end_position_ms"`
-	StartedAt       int64   `json:"started_at"`
-	EndedAt         int64   `json:"ended_at"`
-	PlaybackSpeed   float32 `json:"playback_speed"`
-	DeviceID        string  `json:"device_id"`
+type RecordListeningEventInput struct {
+	Authorization string `header:"Authorization"`
+	Body          RecordListeningEventRequest
 }
 
-// BulkEventsResponse contains acknowledged and failed event IDs.
-type BulkEventsResponse struct {
-	Acknowledged []string `json:"acknowledged"`
-	Failed       []string `json:"failed"`
+type ListeningEventResponse struct {
+	ID              string    `json:"id" doc:"Event ID"`
+	BookID          string    `json:"book_id" doc:"Book ID"`
+	StartPositionMs int64     `json:"start_position_ms" doc:"Start position"`
+	EndPositionMs   int64     `json:"end_position_ms" doc:"End position"`
+	DurationMs      int64     `json:"duration_ms" doc:"Duration"`
+	StartedAt       time.Time `json:"started_at" doc:"Started at"`
+	EndedAt         time.Time `json:"ended_at" doc:"Ended at"`
+	PlaybackSpeed   float32   `json:"playback_speed" doc:"Playback speed"`
+	DeviceID        string    `json:"device_id" doc:"Device ID"`
 }
 
-// handleRecordEvent records listening events (supports both single and bulk).
-func (s *Server) handleRecordEvent(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
+type ProgressResponse struct {
+	BookID            string    `json:"book_id" doc:"Book ID"`
+	CurrentPositionMs int64     `json:"current_position_ms" doc:"Current position in ms"`
+	TotalDurationMs   int64     `json:"total_duration_ms" doc:"Total duration in ms"`
+	Progress          float64   `json:"progress" doc:"Progress 0-1"`
+	TotalListenTimeMs int64     `json:"total_listen_time_ms" doc:"Total listen time"`
+	LastPlayedAt      time.Time `json:"last_played_at" doc:"Last played time"`
+	IsFinished        bool      `json:"is_finished" doc:"Whether finished"`
+}
 
-	// Try to parse as bulk request first (client sends { "events": [...] })
-	var bulkReq BulkEventsRequest
-	if err := json.UnmarshalRead(r.Body, &bulkReq); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
+type RecordListeningEventResponse struct {
+	Event    ListeningEventResponse `json:"event" doc:"Created event"`
+	Progress ProgressResponse       `json:"progress" doc:"Updated progress"`
+}
+
+type RecordListeningEventOutput struct {
+	Body RecordListeningEventResponse
+}
+
+type GetProgressInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Book ID"`
+}
+
+type ProgressOutput struct {
+	Body ProgressResponse
+}
+
+type ResetProgressInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Book ID"`
+}
+
+type GetContinueListeningInput struct {
+	Authorization string `header:"Authorization"`
+	Limit         int    `query:"limit" doc:"Max items (default 10)"`
+}
+
+type ContinueListeningItemResponse struct {
+	BookID            string    `json:"book_id" doc:"Book ID"`
+	Title             string    `json:"title" doc:"Book title"`
+	AuthorName        string    `json:"author_name,omitempty" doc:"Author name"`
+	CoverPath         *string   `json:"cover_path,omitempty" doc:"Cover path"`
+	CoverBlurHash     *string   `json:"cover_blur_hash,omitempty" doc:"Cover blur hash"`
+	CurrentPositionMs int64     `json:"current_position_ms" doc:"Current position"`
+	TotalDurationMs   int64     `json:"total_duration_ms" doc:"Total duration"`
+	Progress          float64   `json:"progress" doc:"Progress 0-1"`
+	LastPlayedAt      time.Time `json:"last_played_at" doc:"Last played"`
+}
+
+type ContinueListeningResponse struct {
+	Items []ContinueListeningItemResponse `json:"items" doc:"Continue listening items"`
+}
+
+type ContinueListeningOutput struct {
+	Body ContinueListeningResponse
+}
+
+type GetUserStatsInput struct {
+	Authorization string `header:"Authorization"`
+}
+
+type UserStatsResponse struct {
+	TotalListenTimeMs int64 `json:"total_listen_time_ms" doc:"Total listen time"`
+	BooksStarted      int   `json:"books_started" doc:"Books started"`
+	BooksFinished     int   `json:"books_finished" doc:"Books finished"`
+}
+
+type UserStatsOutput struct {
+	Body UserStatsResponse
+}
+
+type GetBookStatsInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Book ID"`
+}
+
+type BookStatsResponse struct {
+	TotalListenTimeMs int64 `json:"total_listen_time_ms" doc:"Total listen time"`
+	TotalListeners    int   `json:"total_listeners" doc:"Total listeners"`
+	CompletedCount    int   `json:"completed_count" doc:"Times completed"`
+}
+
+type BookStatsOutput struct {
+	Body BookStatsResponse
+}
+
+// === Handlers ===
+
+func (s *Server) handleRecordListeningEvent(ctx context.Context, input *RecordListeningEventInput) (*RecordListeningEventOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
 	}
 
-	// If we have events, process as bulk
-	if len(bulkReq.Events) > 0 {
-		s.handleBulkEvents(w, r, userID, bulkReq)
-		return
+	result, err := s.services.Listening.RecordEvent(ctx, userID, service.RecordEventRequest{
+		BookID:          input.Body.BookID,
+		StartPositionMs: input.Body.StartPositionMs,
+		EndPositionMs:   input.Body.EndPositionMs,
+		StartedAt:       input.Body.StartedAt,
+		EndedAt:         input.Body.EndedAt,
+		PlaybackSpeed:   input.Body.PlaybackSpeed,
+		DeviceID:        input.Body.DeviceID,
+		DeviceName:      input.Body.DeviceName,
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	// Empty events array - nothing to do
-	response.Success(w, BulkEventsResponse{
-		Acknowledged: []string{},
-		Failed:       []string{},
-	}, s.logger)
+	// Get book for total duration
+	book, err := s.store.GetBook(ctx, input.Body.BookID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &RecordListeningEventOutput{
+		Body: RecordListeningEventResponse{
+			Event: ListeningEventResponse{
+				ID:              result.Event.ID,
+				BookID:          result.Event.BookID,
+				StartPositionMs: result.Event.StartPositionMs,
+				EndPositionMs:   result.Event.EndPositionMs,
+				DurationMs:      result.Event.DurationMs,
+				StartedAt:       result.Event.StartedAt,
+				EndedAt:         result.Event.EndedAt,
+				PlaybackSpeed:   result.Event.PlaybackSpeed,
+				DeviceID:        result.Event.DeviceID,
+			},
+			Progress: ProgressResponse{
+				BookID:            result.Progress.BookID,
+				CurrentPositionMs: result.Progress.CurrentPositionMs,
+				TotalDurationMs:   book.TotalDuration,
+				Progress:          result.Progress.Progress,
+				TotalListenTimeMs: result.Progress.TotalListenTimeMs,
+				LastPlayedAt:      result.Progress.LastPlayedAt,
+				IsFinished:        result.Progress.IsFinished,
+			},
+		},
+	}, nil
 }
 
-// handleBulkEvents processes multiple events and returns acknowledged/failed IDs.
-func (s *Server) handleBulkEvents(w http.ResponseWriter, r *http.Request, userID string, bulkReq BulkEventsRequest) {
-	ctx := r.Context()
-	resp := BulkEventsResponse{
-		Acknowledged: make([]string, 0, len(bulkReq.Events)),
-		Failed:       make([]string, 0),
+func (s *Server) handleGetProgress(ctx context.Context, input *GetProgressInput) (*ProgressOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
 	}
 
-	for _, event := range bulkReq.Events {
-		// Convert bulk item to service request
-		req := service.RecordEventRequest{
-			BookID:          event.BookID,
-			StartPositionMs: event.StartPositionMs,
-			EndPositionMs:   event.EndPositionMs,
-			StartedAt:       millisToTime(event.StartedAt),
-			EndedAt:         millisToTime(event.EndedAt),
-			PlaybackSpeed:   event.PlaybackSpeed,
-			DeviceID:        event.DeviceID,
-			DeviceName:      "", // Client doesn't send this in bulk format
+	progress, err := s.services.Listening.GetProgress(ctx, userID, input.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get book for total duration
+	book, err := s.store.GetBook(ctx, input.ID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ProgressOutput{
+		Body: ProgressResponse{
+			BookID:            progress.BookID,
+			CurrentPositionMs: progress.CurrentPositionMs,
+			TotalDurationMs:   book.TotalDuration,
+			Progress:          progress.Progress,
+			TotalListenTimeMs: progress.TotalListenTimeMs,
+			LastPlayedAt:      progress.LastPlayedAt,
+			IsFinished:        progress.IsFinished,
+		},
+	}, nil
+}
+
+func (s *Server) handleResetProgress(ctx context.Context, input *ResetProgressInput) (*MessageOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.services.Listening.ResetProgress(ctx, userID, input.ID); err != nil {
+		return nil, err
+	}
+
+	return &MessageOutput{Body: MessageResponse{Message: "Progress reset"}}, nil
+}
+
+func (s *Server) handleGetContinueListening(ctx context.Context, input *GetContinueListeningInput) (*ContinueListeningOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	limit := input.Limit
+	if limit <= 0 {
+		limit = 10
+	}
+
+	items, err := s.services.Listening.GetContinueListening(ctx, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := make([]ContinueListeningItemResponse, len(items))
+	for i, item := range items {
+		resp[i] = ContinueListeningItemResponse{
+			BookID:            item.BookID,
+			Title:             item.Title,
+			AuthorName:        item.AuthorName,
+			CoverPath:         item.CoverPath,
+			CoverBlurHash:     item.CoverBlurHash,
+			CurrentPositionMs: item.CurrentPositionMs,
+			TotalDurationMs:   item.TotalDurationMs,
+			Progress:          item.Progress,
+			LastPlayedAt:      item.LastPlayedAt,
 		}
-
-		_, err := s.services.Listening.RecordEvent(ctx, userID, req)
-		if err != nil {
-			s.logger.Warn("Failed to record listening event",
-				"error", err,
-				"user_id", userID,
-				"event_id", event.ID,
-				"book_id", event.BookID,
-			)
-			resp.Failed = append(resp.Failed, event.ID)
-		} else {
-			resp.Acknowledged = append(resp.Acknowledged, event.ID)
-		}
 	}
 
-	response.Success(w, resp, s.logger)
+	return &ContinueListeningOutput{Body: ContinueListeningResponse{Items: resp}}, nil
 }
 
-// handleGetProgress retrieves playback progress for a book.
-func (s *Server) handleGetProgress(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-
-	bookID := chi.URLParam(r, "bookID")
-	if bookID == "" {
-		response.BadRequest(w, "Book ID is required", s.logger)
-		return
-	}
-
-	progress, err := s.services.Listening.GetProgress(ctx, userID, bookID)
-	if errors.Is(err, store.ErrProgressNotFound) {
-		response.NotFound(w, "Progress not found", s.logger)
-		return
-	}
+func (s *Server) handleGetUserStats(ctx context.Context, input *GetUserStatsInput) (*UserStatsOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
 	if err != nil {
-		s.logger.Error("Failed to get progress", "error", err, "user_id", userID, "book_id", bookID)
-		response.InternalError(w, "Failed to get progress", s.logger)
-		return
+		return nil, err
 	}
-
-	response.Success(w, progress, s.logger)
-}
-
-// handleGetContinueListening returns books the user is currently listening to.
-func (s *Server) handleGetContinueListening(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-
-	// Parse limit from query params (default 10)
-	limit := 10
-	if l := r.URL.Query().Get("limit"); l != "" {
-		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 100 {
-			limit = parsed
-		}
-	}
-
-	progress, err := s.services.Listening.GetContinueListening(ctx, userID, limit)
-	if err != nil {
-		s.logger.Error("Failed to get continue listening", "error", err, "user_id", userID)
-		response.InternalError(w, "Failed to get continue listening", s.logger)
-		return
-	}
-
-	response.Success(w, progress, s.logger)
-}
-
-// handleResetProgress removes progress for a book.
-func (s *Server) handleResetProgress(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-
-	bookID := chi.URLParam(r, "bookID")
-	if bookID == "" {
-		response.BadRequest(w, "Book ID is required", s.logger)
-		return
-	}
-
-	if err := s.services.Listening.ResetProgress(ctx, userID, bookID); err != nil {
-		s.logger.Error("Failed to reset progress", "error", err, "user_id", userID, "book_id", bookID)
-		response.InternalError(w, "Failed to reset progress", s.logger)
-		return
-	}
-
-	response.Success(w, map[string]string{"status": "ok"}, s.logger)
-}
-
-// handleGetUserSettings retrieves user playback settings.
-func (s *Server) handleGetUserSettings(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-
-	settings, err := s.services.Listening.GetUserSettings(ctx, userID)
-	if err != nil {
-		s.logger.Error("Failed to get user settings", "error", err, "user_id", userID)
-		response.InternalError(w, "Failed to get settings", s.logger)
-		return
-	}
-
-	response.Success(w, settings, s.logger)
-}
-
-// handleUpdateUserSettings updates user playback settings.
-func (s *Server) handleUpdateUserSettings(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-
-	var req service.UpdateUserSettingsRequest
-	if err := json.UnmarshalRead(r.Body, &req); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
-	}
-
-	settings, err := s.services.Listening.UpdateUserSettings(ctx, userID, req)
-	if err != nil {
-		s.logger.Error("Failed to update user settings", "error", err, "user_id", userID)
-		response.InternalError(w, "Failed to update settings", s.logger)
-		return
-	}
-
-	response.Success(w, settings, s.logger)
-}
-
-// handleGetBookPreferences retrieves per-book preferences.
-func (s *Server) handleGetBookPreferences(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-
-	bookID := chi.URLParam(r, "bookID")
-	if bookID == "" {
-		response.BadRequest(w, "Book ID is required", s.logger)
-		return
-	}
-
-	prefs, err := s.services.Listening.GetBookPreferences(ctx, userID, bookID)
-	if err != nil {
-		s.logger.Error("Failed to get book preferences", "error", err, "user_id", userID, "book_id", bookID)
-		response.InternalError(w, "Failed to get preferences", s.logger)
-		return
-	}
-
-	response.Success(w, prefs, s.logger)
-}
-
-// handleUpdateBookPreferences updates per-book preferences.
-func (s *Server) handleUpdateBookPreferences(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-
-	bookID := chi.URLParam(r, "bookID")
-	if bookID == "" {
-		response.BadRequest(w, "Book ID is required", s.logger)
-		return
-	}
-
-	var req service.UpdateBookPreferencesRequest
-	if err := json.UnmarshalRead(r.Body, &req); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
-	}
-
-	prefs, err := s.services.Listening.UpdateBookPreferences(ctx, userID, bookID, req)
-	if err != nil {
-		s.logger.Error("Failed to update book preferences", "error", err, "user_id", userID, "book_id", bookID)
-		response.InternalError(w, "Failed to update preferences", s.logger)
-		return
-	}
-
-	response.Success(w, prefs, s.logger)
-}
-
-// handleGetUserStats retrieves listening statistics for the user.
-func (s *Server) handleGetUserStats(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
 
 	stats, err := s.services.Listening.GetUserStats(ctx, userID)
 	if err != nil {
-		s.logger.Error("Failed to get user stats", "error", err, "user_id", userID)
-		response.InternalError(w, "Failed to get stats", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, stats, s.logger)
+	return &UserStatsOutput{
+		Body: UserStatsResponse{
+			TotalListenTimeMs: stats.TotalListenTimeMs,
+			BooksStarted:      stats.BooksStarted,
+			BooksFinished:     stats.BooksFinished,
+		},
+	}, nil
 }
 
-// handleGetBookStats retrieves listening statistics for a book.
-func (s *Server) handleGetBookStats(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	_ = mustGetUserID(ctx) // Validates auth
-
-	bookID := chi.URLParam(r, "bookID")
-	if bookID == "" {
-		response.BadRequest(w, "Book ID is required", s.logger)
-		return
+func (s *Server) handleGetBookStats(ctx context.Context, input *GetBookStatsInput) (*BookStatsOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
 	}
 
-	stats, err := s.services.Listening.GetBookStats(ctx, bookID)
+	stats, err := s.services.Listening.GetBookStats(ctx, input.ID)
 	if err != nil {
-		s.logger.Error("Failed to get book stats", "error", err, "book_id", bookID)
-		response.InternalError(w, "Failed to get stats", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, stats, s.logger)
+	return &BookStatsOutput{
+		Body: BookStatsResponse{
+			TotalListenTimeMs: stats.TotalListenTimeMs,
+			TotalListeners:    stats.TotalListeners,
+			CompletedCount:    stats.CompletedCount,
+		},
+	}, nil
 }

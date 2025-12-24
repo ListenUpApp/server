@@ -1,256 +1,457 @@
 package api
 
 import (
-	"encoding/json/v2"
-	"errors"
+	"context"
 	"net/http"
+	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/listenupapp/listenup-server/internal/http/response"
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/service"
-	"github.com/listenupapp/listenup-server/internal/store"
 )
 
-// handleListGenres returns all genres (tree structure).
-func (s *Server) handleListGenres(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+func (s *Server) registerGenreRoutes() {
+	huma.Register(s.api, huma.Operation{
+		OperationID: "listGenres",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/genres",
+		Summary:     "List genres",
+		Description: "Returns the full genre tree",
+		Tags:        []string{"Genres"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleListGenres)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "createGenre",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/genres",
+		Summary:     "Create genre",
+		Description: "Creates a new genre",
+		Tags:        []string{"Genres"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleCreateGenre)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getGenre",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/genres/{id}",
+		Summary:     "Get genre",
+		Description: "Returns a genre by ID",
+		Tags:        []string{"Genres"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetGenre)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "updateGenre",
+		Method:      http.MethodPatch,
+		Path:        "/api/v1/genres/{id}",
+		Summary:     "Update genre",
+		Description: "Updates a genre",
+		Tags:        []string{"Genres"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleUpdateGenre)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "deleteGenre",
+		Method:      http.MethodDelete,
+		Path:        "/api/v1/genres/{id}",
+		Summary:     "Delete genre",
+		Description: "Deletes a genre",
+		Tags:        []string{"Genres"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleDeleteGenre)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getGenreChildren",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/genres/{id}/children",
+		Summary:     "Get genre children",
+		Description: "Returns direct children of a genre",
+		Tags:        []string{"Genres"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetGenreChildren)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getGenreBooks",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/genres/{id}/books",
+		Summary:     "Get genre books",
+		Description: "Returns book IDs in a genre",
+		Tags:        []string{"Genres"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetGenreBooks)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "moveGenre",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/genres/{id}/move",
+		Summary:     "Move genre",
+		Description: "Moves a genre to a new parent",
+		Tags:        []string{"Genres"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleMoveGenre)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "mergeGenres",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/genres/merge",
+		Summary:     "Merge genres",
+		Description: "Merges source genre into target genre",
+		Tags:        []string{"Genres"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleMergeGenres)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "listUnmappedGenres",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/genres/unmapped",
+		Summary:     "List unmapped genres",
+		Description: "Returns raw genre strings that need mapping",
+		Tags:        []string{"Genres"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleListUnmappedGenres)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "mapUnmappedGenre",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/genres/unmapped/map",
+		Summary:     "Map unmapped genre",
+		Description: "Creates an alias for an unmapped genre",
+		Tags:        []string{"Genres"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleMapUnmappedGenre)
+}
+
+// === DTOs ===
+
+type ListGenresInput struct {
+	Authorization string `header:"Authorization"`
+}
+
+type GenreResponse struct {
+	ID          string    `json:"id" doc:"Genre ID"`
+	Name        string    `json:"name" doc:"Genre name"`
+	Slug        string    `json:"slug" doc:"URL-safe slug"`
+	Description string    `json:"description,omitempty" doc:"Description"`
+	ParentID    string    `json:"parent_id,omitempty" doc:"Parent genre ID"`
+	Path        string    `json:"path" doc:"Full path (e.g., /fiction/fantasy)"`
+	Depth       int       `json:"depth" doc:"Depth in tree"`
+	SortOrder   int       `json:"sort_order" doc:"Sort order"`
+	Color       string    `json:"color,omitempty" doc:"Display color"`
+	CreatedAt   time.Time `json:"created_at" doc:"Creation time"`
+	UpdatedAt   time.Time `json:"updated_at" doc:"Last update time"`
+}
+
+type ListGenresResponse struct {
+	Genres []GenreResponse `json:"genres" doc:"List of genres"`
+}
+
+type ListGenresOutput struct {
+	Body ListGenresResponse
+}
+
+type CreateGenreRequest struct {
+	Name        string `json:"name" validate:"required,min=1,max=100" doc:"Genre name"`
+	ParentID    string `json:"parent_id,omitempty" doc:"Parent genre ID"`
+	Description string `json:"description,omitempty" doc:"Description"`
+	Color       string `json:"color,omitempty" doc:"Display color"`
+}
+
+type CreateGenreInput struct {
+	Authorization string `header:"Authorization"`
+	Body          CreateGenreRequest
+}
+
+type GenreOutput struct {
+	Body GenreResponse
+}
+
+type GetGenreInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Genre ID"`
+}
+
+type UpdateGenreRequest struct {
+	Name        *string `json:"name,omitempty" doc:"Genre name"`
+	Description *string `json:"description,omitempty" doc:"Description"`
+	Color       *string `json:"color,omitempty" doc:"Display color"`
+	SortOrder   *int    `json:"sort_order,omitempty" doc:"Sort order"`
+}
+
+type UpdateGenreInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Genre ID"`
+	Body          UpdateGenreRequest
+}
+
+type DeleteGenreInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Genre ID"`
+}
+
+type GetGenreChildrenInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Genre ID"`
+}
+
+type GenreChildrenOutput struct {
+	Body ListGenresResponse
+}
+
+type GetGenreBooksInput struct {
+	Authorization       string `header:"Authorization"`
+	ID                  string `path:"id" doc:"Genre ID"`
+	IncludeDescendants  bool   `query:"include_descendants" doc:"Include books from child genres"`
+}
+
+type GenreBooksResponse struct {
+	BookIDs []string `json:"book_ids" doc:"Book IDs in genre"`
+}
+
+type GenreBooksOutput struct {
+	Body GenreBooksResponse
+}
+
+type MoveGenreRequest struct {
+	NewParentID string `json:"new_parent_id" doc:"New parent genre ID (empty for root)"`
+}
+
+type MoveGenreInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Genre ID"`
+	Body          MoveGenreRequest
+}
+
+type MergeGenresRequest struct {
+	SourceID string `json:"source_id" validate:"required" doc:"Genre to merge from"`
+	TargetID string `json:"target_id" validate:"required" doc:"Genre to merge into"`
+}
+
+type MergeGenresInput struct {
+	Authorization string `header:"Authorization"`
+	Body          MergeGenresRequest
+}
+
+type ListUnmappedGenresInput struct {
+	Authorization string `header:"Authorization"`
+}
+
+type UnmappedGenreResponse struct {
+	RawValue   string `json:"raw_value" doc:"Raw genre string"`
+	BookCount  int    `json:"book_count" doc:"Number of books with this genre"`
+	FirstSeenAt time.Time `json:"first_seen_at" doc:"When first encountered"`
+}
+
+type ListUnmappedGenresResponse struct {
+	UnmappedGenres []UnmappedGenreResponse `json:"unmapped_genres" doc:"List of unmapped genres"`
+}
+
+type ListUnmappedGenresOutput struct {
+	Body ListUnmappedGenresResponse
+}
+
+type MapUnmappedGenreRequest struct {
+	RawValue string   `json:"raw_value" validate:"required" doc:"Raw genre string to map"`
+	GenreIDs []string `json:"genre_ids" validate:"required,min=1" doc:"Genre IDs to map to"`
+}
+
+type MapUnmappedGenreInput struct {
+	Authorization string `header:"Authorization"`
+	Body          MapUnmappedGenreRequest
+}
+
+// === Handlers ===
+
+func (s *Server) handleListGenres(ctx context.Context, input *ListGenresInput) (*ListGenresOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
+	}
 
 	genres, err := s.services.Genre.ListGenres(ctx)
 	if err != nil {
-		s.logger.Error("Failed to list genres", "error", err)
-		response.InternalError(w, "Failed to list genres", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, genres, s.logger)
+	resp := make([]GenreResponse, len(genres))
+	for i, g := range genres {
+		resp[i] = mapGenreResponse(g)
+	}
+
+	return &ListGenresOutput{Body: ListGenresResponse{Genres: resp}}, nil
 }
 
-// handleGetGenre returns a single genre.
-func (s *Server) handleGetGenre(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	id := chi.URLParam(r, "id")
-
-	genre, err := s.services.Genre.GetGenre(ctx, id)
-	if errors.Is(err, store.ErrGenreNotFound) {
-		response.NotFound(w, "Genre not found", s.logger)
-		return
+func (s *Server) handleCreateGenre(ctx context.Context, input *CreateGenreInput) (*GenreOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
 	}
+
+	g, err := s.services.Genre.CreateGenre(ctx, service.CreateGenreRequest{
+		Name:        input.Body.Name,
+		ParentID:    input.Body.ParentID,
+		Description: input.Body.Description,
+		Color:       input.Body.Color,
+	})
 	if err != nil {
-		s.logger.Error("Failed to get genre", "error", err, "id", id)
-		response.InternalError(w, "Failed to get genre", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, genre, s.logger)
+	return &GenreOutput{Body: mapGenreResponse(g)}, nil
 }
 
-// handleCreateGenre creates a new genre.
-func (s *Server) handleCreateGenre(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	_ = mustGetUserID(ctx) // Validates auth
-
-	var req service.CreateGenreRequest
-	if err := json.UnmarshalRead(r.Body, &req); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
+func (s *Server) handleGetGenre(ctx context.Context, input *GetGenreInput) (*GenreOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
 	}
 
-	genre, err := s.services.Genre.CreateGenre(ctx, req)
+	g, err := s.services.Genre.GetGenre(ctx, input.ID)
 	if err != nil {
-		s.logger.Error("Failed to create genre", "error", err)
-		response.BadRequest(w, err.Error(), s.logger)
-		return
+		return nil, err
 	}
 
-	response.Created(w, genre, s.logger)
+	return &GenreOutput{Body: mapGenreResponse(g)}, nil
 }
 
-// handleUpdateGenre updates a genre.
-func (s *Server) handleUpdateGenre(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	_ = mustGetUserID(ctx) // Validates auth
-	id := chi.URLParam(r, "id")
-
-	var req service.UpdateGenreRequest
-	if err := json.UnmarshalRead(r.Body, &req); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
+func (s *Server) handleUpdateGenre(ctx context.Context, input *UpdateGenreInput) (*GenreOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
 	}
 
-	genre, err := s.services.Genre.UpdateGenre(ctx, id, req)
-	if errors.Is(err, store.ErrGenreNotFound) {
-		response.NotFound(w, "Genre not found", s.logger)
-		return
-	}
+	g, err := s.services.Genre.UpdateGenre(ctx, input.ID, service.UpdateGenreRequest{
+		Name:        input.Body.Name,
+		Description: input.Body.Description,
+		Color:       input.Body.Color,
+		SortOrder:   input.Body.SortOrder,
+	})
 	if err != nil {
-		s.logger.Error("Failed to update genre", "error", err, "id", id)
-		response.InternalError(w, "Failed to update genre", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, genre, s.logger)
+	return &GenreOutput{Body: mapGenreResponse(g)}, nil
 }
 
-// handleDeleteGenre deletes a genre.
-func (s *Server) handleDeleteGenre(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	_ = mustGetUserID(ctx) // Validates auth
-	id := chi.URLParam(r, "id")
+func (s *Server) handleDeleteGenre(ctx context.Context, input *DeleteGenreInput) (*MessageOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
+	}
 
-	err := s.services.Genre.DeleteGenre(ctx, id)
-	if errors.Is(err, store.ErrGenreNotFound) {
-		response.NotFound(w, "Genre not found", s.logger)
-		return
+	if err := s.services.Genre.DeleteGenre(ctx, input.ID); err != nil {
+		return nil, err
 	}
-	if errors.Is(err, store.ErrGenreHasChildren) {
-		response.BadRequest(w, "Cannot delete genre with children", s.logger)
-		return
+
+	return &MessageOutput{Body: MessageResponse{Message: "Genre deleted"}}, nil
+}
+
+func (s *Server) handleGetGenreChildren(ctx context.Context, input *GetGenreChildrenInput) (*GenreChildrenOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
 	}
-	if errors.Is(err, store.ErrCannotDeleteSystem) {
-		response.BadRequest(w, "Cannot delete system genre", s.logger)
-		return
-	}
+
+	children, err := s.services.Genre.GetGenreChildren(ctx, input.ID)
 	if err != nil {
-		s.logger.Error("Failed to delete genre", "error", err, "id", id)
-		response.InternalError(w, "Failed to delete genre", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, map[string]string{"status": "deleted"}, s.logger)
+	resp := make([]GenreResponse, len(children))
+	for i, g := range children {
+		resp[i] = mapGenreResponse(g)
+	}
+
+	return &GenreChildrenOutput{Body: ListGenresResponse{Genres: resp}}, nil
 }
 
-// handleMoveGenre changes a genre's parent.
-func (s *Server) handleMoveGenre(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	_ = mustGetUserID(ctx) // Validates auth
-	id := chi.URLParam(r, "id")
-
-	var req struct {
-		ParentID string `json:"parent_id"` // Empty string for root.
-	}
-	if err := json.UnmarshalRead(r.Body, &req); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
+func (s *Server) handleGetGenreBooks(ctx context.Context, input *GetGenreBooksInput) (*GenreBooksOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
 	}
 
-	genre, err := s.services.Genre.MoveGenre(ctx, id, req.ParentID)
+	bookIDs, err := s.services.Genre.GetBooksForGenre(ctx, input.ID, input.IncludeDescendants)
 	if err != nil {
-		s.logger.Error("Failed to move genre", "error", err, "id", id)
-		response.BadRequest(w, err.Error(), s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, genre, s.logger)
+	return &GenreBooksOutput{Body: GenreBooksResponse{BookIDs: bookIDs}}, nil
 }
 
-// handleMergeGenres merges two genres.
-func (s *Server) handleMergeGenres(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	_ = mustGetUserID(ctx) // Validates auth
-
-	var req service.MergeGenresRequest
-	if err := json.UnmarshalRead(r.Body, &req); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
+func (s *Server) handleMoveGenre(ctx context.Context, input *MoveGenreInput) (*GenreOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
 	}
 
-	if err := s.services.Genre.MergeGenres(ctx, req); err != nil {
-		s.logger.Error("Failed to merge genres", "error", err)
-		response.BadRequest(w, err.Error(), s.logger)
-		return
-	}
-
-	response.Success(w, map[string]string{"status": "merged"}, s.logger)
-}
-
-// handleGetGenreBooks returns books in a genre.
-func (s *Server) handleGetGenreBooks(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	id := chi.URLParam(r, "id")
-	includeDescendants := r.URL.Query().Get("include_descendants") == "true"
-
-	bookIDs, err := s.services.Genre.GetBooksForGenre(ctx, id, includeDescendants)
+	g, err := s.services.Genre.MoveGenre(ctx, input.ID, input.Body.NewParentID)
 	if err != nil {
-		s.logger.Error("Failed to get genre books", "error", err, "id", id)
-		response.InternalError(w, "Failed to get books", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, map[string]interface{}{
-		"genre_id": id,
-		"book_ids": bookIDs,
-		"count":    len(bookIDs),
-	}, s.logger)
+	return &GenreOutput{Body: mapGenreResponse(g)}, nil
 }
 
-// handleListUnmappedGenres returns unmapped genre strings.
-func (s *Server) handleListUnmappedGenres(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+func (s *Server) handleMergeGenres(ctx context.Context, input *MergeGenresInput) (*MessageOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
+	}
+
+	if err := s.services.Genre.MergeGenres(ctx, service.MergeGenresRequest{
+		SourceID: input.Body.SourceID,
+		TargetID: input.Body.TargetID,
+	}); err != nil {
+		return nil, err
+	}
+
+	return &MessageOutput{Body: MessageResponse{Message: "Genres merged"}}, nil
+}
+
+func (s *Server) handleListUnmappedGenres(ctx context.Context, input *ListUnmappedGenresInput) (*ListUnmappedGenresOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
+	}
 
 	unmapped, err := s.services.Genre.ListUnmappedGenres(ctx)
 	if err != nil {
-		s.logger.Error("Failed to list unmapped genres", "error", err)
-		response.InternalError(w, "Failed to list unmapped genres", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, unmapped, s.logger)
+	resp := make([]UnmappedGenreResponse, len(unmapped))
+	for i, u := range unmapped {
+		resp[i] = UnmappedGenreResponse{
+			RawValue:    u.RawValue,
+			BookCount:   u.BookCount,
+			FirstSeenAt: u.FirstSeen,
+		}
+	}
+
+	return &ListUnmappedGenresOutput{Body: ListUnmappedGenresResponse{UnmappedGenres: resp}}, nil
 }
 
-// handleMapUnmappedGenre creates an alias for an unmapped genre.
-func (s *Server) handleMapUnmappedGenre(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-
-	var req service.MapUnmappedGenreRequest
-	if err := json.UnmarshalRead(r.Body, &req); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
-	}
-
-	if err := s.services.Genre.MapUnmappedGenre(ctx, userID, req); err != nil {
-		s.logger.Error("Failed to map genre", "error", err)
-		response.BadRequest(w, err.Error(), s.logger)
-		return
-	}
-
-	response.Success(w, map[string]string{"status": "mapped"}, s.logger)
-}
-
-// handleGetBookGenres returns genres for a book.
-func (s *Server) handleGetBookGenres(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	bookID := chi.URLParam(r, "id")
-
-	genres, err := s.services.Genre.GetGenresForBook(ctx, bookID)
+func (s *Server) handleMapUnmappedGenre(ctx context.Context, input *MapUnmappedGenreInput) (*MessageOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
 	if err != nil {
-		s.logger.Error("Failed to get book genres", "error", err, "book_id", bookID)
-		response.InternalError(w, "Failed to get genres", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, genres, s.logger)
+	if err := s.services.Genre.MapUnmappedGenre(ctx, userID, service.MapUnmappedGenreRequest{
+		RawValue: input.Body.RawValue,
+		GenreIDs: input.Body.GenreIDs,
+	}); err != nil {
+		return nil, err
+	}
+
+	return &MessageOutput{Body: MessageResponse{Message: "Genre mapped"}}, nil
 }
 
-// handleSetBookGenres sets genres for a book.
-func (s *Server) handleSetBookGenres(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	_ = mustGetUserID(ctx) // Validates auth
-	bookID := chi.URLParam(r, "id")
+// === Mappers ===
 
-	var req struct {
-		GenreIDs []string `json:"genre_ids"`
+func mapGenreResponse(g *domain.Genre) GenreResponse {
+	return GenreResponse{
+		ID:          g.ID,
+		Name:        g.Name,
+		Slug:        g.Slug,
+		Description: g.Description,
+		ParentID:    g.ParentID,
+		Path:        g.Path,
+		Depth:       g.Depth,
+		SortOrder:   g.SortOrder,
+		Color:       g.Color,
+		CreatedAt:   g.CreatedAt,
+		UpdatedAt:   g.UpdatedAt,
 	}
-	if err := json.UnmarshalRead(r.Body, &req); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
-	}
-
-	if err := s.services.Genre.SetBookGenres(ctx, bookID, req.GenreIDs); err != nil {
-		s.logger.Error("Failed to set book genres", "error", err, "book_id", bookID)
-		response.InternalError(w, "Failed to set genres", s.logger)
-		return
-	}
-
-	response.Success(w, map[string]string{"status": "ok"}, s.logger)
 }

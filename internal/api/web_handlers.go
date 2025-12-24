@@ -1,112 +1,124 @@
 package api
 
 import (
-	"embed"
-	"html/template"
+	"context"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/danielgtaylor/huma/v2"
 )
 
-//go:embed templates/*.html templates/*.json
-var templates embed.FS
+// registerWebRoutes sets up web-facing routes (join page, deep links, etc.)
+func (s *Server) registerWebRoutes() {
+	// Join page for invite links
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getJoinPage",
+		Method:      http.MethodGet,
+		Path:        "/join/{code}",
+		Summary:     "Join page",
+		Description: "Returns HTML page for claiming an invite",
+		Tags:        []string{"Web"},
+	}, s.handleGetJoinPage)
 
-// handleAssetLinks serves the Android App Links verification file.
-// GET /.well-known/assetlinks.json.
-func (s *Server) handleAssetLinks(w http.ResponseWriter, _ *http.Request) {
-	data, err := templates.ReadFile("templates/assetlinks.json")
+	// Android App Links / iOS Universal Links
+	s.router.Get("/.well-known/assetlinks.json", s.handleAssetLinks)
+	s.router.Get("/.well-known/apple-app-site-association", s.handleAppleAppSiteAssociation)
+}
+
+// === DTOs ===
+
+type GetJoinPageInput struct {
+	Code string `path:"code" doc:"Invite code"`
+}
+
+type HTMLOutput struct {
+	ContentType string `header:"Content-Type"`
+	Body        string
+}
+
+// === Handlers ===
+
+func (s *Server) handleGetJoinPage(ctx context.Context, input *GetJoinPageInput) (*HTMLOutput, error) {
+	// Check if invite exists
+	_, err := s.services.Invite.GetInviteDetails(ctx, input.Code)
 	if err != nil {
-		s.logger.Error("Failed to read assetlinks.json", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
+		return &HTMLOutput{
+			ContentType: "text/html; charset=utf-8",
+			Body: `<!DOCTYPE html>
+<html>
+<head>
+    <title>Invalid Invite</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px; text-align: center; }
+        h1 { color: #d32f2f; }
+    </style>
+</head>
+<body>
+    <h1>Invalid Invite</h1>
+    <p>This invite link is invalid or has expired.</p>
+</body>
+</html>`,
+		}, nil
 	}
 
+	// Return HTML that redirects to app or shows install prompt
+	return &HTMLOutput{
+		ContentType: "text/html; charset=utf-8",
+		Body: `<!DOCTYPE html>
+<html>
+<head>
+    <title>Join ListenUp</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta property="og:title" content="You're invited to ListenUp">
+    <meta property="og:description" content="Click to join this audiobook library">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px; text-align: center; }
+        h1 { color: #1976d2; }
+        .btn { display: inline-block; background: #1976d2; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin: 10px; }
+        .btn:hover { background: #1565c0; }
+    </style>
+    <script>
+        // Try to open in app
+        window.location.href = 'listenup://join/` + input.Code + `';
+        setTimeout(function() {
+            // If we're still here, app is not installed
+            document.getElementById('install-prompt').style.display = 'block';
+        }, 2000);
+    </script>
+</head>
+<body>
+    <h1>Join ListenUp</h1>
+    <p>Opening in ListenUp app...</p>
+    <div id="install-prompt" style="display:none">
+        <p>Don't have the app yet?</p>
+        <a href="https://play.google.com/store/apps/details?id=com.listenup" class="btn">Get on Google Play</a>
+    </div>
+</body>
+</html>`,
+	}, nil
+}
+
+func (s *Server) handleAssetLinks(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write(data)
+	w.Write([]byte(`[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.listenup",
+    "sha256_cert_fingerprints": []
+  }
+}]`))
 }
 
-// joinPageData contains data for the invite landing page template.
-type joinPageData struct {
-	Valid       bool
-	Claimed     bool
-	Expired     bool
-	Name        string
-	Email       string
-	ServerName  string
-	InviterName string
-	ServerURL   string
-	Code        string
-}
-
-// handleJoinPage serves the invite landing page.
-// GET /join/{code}.
-func (s *Server) handleJoinPage(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	code := chi.URLParam(r, "code")
-
-	if code == "" {
-		http.Error(w, "Invite code is required", http.StatusBadRequest)
-		return
-	}
-
-	// Get invite details
-	details, err := s.services.Invite.GetInviteDetails(ctx, code)
-
-	// Build template data
-	data := joinPageData{
-		Code:      code,
-		ServerURL: getServerURL(r),
-	}
-
-	if err != nil {
-		// Invalid invite - show error state
-		data.Valid = false
-	} else {
-		data.Valid = details.Valid
-		data.Name = details.Name
-		data.Email = details.Email
-		data.ServerName = details.ServerName
-		data.InviterName = details.InvitedBy
-
-		// Determine specific invalid reason
-		if !details.Valid {
-			// Check if the invite exists but is claimed/expired
-			// The service returns Valid=false for both cases
-			data.Claimed = true // Default assumption
-		}
-	}
-
-	// Parse and execute template
-	tmpl, err := template.ParseFS(templates, "templates/join.html")
-	if err != nil {
-		s.logger.Error("Failed to parse join template", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := tmpl.Execute(w, data); err != nil {
-		s.logger.Error("Failed to execute join template", "error", err)
-	}
-}
-
-// getServerURL extracts the server URL from the request.
-func getServerURL(r *http.Request) string {
-	scheme := "https"
-	if r.TLS == nil {
-		// Check for X-Forwarded-Proto header (common with reverse proxies)
-		if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
-			scheme = proto
-		} else {
-			scheme = "http"
-		}
-	}
-
-	host := r.Host
-	if forwardedHost := r.Header.Get("X-Forwarded-Host"); forwardedHost != "" {
-		host = forwardedHost
-	}
-
-	return scheme + "://" + host
+func (s *Server) handleAppleAppSiteAssociation(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{
+  "applinks": {
+    "apps": [],
+    "details": [{
+      "appID": "TEAMID.com.listenup",
+      "paths": ["/join/*"]
+    }]
+  }
+}`))
 }
