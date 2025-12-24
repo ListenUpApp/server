@@ -46,7 +46,7 @@ type InviteDetailsOutput struct {
 }
 
 type ClaimInviteRequest struct {
-	Password   string     `json:"password" validate:"required,min=8" doc:"New user password"`
+	Password   string     `json:"password" validate:"required,min=8,max=1024" doc:"New user password"`
 	DeviceInfo DeviceInfo `json:"device_info,omitempty" doc:"Device information"`
 }
 

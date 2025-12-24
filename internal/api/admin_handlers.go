@@ -87,10 +87,10 @@ func (s *Server) registerAdminRoutes() {
 // === DTOs ===
 
 type CreateInviteRequest struct {
-	Name          string `json:"name" validate:"required,max=100" doc:"Display name for the invitee"`
-	Email         string `json:"email" validate:"required,email" doc:"Email address for the invitee"`
+	Name          string `json:"name" validate:"required,min=1,max=100" doc:"Display name for the invitee"`
+	Email         string `json:"email" validate:"required,email,max=254" doc:"Email address for the invitee"`
 	Role          string `json:"role" validate:"required,oneof=admin member" doc:"Role to grant"`
-	ExpiresInDays int    `json:"expires_in_days,omitempty" doc:"Days until expiration (default 7)"`
+	ExpiresInDays int    `json:"expires_in_days,omitempty" validate:"omitempty,gte=1,lte=365" doc:"Days until expiration (default 7)"`
 }
 
 type CreateInviteInput struct {
@@ -167,8 +167,8 @@ type AdminUserOutput struct {
 }
 
 type UpdateAdminUserRequest struct {
-	FirstName *string `json:"first_name,omitempty" doc:"First name"`
-	LastName  *string `json:"last_name,omitempty" doc:"Last name"`
+	FirstName *string `json:"first_name,omitempty" validate:"omitempty,min=1,max=100" doc:"First name"`
+	LastName  *string `json:"last_name,omitempty" validate:"omitempty,min=1,max=100" doc:"Last name"`
 	Role      *string `json:"role,omitempty" validate:"omitempty,oneof=admin member" doc:"User role"`
 }
 

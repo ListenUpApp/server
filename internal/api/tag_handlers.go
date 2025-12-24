@@ -97,7 +97,7 @@ type ListTagsOutput struct {
 
 type CreateTagRequest struct {
 	Name  string `json:"name" validate:"required,min=1,max=50" doc:"Tag name"`
-	Color string `json:"color,omitempty" doc:"Display color"`
+	Color string `json:"color,omitempty" validate:"omitempty,max=20" doc:"Display color"`
 }
 
 type CreateTagInput struct {
@@ -115,8 +115,8 @@ type GetTagInput struct {
 }
 
 type UpdateTagRequest struct {
-	Name  *string `json:"name,omitempty" doc:"Tag name"`
-	Color *string `json:"color,omitempty" doc:"Display color"`
+	Name  *string `json:"name,omitempty" validate:"omitempty,min=1,max=50" doc:"Tag name"`
+	Color *string `json:"color,omitempty" validate:"omitempty,max=20" doc:"Display color"`
 }
 
 type UpdateTagInput struct {

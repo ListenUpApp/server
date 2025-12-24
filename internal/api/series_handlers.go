@@ -112,8 +112,8 @@ type ListSeriesOutput struct {
 
 type CreateSeriesRequest struct {
 	Name        string `json:"name" validate:"required,min=1,max=200" doc:"Series name"`
-	Description string `json:"description,omitempty" doc:"Description"`
-	ASIN        string `json:"asin,omitempty" doc:"Audible ASIN"`
+	Description string `json:"description,omitempty" validate:"omitempty,max=2000" doc:"Description"`
+	ASIN        string `json:"asin,omitempty" validate:"omitempty,max=20" doc:"Audible ASIN"`
 }
 
 type CreateSeriesInput struct {
@@ -131,9 +131,9 @@ type GetSeriesInput struct {
 }
 
 type UpdateSeriesRequest struct {
-	Name        *string `json:"name,omitempty" doc:"Series name"`
-	Description *string `json:"description,omitempty" doc:"Description"`
-	ASIN        *string `json:"asin,omitempty" doc:"Audible ASIN"`
+	Name        *string `json:"name,omitempty" validate:"omitempty,min=1,max=200" doc:"Series name"`
+	Description *string `json:"description,omitempty" validate:"omitempty,max=2000" doc:"Description"`
+	ASIN        *string `json:"asin,omitempty" validate:"omitempty,max=20" doc:"Audible ASIN"`
 }
 
 type UpdateSeriesInput struct {

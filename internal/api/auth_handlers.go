@@ -51,21 +51,21 @@ func (s *Server) registerAuthRoutes() {
 // === DTOs ===
 
 type DeviceInfo struct {
-	DeviceType      string `json:"device_type,omitempty" doc:"Device type (mobile, tablet, desktop, web, tv)"`
-	Platform        string `json:"platform,omitempty" doc:"Platform (iOS, Android, Windows, macOS, Linux, Web)"`
-	PlatformVersion string `json:"platform_version,omitempty" doc:"Platform version (17.2, 14.0, etc.)"`
-	ClientName      string `json:"client_name,omitempty" doc:"Client name (ListenUp Mobile, etc.)"`
-	ClientVersion   string `json:"client_version,omitempty" doc:"Client version (1.0.0)"`
-	ClientBuild     string `json:"client_build,omitempty" doc:"Client build number"`
-	DeviceName      string `json:"device_name,omitempty" doc:"Human-readable device name"`
-	DeviceModel     string `json:"device_model,omitempty" doc:"Device model (iPhone 15 Pro, etc.)"`
+	DeviceType      string `json:"device_type,omitempty" validate:"omitempty,max=50" doc:"Device type (mobile, tablet, desktop, web, tv)"`
+	Platform        string `json:"platform,omitempty" validate:"omitempty,max=50" doc:"Platform (iOS, Android, Windows, macOS, Linux, Web)"`
+	PlatformVersion string `json:"platform_version,omitempty" validate:"omitempty,max=50" doc:"Platform version (17.2, 14.0, etc.)"`
+	ClientName      string `json:"client_name,omitempty" validate:"omitempty,max=100" doc:"Client name (ListenUp Mobile, etc.)"`
+	ClientVersion   string `json:"client_version,omitempty" validate:"omitempty,max=50" doc:"Client version (1.0.0)"`
+	ClientBuild     string `json:"client_build,omitempty" validate:"omitempty,max=50" doc:"Client build number"`
+	DeviceName      string `json:"device_name,omitempty" validate:"omitempty,max=100" doc:"Human-readable device name"`
+	DeviceModel     string `json:"device_model,omitempty" validate:"omitempty,max=100" doc:"Device model (iPhone 15 Pro, etc.)"`
 }
 
 type SetupRequest struct {
-	Email     string `json:"email" validate:"required,email" doc:"Admin email address"`
+	Email     string `json:"email" validate:"required,email,max=254" doc:"Admin email address"`
 	Password  string `json:"password" validate:"required,min=8,max=1024" doc:"Admin password"`
-	FirstName string `json:"first_name" validate:"required" doc:"Admin first name"`
-	LastName  string `json:"last_name" validate:"required" doc:"Admin last name"`
+	FirstName string `json:"first_name" validate:"required,min=1,max=100" doc:"Admin first name"`
+	LastName  string `json:"last_name" validate:"required,min=1,max=100" doc:"Admin last name"`
 }
 
 type SetupInput struct {
@@ -73,8 +73,8 @@ type SetupInput struct {
 }
 
 type LoginRequest struct {
-	Email      string     `json:"email" validate:"required,email" doc:"User email"`
-	Password   string     `json:"password" validate:"required" doc:"User password"`
+	Email      string     `json:"email" validate:"required,email,max=254" doc:"User email"`
+	Password   string     `json:"password" validate:"required,max=1024" doc:"User password"`
 	DeviceInfo DeviceInfo `json:"device_info,omitempty" doc:"Client device info"`
 }
 
@@ -96,7 +96,7 @@ type RefreshInput struct {
 }
 
 type LogoutRequest struct {
-	SessionID string `json:"session_id" validate:"required" doc:"Session ID to revoke"`
+	SessionID string `json:"session_id" validate:"required,max=100" doc:"Session ID to revoke"`
 }
 
 type LogoutInput struct {

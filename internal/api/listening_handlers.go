@@ -76,12 +76,12 @@ func (s *Server) registerListeningRoutes() {
 type RecordListeningEventRequest struct {
 	BookID          string    `json:"book_id" validate:"required" doc:"Book ID"`
 	StartPositionMs int64     `json:"start_position_ms" validate:"gte=0" doc:"Start position in ms"`
-	EndPositionMs   int64     `json:"end_position_ms" validate:"gtfield=StartPositionMs" doc:"End position in ms"`
+	EndPositionMs   int64     `json:"end_position_ms" validate:"gte=0,gtefield=StartPositionMs" doc:"End position in ms"`
 	StartedAt       time.Time `json:"started_at" validate:"required" doc:"When playback started"`
-	EndedAt         time.Time `json:"ended_at" validate:"required" doc:"When playback ended"`
+	EndedAt         time.Time `json:"ended_at" validate:"required,gtefield=StartedAt" doc:"When playback ended"`
 	PlaybackSpeed   float32   `json:"playback_speed" validate:"gt=0,lte=4" doc:"Playback speed"`
-	DeviceID        string    `json:"device_id" validate:"required" doc:"Device ID"`
-	DeviceName      string    `json:"device_name" doc:"Device name"`
+	DeviceID        string    `json:"device_id" validate:"required,max=100" doc:"Device ID"`
+	DeviceName      string    `json:"device_name" validate:"omitempty,max=100" doc:"Device name"`
 }
 
 type RecordListeningEventInput struct {

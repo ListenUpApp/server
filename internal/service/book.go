@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/genre"
@@ -638,8 +639,18 @@ func (s *BookService) resolveGenres(ctx context.Context, genreNames []string) ([
 
 // applyCover downloads and stores a cover image from a URL.
 func (s *BookService) applyCover(ctx context.Context, book *domain.Book, coverURL string) error {
-	// Download image
-	resp, err := http.Get(coverURL)
+	// Create timeout context for the download (30 seconds should be plenty for a cover image)
+	downloadCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	// Create request with context for proper cancellation/timeout
+	req, err := http.NewRequestWithContext(downloadCtx, http.MethodGet, coverURL, nil)
+	if err != nil {
+		return fmt.Errorf("create cover request: %w", err)
+	}
+
+	// Execute request
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("download cover: %w", err)
 	}
@@ -649,8 +660,12 @@ func (s *BookService) applyCover(ctx context.Context, book *domain.Book, coverUR
 		return fmt.Errorf("download cover: status %d", resp.StatusCode)
 	}
 
+	// Limit read size to 10MB to prevent memory exhaustion from malicious/corrupted images
+	const maxCoverSize = 10 * 1024 * 1024
+	limitedReader := io.LimitReader(resp.Body, maxCoverSize)
+
 	// Read image data
-	data, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(limitedReader)
 	if err != nil {
 		return fmt.Errorf("read cover data: %w", err)
 	}

@@ -152,9 +152,9 @@ type ListGenresOutput struct {
 
 type CreateGenreRequest struct {
 	Name        string `json:"name" validate:"required,min=1,max=100" doc:"Genre name"`
-	ParentID    string `json:"parent_id,omitempty" doc:"Parent genre ID"`
-	Description string `json:"description,omitempty" doc:"Description"`
-	Color       string `json:"color,omitempty" doc:"Display color"`
+	ParentID    string `json:"parent_id,omitempty" validate:"omitempty,max=50" doc:"Parent genre ID"`
+	Description string `json:"description,omitempty" validate:"omitempty,max=1000" doc:"Description"`
+	Color       string `json:"color,omitempty" validate:"omitempty,max=20" doc:"Display color"`
 }
 
 type CreateGenreInput struct {
@@ -172,10 +172,10 @@ type GetGenreInput struct {
 }
 
 type UpdateGenreRequest struct {
-	Name        *string `json:"name,omitempty" doc:"Genre name"`
-	Description *string `json:"description,omitempty" doc:"Description"`
-	Color       *string `json:"color,omitempty" doc:"Display color"`
-	SortOrder   *int    `json:"sort_order,omitempty" doc:"Sort order"`
+	Name        *string `json:"name,omitempty" validate:"omitempty,min=1,max=100" doc:"Genre name"`
+	Description *string `json:"description,omitempty" validate:"omitempty,max=1000" doc:"Description"`
+	Color       *string `json:"color,omitempty" validate:"omitempty,max=20" doc:"Display color"`
+	SortOrder   *int    `json:"sort_order,omitempty" validate:"omitempty,gte=0,lte=9999" doc:"Sort order"`
 }
 
 type UpdateGenreInput struct {
@@ -251,8 +251,8 @@ type ListUnmappedGenresOutput struct {
 }
 
 type MapUnmappedGenreRequest struct {
-	RawValue string   `json:"raw_value" validate:"required" doc:"Raw genre string to map"`
-	GenreIDs []string `json:"genre_ids" validate:"required,min=1" doc:"Genre IDs to map to"`
+	RawValue string   `json:"raw_value" validate:"required,max=200" doc:"Raw genre string to map"`
+	GenreIDs []string `json:"genre_ids" validate:"required,min=1,max=20" doc:"Genre IDs to map to"`
 }
 
 type MapUnmappedGenreInput struct {

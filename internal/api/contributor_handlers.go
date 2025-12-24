@@ -125,11 +125,11 @@ type ListContributorsOutput struct {
 
 type CreateContributorRequest struct {
 	Name        string `json:"name" validate:"required,min=1,max=200" doc:"Contributor name"`
-	SortName    string `json:"sort_name,omitempty" doc:"Sort name (e.g., 'King, Stephen')"`
-	Description string `json:"description,omitempty" doc:"Description"`
-	ImageURL    string `json:"image_url,omitempty" doc:"Image URL"`
-	Website     string `json:"website,omitempty" doc:"Website URL"`
-	AudibleASIN string `json:"audible_asin,omitempty" doc:"Audible ASIN"`
+	SortName    string `json:"sort_name,omitempty" validate:"omitempty,max=200" doc:"Sort name (e.g., 'King, Stephen')"`
+	Description string `json:"description,omitempty" validate:"omitempty,max=5000" doc:"Description"`
+	ImageURL    string `json:"image_url,omitempty" validate:"omitempty,url,max=2000" doc:"Image URL"`
+	Website     string `json:"website,omitempty" validate:"omitempty,url,max=2000" doc:"Website URL"`
+	AudibleASIN string `json:"audible_asin,omitempty" validate:"omitempty,max=20" doc:"Audible ASIN"`
 }
 
 type CreateContributorInput struct {
@@ -147,12 +147,12 @@ type GetContributorInput struct {
 }
 
 type UpdateContributorRequest struct {
-	Name        *string `json:"name,omitempty" doc:"Contributor name"`
-	SortName    *string `json:"sort_name,omitempty" doc:"Sort name"`
-	Description *string `json:"description,omitempty" doc:"Description"`
-	ImageURL    *string `json:"image_url,omitempty" doc:"Image URL"`
-	Website     *string `json:"website,omitempty" doc:"Website URL"`
-	AudibleASIN *string `json:"audible_asin,omitempty" doc:"Audible ASIN"`
+	Name        *string `json:"name,omitempty" validate:"omitempty,min=1,max=200" doc:"Contributor name"`
+	SortName    *string `json:"sort_name,omitempty" validate:"omitempty,max=200" doc:"Sort name"`
+	Description *string `json:"description,omitempty" validate:"omitempty,max=5000" doc:"Description"`
+	ImageURL    *string `json:"image_url,omitempty" validate:"omitempty,url,max=2000" doc:"Image URL"`
+	Website     *string `json:"website,omitempty" validate:"omitempty,url,max=2000" doc:"Website URL"`
+	AudibleASIN *string `json:"audible_asin,omitempty" validate:"omitempty,max=20" doc:"Audible ASIN"`
 }
 
 type UpdateContributorInput struct {
@@ -198,8 +198,8 @@ type MergeContributorsInput struct {
 
 type SearchContributorsInput struct {
 	Authorization string `header:"Authorization"`
-	Query         string `query:"q" validate:"required,min=1" doc:"Search query"`
-	Limit         int    `query:"limit" doc:"Max results (default 10)"`
+	Query         string `query:"q" validate:"required,min=1,max=200" doc:"Search query"`
+	Limit         int    `query:"limit" validate:"omitempty,gte=1,lte=100" doc:"Max results (default 10)"`
 }
 
 type ContributorSearchResult struct {

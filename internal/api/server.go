@@ -38,7 +38,7 @@ func NewServer(
 	router := chi.NewRouter()
 
 	// Set up middleware BEFORE huma (which registers OpenAPI routes)
-	setupMiddleware(router)
+	setupMiddleware(router, logger)
 
 	// Configure huma API
 	config := huma.DefaultConfig("ListenUp API", "1.0.0")
@@ -80,7 +80,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // setupMiddleware configures the middleware stack.
 // Must be called before any routes are registered (including huma).
-func setupMiddleware(router chi.Router) {
+func setupMiddleware(router chi.Router, logger *slog.Logger) {
+	// CORS - allow cross-origin requests (required for web clients)
 	router.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
@@ -90,10 +91,22 @@ func setupMiddleware(router chi.Router) {
 		MaxAge:           300,
 	}))
 
+	// Security headers - protect against common web vulnerabilities
+	router.Use(SecurityHeaders)
+
+	// Request ID - generate unique ID for each request
 	router.Use(middleware.RequestID)
+
+	// Real IP - extract client IP from X-Forwarded-For / X-Real-IP headers
 	router.Use(middleware.RealIP)
-	router.Use(middleware.Logger)
+
+	// Structured logging - replaces chi's basic Logger with structured slog
+	router.Use(StructuredLogger(logger))
+
+	// Panic recovery - catch panics and return 500 instead of crashing
 	router.Use(middleware.Recoverer)
+
+	// Response compression - gzip responses at compression level 5
 	router.Use(middleware.Compress(5))
 }
 

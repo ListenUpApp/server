@@ -2,9 +2,12 @@ package api
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/listenupapp/listenup-server/internal/http/response"
 )
 
@@ -99,4 +102,91 @@ func mustGetUserID(ctx context.Context) string {
 		panic("mustGetUserID: called without authentication - missing requireAuth middleware on route")
 	}
 	return userID
+}
+
+// StructuredLogger returns a middleware that logs requests using structured logging.
+// It captures: method, path, status, duration, request_id, client_ip, bytes_written.
+// Log level varies by status code: INFO for 2xx/3xx, WARN for 4xx, ERROR for 5xx.
+func StructuredLogger(logger *slog.Logger) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+
+			// Wrap response writer to capture status code
+			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+
+			// Process request
+			next.ServeHTTP(ww, r)
+
+			// Calculate duration
+			duration := time.Since(start)
+
+			// Get request ID from chi middleware
+			requestID := middleware.GetReqID(r.Context())
+
+			// Build log attributes
+			attrs := []slog.Attr{
+				slog.String("method", r.Method),
+				slog.String("path", r.URL.Path),
+				slog.Int("status", ww.Status()),
+				slog.Duration("duration", duration),
+				slog.String("request_id", requestID),
+				slog.String("client_ip", r.RemoteAddr),
+				slog.Int("bytes", ww.BytesWritten()),
+			}
+
+			// Add query string if present (but not for sensitive endpoints)
+			if r.URL.RawQuery != "" && !isSensitivePath(r.URL.Path) {
+				attrs = append(attrs, slog.String("query", r.URL.RawQuery))
+			}
+
+			// Choose log level based on status code
+			status := ww.Status()
+			switch {
+			case status >= 500:
+				logger.LogAttrs(r.Context(), slog.LevelError, "request completed", attrs...)
+			case status >= 400:
+				logger.LogAttrs(r.Context(), slog.LevelWarn, "request completed", attrs...)
+			default:
+				logger.LogAttrs(r.Context(), slog.LevelInfo, "request completed", attrs...)
+			}
+		})
+	}
+}
+
+// SecurityHeaders returns a middleware that adds security headers to responses.
+// These headers protect against common web vulnerabilities even in self-hosted contexts.
+func SecurityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Prevent clickjacking - deny all framing
+		w.Header().Set("X-Frame-Options", "DENY")
+
+		// Prevent MIME type sniffing attacks
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+
+		// Control referrer information sent with requests
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+
+		// Legacy XSS protection (still useful for older browsers)
+		w.Header().Set("X-XSS-Protection", "1; mode=block")
+
+		// Restrict access to sensitive browser features
+		w.Header().Set("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// isSensitivePath returns true if the path might contain sensitive data in query params.
+func isSensitivePath(path string) bool {
+	sensitivePaths := []string{
+		"/api/v1/auth/",
+		"/api/v1/invites/",
+	}
+	for _, sp := range sensitivePaths {
+		if len(path) >= len(sp) && path[:len(sp)] == sp {
+			return true
+		}
+	}
+	return false
 }

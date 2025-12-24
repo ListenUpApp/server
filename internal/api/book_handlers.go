@@ -185,14 +185,14 @@ type BookOutput struct {
 }
 
 type UpdateBookRequest struct {
-	Title       *string `json:"title,omitempty" doc:"Book title"`
-	Subtitle    *string `json:"subtitle,omitempty" doc:"Book subtitle"`
-	Description *string `json:"description,omitempty" doc:"Book description"`
-	Publisher   *string `json:"publisher,omitempty" doc:"Publisher name"`
-	PublishYear *string `json:"publish_year,omitempty" doc:"Publication year"`
-	Language    *string `json:"language,omitempty" doc:"Language code"`
-	ASIN        *string `json:"asin,omitempty" doc:"Amazon ASIN"`
-	ISBN        *string `json:"isbn,omitempty" doc:"ISBN"`
+	Title       *string `json:"title,omitempty" validate:"omitempty,min=1,max=500" doc:"Book title"`
+	Subtitle    *string `json:"subtitle,omitempty" validate:"omitempty,max=500" doc:"Book subtitle"`
+	Description *string `json:"description,omitempty" validate:"omitempty,max=10000" doc:"Book description"`
+	Publisher   *string `json:"publisher,omitempty" validate:"omitempty,max=200" doc:"Publisher name"`
+	PublishYear *string `json:"publish_year,omitempty" validate:"omitempty,max=10" doc:"Publication year"`
+	Language    *string `json:"language,omitempty" validate:"omitempty,max=10" doc:"Language code"`
+	ASIN        *string `json:"asin,omitempty" validate:"omitempty,len=10" doc:"Amazon ASIN"`
+	ISBN        *string `json:"isbn,omitempty" validate:"omitempty,max=17" doc:"ISBN"`
 }
 
 type UpdateBookInput struct {
@@ -202,12 +202,12 @@ type UpdateBookInput struct {
 }
 
 type SetContributorsRequest struct {
-	Contributors []ContributorInput `json:"contributors" validate:"required" doc:"Contributors"`
+	Contributors []ContributorInput `json:"contributors" validate:"required,min=1,max=50,dive" doc:"Contributors"`
 }
 
 type ContributorInput struct {
-	Name  string   `json:"name" validate:"required" doc:"Contributor name"`
-	Roles []string `json:"roles" validate:"required" doc:"Roles"`
+	Name  string   `json:"name" validate:"required,min=1,max=200" doc:"Contributor name"`
+	Roles []string `json:"roles" validate:"required,min=1,max=10,dive,min=1,max=50" doc:"Roles"`
 }
 
 type SetContributorsInput struct {
@@ -217,12 +217,12 @@ type SetContributorsInput struct {
 }
 
 type SetSeriesRequest struct {
-	Series []SeriesInput `json:"series" doc:"Series memberships"`
+	Series []SeriesInput `json:"series" validate:"omitempty,max=20,dive" doc:"Series memberships"`
 }
 
 type SeriesInput struct {
-	Name     string `json:"name" validate:"required" doc:"Series name"`
-	Sequence string `json:"sequence,omitempty" doc:"Sequence in series"`
+	Name     string `json:"name" validate:"required,min=1,max=200" doc:"Series name"`
+	Sequence string `json:"sequence,omitempty" validate:"omitempty,max=50" doc:"Sequence in series"`
 }
 
 type SetSeriesInput struct {
@@ -245,7 +245,7 @@ type GetBookGenresInput struct {
 }
 
 type SetGenresRequest struct {
-	GenreIDs []string `json:"genre_ids" validate:"required" doc:"Genre IDs"`
+	GenreIDs []string `json:"genre_ids" validate:"required,min=1,max=50" doc:"Genre IDs"`
 }
 
 type SetGenresInput struct {

@@ -24,10 +24,10 @@ func (s *Server) registerSearchRoutes() {
 
 type SearchInput struct {
 	Authorization string   `header:"Authorization"`
-	Query         string   `query:"q" validate:"required,min=1" doc:"Search query"`
-	Types         []string `query:"types" doc:"Types to search (book, contributor, series). Omit for all."`
-	Limit         int      `query:"limit" doc:"Max results per type (default 10)"`
-	GenreSlug     string   `query:"genre" doc:"Filter by genre slug"`
+	Query         string   `query:"q" validate:"required,min=1,max=200" doc:"Search query"`
+	Types         []string `query:"types" validate:"omitempty,max=3" doc:"Types to search (book, contributor, series). Omit for all."`
+	Limit         int      `query:"limit" validate:"omitempty,gte=1,lte=100" doc:"Max results per type (default 10)"`
+	GenreSlug     string   `query:"genre" validate:"omitempty,max=100" doc:"Filter by genre slug"`
 }
 
 type SearchBookResult struct {

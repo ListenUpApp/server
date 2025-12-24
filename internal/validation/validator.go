@@ -72,6 +72,8 @@ func (v *Validator) friendlyMessage(e validator.FieldError) string {
 		return fmt.Sprintf("must be at least %s characters", e.Param())
 	case "max":
 		return fmt.Sprintf("must not exceed %s characters", e.Param())
+	case "len":
+		return fmt.Sprintf("must be exactly %s characters", e.Param())
 	case "url":
 		return "must be a valid URL"
 	case "uuid":
@@ -85,6 +87,14 @@ func (v *Validator) friendlyMessage(e validator.FieldError) string {
 	case "gt":
 		return fmt.Sprintf("must be greater than %s", e.Param())
 	case "lt":
+		return fmt.Sprintf("must be less than %s", e.Param())
+	case "gtefield":
+		return fmt.Sprintf("must be greater than or equal to %s", e.Param())
+	case "gtfield":
+		return fmt.Sprintf("must be greater than %s", e.Param())
+	case "ltefield":
+		return fmt.Sprintf("must be less than or equal to %s", e.Param())
+	case "ltfield":
 		return fmt.Sprintf("must be less than %s", e.Param())
 	default:
 		return "is invalid"
