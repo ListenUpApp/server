@@ -7,11 +7,13 @@ import (
 
 // Sentinel errors for Audible API operations.
 var (
-	ErrNotFound    = errors.New("audible: not found")
-	ErrRateLimited = errors.New("audible: rate limited by server")
-	ErrBadRequest  = errors.New("audible: bad request")
-	ErrServer      = errors.New("audible: server error")
-	ErrInvalidASIN = errors.New("audible: invalid ASIN format")
+	ErrNotFound            = errors.New("audible: not found")
+	ErrRateLimited         = errors.New("audible: rate limited by server")
+	ErrBadRequest          = errors.New("audible: bad request")
+	ErrServer              = errors.New("audible: server error")
+	ErrInvalidASIN         = errors.New("audible: invalid ASIN format")
+	ErrScrapeFailed        = errors.New("audible: failed to parse page")
+	ErrContributorNotFound = errors.New("audible: contributor not found")
 )
 
 // Error wraps an underlying error with operation context.

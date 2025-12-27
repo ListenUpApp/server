@@ -274,6 +274,87 @@ func (s *MetadataService) resolveRegion(region *audible.Region) audible.Region {
 	return s.defaultRegion
 }
 
+// SearchContributors searches for contributors with region fallback.
+func (s *MetadataService) SearchContributors(ctx context.Context, name string) ([]audible.ContributorSearchResult, audible.Region, error) {
+	return s.SearchContributorsInRegion(ctx, name, nil)
+}
+
+// SearchContributorsInRegion searches for contributors in a specific region.
+// If region is nil, uses the default region with fallback to US.
+func (s *MetadataService) SearchContributorsInRegion(ctx context.Context, name string, region *audible.Region) ([]audible.ContributorSearchResult, audible.Region, error) {
+	// If a specific region is requested, search only in that region
+	if region != nil && region.Valid() {
+		s.logger.Debug("searching contributors in specified region",
+			"name", name,
+			"region", *region,
+		)
+		results, err := s.client.SearchContributors(ctx, *region, name)
+		return results, *region, err
+	}
+
+	// Try default region first
+	results, err := s.client.SearchContributors(ctx, s.defaultRegion, name)
+	if err == nil && len(results) > 0 {
+		return results, s.defaultRegion, nil
+	}
+
+	if err != nil {
+		s.logger.Warn("default region contributor search failed, trying fallback",
+			"error", err,
+			"defaultRegion", s.defaultRegion,
+		)
+	}
+
+	// Fall back to US if different
+	if s.defaultRegion != audible.RegionUS {
+		s.logger.Debug("falling back to US region for contributor search")
+		results, err = s.client.SearchContributors(ctx, audible.RegionUS, name)
+		if err == nil && len(results) > 0 {
+			return results, audible.RegionUS, nil
+		}
+	}
+
+	return nil, s.defaultRegion, err
+}
+
+// GetContributorProfile fetches a contributor profile by ASIN.
+func (s *MetadataService) GetContributorProfile(ctx context.Context, region *audible.Region, asin string) (*audible.ContributorProfile, error) {
+	r := s.resolveRegion(region)
+
+	s.logger.Debug("fetching contributor profile",
+		"asin", asin,
+		"region", r,
+	)
+
+	profile, err := s.client.GetContributorProfile(ctx, r, asin)
+	if err != nil {
+		return nil, err
+	}
+
+	return profile, nil
+}
+
+// GetContributorProfileWithFallback fetches a contributor profile with region fallback.
+func (s *MetadataService) GetContributorProfileWithFallback(ctx context.Context, asin string) (*audible.ContributorProfile, audible.Region, error) {
+	// Try default region first
+	profile, err := s.client.GetContributorProfile(ctx, s.defaultRegion, asin)
+	if err == nil {
+		return profile, s.defaultRegion, nil
+	}
+
+	if s.defaultRegion != audible.RegionUS {
+		s.logger.Debug("falling back to US region for contributor profile",
+			"asin", asin,
+		)
+		profile, err = s.client.GetContributorProfile(ctx, audible.RegionUS, asin)
+		if err == nil {
+			return profile, audible.RegionUS, nil
+		}
+	}
+
+	return nil, s.defaultRegion, err
+}
+
 // Close releases resources.
 func (s *MetadataService) Close() {
 	s.client.Close()

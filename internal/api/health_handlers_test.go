@@ -17,9 +17,10 @@ func TestHealthCheck_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.Code)
 
-	var healthResp HealthResponse
-	err := json.Unmarshal(resp.Body.Bytes(), &healthResp)
+	var envelope testEnvelope[HealthResponse]
+	err := json.Unmarshal(resp.Body.Bytes(), &envelope)
 	require.NoError(t, err)
 
-	assert.Equal(t, "healthy", healthResp.Status)
+	assert.True(t, envelope.Success)
+	assert.Equal(t, "healthy", envelope.Data.Status)
 }

@@ -22,15 +22,17 @@ func TestSetup_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.Code)
 
-	var authResp AuthResponse
-	err := json.Unmarshal(resp.Body.Bytes(), &authResp)
+	var envelope testEnvelope[AuthResponse]
+	err := json.Unmarshal(resp.Body.Bytes(), &envelope)
 	require.NoError(t, err)
 
-	assert.NotEmpty(t, authResp.AccessToken)
-	assert.NotEmpty(t, authResp.RefreshToken)
-	assert.Equal(t, "admin@example.com", authResp.User.Email)
-	assert.Equal(t, "Admin User", authResp.User.Name)
-	assert.Greater(t, authResp.ExpiresIn, 0)
+	assert.True(t, envelope.Success)
+	assert.NotEmpty(t, envelope.Data.AccessToken)
+	assert.NotEmpty(t, envelope.Data.RefreshToken)
+	assert.Equal(t, "admin@example.com", envelope.Data.User.Email)
+	assert.Equal(t, "Admin", envelope.Data.User.FirstName)
+	assert.Equal(t, "User", envelope.Data.User.LastName)
+	assert.Greater(t, envelope.Data.ExpiresIn, 0)
 }
 
 func TestSetup_AlreadyConfigured(t *testing.T) {
@@ -140,13 +142,14 @@ func TestLogin_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.Code)
 
-	var authResp AuthResponse
-	err := json.Unmarshal(resp.Body.Bytes(), &authResp)
+	var envelope testEnvelope[AuthResponse]
+	err := json.Unmarshal(resp.Body.Bytes(), &envelope)
 	require.NoError(t, err)
 
-	assert.NotEmpty(t, authResp.AccessToken)
-	assert.NotEmpty(t, authResp.RefreshToken)
-	assert.Equal(t, "admin@example.com", authResp.User.Email)
+	assert.True(t, envelope.Success)
+	assert.NotEmpty(t, envelope.Data.AccessToken)
+	assert.NotEmpty(t, envelope.Data.RefreshToken)
+	assert.Equal(t, "admin@example.com", envelope.Data.User.Email)
 }
 
 func TestLogin_InvalidCredentials(t *testing.T) {
@@ -230,13 +233,13 @@ func TestRefresh_Success(t *testing.T) {
 	})
 	require.Equal(t, http.StatusOK, resp.Code)
 
-	var setupResp AuthResponse
-	err := json.Unmarshal(resp.Body.Bytes(), &setupResp)
+	var setupEnvelope testEnvelope[AuthResponse]
+	err := json.Unmarshal(resp.Body.Bytes(), &setupEnvelope)
 	require.NoError(t, err)
 
 	// Refresh tokens
 	resp = ts.api.Post("/api/v1/auth/refresh", map[string]any{
-		"refresh_token": setupResp.RefreshToken,
+		"refresh_token": setupEnvelope.Data.RefreshToken,
 		"device_info": map[string]any{
 			"device_type": "mobile",
 			"platform":    "iOS",
@@ -245,15 +248,16 @@ func TestRefresh_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.Code)
 
-	var refreshResp AuthResponse
-	err = json.Unmarshal(resp.Body.Bytes(), &refreshResp)
+	var refreshEnvelope testEnvelope[AuthResponse]
+	err = json.Unmarshal(resp.Body.Bytes(), &refreshEnvelope)
 	require.NoError(t, err)
 
-	assert.NotEmpty(t, refreshResp.AccessToken)
-	assert.NotEmpty(t, refreshResp.RefreshToken)
+	assert.True(t, refreshEnvelope.Success)
+	assert.NotEmpty(t, refreshEnvelope.Data.AccessToken)
+	assert.NotEmpty(t, refreshEnvelope.Data.RefreshToken)
 	// New tokens should be different
-	assert.NotEqual(t, setupResp.AccessToken, refreshResp.AccessToken)
-	assert.NotEqual(t, setupResp.RefreshToken, refreshResp.RefreshToken)
+	assert.NotEqual(t, setupEnvelope.Data.AccessToken, refreshEnvelope.Data.AccessToken)
+	assert.NotEqual(t, setupEnvelope.Data.RefreshToken, refreshEnvelope.Data.RefreshToken)
 }
 
 func TestRefresh_InvalidToken(t *testing.T) {
@@ -291,9 +295,10 @@ func TestLogout_Success(t *testing.T) {
 	})
 	require.Equal(t, http.StatusOK, resp.Code)
 
-	var loginResp AuthResponse
-	err := json.Unmarshal(resp.Body.Bytes(), &loginResp)
+	var loginEnvelope testEnvelope[AuthResponse]
+	err := json.Unmarshal(resp.Body.Bytes(), &loginEnvelope)
 	require.NoError(t, err)
+	require.True(t, loginEnvelope.Success)
 
 	// Get user's sessions to find session ID
 	// For now we'll use a placeholder - logout should work even for non-existent sessions

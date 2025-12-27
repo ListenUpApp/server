@@ -97,6 +97,9 @@ func setupTestServer(t *testing.T) *testServer {
 		},
 	}
 
+	// Wrap all responses in {success, data, error} envelope for client compatibility
+	humaConfig.Transformers = append(humaConfig.Transformers, EnvelopeTransformer)
+
 	api := humachi.New(router, humaConfig)
 
 	// Register custom error handler
@@ -137,6 +140,13 @@ func setupTestServer(t *testing.T) *testServer {
 	}
 }
 
+// testEnvelope wraps API responses for tests.
+type testEnvelope[T any] struct {
+	Success bool   `json:"success"`
+	Data    T      `json:"data"`
+	Error   string `json:"error,omitempty"`
+}
+
 // createTestUserAndLogin creates a user through setup and returns the access token.
 func (ts *testServer) createTestUserAndLogin(t *testing.T) string {
 	t.Helper()
@@ -151,9 +161,9 @@ func (ts *testServer) createTestUserAndLogin(t *testing.T) string {
 
 	require.Equal(t, http.StatusOK, resp.Code, "Setup failed: %s", resp.Body.String())
 
-	var authResp AuthResponse
-	err := json.Unmarshal(resp.Body.Bytes(), &authResp)
+	var envelope testEnvelope[AuthResponse]
+	err := json.Unmarshal(resp.Body.Bytes(), &envelope)
 	require.NoError(t, err)
 
-	return authResp.AccessToken
+	return envelope.Data.AccessToken
 }

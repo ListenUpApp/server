@@ -21,15 +21,16 @@ func TestGetSyncManifest_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.Code)
 
-	var manifestResp SyncManifestResponse
-	err := json.Unmarshal(resp.Body.Bytes(), &manifestResp)
+	var envelope testEnvelope[SyncManifestResponse]
+	err := json.Unmarshal(resp.Body.Bytes(), &envelope)
 	require.NoError(t, err)
 
+	assert.True(t, envelope.Success)
 	// Empty library initially
-	assert.NotEmpty(t, manifestResp.LibraryVersion)
-	assert.NotEmpty(t, manifestResp.Checkpoint)
-	assert.Empty(t, manifestResp.BookIDs)
-	assert.Equal(t, 0, manifestResp.Counts.Books)
+	assert.NotEmpty(t, envelope.Data.LibraryVersion)
+	assert.NotEmpty(t, envelope.Data.Checkpoint)
+	assert.Empty(t, envelope.Data.BookIDs)
+	assert.Equal(t, 0, envelope.Data.Counts.Books)
 }
 
 func TestGetSyncManifest_Unauthorized(t *testing.T) {
@@ -62,13 +63,14 @@ func TestGetSyncBooks_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.Code)
 
-	var booksResp SyncBooksResponse
-	err := json.Unmarshal(resp.Body.Bytes(), &booksResp)
+	var envelope testEnvelope[SyncBooksResponse]
+	err := json.Unmarshal(resp.Body.Bytes(), &envelope)
 	require.NoError(t, err)
 
+	assert.True(t, envelope.Success)
 	// Empty library initially
-	assert.Empty(t, booksResp.Books)
-	assert.False(t, booksResp.HasMore)
+	assert.Empty(t, envelope.Data.Books)
+	assert.False(t, envelope.Data.HasMore)
 }
 
 func TestGetSyncBooks_WithPagination(t *testing.T) {
@@ -82,11 +84,12 @@ func TestGetSyncBooks_WithPagination(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.Code)
 
-	var booksResp SyncBooksResponse
-	err := json.Unmarshal(resp.Body.Bytes(), &booksResp)
+	var envelope testEnvelope[SyncBooksResponse]
+	err := json.Unmarshal(resp.Body.Bytes(), &envelope)
 	require.NoError(t, err)
 
-	assert.False(t, booksResp.HasMore)
+	assert.True(t, envelope.Success)
+	assert.False(t, envelope.Data.HasMore)
 }
 
 func TestGetSyncBooks_Unauthorized(t *testing.T) {
@@ -109,13 +112,14 @@ func TestGetSyncContributors_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.Code)
 
-	var contribResp SyncContributorsResponse
-	err := json.Unmarshal(resp.Body.Bytes(), &contribResp)
+	var envelope testEnvelope[SyncContributorsResponse]
+	err := json.Unmarshal(resp.Body.Bytes(), &envelope)
 	require.NoError(t, err)
 
+	assert.True(t, envelope.Success)
 	// Empty library initially
-	assert.Empty(t, contribResp.Contributors)
-	assert.False(t, contribResp.HasMore)
+	assert.Empty(t, envelope.Data.Contributors)
+	assert.False(t, envelope.Data.HasMore)
 }
 
 func TestGetSyncContributors_Unauthorized(t *testing.T) {
@@ -138,13 +142,14 @@ func TestGetSyncSeries_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.Code)
 
-	var seriesResp SyncSeriesResponse
-	err := json.Unmarshal(resp.Body.Bytes(), &seriesResp)
+	var envelope testEnvelope[SyncSeriesResponse]
+	err := json.Unmarshal(resp.Body.Bytes(), &envelope)
 	require.NoError(t, err)
 
+	assert.True(t, envelope.Success)
 	// Empty library initially
-	assert.Empty(t, seriesResp.Series)
-	assert.False(t, seriesResp.HasMore)
+	assert.Empty(t, envelope.Data.Series)
+	assert.False(t, envelope.Data.HasMore)
 }
 
 func TestGetSyncSeries_Unauthorized(t *testing.T) {

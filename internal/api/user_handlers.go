@@ -40,12 +40,15 @@ func (s *Server) handleGetCurrentUser(ctx context.Context, input *AuthenticatedI
 
 	return &UserOutput{
 		Body: UserResponse{
-			ID:        user.ID,
-			Email:     user.Email,
-			Name:      user.FirstName + " " + user.LastName,
-			Role:      string(user.Role),
-			CreatedAt: user.CreatedAt,
-			UpdatedAt: user.UpdatedAt,
+			ID:          user.ID,
+			Email:       user.Email,
+			DisplayName: user.DisplayName,
+			FirstName:   user.FirstName,
+			LastName:    user.LastName,
+			IsRoot:      user.IsRoot,
+			CreatedAt:   user.CreatedAt,
+			UpdatedAt:   user.UpdatedAt,
+			LastLoginAt: user.LastLoginAt,
 		},
 	}, nil
 }

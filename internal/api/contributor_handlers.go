@@ -2,10 +2,13 @@ package api
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"net/http"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/go-chi/chi/v5"
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/id"
 	"github.com/listenupapp/listenup-server/internal/store"
@@ -83,6 +86,16 @@ func (s *Server) registerContributorRoutes() {
 	}, s.handleMergeContributors)
 
 	huma.Register(s.api, huma.Operation{
+		OperationID: "unmergeContributor",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/contributors/unmerge",
+		Summary:     "Unmerge contributor alias",
+		Description: "Splits an alias back into a separate contributor",
+		Tags:        []string{"Contributors"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleUnmergeContributor)
+
+	huma.Register(s.api, huma.Operation{
 		OperationID: "searchContributors",
 		Method:      http.MethodGet,
 		Path:        "/api/v1/contributors/search",
@@ -91,6 +104,19 @@ func (s *Server) registerContributorRoutes() {
 		Tags:        []string{"Contributors"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleSearchContributors)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "applyContributorMetadata",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/contributors/{id}/metadata",
+		Summary:     "Apply Audible metadata",
+		Description: "Fetches and applies metadata from Audible to a contributor",
+		Tags:        []string{"Contributors"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleApplyContributorMetadata)
+
+	// Direct chi route for contributor image serving (no auth required)
+	s.router.Get("/api/v1/contributors/{id}/image", s.handleServeContributorImage)
 }
 
 // === DTOs ===
@@ -196,6 +222,16 @@ type MergeContributorsInput struct {
 	Body          MergeContributorsRequest
 }
 
+type UnmergeContributorRequest struct {
+	SourceID  string `json:"source_id" validate:"required" doc:"Contributor with the alias to split"`
+	AliasName string `json:"alias_name" validate:"required,min=1,max=200" doc:"Alias name to split into a new contributor"`
+}
+
+type UnmergeContributorInput struct {
+	Authorization string `header:"Authorization"`
+	Body          UnmergeContributorRequest
+}
+
 type SearchContributorsInput struct {
 	Authorization string `header:"Authorization"`
 	Query         string `query:"q" validate:"required,min=1,max=200" doc:"Search query"`
@@ -214,6 +250,14 @@ type SearchContributorsResponse struct {
 
 type SearchContributorsOutput struct {
 	Body SearchContributorsResponse
+}
+
+type ApplyContributorMetadataInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Contributor ID"`
+	ASIN          string `query:"asin" doc:"Audible ASIN (required if multiple matches)"`
+	Name          string `query:"name" doc:"Contributor name (fallback for search if contributor not found)"`
+	ImageURL      string `query:"imageUrl" doc:"Image URL from search results (Audible API no longer returns images)"`
 }
 
 // === Handlers ===
@@ -393,6 +437,19 @@ func (s *Server) handleMergeContributors(ctx context.Context, input *MergeContri
 	return &ContributorOutput{Body: mapContributorResponse(c)}, nil
 }
 
+func (s *Server) handleUnmergeContributor(ctx context.Context, input *UnmergeContributorInput) (*ContributorOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
+	}
+
+	c, err := s.store.UnmergeContributor(ctx, input.Body.SourceID, input.Body.AliasName)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ContributorOutput{Body: mapContributorResponse(c)}, nil
+}
+
 func (s *Server) handleSearchContributors(ctx context.Context, input *SearchContributorsInput) (*SearchContributorsOutput, error) {
 	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
 		return nil, err
@@ -418,6 +475,220 @@ func (s *Server) handleSearchContributors(ctx context.Context, input *SearchCont
 	}
 
 	return &SearchContributorsOutput{Body: SearchContributorsResponse{Results: resp}}, nil
+}
+
+// searchContributorByName searches Audible for contributors by name and returns 409 Conflict with candidates.
+// If an ASIN is provided, returns 404 since the contributor doesn't exist locally yet.
+func (s *Server) searchContributorByName(ctx context.Context, name string, asin string) (*ContributorOutput, error) {
+	// If ASIN provided, the contributor just doesn't exist locally yet - return 404
+	if asin != "" {
+		return nil, &APIError{
+			status:  http.StatusNotFound,
+			Code:    "contributor_not_synced",
+			Message: "Contributor not found locally. Please wait for sync to complete, then try again.",
+		}
+	}
+
+	// Search Audible by name
+	results, region, err := s.services.Metadata.SearchContributors(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return 409 Conflict with candidates
+	candidates := make([]MetadataContributorSearchResultResponse, len(results))
+	for i, r := range results {
+		candidates[i] = MetadataContributorSearchResultResponse{
+			ASIN:        r.ASIN,
+			Name:        r.Name,
+			ImageURL:    r.ImageURL,
+			Description: r.Description,
+		}
+	}
+
+	var message string
+	if len(results) == 0 {
+		message = fmt.Sprintf("No matches found for \"%s\" on Audible. Try searching with a different name.", name)
+	} else if len(results) == 1 {
+		message = fmt.Sprintf("Found contributor \"%s\" on Audible (%s region).", results[0].Name, region)
+	} else {
+		message = fmt.Sprintf("Multiple contributors found in %s region. Select a contributor and retry with ?asin={asin}", region)
+	}
+
+	return nil, &APIError{
+		status:  http.StatusConflict,
+		Code:    "disambiguation_required",
+		Message: message,
+		Details: map[string]any{
+			"candidates":    candidates,
+			"searched_name": name,
+		},
+	}
+}
+
+func (s *Server) handleApplyContributorMetadata(ctx context.Context, input *ApplyContributorMetadataInput) (*ContributorOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
+	}
+
+	s.logger.Debug("applying contributor metadata",
+		"contributor_id", input.ID,
+		"asin", input.ASIN,
+		"name", input.Name,
+		"image_url", input.ImageURL,
+	)
+
+	// Get existing contributor
+	contributor, err := s.store.GetContributor(ctx, input.ID)
+	contributorNotFound := err != nil && isNotFoundError(err)
+
+	if err != nil && !contributorNotFound {
+		// Real error (not just "not found")
+		return nil, err
+	}
+
+	if contributorNotFound {
+		s.logger.Debug("contributor not found, will create if ASIN provided",
+			"contributor_id", input.ID,
+		)
+	}
+
+	// Determine ASIN to use
+	asin := ""
+	if input.ASIN != "" {
+		asin = input.ASIN
+	} else if contributor != nil && contributor.ASIN != "" {
+		asin = contributor.ASIN
+	}
+
+	// Determine name to search with
+	searchName := input.Name
+	if searchName == "" && contributor != nil {
+		searchName = contributor.Name
+	}
+
+	// If no ASIN, search by name and return candidates
+	if asin == "" {
+		if searchName == "" {
+			return nil, &APIError{
+				status:  http.StatusBadRequest,
+				Code:    "missing_search_criteria",
+				Message: "Either ASIN or name must be provided",
+			}
+		}
+		return s.searchContributorByName(ctx, searchName, "")
+	}
+
+	// Fetch profile from Audible
+	profile, _, err := s.services.Metadata.GetContributorProfileWithFallback(ctx, asin)
+	if err != nil {
+		return nil, err
+	}
+
+	// If contributor doesn't exist, create it with the client's ID
+	if contributorNotFound {
+		contributor = &domain.Contributor{
+			Syncable: domain.Syncable{
+				ID: input.ID,
+			},
+			Name: searchName, // Use the name provided by client
+		}
+		contributor.InitTimestamps()
+		s.logger.Info("creating contributor from metadata apply",
+			"contributor_id", input.ID,
+			"name", searchName,
+		)
+	}
+
+	// Apply metadata
+	contributor.ASIN = profile.ASIN
+	if profile.Name != "" {
+		contributor.Name = profile.Name
+	}
+	if profile.Biography != "" {
+		contributor.Biography = profile.Biography
+	}
+
+	// Download and store image if present
+	// Prefer profile.ImageURL, fall back to imageUrl from search results
+	// (Audible API no longer returns contributor images, but search results have them)
+	imageURL := profile.ImageURL
+	if imageURL == "" {
+		imageURL = input.ImageURL
+	}
+	if imageURL != "" {
+		if err := s.downloadContributorImage(ctx, contributor.ID, imageURL); err != nil {
+			s.logger.Warn("Failed to download contributor image",
+				"error", err,
+				"contributor_id", contributor.ID,
+				"image_url", imageURL,
+			)
+			// Continue without image
+		} else {
+			contributor.ImageURL = fmt.Sprintf("/api/v1/contributors/%s/image", contributor.ID)
+		}
+	}
+
+	// Create or update contributor
+	contributor.UpdatedAt = time.Now()
+	if contributorNotFound {
+		if err := s.store.CreateContributor(ctx, contributor); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := s.store.UpdateContributor(ctx, contributor); err != nil {
+			return nil, err
+		}
+	}
+
+	return &ContributorOutput{Body: mapContributorResponse(contributor)}, nil
+}
+
+func (s *Server) downloadContributorImage(ctx context.Context, contributorID, imageURL string) error {
+	downloadCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(downloadCtx, http.MethodGet, imageURL, nil)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("download image: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download image: status %d", resp.StatusCode)
+	}
+
+	const maxImageSize = 10 * 1024 * 1024
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxImageSize))
+	if err != nil {
+		return fmt.Errorf("read image: %w", err)
+	}
+
+	return s.storage.ContributorImages.Save(contributorID, data)
+}
+
+func (s *Server) handleServeContributorImage(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		http.Error(w, "id required", http.StatusBadRequest)
+		return
+	}
+
+	data, err := s.storage.ContributorImages.Get(id)
+	if err != nil {
+		http.Error(w, "image not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
+	w.Write(data)
 }
 
 // === Mappers ===

@@ -74,14 +74,14 @@ func (s *Server) registerListeningRoutes() {
 // === DTOs ===
 
 type RecordListeningEventRequest struct {
-	BookID          string    `json:"book_id" validate:"required" doc:"Book ID"`
-	StartPositionMs int64     `json:"start_position_ms" validate:"gte=0" doc:"Start position in ms"`
-	EndPositionMs   int64     `json:"end_position_ms" validate:"gte=0,gtefield=StartPositionMs" doc:"End position in ms"`
-	StartedAt       time.Time `json:"started_at" validate:"required" doc:"When playback started"`
-	EndedAt         time.Time `json:"ended_at" validate:"required,gtefield=StartedAt" doc:"When playback ended"`
-	PlaybackSpeed   float32   `json:"playback_speed" validate:"gt=0,lte=4" doc:"Playback speed"`
-	DeviceID        string    `json:"device_id" validate:"required,max=100" doc:"Device ID"`
-	DeviceName      string    `json:"device_name" validate:"omitempty,max=100" doc:"Device name"`
+	BookID          string   `json:"book_id" validate:"required" doc:"Book ID"`
+	StartPositionMs int64    `json:"start_position_ms" validate:"gte=0" doc:"Start position in ms"`
+	EndPositionMs   int64    `json:"end_position_ms" validate:"gte=0,gtefield=StartPositionMs" doc:"End position in ms"`
+	StartedAt       FlexTime `json:"started_at" validate:"required" doc:"When playback started (RFC3339 or epoch ms)"`
+	EndedAt         FlexTime `json:"ended_at" validate:"required" doc:"When playback ended (RFC3339 or epoch ms)"`
+	PlaybackSpeed   float32  `json:"playback_speed" validate:"gt=0,lte=4" doc:"Playback speed"`
+	DeviceID        string   `json:"device_id" validate:"required,max=100" doc:"Device ID"`
+	DeviceName      string   `json:"device_name" validate:"omitempty,max=100" doc:"Device name"`
 }
 
 type RecordListeningEventInput struct {
@@ -102,12 +102,15 @@ type ListeningEventResponse struct {
 }
 
 type ProgressResponse struct {
+	UserID            string    `json:"user_id" doc:"User ID"`
 	BookID            string    `json:"book_id" doc:"Book ID"`
 	CurrentPositionMs int64     `json:"current_position_ms" doc:"Current position in ms"`
 	TotalDurationMs   int64     `json:"total_duration_ms" doc:"Total duration in ms"`
 	Progress          float64   `json:"progress" doc:"Progress 0-1"`
 	TotalListenTimeMs int64     `json:"total_listen_time_ms" doc:"Total listen time"`
+	StartedAt         time.Time `json:"started_at" doc:"When listening started"`
 	LastPlayedAt      time.Time `json:"last_played_at" doc:"Last played time"`
+	UpdatedAt         time.Time `json:"updated_at" doc:"Last update time"`
 	IsFinished        bool      `json:"is_finished" doc:"Whether finished"`
 }
 
@@ -200,8 +203,8 @@ func (s *Server) handleRecordListeningEvent(ctx context.Context, input *RecordLi
 		BookID:          input.Body.BookID,
 		StartPositionMs: input.Body.StartPositionMs,
 		EndPositionMs:   input.Body.EndPositionMs,
-		StartedAt:       input.Body.StartedAt,
-		EndedAt:         input.Body.EndedAt,
+		StartedAt:       input.Body.StartedAt.ToTime(),
+		EndedAt:         input.Body.EndedAt.ToTime(),
 		PlaybackSpeed:   input.Body.PlaybackSpeed,
 		DeviceID:        input.Body.DeviceID,
 		DeviceName:      input.Body.DeviceName,
@@ -230,12 +233,15 @@ func (s *Server) handleRecordListeningEvent(ctx context.Context, input *RecordLi
 				DeviceID:        result.Event.DeviceID,
 			},
 			Progress: ProgressResponse{
+				UserID:            result.Progress.UserID,
 				BookID:            result.Progress.BookID,
 				CurrentPositionMs: result.Progress.CurrentPositionMs,
 				TotalDurationMs:   book.TotalDuration,
 				Progress:          result.Progress.Progress,
 				TotalListenTimeMs: result.Progress.TotalListenTimeMs,
+				StartedAt:         result.Progress.StartedAt,
 				LastPlayedAt:      result.Progress.LastPlayedAt,
+				UpdatedAt:         result.Progress.UpdatedAt,
 				IsFinished:        result.Progress.IsFinished,
 			},
 		},
@@ -261,12 +267,15 @@ func (s *Server) handleGetProgress(ctx context.Context, input *GetProgressInput)
 
 	return &ProgressOutput{
 		Body: ProgressResponse{
+			UserID:            progress.UserID,
 			BookID:            progress.BookID,
 			CurrentPositionMs: progress.CurrentPositionMs,
 			TotalDurationMs:   book.TotalDuration,
 			Progress:          progress.Progress,
 			TotalListenTimeMs: progress.TotalListenTimeMs,
+			StartedAt:         progress.StartedAt,
 			LastPlayedAt:      progress.LastPlayedAt,
+			UpdatedAt:         progress.UpdatedAt,
 			IsFinished:        progress.IsFinished,
 		},
 	}, nil

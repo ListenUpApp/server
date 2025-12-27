@@ -17,13 +17,14 @@ func TestGetInstance_BeforeSetup(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.Code)
 
-	var instanceResp InstanceResponse
-	err := json.Unmarshal(resp.Body.Bytes(), &instanceResp)
+	var envelope testEnvelope[InstanceResponse]
+	err := json.Unmarshal(resp.Body.Bytes(), &envelope)
 	require.NoError(t, err)
 
-	assert.NotEmpty(t, instanceResp.ID)
-	assert.Equal(t, "Test Server", instanceResp.Name)
-	assert.True(t, instanceResp.SetupRequired, "Setup should be required before admin user is created")
+	assert.True(t, envelope.Success)
+	assert.NotEmpty(t, envelope.Data.ID)
+	assert.Equal(t, "Test Server", envelope.Data.Name)
+	assert.True(t, envelope.Data.SetupRequired, "Setup should be required before admin user is created")
 }
 
 func TestGetInstance_AfterSetup(t *testing.T) {
@@ -37,11 +38,12 @@ func TestGetInstance_AfterSetup(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.Code)
 
-	var instanceResp InstanceResponse
-	err := json.Unmarshal(resp.Body.Bytes(), &instanceResp)
+	var envelope testEnvelope[InstanceResponse]
+	err := json.Unmarshal(resp.Body.Bytes(), &envelope)
 	require.NoError(t, err)
 
-	assert.NotEmpty(t, instanceResp.ID)
-	assert.Equal(t, "Test Server", instanceResp.Name)
-	assert.False(t, instanceResp.SetupRequired, "Setup should not be required after admin user is created")
+	assert.True(t, envelope.Success)
+	assert.NotEmpty(t, envelope.Data.ID)
+	assert.Equal(t, "Test Server", envelope.Data.Name)
+	assert.False(t, envelope.Data.SetupRequired, "Setup should not be required after admin user is created")
 }

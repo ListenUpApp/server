@@ -59,6 +59,8 @@ type DeviceInfo struct {
 	ClientBuild     string `json:"client_build,omitempty" validate:"omitempty,max=50" doc:"Client build number"`
 	DeviceName      string `json:"device_name,omitempty" validate:"omitempty,max=100" doc:"Human-readable device name"`
 	DeviceModel     string `json:"device_model,omitempty" validate:"omitempty,max=100" doc:"Device model (iPhone 15 Pro, etc.)"`
+	BrowserName     string `json:"browser_name,omitempty" validate:"omitempty,max=100" doc:"Browser name (for web clients)"`
+	BrowserVersion  string `json:"browser_version,omitempty" validate:"omitempty,max=50" doc:"Browser version (for web clients)"`
 }
 
 type SetupRequest struct {
@@ -104,17 +106,22 @@ type LogoutInput struct {
 }
 
 type UserResponse struct {
-	ID        string    `json:"id" doc:"User ID"`
-	Email     string    `json:"email" doc:"User email"`
-	Name      string    `json:"name" doc:"Display name"`
-	Role      string    `json:"role" doc:"User role"`
-	CreatedAt time.Time `json:"created_at" doc:"Creation timestamp"`
-	UpdatedAt time.Time `json:"updated_at" doc:"Last update timestamp"`
+	ID          string    `json:"id" doc:"User ID"`
+	Email       string    `json:"email" doc:"User email"`
+	DisplayName string    `json:"display_name" doc:"Display name"`
+	FirstName   string    `json:"first_name" doc:"First name"`
+	LastName    string    `json:"last_name" doc:"Last name"`
+	IsRoot      bool      `json:"is_root" doc:"Whether user is root admin"`
+	CreatedAt   time.Time `json:"created_at" doc:"Creation timestamp"`
+	UpdatedAt   time.Time `json:"updated_at" doc:"Last update timestamp"`
+	LastLoginAt time.Time `json:"last_login_at" doc:"Last login timestamp"`
 }
 
 type AuthResponse struct {
 	AccessToken  string       `json:"access_token" doc:"PASETO access token"`
 	RefreshToken string       `json:"refresh_token" doc:"Refresh token"`
+	SessionID    string       `json:"session_id" doc:"Session identifier"`
+	TokenType    string       `json:"token_type" doc:"Token type (Bearer)"`
 	ExpiresIn    int          `json:"expires_in" doc:"Token expiry in seconds"`
 	User         UserResponse `json:"user" doc:"Authenticated user"`
 }
@@ -212,14 +219,19 @@ func mapAuthResponse(resp *service.AuthResponse) AuthResponse {
 	return AuthResponse{
 		AccessToken:  resp.AccessToken,
 		RefreshToken: resp.RefreshToken,
+		SessionID:    resp.SessionID,
+		TokenType:    resp.TokenType,
 		ExpiresIn:    resp.ExpiresIn,
 		User: UserResponse{
-			ID:        resp.User.ID,
-			Email:     resp.User.Email,
-			Name:      resp.User.FirstName + " " + resp.User.LastName,
-			Role:      string(resp.User.Role),
-			CreatedAt: resp.User.CreatedAt,
-			UpdatedAt: resp.User.UpdatedAt,
+			ID:          resp.User.ID,
+			Email:       resp.User.Email,
+			DisplayName: resp.User.DisplayName,
+			FirstName:   resp.User.FirstName,
+			LastName:    resp.User.LastName,
+			IsRoot:      resp.User.IsRoot,
+			CreatedAt:   resp.User.CreatedAt,
+			UpdatedAt:   resp.User.UpdatedAt,
+			LastLoginAt: resp.User.LastLoginAt,
 		},
 	}
 }

@@ -60,6 +60,7 @@ const (
 // Client is a rate-limited Audible API client.
 type Client struct {
 	http    *http.Client
+	webHTTP *http.Client // Separate client for web scraping with compression disabled
 	limiter *ratelimit.KeyedRateLimiter
 	logger  *slog.Logger
 }
@@ -69,6 +70,20 @@ func New(logger *slog.Logger) *Client {
 	return &Client{
 		http: &http.Client{
 			Timeout: defaultTimeout,
+		},
+		// Web scraping client with compression disabled and no auto-redirects.
+		// Audible's CDN serves geo-restricted content when Accept-Encoding is set,
+		// but serves full US content when compression is disabled.
+		// We disable auto-redirects to handle geo-redirects specially.
+		webHTTP: &http.Client{
+			Timeout: defaultTimeout,
+			Transport: &http.Transport{
+				DisableCompression: true,
+			},
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				// Don't follow redirects automatically - we handle them manually
+				return http.ErrUseLastResponse
+			},
 		},
 		limiter: ratelimit.New(defaultRPS, defaultBurst),
 		logger:  logger,

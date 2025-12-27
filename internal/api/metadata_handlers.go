@@ -49,14 +49,34 @@ func (s *Server) registerMetadataRoutes() {
 		Tags:        []string{"Metadata"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleRefreshMetadataBook)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "searchMetadataContributors",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/metadata/contributors/search",
+		Summary:     "Search contributors",
+		Description: "Search for contributors on Audible by name",
+		Tags:        []string{"Metadata"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleSearchMetadataContributors)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getMetadataContributor",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/metadata/contributors/{asin}",
+		Summary:     "Get contributor profile",
+		Description: "Fetches contributor profile from Audible by ASIN",
+		Tags:        []string{"Metadata"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetMetadataContributor)
 }
 
 // === DTOs ===
 
 type SearchMetadataInput struct {
-	Authorization string  `header:"Authorization"`
-	Query         string  `query:"q" validate:"required,min=1" doc:"Search query"`
-	Region        *string `query:"region" doc:"Audible region (us, uk, de, fr, etc.)"`
+	Authorization string `header:"Authorization"`
+	Query         string `query:"q" validate:"required,min=1" doc:"Search query"`
+	Region        string `query:"region" doc:"Audible region (us, uk, de, fr, etc.)"`
 }
 
 type MetadataContributorResponse struct {
@@ -86,9 +106,9 @@ type SearchMetadataOutput struct {
 }
 
 type GetMetadataBookInput struct {
-	Authorization string  `header:"Authorization"`
-	ASIN          string  `path:"asin" doc:"Audible ASIN"`
-	Region        *string `query:"region" doc:"Audible region"`
+	Authorization string `header:"Authorization"`
+	ASIN          string `path:"asin" doc:"Audible ASIN"`
+	Region        string `query:"region" doc:"Audible region"`
 }
 
 type MetadataSeriesEntryResponse struct {
@@ -120,9 +140,9 @@ type MetadataBookOutput struct {
 }
 
 type GetMetadataChaptersInput struct {
-	Authorization string  `header:"Authorization"`
-	ASIN          string  `path:"asin" doc:"Audible ASIN"`
-	Region        *string `query:"region" doc:"Audible region"`
+	Authorization string `header:"Authorization"`
+	ASIN          string `path:"asin" doc:"Audible ASIN"`
+	Region        string `query:"region" doc:"Audible region"`
 }
 
 type MetadataChapterResponse struct {
@@ -143,6 +163,47 @@ type RefreshMetadataBookInput struct {
 	Authorization string `header:"Authorization"`
 	ASIN          string `path:"asin" doc:"Audible ASIN"`
 	Region        string `query:"region" validate:"required" doc:"Audible region"`
+}
+
+// === Contributor Metadata DTOs ===
+
+type SearchMetadataContributorsInput struct {
+	Authorization string `header:"Authorization"`
+	Query         string `query:"q" validate:"required,min=1,max=200" doc:"Contributor name to search"`
+	Region        string `query:"region" validate:"omitempty" doc:"Audible region"`
+}
+
+type MetadataContributorSearchResultResponse struct {
+	ASIN        string `json:"asin" doc:"Audible ASIN"`
+	Name        string `json:"name" doc:"Contributor name"`
+	ImageURL    string `json:"image_url,omitempty" doc:"Profile image URL"`
+	Description string `json:"description,omitempty" doc:"Description (e.g., '142 titles')"`
+}
+
+type SearchMetadataContributorsResponse struct {
+	Results []MetadataContributorSearchResultResponse `json:"results" doc:"Search results"`
+	Region  string                                    `json:"region" doc:"Region that returned results"`
+}
+
+type SearchMetadataContributorsOutput struct {
+	Body SearchMetadataContributorsResponse
+}
+
+type GetMetadataContributorInput struct {
+	Authorization string `header:"Authorization"`
+	ASIN          string `path:"asin" doc:"Audible ASIN"`
+	Region        string `query:"region" validate:"omitempty" doc:"Audible region"`
+}
+
+type MetadataContributorProfileResponse struct {
+	ASIN      string `json:"asin" doc:"Audible ASIN"`
+	Name      string `json:"name" doc:"Contributor name"`
+	Biography string `json:"biography,omitempty" doc:"Biography text"`
+	ImageURL  string `json:"image_url,omitempty" doc:"Profile image URL"`
+}
+
+type MetadataContributorProfileOutput struct {
+	Body MetadataContributorProfileResponse
 }
 
 // === Handlers ===
@@ -178,8 +239,8 @@ func (s *Server) handleGetMetadataBook(ctx context.Context, input *GetMetadataBo
 	}
 
 	var region *audible.Region
-	if input.Region != nil {
-		r := audible.Region(*input.Region)
+	if input.Region != "" {
+		r := audible.Region(input.Region)
 		region = &r
 	}
 
@@ -197,8 +258,8 @@ func (s *Server) handleGetMetadataChapters(ctx context.Context, input *GetMetada
 	}
 
 	var region *audible.Region
-	if input.Region != nil {
-		r := audible.Region(*input.Region)
+	if input.Region != "" {
+		r := audible.Region(input.Region)
 		region = &r
 	}
 
@@ -287,4 +348,66 @@ func mapMetadataBook(b *audible.Book) MetadataBookResponse {
 		Rating:         b.Rating,
 		RatingCount:    b.RatingCount,
 	}
+}
+
+// === Contributor Metadata Handlers ===
+
+func (s *Server) handleSearchMetadataContributors(ctx context.Context, input *SearchMetadataContributorsInput) (*SearchMetadataContributorsOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
+	}
+
+	var region *audible.Region
+	if input.Region != "" {
+		r := audible.Region(input.Region)
+		region = &r
+	}
+
+	results, usedRegion, err := s.services.Metadata.SearchContributorsInRegion(ctx, input.Query, region)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := make([]MetadataContributorSearchResultResponse, len(results))
+	for i, r := range results {
+		resp[i] = MetadataContributorSearchResultResponse{
+			ASIN:        r.ASIN,
+			Name:        r.Name,
+			ImageURL:    r.ImageURL,
+			Description: r.Description,
+		}
+	}
+
+	return &SearchMetadataContributorsOutput{
+		Body: SearchMetadataContributorsResponse{
+			Results: resp,
+			Region:  string(usedRegion),
+		},
+	}, nil
+}
+
+func (s *Server) handleGetMetadataContributor(ctx context.Context, input *GetMetadataContributorInput) (*MetadataContributorProfileOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
+	}
+
+	var region *audible.Region
+	if input.Region != "" {
+		r := audible.Region(input.Region)
+		region = &r
+	}
+
+	profile, err := s.services.Metadata.GetContributorProfile(ctx, region, input.ASIN)
+	if err != nil {
+		return nil, err
+	}
+
+	return &MetadataContributorProfileOutput{
+		Body: MetadataContributorProfileResponse{
+			ASIN:      profile.ASIN,
+			Name:      profile.Name,
+			Biography: profile.Biography,
+			ImageURL:  profile.ImageURL,
+		},
+	}, nil
 }

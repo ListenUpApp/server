@@ -52,6 +52,9 @@ func NewServer(
 		},
 	}
 
+	// Wrap all responses in {success, data, error} envelope for client compatibility
+	config.Transformers = append(config.Transformers, EnvelopeTransformer)
+
 	api := humachi.New(router, config)
 
 	// Register custom error handler for domain errors

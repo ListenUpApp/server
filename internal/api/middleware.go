@@ -4,9 +4,11 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/listenupapp/listenup-server/internal/http/response"
 )
@@ -112,11 +114,15 @@ func StructuredLogger(logger *slog.Logger) func(next http.Handler) http.Handler 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 
-			// Wrap response writer to capture status code
-			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+			// Wrap response writer to capture status code and body for error logging
+			ww := &responseCapture{
+				ResponseWriter: w,
+				ww:             middleware.NewWrapResponseWriter(w, r.ProtoMajor),
+			}
 
 			// Process request
-			next.ServeHTTP(ww, r)
+			ww.ww.Tee(ww) // Capture response body for error logging
+			next.ServeHTTP(ww.ww, r)
 
 			// Calculate duration
 			duration := time.Since(start)
@@ -128,11 +134,11 @@ func StructuredLogger(logger *slog.Logger) func(next http.Handler) http.Handler 
 			attrs := []slog.Attr{
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
-				slog.Int("status", ww.Status()),
+				slog.Int("status", ww.ww.Status()),
 				slog.Duration("duration", duration),
 				slog.String("request_id", requestID),
 				slog.String("client_ip", r.RemoteAddr),
-				slog.Int("bytes", ww.BytesWritten()),
+				slog.Int("bytes", ww.ww.BytesWritten()),
 			}
 
 			// Add query string if present (but not for sensitive endpoints)
@@ -141,9 +147,13 @@ func StructuredLogger(logger *slog.Logger) func(next http.Handler) http.Handler 
 			}
 
 			// Choose log level based on status code
-			status := ww.Status()
+			status := ww.ww.Status()
 			switch {
 			case status >= 500:
+				// For 5xx errors, also log the response body to help debug
+				if len(ww.body) > 0 && len(ww.body) < 2000 {
+					attrs = append(attrs, slog.String("response_body", string(ww.body)))
+				}
 				logger.LogAttrs(r.Context(), slog.LevelError, "request completed", attrs...)
 			case status >= 400:
 				logger.LogAttrs(r.Context(), slog.LevelWarn, "request completed", attrs...)
@@ -152,6 +162,26 @@ func StructuredLogger(logger *slog.Logger) func(next http.Handler) http.Handler 
 			}
 		})
 	}
+}
+
+// responseCapture captures the response body for error logging.
+type responseCapture struct {
+	http.ResponseWriter
+	ww   middleware.WrapResponseWriter
+	body []byte
+}
+
+func (rc *responseCapture) Write(b []byte) (int, error) {
+	// Only capture first 2KB of response for logging
+	if len(rc.body) < 2000 {
+		remaining := 2000 - len(rc.body)
+		if len(b) > remaining {
+			rc.body = append(rc.body, b[:remaining]...)
+		} else {
+			rc.body = append(rc.body, b...)
+		}
+	}
+	return len(b), nil
 }
 
 // SecurityHeaders returns a middleware that adds security headers to responses.
@@ -189,4 +219,96 @@ func isSensitivePath(path string) bool {
 		}
 	}
 	return false
+}
+
+// APIEnvelope wraps all API responses in a consistent format.
+// This maintains compatibility with clients expecting {success, data, error} structure.
+type APIEnvelope struct {
+	Success bool   `json:"success"`
+	Data    any    `json:"data,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+// APIErrorEnvelope is used for error responses that include code and details.
+// Some errors (like 409 Conflict for disambiguation) need to return structured data.
+type APIErrorEnvelope struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Details any    `json:"details,omitempty"`
+}
+
+// EnvelopeTransformer wraps Huma responses in the standard API envelope format.
+// Clients expect responses wrapped as: {"success": bool, "data": ..., "error": ...}
+// For errors with details (like disambiguation), returns full error structure.
+func EnvelopeTransformer(_ huma.Context, status string, v any) (any, error) {
+	// Parse status code to determine success
+	statusCode, err := strconv.Atoi(status)
+	if err != nil {
+		statusCode = 200 // Default to success if parsing fails
+	}
+
+	success := statusCode < 400
+
+	if success {
+		return APIEnvelope{
+			Success: true,
+			Data:    v,
+		}, nil
+	}
+
+	// For APIErrors with details, return full error structure (code, message, details)
+	// This is needed for 409 Conflict responses that include disambiguation candidates
+	if apiErr, ok := v.(*APIError); ok && apiErr.Details != nil {
+		return APIErrorEnvelope{
+			Code:    apiErr.Code,
+			Message: apiErr.Message,
+			Details: apiErr.Details,
+		}, nil
+	}
+
+	// For simple errors, use the standard envelope
+	errorMsg := extractErrorMessage(v)
+
+	return APIEnvelope{
+		Success: false,
+		Error:   errorMsg,
+	}, nil
+}
+
+// extractErrorMessage extracts a human-readable error message from various error types.
+func extractErrorMessage(v any) string {
+	// Try our custom APIError
+	if apiErr, ok := v.(*APIError); ok {
+		return apiErr.Message
+	}
+
+	// Try huma's ErrorModel (struct with Title, Detail, etc.)
+	if errModel, ok := v.(*huma.ErrorModel); ok {
+		if errModel.Detail != "" {
+			return errModel.Detail
+		}
+		if errModel.Title != "" {
+			return errModel.Title
+		}
+	}
+
+	// Try map[string]any (generic error response)
+	if errMap, ok := v.(map[string]any); ok {
+		if msg, ok := errMap["message"].(string); ok {
+			return msg
+		}
+		if detail, ok := errMap["detail"].(string); ok {
+			return detail
+		}
+		if title, ok := errMap["title"].(string); ok {
+			return title
+		}
+	}
+
+	// Try error interface
+	if err, ok := v.(error); ok {
+		return err.Error()
+	}
+
+	return "An error occurred"
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/dto"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
@@ -104,15 +105,19 @@ type GetSyncContributorsInput struct {
 }
 
 type SyncContributorResponse struct {
-	ID        string    `json:"id" doc:"Contributor ID"`
-	Name      string    `json:"name" doc:"Name"`
-	SortName  string    `json:"sort_name,omitempty" doc:"Sort name"`
-	Biography string    `json:"biography,omitempty" doc:"Biography"`
-	ImageURL  string    `json:"image_url,omitempty" doc:"Image URL"`
-	Website   string    `json:"website,omitempty" doc:"Website"`
-	ASIN      string    `json:"asin,omitempty" doc:"Audible ASIN"`
-	CreatedAt time.Time `json:"created_at" doc:"Created time"`
-	UpdatedAt time.Time `json:"updated_at" doc:"Updated time"`
+	ID            string    `json:"id" doc:"Contributor ID"`
+	Name          string    `json:"name" doc:"Name"`
+	SortName      string    `json:"sort_name,omitempty" doc:"Sort name"`
+	Biography     string    `json:"biography,omitempty" doc:"Biography"`
+	ImageURL      string    `json:"image_url,omitempty" doc:"Image URL"`
+	ImageBlurHash string    `json:"image_blur_hash,omitempty" doc:"Image blur hash for placeholders"`
+	Website       string    `json:"website,omitempty" doc:"Website"`
+	BirthDate     string    `json:"birth_date,omitempty" doc:"Birth date (ISO 8601)"`
+	DeathDate     string    `json:"death_date,omitempty" doc:"Death date (ISO 8601)"`
+	Aliases       []string  `json:"aliases,omitempty" doc:"Pen names and aliases"`
+	ASIN          string    `json:"asin,omitempty" doc:"Audible ASIN"`
+	CreatedAt     time.Time `json:"created_at" doc:"Created time"`
+	UpdatedAt     time.Time `json:"updated_at" doc:"Updated time"`
 }
 
 type SyncContributorsResponse struct {
@@ -134,12 +139,13 @@ type GetSyncSeriesInput struct {
 }
 
 type SyncSeriesItemResponse struct {
-	ID          string    `json:"id" doc:"Series ID"`
-	Name        string    `json:"name" doc:"Name"`
-	Description string    `json:"description,omitempty" doc:"Description"`
-	ASIN        string    `json:"asin,omitempty" doc:"Audible ASIN"`
-	CreatedAt   time.Time `json:"created_at" doc:"Created time"`
-	UpdatedAt   time.Time `json:"updated_at" doc:"Updated time"`
+	ID          string                `json:"id" doc:"Series ID"`
+	Name        string                `json:"name" doc:"Name"`
+	Description string                `json:"description,omitempty" doc:"Description"`
+	CoverImage  *domain.ImageFileInfo `json:"cover_image,omitempty" doc:"Cover image metadata"`
+	ASIN        string                `json:"asin,omitempty" doc:"Audible ASIN"`
+	CreatedAt   time.Time             `json:"created_at" doc:"Created time"`
+	UpdatedAt   time.Time             `json:"updated_at" doc:"Updated time"`
 }
 
 type SyncSeriesResponse struct {
@@ -248,15 +254,19 @@ func (s *Server) handleGetSyncContributors(ctx context.Context, input *GetSyncCo
 	resp := make([]SyncContributorResponse, len(result.Contributors))
 	for i, c := range result.Contributors {
 		resp[i] = SyncContributorResponse{
-			ID:        c.ID,
-			Name:      c.Name,
-			SortName:  c.SortName,
-			Biography: c.Biography,
-			ImageURL:  c.ImageURL,
-			Website:   c.Website,
-			ASIN:      c.ASIN,
-			CreatedAt: c.CreatedAt,
-			UpdatedAt: c.UpdatedAt,
+			ID:            c.ID,
+			Name:          c.Name,
+			SortName:      c.SortName,
+			Biography:     c.Biography,
+			ImageURL:      c.ImageURL,
+			ImageBlurHash: c.ImageBlurHash,
+			Website:       c.Website,
+			BirthDate:     c.BirthDate,
+			DeathDate:     c.DeathDate,
+			Aliases:       c.Aliases,
+			ASIN:          c.ASIN,
+			CreatedAt:     c.CreatedAt,
+			UpdatedAt:     c.UpdatedAt,
 		}
 	}
 
@@ -304,6 +314,7 @@ func (s *Server) handleGetSyncSeries(ctx context.Context, input *GetSyncSeriesIn
 			ID:          series.ID,
 			Name:        series.Name,
 			Description: series.Description,
+			CoverImage:  series.CoverImage,
 			ASIN:        series.ASIN,
 			CreatedAt:   series.CreatedAt,
 			UpdatedAt:   series.UpdatedAt,

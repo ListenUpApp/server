@@ -2,9 +2,12 @@ package api
 
 import (
 	"errors"
+	"net/http"
+	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 	domainerrors "github.com/listenupapp/listenup-server/internal/errors"
+	"github.com/listenupapp/listenup-server/internal/store"
 )
 
 // APIError is a custom error type that implements huma.StatusError.
@@ -46,6 +49,15 @@ func RegisterErrorHandler() {
 					Details: domainErr.Details,
 				}
 			}
+
+			// Check for store "not found" errors and convert to 404
+			if isNotFoundError(err) {
+				return &APIError{
+					status:  http.StatusNotFound,
+					Code:    string(domainerrors.CodeNotFound),
+					Message: err.Error(),
+				}
+			}
 		}
 
 		// Map standard HTTP status codes to our error codes
@@ -57,6 +69,29 @@ func RegisterErrorHandler() {
 			Message: message,
 		}
 	}
+}
+
+// isNotFoundError checks if the error is a "not found" type error from the store.
+func isNotFoundError(err error) bool {
+	// Check for specific store errors
+	if errors.Is(err, store.ErrBookNotFound) ||
+		errors.Is(err, store.ErrContributorNotFound) ||
+		errors.Is(err, store.ErrSeriesNotFound) ||
+		errors.Is(err, store.ErrCollectionNotFound) ||
+		errors.Is(err, store.ErrUserNotFound) ||
+		errors.Is(err, store.ErrGenreNotFound) ||
+		errors.Is(err, store.ErrTagNotFound) ||
+		errors.Is(err, store.ErrInviteNotFound) ||
+		errors.Is(err, store.ErrSessionNotFound) {
+		return true
+	}
+
+	// Fallback: check if error message contains "not found"
+	if err != nil && strings.Contains(strings.ToLower(err.Error()), "not found") {
+		return true
+	}
+
+	return false
 }
 
 // statusToCode maps HTTP status codes to our domain error codes.
