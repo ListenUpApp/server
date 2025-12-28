@@ -43,6 +43,8 @@ func NewContainer() *do.RootScope {
 	// Metadata layer
 	do.Provide(injector, providers.ProvideAudibleClient)
 	do.Provide(injector, providers.ProvideMetadataService)
+	do.Provide(injector, providers.ProvideITunesClient)
+	do.Provide(injector, providers.ProvideCoverService)
 
 	// Auth layer
 	do.Provide(injector, providers.ProvideTokenService)
@@ -92,6 +94,8 @@ func Bootstrap(injector *do.RootScope) error {
 	_ = do.MustInvoke[*service.SearchService](injector)
 	_ = do.MustInvoke[*providers.AudibleClientHandle](injector)
 	_ = do.MustInvoke[*providers.MetadataServiceHandle](injector)
+	_ = do.MustInvoke[*providers.ITunesClientHandle](injector)
+	_ = do.MustInvoke[*service.CoverService](injector)
 	_ = do.MustInvoke[*auth.TokenService](injector)
 
 	// Business services

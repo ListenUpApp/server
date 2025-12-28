@@ -296,13 +296,14 @@ type RemoveTagInput struct {
 
 // ApplyMatchRequest is the request body for applying Audible metadata.
 type ApplyMatchRequest struct {
-	ASIN      string              `json:"asin" doc:"Audible ASIN"`
-	Region    string              `json:"region,omitempty" doc:"Audible region"`
-	Fields    MatchFieldsRequest  `json:"fields" doc:"Fields to apply"`
-	Authors   []string            `json:"authors,omitempty" doc:"Author ASINs to apply"`
-	Narrators []string            `json:"narrators,omitempty" doc:"Narrator ASINs to apply"`
-	Series    []SeriesMatchInput  `json:"series,omitempty" doc:"Series to apply"`
-	Genres    []string            `json:"genres,omitempty" doc:"Genre names to apply"`
+	ASIN      string             `json:"asin" doc:"Audible ASIN"`
+	Region    string             `json:"region,omitempty" doc:"Audible region"`
+	Fields    MatchFieldsRequest `json:"fields" doc:"Fields to apply"`
+	Authors   []string           `json:"authors,omitempty" doc:"Author ASINs to apply"`
+	Narrators []string           `json:"narrators,omitempty" doc:"Narrator ASINs to apply"`
+	Series    []SeriesMatchInput `json:"series,omitempty" doc:"Series to apply"`
+	Genres    []string           `json:"genres,omitempty" doc:"Genre names to apply"`
+	CoverURL  string             `json:"cover_url,omitempty" doc:"Explicit cover URL to download (overrides Audible cover if provided)"`
 }
 
 type MatchFieldsRequest struct {
@@ -325,6 +326,25 @@ type ApplyMatchInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Book ID"`
 	Body          ApplyMatchRequest
+}
+
+// CoverResultResponse contains cover download status.
+type CoverResultResponse struct {
+	Applied bool   `json:"applied" doc:"Whether cover was successfully applied"`
+	Source  string `json:"source,omitempty" doc:"Cover source (audible, itunes)"`
+	Width   int    `json:"width,omitempty" doc:"Cover width in pixels"`
+	Height  int    `json:"height,omitempty" doc:"Cover height in pixels"`
+	Error   string `json:"error,omitempty" doc:"Error message if cover failed"`
+}
+
+// ApplyMatchResponse includes the book and cover status.
+type ApplyMatchResponse struct {
+	Book  BookResponse         `json:"book" doc:"Updated book"`
+	Cover *CoverResultResponse `json:"cover,omitempty" doc:"Cover download result (if cover was requested)"`
+}
+
+type ApplyMatchOutput struct {
+	Body ApplyMatchResponse
 }
 
 // === Handlers ===
@@ -650,7 +670,7 @@ func convertStringRoles(roles []string) []string {
 	return result
 }
 
-func (s *Server) handleApplyBookMatch(ctx context.Context, input *ApplyMatchInput) (*BookOutput, error) {
+func (s *Server) handleApplyBookMatch(ctx context.Context, input *ApplyMatchInput) (*ApplyMatchOutput, error) {
 	// Validate ASIN is present
 	if input.Body.ASIN == "" {
 		return nil, huma.Error400BadRequest("ASIN is required")
@@ -675,6 +695,7 @@ func (s *Server) handleApplyBookMatch(ctx context.Context, input *ApplyMatchInpu
 		Authors:   input.Body.Authors,
 		Narrators: input.Body.Narrators,
 		Genres:    input.Body.Genres,
+		CoverURL:  input.Body.CoverURL,
 	}
 
 	// Convert series entries
@@ -687,18 +708,33 @@ func (s *Server) handleApplyBookMatch(ctx context.Context, input *ApplyMatchInpu
 	}
 
 	// Apply the match
-	book, err := s.services.Book.ApplyMatch(ctx, userID, input.ID, input.Body.ASIN, input.Body.Region, opts)
+	result, err := s.services.Book.ApplyMatchWithCoverResult(ctx, userID, input.ID, input.Body.ASIN, input.Body.Region, opts)
 	if err != nil {
 		return nil, err
 	}
 
 	// Enrich book for response
-	enriched, err := s.store.EnrichBook(ctx, book)
+	enriched, err := s.store.EnrichBook(ctx, result.Book)
 	if err != nil {
 		return nil, err
 	}
 
-	return &BookOutput{Body: mapEnrichedBookResponse(enriched)}, nil
+	response := ApplyMatchResponse{
+		Book: mapEnrichedBookResponse(enriched),
+	}
+
+	// Add cover result if a cover was requested
+	if result.CoverResult != nil {
+		response.Cover = &CoverResultResponse{
+			Applied: result.CoverResult.Applied,
+			Source:  result.CoverResult.Source,
+			Width:   result.CoverResult.Width,
+			Height:  result.CoverResult.Height,
+			Error:   result.CoverResult.Error,
+		}
+	}
+
+	return &ApplyMatchOutput{Body: response}, nil
 }
 
 // Unused but required for potential streaming endpoint

@@ -6,6 +6,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/config"
 	"github.com/listenupapp/listenup-server/internal/logger"
 	"github.com/listenupapp/listenup-server/internal/metadata/audible"
+	"github.com/listenupapp/listenup-server/internal/metadata/itunes"
 	"github.com/listenupapp/listenup-server/internal/service"
 )
 
@@ -68,4 +69,44 @@ func ProvideMetadataService(i do.Injector) (*MetadataServiceHandle, error) {
 	)
 
 	return &MetadataServiceHandle{MetadataService: svc}, nil
+}
+
+// ITunesClientHandle wraps the iTunes client with shutdown capability.
+type ITunesClientHandle struct {
+	*itunes.Client
+}
+
+// Shutdown implements do.Shutdownable.
+func (h *ITunesClientHandle) Shutdown() error {
+	h.Client.Close()
+	return nil
+}
+
+// ProvideITunesClient provides the iTunes API client.
+func ProvideITunesClient(i do.Injector) (*ITunesClientHandle, error) {
+	log := do.MustInvoke[*logger.Logger](i)
+
+	client := itunes.NewClient(log.Logger)
+	log.Info("iTunes client initialized")
+
+	return &ITunesClientHandle{Client: client}, nil
+}
+
+// ProvideCoverService provides the cover search and download service.
+func ProvideCoverService(i do.Injector) (*service.CoverService, error) {
+	log := do.MustInvoke[*logger.Logger](i)
+	itunesHandle := do.MustInvoke[*ITunesClientHandle](i)
+	metadataHandle := do.MustInvoke[*MetadataServiceHandle](i)
+	storages := do.MustInvoke[*ImageStorages](i)
+
+	svc := service.NewCoverService(
+		itunesHandle.Client,
+		metadataHandle.MetadataService,
+		storages.Covers,
+		log.Logger,
+	)
+
+	log.Info("Cover service initialized")
+
+	return svc, nil
 }

@@ -10,6 +10,17 @@ import (
 )
 
 func (s *Server) registerCoverRoutes() {
+	// Cover search from multiple sources (iTunes, Audible)
+	huma.Register(s.api, huma.Operation{
+		OperationID: "searchCovers",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/covers/search",
+		Summary:     "Search covers",
+		Description: "Search for cover images from multiple sources (iTunes, Audible)",
+		Tags:        []string{"Covers"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleSearchCovers)
+
 	// Cover routes use chi directly for streaming, not huma
 	// But we still register them for OpenAPI documentation
 	huma.Register(s.api, huma.Operation{
@@ -54,6 +65,28 @@ func (s *Server) registerCoverRoutes() {
 
 // === DTOs ===
 
+type SearchCoversInput struct {
+	Authorization string `header:"Authorization"`
+	Title         string `query:"title" validate:"required,min=1" doc:"Book title to search for"`
+	Author        string `query:"author" doc:"Author name (optional, improves results)"`
+}
+
+type CoverOptionResponse struct {
+	Source   string `json:"source" doc:"Cover source (audible, itunes)"`
+	URL      string `json:"url" doc:"Cover image URL"`
+	Width    int    `json:"width" doc:"Image width in pixels"`
+	Height   int    `json:"height" doc:"Image height in pixels"`
+	SourceID string `json:"source_id" doc:"Source-specific ID (ASIN for Audible, collectionId for iTunes)"`
+}
+
+type SearchCoversResponse struct {
+	Covers []CoverOptionResponse `json:"covers" doc:"Cover options sorted by resolution (highest first)"`
+}
+
+type SearchCoversOutput struct {
+	Body SearchCoversResponse
+}
+
 type GetBookCoverInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Book ID"`
@@ -89,6 +122,32 @@ type DeleteBookCoverInput struct {
 }
 
 // === Handlers ===
+
+func (s *Server) handleSearchCovers(ctx context.Context, input *SearchCoversInput) (*SearchCoversOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
+	}
+
+	result, err := s.services.Cover.SearchCovers(ctx, input.Title, input.Author)
+	if err != nil {
+		return nil, err
+	}
+
+	covers := make([]CoverOptionResponse, len(result.Covers))
+	for i, c := range result.Covers {
+		covers[i] = CoverOptionResponse{
+			Source:   c.Source,
+			URL:      c.URL,
+			Width:    c.Width,
+			Height:   c.Height,
+			SourceID: c.SourceID,
+		}
+	}
+
+	return &SearchCoversOutput{
+		Body: SearchCoversResponse{Covers: covers},
+	}, nil
+}
 
 func (s *Server) handleGetBookCover(ctx context.Context, input *GetBookCoverInput) (*CoverRedirectOutput, error) {
 	userID, err := s.authenticateRequest(ctx, input.Authorization)

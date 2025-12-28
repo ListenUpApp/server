@@ -47,6 +47,7 @@ func ProvideBookService(i do.Injector) (*service.BookService, error) {
 	storeHandle := do.MustInvoke[*StoreHandle](i)
 	fileScanner := do.MustInvoke[*scanner.Scanner](i)
 	metadataHandle := do.MustInvoke[*MetadataServiceHandle](i)
+	coverService := do.MustInvoke[*service.CoverService](i)
 	storages := do.MustInvoke[*ImageStorages](i)
 	log := do.MustInvoke[*logger.Logger](i)
 
@@ -54,6 +55,7 @@ func ProvideBookService(i do.Injector) (*service.BookService, error) {
 		storeHandle.Store,
 		fileScanner,
 		metadataHandle.MetadataService,
+		coverService,
 		storages.Covers,
 		log.Logger,
 	), nil

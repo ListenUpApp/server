@@ -25,6 +25,13 @@ type ApplyMatchOptions struct {
 	Narrators []string // Audible ASINs
 	Series    []SeriesMatchEntry
 	Genres    []string
+	CoverURL  string // Explicit cover URL (overrides Audible if provided)
+}
+
+// ApplyMatchResult contains the book and cover download result.
+type ApplyMatchResult struct {
+	Book        *domain.Book
+	CoverResult *CoverDownloadResult
 }
 
 // MatchFields specifies which simple fields to apply.
@@ -50,6 +57,7 @@ type BookService struct {
 	store           *store.Store
 	scanner         *scanner.Scanner
 	metadataService *MetadataService
+	coverService    *CoverService
 	coverStorage    *images.Storage
 	logger          *slog.Logger
 }
@@ -59,6 +67,7 @@ func NewBookService(
 	store *store.Store,
 	scanner *scanner.Scanner,
 	metadataService *MetadataService,
+	coverService *CoverService,
 	coverStorage *images.Storage,
 	logger *slog.Logger,
 ) *BookService {
@@ -66,6 +75,7 @@ func NewBookService(
 		store:           store,
 		scanner:         scanner,
 		metadataService: metadataService,
+		coverService:    coverService,
 		coverStorage:    coverStorage,
 		logger:          logger,
 	}
@@ -343,6 +353,137 @@ func (s *BookService) ApplyMatch(
 	)
 
 	return book, nil
+}
+
+// ApplyMatchWithCoverResult applies metadata and returns detailed cover download results.
+// If opts.CoverURL is provided, it downloads from that URL instead of Audible's cover.
+func (s *BookService) ApplyMatchWithCoverResult(
+	ctx context.Context,
+	userID, bookID, asin, region string,
+	opts ApplyMatchOptions,
+) (*ApplyMatchResult, error) {
+	// Get book with ACL check
+	book, err := s.store.GetBook(ctx, bookID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse region
+	var audibleRegion *audible.Region
+	if region != "" {
+		r := audible.Region(region)
+		if r.Valid() {
+			audibleRegion = &r
+		}
+	}
+
+	// Fetch metadata from Audible
+	audibleBook, err := s.metadataService.GetBook(ctx, audibleRegion, asin)
+	if err != nil {
+		return nil, fmt.Errorf("fetch audible metadata: %w", err)
+	}
+
+	// Validate Audible response has usable data
+	if audibleBook.Title == "" && len(audibleBook.Authors) == 0 && len(audibleBook.Narrators) == 0 {
+		return nil, fmt.Errorf("audible returned empty metadata for ASIN %s - the book may be unavailable in region %s", asin, region)
+	}
+
+	// Apply simple fields
+	if opts.Fields.Title {
+		book.Title = audibleBook.Title
+	}
+	if opts.Fields.Subtitle {
+		book.Subtitle = audibleBook.Subtitle
+	}
+	if opts.Fields.Description {
+		book.Description = audibleBook.Description
+	}
+	if opts.Fields.Publisher {
+		book.Publisher = audibleBook.Publisher
+	}
+	if opts.Fields.ReleaseDate && !audibleBook.ReleaseDate.IsZero() {
+		book.PublishYear = audibleBook.ReleaseDate.Format("2006")
+	}
+	if opts.Fields.Language {
+		book.Language = audibleBook.Language
+	}
+
+	// Store ASIN and region for future refresh
+	book.ASIN = asin
+	if audibleRegion != nil {
+		book.AudibleRegion = string(*audibleRegion)
+	}
+
+	// Apply contributors
+	if len(opts.Authors) > 0 || len(opts.Narrators) > 0 {
+		contributors, err := s.mergeContributors(ctx, book.Contributors, audibleBook, opts.Authors, opts.Narrators)
+		if err != nil {
+			return nil, fmt.Errorf("merge contributors: %w", err)
+		}
+		book.Contributors = contributors
+	}
+
+	// Apply series
+	if len(opts.Series) > 0 {
+		seriesLinks, err := s.resolveSeries(ctx, audibleBook.Series, opts.Series)
+		if err != nil {
+			return nil, fmt.Errorf("resolve series: %w", err)
+		}
+		book.Series = seriesLinks
+	}
+
+	// Apply genres
+	if len(opts.Genres) > 0 {
+		genreIDs, err := s.resolveGenres(ctx, opts.Genres)
+		if err != nil {
+			return nil, fmt.Errorf("resolve genres: %w", err)
+		}
+		book.GenreIDs = genreIDs
+	}
+
+	result := &ApplyMatchResult{Book: book}
+
+	// Apply cover with detailed result
+	if opts.Fields.Cover {
+		// Use explicit URL if provided, otherwise use Audible's cover
+		coverURL := opts.CoverURL
+		if coverURL == "" {
+			coverURL = audibleBook.CoverURL
+		}
+
+		if coverURL != "" && s.coverService != nil {
+			coverResult := s.coverService.DownloadCover(ctx, bookID, coverURL)
+			result.CoverResult = coverResult
+
+			if coverResult.Applied {
+				// Update book's CoverImage metadata
+				book.CoverImage = &domain.ImageFileInfo{
+					Path:     fmt.Sprintf("%s.jpg", book.ID),
+					Filename: "cover.jpg",
+					Format:   "image/jpeg",
+				}
+			}
+		} else if coverURL == "" {
+			result.CoverResult = &CoverDownloadResult{
+				Applied: false,
+				Error:   "no cover URL available",
+			}
+		}
+	}
+
+	// Update book
+	if err := s.store.UpdateBook(ctx, book); err != nil {
+		return nil, fmt.Errorf("update book: %w", err)
+	}
+
+	s.logger.Info("Applied Audible match with cover result",
+		"book_id", bookID,
+		"asin", asin,
+		"region", region,
+		"cover_applied", result.CoverResult != nil && result.CoverResult.Applied,
+	)
+
+	return result, nil
 }
 
 // mergeContributors performs a smart merge of Audible contributors with existing book contributors.
