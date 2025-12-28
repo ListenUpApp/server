@@ -252,12 +252,22 @@ type SearchContributorsOutput struct {
 	Body SearchContributorsResponse
 }
 
+type ApplyContributorMetadataRequest struct {
+	ASIN     string                    `json:"asin" doc:"Audible ASIN"`
+	ImageURL string                    `json:"image_url,omitempty" doc:"Image URL from search results"`
+	Fields   ContributorMetadataFields `json:"fields" doc:"Which fields to apply"`
+}
+
+type ContributorMetadataFields struct {
+	Name      bool `json:"name" doc:"Apply name from Audible"`
+	Biography bool `json:"biography" doc:"Apply biography from Audible"`
+	Image     bool `json:"image" doc:"Download and apply image"`
+}
+
 type ApplyContributorMetadataInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Contributor ID"`
-	ASIN          string `query:"asin" doc:"Audible ASIN (required if multiple matches)"`
-	Name          string `query:"name" doc:"Contributor name (fallback for search if contributor not found)"`
-	ImageURL      string `query:"imageUrl" doc:"Image URL from search results (Audible API no longer returns images)"`
+	Body          ApplyContributorMetadataRequest
 }
 
 // === Handlers ===
@@ -531,52 +541,39 @@ func (s *Server) handleApplyContributorMetadata(ctx context.Context, input *Appl
 		return nil, err
 	}
 
+	fields := input.Body.Fields
 	s.logger.Debug("applying contributor metadata",
 		"contributor_id", input.ID,
-		"asin", input.ASIN,
-		"name", input.Name,
-		"image_url", input.ImageURL,
+		"asin", input.Body.ASIN,
+		"image_url", input.Body.ImageURL,
+		"fields.name", fields.Name,
+		"fields.biography", fields.Biography,
+		"fields.image", fields.Image,
 	)
+
+	// Validate at least one field is selected
+	if !fields.Name && !fields.Biography && !fields.Image {
+		return nil, &APIError{
+			status:  http.StatusBadRequest,
+			Code:    "no_fields_selected",
+			Message: "At least one field must be selected to apply",
+		}
+	}
 
 	// Get existing contributor
 	contributor, err := s.store.GetContributor(ctx, input.ID)
-	contributorNotFound := err != nil && isNotFoundError(err)
-
-	if err != nil && !contributorNotFound {
-		// Real error (not just "not found")
+	if err != nil {
 		return nil, err
 	}
 
-	if contributorNotFound {
-		s.logger.Debug("contributor not found, will create if ASIN provided",
-			"contributor_id", input.ID,
-		)
-	}
-
-	// Determine ASIN to use
-	asin := ""
-	if input.ASIN != "" {
-		asin = input.ASIN
-	} else if contributor != nil && contributor.ASIN != "" {
-		asin = contributor.ASIN
-	}
-
-	// Determine name to search with
-	searchName := input.Name
-	if searchName == "" && contributor != nil {
-		searchName = contributor.Name
-	}
-
-	// If no ASIN, search by name and return candidates
+	// ASIN is required
+	asin := input.Body.ASIN
 	if asin == "" {
-		if searchName == "" {
-			return nil, &APIError{
-				status:  http.StatusBadRequest,
-				Code:    "missing_search_criteria",
-				Message: "Either ASIN or name must be provided",
-			}
+		return nil, &APIError{
+			status:  http.StatusBadRequest,
+			Code:    "missing_asin",
+			Message: "ASIN is required",
 		}
-		return s.searchContributorByName(ctx, searchName, "")
 	}
 
 	// Fetch profile from Audible
@@ -585,60 +582,42 @@ func (s *Server) handleApplyContributorMetadata(ctx context.Context, input *Appl
 		return nil, err
 	}
 
-	// If contributor doesn't exist, create it with the client's ID
-	if contributorNotFound {
-		contributor = &domain.Contributor{
-			Syncable: domain.Syncable{
-				ID: input.ID,
-			},
-			Name: searchName, // Use the name provided by client
-		}
-		contributor.InitTimestamps()
-		s.logger.Info("creating contributor from metadata apply",
-			"contributor_id", input.ID,
-			"name", searchName,
-		)
-	}
-
-	// Apply metadata
+	// Always update ASIN to track the match
 	contributor.ASIN = profile.ASIN
-	if profile.Name != "" {
+
+	// Apply selected fields only
+	if fields.Name && profile.Name != "" {
 		contributor.Name = profile.Name
 	}
-	if profile.Biography != "" {
+	if fields.Biography && profile.Biography != "" {
 		contributor.Biography = profile.Biography
 	}
 
-	// Download and store image if present
-	// Prefer profile.ImageURL, fall back to imageUrl from search results
-	// (Audible API no longer returns contributor images, but search results have them)
-	imageURL := profile.ImageURL
-	if imageURL == "" {
-		imageURL = input.ImageURL
-	}
-	if imageURL != "" {
-		if err := s.downloadContributorImage(ctx, contributor.ID, imageURL); err != nil {
-			s.logger.Warn("Failed to download contributor image",
-				"error", err,
-				"contributor_id", contributor.ID,
-				"image_url", imageURL,
-			)
-			// Continue without image
-		} else {
-			contributor.ImageURL = fmt.Sprintf("/api/v1/contributors/%s/image", contributor.ID)
+	// Download and store image if selected
+	if fields.Image {
+		// Prefer profile.ImageURL, fall back to imageUrl from search results
+		imageURL := profile.ImageURL
+		if imageURL == "" {
+			imageURL = input.Body.ImageURL
+		}
+		if imageURL != "" {
+			if err := s.downloadContributorImage(ctx, contributor.ID, imageURL); err != nil {
+				s.logger.Warn("Failed to download contributor image",
+					"error", err,
+					"contributor_id", contributor.ID,
+					"image_url", imageURL,
+				)
+				// Continue without image
+			} else {
+				contributor.ImageURL = fmt.Sprintf("/api/v1/contributors/%s/image", contributor.ID)
+			}
 		}
 	}
 
-	// Create or update contributor
+	// Update contributor
 	contributor.UpdatedAt = time.Now()
-	if contributorNotFound {
-		if err := s.store.CreateContributor(ctx, contributor); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := s.store.UpdateContributor(ctx, contributor); err != nil {
-			return nil, err
-		}
+	if err := s.store.UpdateContributor(ctx, contributor); err != nil {
+		return nil, err
 	}
 
 	return &ContributorOutput{Body: mapContributorResponse(contributor)}, nil
