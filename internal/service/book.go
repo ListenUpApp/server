@@ -307,11 +307,28 @@ func (s *BookService) ApplyMatch(
 	}
 
 	// Apply cover
+	s.logger.Info("Cover application check",
+		"book_id", bookID,
+		"cover_requested", opts.Fields.Cover,
+		"cover_url_available", audibleBook.CoverURL != "",
+		"cover_url", audibleBook.CoverURL,
+	)
 	if opts.Fields.Cover && audibleBook.CoverURL != "" {
 		if err := s.applyCover(ctx, book, audibleBook.CoverURL); err != nil {
 			s.logger.Warn("Failed to apply cover", "error", err, "book_id", bookID)
 			// Continue without cover - don't fail the whole operation
+		} else {
+			s.logger.Info("Cover applied successfully",
+				"book_id", bookID,
+				"cover_image", book.CoverImage,
+			)
 		}
+	} else {
+		s.logger.Warn("Cover not applied",
+			"book_id", bookID,
+			"cover_requested", opts.Fields.Cover,
+			"cover_url_empty", audibleBook.CoverURL == "",
+		)
 	}
 
 	// Update book
@@ -675,7 +692,18 @@ func (s *BookService) applyCover(ctx context.Context, book *domain.Book, coverUR
 		return fmt.Errorf("store cover: %w", err)
 	}
 
-	// Note: CoverImage metadata is typically set during scanning, not here
-	// This function only downloads and stores the raw image file
+	// Update book's CoverImage metadata so it can be served
+	book.CoverImage = &domain.ImageFileInfo{
+		Path:     fmt.Sprintf("%s.jpg", book.ID),
+		Filename: "cover.jpg",
+		Format:   "image/jpeg",
+		Size:     int64(len(data)),
+	}
+
+	s.logger.Info("Applied cover from Audible",
+		"book_id", book.ID,
+		"size", len(data),
+	)
+
 	return nil
 }

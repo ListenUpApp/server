@@ -9,6 +9,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/dto"
+	"github.com/listenupapp/listenup-server/internal/service"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
@@ -112,6 +113,16 @@ func (s *Server) registerBookRoutes() {
 		Tags:        []string{"Books"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleRemoveBookTag)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "applyBookMatch",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/books/{id}/match",
+		Summary:     "Apply metadata match",
+		Description: "Applies Audible metadata to a book based on user selections",
+		Tags:        []string{"Books", "Metadata"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleApplyBookMatch)
 }
 
 // === DTOs ===
@@ -281,6 +292,39 @@ type RemoveTagInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Book ID"`
 	TagID         string `path:"tagId" doc:"Tag ID"`
+}
+
+// ApplyMatchRequest is the request body for applying Audible metadata.
+type ApplyMatchRequest struct {
+	ASIN      string              `json:"asin" doc:"Audible ASIN"`
+	Region    string              `json:"region,omitempty" doc:"Audible region"`
+	Fields    MatchFieldsRequest  `json:"fields" doc:"Fields to apply"`
+	Authors   []string            `json:"authors,omitempty" doc:"Author ASINs to apply"`
+	Narrators []string            `json:"narrators,omitempty" doc:"Narrator ASINs to apply"`
+	Series    []SeriesMatchInput  `json:"series,omitempty" doc:"Series to apply"`
+	Genres    []string            `json:"genres,omitempty" doc:"Genre names to apply"`
+}
+
+type MatchFieldsRequest struct {
+	Title       bool `json:"title,omitempty" doc:"Apply title"`
+	Subtitle    bool `json:"subtitle,omitempty" doc:"Apply subtitle"`
+	Description bool `json:"description,omitempty" doc:"Apply description"`
+	Publisher   bool `json:"publisher,omitempty" doc:"Apply publisher"`
+	ReleaseDate bool `json:"releaseDate,omitempty" doc:"Apply release date"`
+	Language    bool `json:"language,omitempty" doc:"Apply language"`
+	Cover       bool `json:"cover,omitempty" doc:"Apply cover"`
+}
+
+type SeriesMatchInput struct {
+	ASIN          string `json:"asin,omitempty" doc:"Series ASIN"`
+	ApplyName     bool   `json:"applyName,omitempty" doc:"Apply series name"`
+	ApplySequence bool   `json:"applySequence,omitempty" doc:"Apply sequence"`
+}
+
+type ApplyMatchInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Book ID"`
+	Body          ApplyMatchRequest
 }
 
 // === Handlers ===
@@ -604,6 +648,57 @@ func convertStringRoles(roles []string) []string {
 	result := make([]string, len(roles))
 	copy(result, roles)
 	return result
+}
+
+func (s *Server) handleApplyBookMatch(ctx context.Context, input *ApplyMatchInput) (*BookOutput, error) {
+	// Validate ASIN is present
+	if input.Body.ASIN == "" {
+		return nil, huma.Error400BadRequest("ASIN is required")
+	}
+
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert request to service options
+	opts := service.ApplyMatchOptions{
+		Fields: service.MatchFields{
+			Title:       input.Body.Fields.Title,
+			Subtitle:    input.Body.Fields.Subtitle,
+			Description: input.Body.Fields.Description,
+			Publisher:   input.Body.Fields.Publisher,
+			ReleaseDate: input.Body.Fields.ReleaseDate,
+			Language:    input.Body.Fields.Language,
+			Cover:       input.Body.Fields.Cover,
+		},
+		Authors:   input.Body.Authors,
+		Narrators: input.Body.Narrators,
+		Genres:    input.Body.Genres,
+	}
+
+	// Convert series entries
+	for _, se := range input.Body.Series {
+		opts.Series = append(opts.Series, service.SeriesMatchEntry{
+			ASIN:          se.ASIN,
+			ApplyName:     se.ApplyName,
+			ApplySequence: se.ApplySequence,
+		})
+	}
+
+	// Apply the match
+	book, err := s.services.Book.ApplyMatch(ctx, userID, input.ID, input.Body.ASIN, input.Body.Region, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	// Enrich book for response
+	enriched, err := s.store.EnrichBook(ctx, book)
+	if err != nil {
+		return nil, err
+	}
+
+	return &BookOutput{Body: mapEnrichedBookResponse(enriched)}, nil
 }
 
 // Unused but required for potential streaming endpoint

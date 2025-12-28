@@ -23,7 +23,7 @@ func (s *Server) registerMetadataRoutes() {
 	huma.Register(s.api, huma.Operation{
 		OperationID: "getMetadataBook",
 		Method:      http.MethodGet,
-		Path:        "/api/v1/metadata/books/{asin}",
+		Path:        "/api/v1/metadata/book/{asin}",
 		Summary:     "Get book metadata",
 		Description: "Fetches book metadata from Audible by ASIN",
 		Tags:        []string{"Metadata"},
@@ -33,7 +33,7 @@ func (s *Server) registerMetadataRoutes() {
 	huma.Register(s.api, huma.Operation{
 		OperationID: "getMetadataChapters",
 		Method:      http.MethodGet,
-		Path:        "/api/v1/metadata/books/{asin}/chapters",
+		Path:        "/api/v1/metadata/book/{asin}/chapters",
 		Summary:     "Get chapter metadata",
 		Description: "Fetches chapter information from Audible by ASIN",
 		Tags:        []string{"Metadata"},
@@ -43,7 +43,7 @@ func (s *Server) registerMetadataRoutes() {
 	huma.Register(s.api, huma.Operation{
 		OperationID: "refreshMetadataBook",
 		Method:      http.MethodPost,
-		Path:        "/api/v1/metadata/books/{asin}/refresh",
+		Path:        "/api/v1/metadata/book/{asin}/refresh",
 		Summary:     "Refresh book metadata",
 		Description: "Forces a fresh fetch of book metadata, bypassing cache",
 		Tags:        []string{"Metadata"},
