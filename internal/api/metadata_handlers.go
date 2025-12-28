@@ -73,18 +73,21 @@ func (s *Server) registerMetadataRoutes() {
 
 // === DTOs ===
 
+// SearchMetadataInput contains parameters for searching metadata.
 type SearchMetadataInput struct {
 	Authorization string `header:"Authorization"`
 	Query         string `query:"q" validate:"required,min=1" doc:"Search query"`
 	Region        string `query:"region" doc:"Audible region (us, uk, de, fr, etc.)"`
 }
 
+// MetadataContributorResponse represents a contributor in metadata responses.
 type MetadataContributorResponse struct {
 	ASIN string `json:"asin,omitempty" doc:"Contributor ASIN"`
 	Name string `json:"name" doc:"Contributor name"`
 	Role string `json:"role" doc:"Contributor role"`
 }
 
+// MetadataSearchResultResponse represents a search result from Audible.
 type MetadataSearchResultResponse struct {
 	ASIN           string                        `json:"asin" doc:"Audible ASIN"`
 	Title          string                        `json:"title" doc:"Book title"`
@@ -96,27 +99,32 @@ type MetadataSearchResultResponse struct {
 	CoverURL       string                        `json:"cover_url,omitempty" doc:"Cover image URL"`
 }
 
+// SearchMetadataResponse contains metadata search results.
 type SearchMetadataResponse struct {
 	Results []MetadataSearchResultResponse `json:"results" doc:"Search results"`
 	Region  string                         `json:"region" doc:"Region that returned results"`
 }
 
+// SearchMetadataOutput wraps the search metadata response for Huma.
 type SearchMetadataOutput struct {
 	Body SearchMetadataResponse
 }
 
+// GetMetadataBookInput contains parameters for getting book metadata.
 type GetMetadataBookInput struct {
 	Authorization string `header:"Authorization"`
 	ASIN          string `path:"asin" doc:"Audible ASIN"`
 	Region        string `query:"region" doc:"Audible region"`
 }
 
+// MetadataSeriesEntryResponse represents a series entry in metadata responses.
 type MetadataSeriesEntryResponse struct {
 	ASIN     string `json:"asin,omitempty" doc:"Series ASIN"`
 	Name     string `json:"name" doc:"Series name"`
 	Position string `json:"position,omitempty" doc:"Position in series"`
 }
 
+// MetadataBookResponse contains book metadata from Audible.
 type MetadataBookResponse struct {
 	ASIN           string                        `json:"asin" doc:"Audible ASIN"`
 	Title          string                        `json:"title" doc:"Book title"`
@@ -135,30 +143,36 @@ type MetadataBookResponse struct {
 	RatingCount    int                           `json:"rating_count,omitempty" doc:"Number of ratings"`
 }
 
+// MetadataBookOutput wraps the metadata book response for Huma.
 type MetadataBookOutput struct {
 	Body MetadataBookResponse
 }
 
+// GetMetadataChaptersInput contains parameters for getting chapter metadata.
 type GetMetadataChaptersInput struct {
 	Authorization string `header:"Authorization"`
 	ASIN          string `path:"asin" doc:"Audible ASIN"`
 	Region        string `query:"region" doc:"Audible region"`
 }
 
+// MetadataChapterResponse represents a chapter in metadata responses.
 type MetadataChapterResponse struct {
 	Title      string `json:"title" doc:"Chapter title"`
 	StartMs    int64  `json:"start_ms" doc:"Start offset in milliseconds"`
 	DurationMs int64  `json:"duration_ms" doc:"Duration in milliseconds"`
 }
 
+// MetadataChaptersResponse contains chapter metadata.
 type MetadataChaptersResponse struct {
 	Chapters []MetadataChapterResponse `json:"chapters" doc:"Chapter list"`
 }
 
+// MetadataChaptersOutput wraps the metadata chapters response for Huma.
 type MetadataChaptersOutput struct {
 	Body MetadataChaptersResponse
 }
 
+// RefreshMetadataBookInput contains parameters for refreshing book metadata.
 type RefreshMetadataBookInput struct {
 	Authorization string `header:"Authorization"`
 	ASIN          string `path:"asin" doc:"Audible ASIN"`
@@ -167,12 +181,14 @@ type RefreshMetadataBookInput struct {
 
 // === Contributor Metadata DTOs ===
 
+// SearchMetadataContributorsInput contains parameters for searching contributors.
 type SearchMetadataContributorsInput struct {
 	Authorization string `header:"Authorization"`
 	Query         string `query:"q" validate:"required,min=1,max=200" doc:"Contributor name to search"`
 	Region        string `query:"region" validate:"omitempty" doc:"Audible region"`
 }
 
+// MetadataContributorSearchResultResponse represents a contributor search result.
 type MetadataContributorSearchResultResponse struct {
 	ASIN        string `json:"asin" doc:"Audible ASIN"`
 	Name        string `json:"name" doc:"Contributor name"`
@@ -180,21 +196,25 @@ type MetadataContributorSearchResultResponse struct {
 	Description string `json:"description,omitempty" doc:"Description (e.g., '142 titles')"`
 }
 
+// SearchMetadataContributorsResponse contains contributor search results.
 type SearchMetadataContributorsResponse struct {
 	Results []MetadataContributorSearchResultResponse `json:"results" doc:"Search results"`
 	Region  string                                    `json:"region" doc:"Region that returned results"`
 }
 
+// SearchMetadataContributorsOutput wraps the search contributors response for Huma.
 type SearchMetadataContributorsOutput struct {
 	Body SearchMetadataContributorsResponse
 }
 
+// GetMetadataContributorInput contains parameters for getting a contributor profile.
 type GetMetadataContributorInput struct {
 	Authorization string `header:"Authorization"`
 	ASIN          string `path:"asin" doc:"Audible ASIN"`
 	Region        string `query:"region" validate:"omitempty" doc:"Audible region"`
 }
 
+// MetadataContributorProfileResponse contains contributor profile data.
 type MetadataContributorProfileResponse struct {
 	ASIN      string `json:"asin" doc:"Audible ASIN"`
 	Name      string `json:"name" doc:"Contributor name"`
@@ -202,6 +222,7 @@ type MetadataContributorProfileResponse struct {
 	ImageURL  string `json:"image_url,omitempty" doc:"Profile image URL"`
 }
 
+// MetadataContributorProfileOutput wraps the contributor profile response for Huma.
 type MetadataContributorProfileOutput struct {
 	Body MetadataContributorProfileResponse
 }
@@ -221,8 +242,8 @@ func (s *Server) handleSearchMetadata(ctx context.Context, input *SearchMetadata
 	}
 
 	resp := make([]MetadataSearchResultResponse, len(results))
-	for i, r := range results {
-		resp[i] = mapSearchResult(r)
+	for i := range results {
+		resp[i] = mapSearchResult(results[i])
 	}
 
 	return &SearchMetadataOutput{

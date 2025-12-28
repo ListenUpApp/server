@@ -98,7 +98,7 @@ func (s *Server) handleStreamAudio(w http.ResponseWriter, r *http.Request) {
 	// Full file
 	w.Header().Set("Content-Length", strconv.FormatInt(fileInfo.Size(), 10))
 	if r.Method != http.MethodHead {
-		io.Copy(w, file)
+		_, _ = io.Copy(w, file)
 	}
 }
 
@@ -169,7 +169,7 @@ func (s *Server) handleRangeRequest(w http.ResponseWriter, r *http.Request, read
 	w.WriteHeader(http.StatusPartialContent)
 
 	if r.Method != http.MethodHead {
-		io.CopyN(w, reader, contentLength)
+		_, _ = io.CopyN(w, reader, contentLength)
 	}
 }
 
@@ -244,15 +244,15 @@ func (s *Server) handleTranscodedAudio(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	io.Copy(w, file)
+	_, _ = io.Copy(w, file)
 }
 
-// getMimeType returns MIME type based on audio format
+// getMimeType returns MIME type based on audio format.
 func getMimeType(format string) string {
 	switch strings.ToLower(format) {
 	case "mp3":
 		return "audio/mpeg"
-	case "m4a", "m4b", "mp4", "aac":
+	case "m4a", "m4b", "mp4", "aac": //nolint:goconst // Case list is clearer than constants
 		return "audio/mp4"
 	case "opus":
 		return "audio/opus"

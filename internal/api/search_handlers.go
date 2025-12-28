@@ -22,6 +22,7 @@ func (s *Server) registerSearchRoutes() {
 
 // === DTOs ===
 
+// SearchInput contains parameters for searching the library.
 type SearchInput struct {
 	Authorization string   `header:"Authorization"`
 	Query         string   `query:"q" validate:"required,min=1,max=200" doc:"Search query"`
@@ -30,6 +31,7 @@ type SearchInput struct {
 	GenreSlug     string   `query:"genre" validate:"omitempty,max=100" doc:"Filter by genre slug"`
 }
 
+// SearchBookResult contains book search result data.
 type SearchBookResult struct {
 	ID           string  `json:"id" doc:"Book ID"`
 	Title        string  `json:"title" doc:"Book title"`
@@ -40,6 +42,7 @@ type SearchBookResult struct {
 	Score        float64 `json:"score" doc:"Search relevance score"`
 }
 
+// SearchContributorResult contains contributor search result data.
 type SearchContributorResult struct {
 	ID        string  `json:"id" doc:"Contributor ID"`
 	Name      string  `json:"name" doc:"Contributor name"`
@@ -47,6 +50,7 @@ type SearchContributorResult struct {
 	Score     float64 `json:"score" doc:"Search relevance score"`
 }
 
+// SearchSeriesResult contains series search result data.
 type SearchSeriesResult struct {
 	ID        string  `json:"id" doc:"Series ID"`
 	Name      string  `json:"name" doc:"Series name"`
@@ -54,6 +58,7 @@ type SearchSeriesResult struct {
 	Score     float64 `json:"score" doc:"Search relevance score"`
 }
 
+// SearchResponse contains search results.
 type SearchResponse struct {
 	Books        []SearchBookResult        `json:"books,omitempty" doc:"Book results"`
 	Contributors []SearchContributorResult `json:"contributors,omitempty" doc:"Contributor results"`
@@ -61,6 +66,7 @@ type SearchResponse struct {
 	TotalHits    int                       `json:"total_hits" doc:"Total matches across all types"`
 }
 
+// SearchOutput wraps the search response for Huma.
 type SearchOutput struct {
 	Body SearchResponse
 }
@@ -108,11 +114,12 @@ func (s *Server) handleSearch(ctx context.Context, input *SearchInput) (*SearchO
 	}
 
 	resp := SearchResponse{
-		TotalHits: int(result.Total),
+		TotalHits: min(int(result.Total), int(^uint(0)>>1)), //nolint:gosec // Safe: capped at max int
 	}
 
 	// Categorize hits by type
-	for _, hit := range result.Hits {
+	for i := range result.Hits {
+		hit := &result.Hits[i]
 		switch hit.Type {
 		case search.DocTypeBook:
 			resp.Books = append(resp.Books, SearchBookResult{

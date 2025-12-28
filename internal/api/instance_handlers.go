@@ -19,6 +19,7 @@ func (s *Server) registerInstanceRoutes() {
 	}, s.handleGetInstance)
 }
 
+// InstanceResponse contains server instance data in API responses.
 type InstanceResponse struct {
 	ID            string    `json:"id" doc:"Instance ID"`
 	Name          string    `json:"name" doc:"Server name"`
@@ -30,6 +31,7 @@ type InstanceResponse struct {
 	SetupRequired bool      `json:"setup_required" doc:"Whether initial setup is needed"`
 }
 
+// InstanceOutput wraps the instance response for Huma.
 type InstanceOutput struct {
 	Body InstanceResponse
 }

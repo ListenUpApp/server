@@ -123,7 +123,7 @@ func TestValidator_JSONFieldNames(t *testing.T) {
 	}
 }
 
-// OptionalFieldRequest tests validation with omitempty
+// OptionalFieldRequest tests validation with omitempty.
 type OptionalFieldRequest struct {
 	Title       *string `json:"title" validate:"omitempty,min=1,max=100"`
 	Description *string `json:"description" validate:"omitempty,max=500"`
@@ -173,7 +173,7 @@ func TestValidator_OptionalFields(t *testing.T) {
 	assert.Error(t, err, "Title too long should fail")
 }
 
-// SliceRequest tests validation with slices and dive
+// SliceRequest tests validation with slices and dive.
 type SliceRequest struct {
 	Items []ItemInput `json:"items" validate:"required,min=1,max=10,dive"`
 }
@@ -218,7 +218,7 @@ func TestValidator_SliceValidation(t *testing.T) {
 	assert.Error(t, err, "Invalid item in slice should fail")
 }
 
-// LengthRequest tests exact length validation
+// LengthRequest tests exact length validation.
 type LengthRequest struct {
 	ASIN string `json:"asin" validate:"omitempty,len=10"`
 	Code string `json:"code" validate:"required,len=6"`
@@ -251,7 +251,7 @@ func TestValidator_LengthValidation(t *testing.T) {
 	assert.NoError(t, err, "Empty optional with len should pass")
 }
 
-// NumericRangeRequest tests gte/lte validation
+// NumericRangeRequest tests gte/lte validation.
 type NumericRangeRequest struct {
 	Speed   float32 `json:"speed" validate:"gt=0,lte=4"`
 	SkipSec int     `json:"skip_sec" validate:"gte=5,lte=300"`
@@ -301,7 +301,7 @@ func TestValidator_NumericRangeValidation(t *testing.T) {
 	assert.Error(t, err, "SkipSec below min should fail")
 }
 
-// OneOfRequest tests oneof validation
+// OneOfRequest tests oneof validation.
 type OneOfRequest struct {
 	Role string `json:"role" validate:"required,oneof=admin member"`
 }

@@ -28,11 +28,11 @@ type CoverSearchResult struct {
 
 // CoverDownloadResult contains the result of downloading a cover.
 type CoverDownloadResult struct {
-	Applied    bool   `json:"applied"`              // Whether the cover was applied
-	Source     string `json:"source,omitempty"`     // Source of the cover
-	Width      int    `json:"width,omitempty"`      // Actual width of stored cover
-	Height     int    `json:"height,omitempty"`     // Actual height of stored cover
-	Error      string `json:"error,omitempty"`      // Error message if failed
+	Applied bool   `json:"applied"`          // Whether the cover was applied
+	Source  string `json:"source,omitempty"` // Source of the cover
+	Width   int    `json:"width,omitempty"`  // Actual width of stored cover
+	Height  int    `json:"height,omitempty"` // Actual height of stored cover
+	Error   string `json:"error,omitempty"`  // Error message if failed
 }
 
 // CoverService handles cover search and download from multiple sources.

@@ -65,11 +65,11 @@ type Event struct {
 	Data      any       `json:"data"` // Event-specific data as JSON object
 	Type      EventType `json:"type"`
 
-	// Future fields for filtering (TODO: Add when implementing multi-user)
-	// SECURITY TODO: Currently broadcasting to all clients regardless of user/collection
-	// Issue: Any connected client receives all library events (John's reading habits are at risk of disclosure.)
-	// Risk: Medium - self-hosted single-user deployments are fine, multi-user is not
-	// Fix: When implementing auth at some point, filter events by UserID and Collection
+	// Filtering fields for multi-user support.
+	// When set, events are only delivered to clients matching these criteria.
+	// Empty string means "broadcast to all" (backwards compatible).
+	UserID       string `json:"-"` // Filter to specific user (not sent to client)
+	CollectionID string `json:"-"` // Filter to specific collection (not sent to client)
 }
 
 // BookEventData is the data payload for book events.

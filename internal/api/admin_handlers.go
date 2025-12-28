@@ -86,6 +86,7 @@ func (s *Server) registerAdminRoutes() {
 
 // === DTOs ===
 
+// CreateInviteRequest is the request body for creating an invite.
 type CreateInviteRequest struct {
 	Name          string `json:"name" validate:"required,min=1,max=100" doc:"Display name for the invitee"`
 	Email         string `json:"email" validate:"required,email,max=254" doc:"Email address for the invitee"`
@@ -93,11 +94,13 @@ type CreateInviteRequest struct {
 	ExpiresInDays int    `json:"expires_in_days,omitempty" validate:"omitempty,gte=1,lte=365" doc:"Days until expiration (default 7)"`
 }
 
+// CreateInviteInput is the Huma input for creating an invite.
 type CreateInviteInput struct {
 	Authorization string `header:"Authorization"`
 	Body          CreateInviteRequest
 }
 
+// InviteResponse is the API response for an invite.
 type InviteResponse struct {
 	ID        string    `json:"id" doc:"Invite ID"`
 	Code      string    `json:"code" doc:"Invite code"`
@@ -111,32 +114,39 @@ type InviteResponse struct {
 	URL       string    `json:"url,omitempty" doc:"Invite URL"`
 }
 
+// InviteOutput is the Huma output wrapper for an invite.
 type InviteOutput struct {
 	Body InviteResponse
 }
 
+// ListInvitesInput is the Huma input for listing invites.
 type ListInvitesInput struct {
 	Authorization string `header:"Authorization"`
 }
 
+// ListInvitesResponse is the API response for listing invites.
 type ListInvitesResponse struct {
 	Invites []InviteResponse `json:"invites" doc:"List of invites"`
 	Total   int              `json:"total" doc:"Total count"`
 }
 
+// ListInvitesOutput is the Huma output wrapper for listing invites.
 type ListInvitesOutput struct {
 	Body ListInvitesResponse
 }
 
+// DeleteInviteInput is the Huma input for deleting an invite.
 type DeleteInviteInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Invite ID"`
 }
 
+// ListUsersInput is the Huma input for listing users.
 type ListUsersInput struct {
 	Authorization string `header:"Authorization"`
 }
 
+// AdminUserResponse is the API response for a user in admin context.
 type AdminUserResponse struct {
 	ID        string    `json:"id" doc:"User ID"`
 	Email     string    `json:"email" doc:"Email address"`
@@ -148,36 +158,43 @@ type AdminUserResponse struct {
 	UpdatedAt time.Time `json:"updated_at" doc:"Last update time"`
 }
 
+// ListUsersResponse is the API response for listing users.
 type ListUsersResponse struct {
 	Users []AdminUserResponse `json:"users" doc:"List of users"`
 	Total int                 `json:"total" doc:"Total count"`
 }
 
+// ListUsersOutput is the Huma output wrapper for listing users.
 type ListUsersOutput struct {
 	Body ListUsersResponse
 }
 
+// GetAdminUserInput is the Huma input for getting a user.
 type GetAdminUserInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"User ID"`
 }
 
+// AdminUserOutput is the Huma output wrapper for a user.
 type AdminUserOutput struct {
 	Body AdminUserResponse
 }
 
+// UpdateAdminUserRequest is the request body for updating a user.
 type UpdateAdminUserRequest struct {
 	FirstName *string `json:"first_name,omitempty" validate:"omitempty,min=1,max=100" doc:"First name"`
 	LastName  *string `json:"last_name,omitempty" validate:"omitempty,min=1,max=100" doc:"Last name"`
 	Role      *string `json:"role,omitempty" validate:"omitempty,oneof=admin member" doc:"User role"`
 }
 
+// UpdateAdminUserInput is the Huma input for updating a user.
 type UpdateAdminUserInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"User ID"`
 	Body          UpdateAdminUserRequest
 }
 
+// DeleteAdminUserInput is the Huma input for deleting a user.
 type DeleteAdminUserInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"User ID"`

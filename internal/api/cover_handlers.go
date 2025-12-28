@@ -65,12 +65,14 @@ func (s *Server) registerCoverRoutes() {
 
 // === DTOs ===
 
+// SearchCoversInput contains parameters for searching covers.
 type SearchCoversInput struct {
 	Authorization string `header:"Authorization"`
 	Title         string `query:"title" validate:"required,min=1" doc:"Book title to search for"`
 	Author        string `query:"author" doc:"Author name (optional, improves results)"`
 }
 
+// CoverOptionResponse contains cover option data in API responses.
 type CoverOptionResponse struct {
 	Source   string `json:"source" doc:"Cover source (audible, itunes)"`
 	URL      string `json:"url" doc:"Cover image URL"`
@@ -79,43 +81,52 @@ type CoverOptionResponse struct {
 	SourceID string `json:"source_id" doc:"Source-specific ID (ASIN for Audible, collectionId for iTunes)"`
 }
 
+// SearchCoversResponse contains cover search results.
 type SearchCoversResponse struct {
 	Covers []CoverOptionResponse `json:"covers" doc:"Cover options sorted by resolution (highest first)"`
 }
 
+// SearchCoversOutput wraps the search covers response for Huma.
 type SearchCoversOutput struct {
 	Body SearchCoversResponse
 }
 
+// GetBookCoverInput contains parameters for getting a book cover.
 type GetBookCoverInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Book ID"`
 }
 
+// CoverRedirectOutput represents a redirect response for cover requests.
 type CoverRedirectOutput struct {
 	Status   int
 	Location string `header:"Location"`
 }
 
+// StatusCode returns the HTTP status code for the redirect.
 func (o *CoverRedirectOutput) StatusCode() int {
 	return o.Status
 }
 
+// UploadBookCoverInput contains parameters for uploading a book cover.
 type UploadBookCoverInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Book ID"`
 	RawBody       []byte
 }
 
+// CoverResponse contains cover data in API responses.
 type CoverResponse struct {
 	Path     string `json:"path" doc:"Cover path"`
 	BlurHash string `json:"blur_hash,omitempty" doc:"BlurHash string"`
 }
 
+// CoverOutput wraps the cover response for Huma.
 type CoverOutput struct {
 	Body CoverResponse
 }
 
+// DeleteBookCoverInput contains parameters for deleting a book cover.
 type DeleteBookCoverInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Book ID"`
@@ -233,8 +244,7 @@ func (s *Server) handleServeCover(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleServeCoverByBookID serves a cover directly by book ID.
-// Used by mobile clients for sync operations.
-// GET /api/v1/covers/{id}
+// Used by mobile clients for sync operations via GET /api/v1/covers/{id}.
 func (s *Server) handleServeCoverByBookID(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
@@ -255,8 +265,7 @@ func (s *Server) handleServeCoverByBookID(w http.ResponseWriter, r *http.Request
 }
 
 // handleServeCoverBatch serves multiple covers as a TAR archive.
-// Used by mobile clients for efficient batch sync.
-// GET /api/v1/covers/batch?ids=book1,book2,book3
+// Used by mobile clients for efficient batch sync via GET /api/v1/covers/batch?ids=book1,book2,book3.
 func (s *Server) handleServeCoverBatch(w http.ResponseWriter, r *http.Request) {
 	idsParam := r.URL.Query().Get("ids")
 	if idsParam == "" {

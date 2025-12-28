@@ -32,10 +32,10 @@ type LoginRequest struct {
 
 // LoginInput wraps the login request for huma.
 type LoginInput struct {
-	Body            LoginRequest
-	XForwardedFor   string `header:"X-Forwarded-For" doc:"Client IP from proxy"`
-	XRealIP         string `header:"X-Real-IP" doc:"Client real IP"`
-	RemoteAddr      string `header:"Remote-Addr" doc:"Remote address"`
+	Body          LoginRequest
+	XForwardedFor string `header:"X-Forwarded-For" doc:"Client IP from proxy"`
+	XRealIP       string `header:"X-Real-IP" doc:"Client real IP"`
+	RemoteAddr    string `header:"Remote-Addr" doc:"Remote address"`
 }
 
 // AuthResponse is the response for successful authentication.
@@ -91,11 +91,11 @@ type UserOutput struct {
 
 // InviteDetails represents public invite information.
 type InviteDetails struct {
-	Code         string     `json:"code" doc:"Invite code"`
-	Role         string     `json:"role" doc:"Role granted by this invite"`
-	ExpiresAt    *time.Time `json:"expires_at,omitempty" doc:"Expiration timestamp"`
-	ServerName   string     `json:"server_name" doc:"Name of the server"`
-	InvitedBy    string     `json:"invited_by,omitempty" doc:"Name of inviter"`
+	Code       string     `json:"code" doc:"Invite code"`
+	Role       string     `json:"role" doc:"Role granted by this invite"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty" doc:"Expiration timestamp"`
+	ServerName string     `json:"server_name" doc:"Name of the server"`
+	InvitedBy  string     `json:"invited_by,omitempty" doc:"Name of inviter"`
 }
 
 // InviteDetailsOutput wraps invite details for huma.

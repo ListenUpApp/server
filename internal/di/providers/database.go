@@ -108,7 +108,7 @@ func ProvideBootstrap(i do.Injector) (*Bootstrap, error) {
 	}, nil
 }
 
-// SlogLogger provides access to the underlying slog.Logger for packages that need it.
+// ProvideSlogLogger provides access to the underlying slog.Logger for packages that need it.
 func ProvideSlogLogger(i do.Injector) (*slog.Logger, error) {
 	log := do.MustInvoke[*logger.Logger](i)
 	return log.Logger, nil

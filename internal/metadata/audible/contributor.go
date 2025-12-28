@@ -15,7 +15,7 @@ import (
 	"golang.org/x/net/html"
 )
 
-// Ensure json/v2 is available for future use (project convention)
+// Ensure json/v2 is available for future use (project convention).
 var _ json.Options
 
 // GetContributorProfile fetches a contributor's profile by ASIN by scraping the author page.
@@ -73,6 +73,8 @@ func (c *Client) SearchContributors(ctx context.Context, region Region, name str
 // doWebRequest executes an HTTP request to the Audible website with rate limiting.
 // Handles geo-redirects by detecting when Audible redirects to a different regional
 // domain and retrying the request with the correct URL.
+//
+//nolint:gocyclo,nestif,gocritic // Complex redirect handling is inherent to the Audible scraping logic
 func (c *Client) doWebRequest(ctx context.Context, region Region, fullURL string) ([]byte, error) {
 	// Wait for rate limit (shared with API requests)
 	if err := c.limiter.Wait(ctx, string(region)); err != nil {
@@ -164,7 +166,7 @@ func (c *Client) doWebRequest(ctx context.Context, region Region, fullURL string
 				}
 
 				// Need to drain the response body before making new request
-				io.Copy(io.Discard, resp.Body)
+				_, _ = io.Copy(io.Discard, resp.Body)
 				resp.Body.Close()
 
 				// Wait for rate limit again for the retry
@@ -279,7 +281,7 @@ func parseContributorSearch(htmlContent []byte, searchQuery string) ([]Contribut
 
 	// Track authors with occurrence count (more occurrences = more relevant)
 	type authorData struct {
-		result     ContributorSearchResult
+		result      ContributorSearchResult
 		occurrences int
 	}
 	resultMap := make(map[string]*authorData)

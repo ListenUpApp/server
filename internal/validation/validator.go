@@ -62,6 +62,7 @@ func (v *Validator) formatError(err error) error {
 	return domainerrors.ValidationWithDetails("validation failed", fieldErrors)
 }
 
+//nolint:gocyclo // Switch statement covering validation tags is intentionally exhaustive.
 func (v *Validator) friendlyMessage(e validator.FieldError) string {
 	switch e.Tag() {
 	case "required":

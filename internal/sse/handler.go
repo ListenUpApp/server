@@ -52,7 +52,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Register client.
-	client, err := h.manager.Connect()
+	// TODO: Extract userID from auth token when SSE auth is implemented.
+	// For now, empty strings mean "receive all events" (single-user compatible).
+	client, err := h.manager.Connect("", "")
 	if err != nil {
 		h.logger.Error("failed to register SSE client", slog.String("error", err.Error()))
 		http.Error(w, "Failed to establish connection", http.StatusInternalServerError)

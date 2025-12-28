@@ -90,7 +90,7 @@ func (s *TokenService) GenerateAccessToken(user *domain.User) (string, error) {
 	return encrypted, nil
 }
 
-// VerifyAccessToken verifies and parses a PASETO access tokne.
+// VerifyAccessToken verifies and parses a PASETO access token.
 // Returns the claims if valid, or an error if they're invalid or expired.
 func (s *TokenService) VerifyAccessToken(tokenString string) (*AccessClaims, error) {
 	parser := paseto.NewParser()

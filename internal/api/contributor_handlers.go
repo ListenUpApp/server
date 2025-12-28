@@ -121,12 +121,14 @@ func (s *Server) registerContributorRoutes() {
 
 // === DTOs ===
 
+// ListContributorsInput contains parameters for listing contributors.
 type ListContributorsInput struct {
 	Authorization string `header:"Authorization"`
 	Cursor        string `query:"cursor" doc:"Pagination cursor"`
 	Limit         int    `query:"limit" doc:"Items per page (default 50)"`
 }
 
+// ContributorResponse contains contributor data in API responses.
 type ContributorResponse struct {
 	ID          string    `json:"id" doc:"Contributor ID"`
 	Name        string    `json:"name" doc:"Contributor name"`
@@ -139,16 +141,19 @@ type ContributorResponse struct {
 	UpdatedAt   time.Time `json:"updated_at" doc:"Last update time"`
 }
 
+// ListContributorsResponse contains a paginated list of contributors.
 type ListContributorsResponse struct {
 	Contributors []ContributorResponse `json:"contributors" doc:"List of contributors"`
 	NextCursor   string                `json:"next_cursor,omitempty" doc:"Next page cursor"`
 	HasMore      bool                  `json:"has_more" doc:"Whether more pages exist"`
 }
 
+// ListContributorsOutput wraps the list contributors response for Huma.
 type ListContributorsOutput struct {
 	Body ListContributorsResponse
 }
 
+// CreateContributorRequest is the request body for creating a contributor.
 type CreateContributorRequest struct {
 	Name        string `json:"name" validate:"required,min=1,max=200" doc:"Contributor name"`
 	SortName    string `json:"sort_name,omitempty" validate:"omitempty,max=200" doc:"Sort name (e.g., 'King, Stephen')"`
@@ -158,20 +163,24 @@ type CreateContributorRequest struct {
 	AudibleASIN string `json:"audible_asin,omitempty" validate:"omitempty,max=20" doc:"Audible ASIN"`
 }
 
+// CreateContributorInput wraps the create contributor request for Huma.
 type CreateContributorInput struct {
 	Authorization string `header:"Authorization"`
 	Body          CreateContributorRequest
 }
 
+// ContributorOutput wraps the contributor response for Huma.
 type ContributorOutput struct {
 	Body ContributorResponse
 }
 
+// GetContributorInput contains parameters for getting a contributor.
 type GetContributorInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Contributor ID"`
 }
 
+// UpdateContributorRequest is the request body for updating a contributor.
 type UpdateContributorRequest struct {
 	Name        *string `json:"name,omitempty" validate:"omitempty,min=1,max=200" doc:"Contributor name"`
 	SortName    *string `json:"sort_name,omitempty" validate:"omitempty,max=200" doc:"Sort name"`
@@ -181,22 +190,26 @@ type UpdateContributorRequest struct {
 	AudibleASIN *string `json:"audible_asin,omitempty" validate:"omitempty,max=20" doc:"Audible ASIN"`
 }
 
+// UpdateContributorInput wraps the update contributor request for Huma.
 type UpdateContributorInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Contributor ID"`
 	Body          UpdateContributorRequest
 }
 
+// DeleteContributorInput contains parameters for deleting a contributor.
 type DeleteContributorInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Contributor ID"`
 }
 
+// GetContributorBooksInput contains parameters for getting contributor books.
 type GetContributorBooksInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Contributor ID"`
 }
 
+// ContributorBookResponse represents a book in contributor responses.
 type ContributorBookResponse struct {
 	ID        string   `json:"id" doc:"Book ID"`
 	Title     string   `json:"title" doc:"Book title"`
@@ -204,66 +217,79 @@ type ContributorBookResponse struct {
 	CoverPath *string  `json:"cover_path,omitempty" doc:"Cover image path"`
 }
 
+// ContributorBooksResponse contains books by a contributor.
 type ContributorBooksResponse struct {
 	Books []ContributorBookResponse `json:"books" doc:"Books by contributor"`
 }
 
+// ContributorBooksOutput wraps the contributor books response for Huma.
 type ContributorBooksOutput struct {
 	Body ContributorBooksResponse
 }
 
+// MergeContributorsRequest is the request body for merging contributors.
 type MergeContributorsRequest struct {
 	SourceID string `json:"source_id" validate:"required" doc:"Contributor to merge from"`
 	TargetID string `json:"target_id" validate:"required" doc:"Contributor to merge into"`
 }
 
+// MergeContributorsInput wraps the merge contributors request for Huma.
 type MergeContributorsInput struct {
 	Authorization string `header:"Authorization"`
 	Body          MergeContributorsRequest
 }
 
+// UnmergeContributorRequest is the request body for unmerging a contributor alias.
 type UnmergeContributorRequest struct {
 	SourceID  string `json:"source_id" validate:"required" doc:"Contributor with the alias to split"`
 	AliasName string `json:"alias_name" validate:"required,min=1,max=200" doc:"Alias name to split into a new contributor"`
 }
 
+// UnmergeContributorInput wraps the unmerge contributor request for Huma.
 type UnmergeContributorInput struct {
 	Authorization string `header:"Authorization"`
 	Body          UnmergeContributorRequest
 }
 
+// SearchContributorsInput contains parameters for searching contributors.
 type SearchContributorsInput struct {
 	Authorization string `header:"Authorization"`
 	Query         string `query:"q" validate:"required,min=1,max=200" doc:"Search query"`
 	Limit         int    `query:"limit" validate:"omitempty,gte=1,lte=100" doc:"Max results (default 10)"`
 }
 
+// ContributorSearchResult represents a contributor in search results.
 type ContributorSearchResult struct {
 	ID        string `json:"id" doc:"Contributor ID"`
 	Name      string `json:"name" doc:"Contributor name"`
 	BookCount int    `json:"book_count" doc:"Number of books"`
 }
 
+// SearchContributorsResponse contains contributor search results.
 type SearchContributorsResponse struct {
 	Results []ContributorSearchResult `json:"results" doc:"Search results"`
 }
 
+// SearchContributorsOutput wraps the search contributors response for Huma.
 type SearchContributorsOutput struct {
 	Body SearchContributorsResponse
 }
 
+// ApplyContributorMetadataRequest is the request body for applying Audible metadata to a contributor.
 type ApplyContributorMetadataRequest struct {
 	ASIN     string                    `json:"asin" doc:"Audible ASIN"`
 	ImageURL string                    `json:"image_url,omitempty" doc:"Image URL from search results"`
 	Fields   ContributorMetadataFields `json:"fields" doc:"Which fields to apply"`
 }
 
+// ContributorMetadataFields specifies which metadata fields to apply.
 type ContributorMetadataFields struct {
 	Name      bool `json:"name" doc:"Apply name from Audible"`
 	Biography bool `json:"biography" doc:"Apply biography from Audible"`
 	Image     bool `json:"image" doc:"Download and apply image"`
 }
 
+// ApplyContributorMetadataInput wraps the apply metadata request for Huma.
 type ApplyContributorMetadataInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Contributor ID"`
@@ -485,55 +511,6 @@ func (s *Server) handleSearchContributors(ctx context.Context, input *SearchCont
 	}
 
 	return &SearchContributorsOutput{Body: SearchContributorsResponse{Results: resp}}, nil
-}
-
-// searchContributorByName searches Audible for contributors by name and returns 409 Conflict with candidates.
-// If an ASIN is provided, returns 404 since the contributor doesn't exist locally yet.
-func (s *Server) searchContributorByName(ctx context.Context, name string, asin string) (*ContributorOutput, error) {
-	// If ASIN provided, the contributor just doesn't exist locally yet - return 404
-	if asin != "" {
-		return nil, &APIError{
-			status:  http.StatusNotFound,
-			Code:    "contributor_not_synced",
-			Message: "Contributor not found locally. Please wait for sync to complete, then try again.",
-		}
-	}
-
-	// Search Audible by name
-	results, region, err := s.services.Metadata.SearchContributors(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-
-	// Return 409 Conflict with candidates
-	candidates := make([]MetadataContributorSearchResultResponse, len(results))
-	for i, r := range results {
-		candidates[i] = MetadataContributorSearchResultResponse{
-			ASIN:        r.ASIN,
-			Name:        r.Name,
-			ImageURL:    r.ImageURL,
-			Description: r.Description,
-		}
-	}
-
-	var message string
-	if len(results) == 0 {
-		message = fmt.Sprintf("No matches found for \"%s\" on Audible. Try searching with a different name.", name)
-	} else if len(results) == 1 {
-		message = fmt.Sprintf("Found contributor \"%s\" on Audible (%s region).", results[0].Name, region)
-	} else {
-		message = fmt.Sprintf("Multiple contributors found in %s region. Select a contributor and retry with ?asin={asin}", region)
-	}
-
-	return nil, &APIError{
-		status:  http.StatusConflict,
-		Code:    "disambiguation_required",
-		Message: message,
-		Details: map[string]any{
-			"candidates":    candidates,
-			"searched_name": name,
-		},
-	}
 }
 
 func (s *Server) handleApplyContributorMetadata(ctx context.Context, input *ApplyContributorMetadataInput) (*ContributorOutput, error) {

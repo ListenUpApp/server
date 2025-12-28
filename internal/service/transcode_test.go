@@ -57,6 +57,7 @@ func setupTranscodeTest(t *testing.T) (*TranscodeService, string, func()) {
 
 // createTestTranscodeJob creates a transcode job for testing.
 func createTestTranscodeJob(t *testing.T, s *store.Store, bookID, audioFileID string, status domain.TranscodeStatus) *domain.TranscodeJob {
+	t.Helper()
 	return createTestTranscodeJobWithVariant(t, s, bookID, audioFileID, status, domain.TranscodeVariantSpatial)
 }
 
@@ -112,6 +113,7 @@ func Test_findAvailableSegments(t *testing.T) {
 		{
 			name: "empty directory returns empty slice",
 			setupDir: func(t *testing.T, dir string) {
+				t.Helper()
 				// Directory exists but is empty
 			},
 			wantSegments: nil, // Empty directory returns nil slice
@@ -120,6 +122,7 @@ func Test_findAvailableSegments(t *testing.T) {
 		{
 			name: "directory with segments returns sorted list",
 			setupDir: func(t *testing.T, dir string) {
+				t.Helper()
 				// Create segments out of order
 				require.NoError(t, os.WriteFile(filepath.Join(dir, "seg_0002.ts"), []byte("test"), 0644))
 				require.NoError(t, os.WriteFile(filepath.Join(dir, "seg_0000.ts"), []byte("test"), 0644))
@@ -131,6 +134,7 @@ func Test_findAvailableSegments(t *testing.T) {
 		{
 			name: "directory with mixed files only returns seg_*.ts",
 			setupDir: func(t *testing.T, dir string) {
+				t.Helper()
 				// Create valid segments
 				require.NoError(t, os.WriteFile(filepath.Join(dir, "seg_0000.ts"), []byte("test"), 0644))
 				require.NoError(t, os.WriteFile(filepath.Join(dir, "seg_0001.ts"), []byte("test"), 0644))
@@ -193,12 +197,14 @@ func Test_GenerateDynamicPlaylist(t *testing.T) {
 		{
 			name: "job exists, segments exist, status=Running - playlist without ENDLIST",
 			setupJob: func(t *testing.T, s *store.Store, cachePath string) (string, string) {
+				t.Helper()
 				bookID := "book_test123"
 				audioFileID := "af_test456"
 				createTestTranscodeJob(t, s, bookID, audioFileID, domain.TranscodeStatusRunning)
 				return bookID, audioFileID
 			},
 			setupFiles: func(t *testing.T, cachePath, bookID, audioFileID string) {
+				t.Helper()
 				hlsDir := filepath.Join(cachePath, bookID, audioFileID, string(domain.TranscodeVariantSpatial))
 				require.NoError(t, os.MkdirAll(hlsDir, 0755))
 				require.NoError(t, os.WriteFile(filepath.Join(hlsDir, "seg_0000.ts"), []byte("test"), 0644))
@@ -206,6 +212,7 @@ func Test_GenerateDynamicPlaylist(t *testing.T) {
 			},
 			wantErr: false,
 			checkResult: func(t *testing.T, playlist string, status domain.TranscodeStatus) {
+				t.Helper()
 				// Verify playlist structure
 				assert.Contains(t, playlist, "#EXTM3U")
 				assert.Contains(t, playlist, "#EXT-X-VERSION:3")
@@ -220,12 +227,14 @@ func Test_GenerateDynamicPlaylist(t *testing.T) {
 		{
 			name: "job exists, segments exist, status=Completed - playlist with ENDLIST",
 			setupJob: func(t *testing.T, s *store.Store, cachePath string) (string, string) {
+				t.Helper()
 				bookID := "book_test789"
 				audioFileID := "af_test012"
 				createTestTranscodeJob(t, s, bookID, audioFileID, domain.TranscodeStatusCompleted)
 				return bookID, audioFileID
 			},
 			setupFiles: func(t *testing.T, cachePath, bookID, audioFileID string) {
+				t.Helper()
 				hlsDir := filepath.Join(cachePath, bookID, audioFileID, string(domain.TranscodeVariantSpatial))
 				require.NoError(t, os.MkdirAll(hlsDir, 0755))
 				require.NoError(t, os.WriteFile(filepath.Join(hlsDir, "seg_0000.ts"), []byte("test"), 0644))
@@ -234,6 +243,7 @@ func Test_GenerateDynamicPlaylist(t *testing.T) {
 			},
 			wantErr: false,
 			checkResult: func(t *testing.T, playlist string, status domain.TranscodeStatus) {
+				t.Helper()
 				// Verify playlist structure
 				assert.Contains(t, playlist, "#EXTM3U")
 				assert.Contains(t, playlist, "seg_0000.ts")
@@ -246,10 +256,12 @@ func Test_GenerateDynamicPlaylist(t *testing.T) {
 		{
 			name: "job not found returns error",
 			setupJob: func(t *testing.T, s *store.Store, cachePath string) (string, string) {
+				t.Helper()
 				// Don't create a job - return non-existent IDs
 				return "book_nonexistent", "af_nonexistent"
 			},
 			setupFiles: func(t *testing.T, cachePath, bookID, audioFileID string) {
+				t.Helper()
 				// No files to create
 			},
 			wantErr:    true,
@@ -258,12 +270,14 @@ func Test_GenerateDynamicPlaylist(t *testing.T) {
 		{
 			name: "no segments available returns error",
 			setupJob: func(t *testing.T, s *store.Store, cachePath string) (string, string) {
+				t.Helper()
 				bookID := "book_noseg"
 				audioFileID := "af_noseg"
 				createTestTranscodeJob(t, s, bookID, audioFileID, domain.TranscodeStatusRunning)
 				return bookID, audioFileID
 			},
 			setupFiles: func(t *testing.T, cachePath, bookID, audioFileID string) {
+				t.Helper()
 				// Create directory but no segments
 				hlsDir := filepath.Join(cachePath, bookID, audioFileID, string(domain.TranscodeVariantSpatial))
 				require.NoError(t, os.MkdirAll(hlsDir, 0755))

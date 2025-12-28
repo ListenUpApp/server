@@ -73,17 +73,20 @@ func (s *Server) registerShareRoutes() {
 
 // === DTOs ===
 
+// ShareCollectionRequest is the request body for sharing a collection.
 type ShareCollectionRequest struct {
 	UserID     string `json:"user_id" validate:"required" doc:"User ID to share with"`
 	Permission string `json:"permission" validate:"required,oneof=read write" doc:"Permission level"`
 }
 
+// ShareCollectionInput wraps the share collection request for Huma.
 type ShareCollectionInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Collection ID"`
 	Body          ShareCollectionRequest
 }
 
+// ShareResponse contains share data in API responses.
 type ShareResponse struct {
 	ID               string    `json:"id" doc:"Share ID"`
 	CollectionID     string    `json:"collection_id" doc:"Collection ID"`
@@ -93,43 +96,52 @@ type ShareResponse struct {
 	CreatedAt        time.Time `json:"created_at" doc:"Creation time"`
 }
 
+// ShareOutput wraps the share response for Huma.
 type ShareOutput struct {
 	Body ShareResponse
 }
 
+// ListCollectionSharesInput contains parameters for listing collection shares.
 type ListCollectionSharesInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Collection ID"`
 }
 
+// ListSharesResponse contains a list of shares.
 type ListSharesResponse struct {
 	Shares []ShareResponse `json:"shares" doc:"List of shares"`
 }
 
+// ListSharesOutput wraps the list shares response for Huma.
 type ListSharesOutput struct {
 	Body ListSharesResponse
 }
 
+// GetShareInput contains parameters for getting a share.
 type GetShareInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Share ID"`
 }
 
+// UpdateShareRequest is the request body for updating a share.
 type UpdateShareRequest struct {
 	Permission string `json:"permission" validate:"required,oneof=read write" doc:"New permission level"`
 }
 
+// UpdateShareInput wraps the update share request for Huma.
 type UpdateShareInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Share ID"`
 	Body          UpdateShareRequest
 }
 
+// DeleteShareInput contains parameters for deleting a share.
 type DeleteShareInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Share ID"`
 }
 
+// ListSharedWithMeInput contains parameters for listing shares with the current user.
 type ListSharedWithMeInput struct {
 	Authorization string `header:"Authorization"`
 }

@@ -3,14 +3,13 @@ package images
 import (
 	"fmt"
 	"image"
-	"image/draw"
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
+	_ "image/gif"  // Register GIF decoder
+	_ "image/jpeg" // Register JPEG decoder
+	_ "image/png"  // Register PNG decoder
 	"os"
 
 	"github.com/bbrks/go-blurhash"
-	_ "golang.org/x/image/webp"
+	_ "golang.org/x/image/webp" // Register WebP decoder
 )
 
 // blurHashSize is the target size for BlurHash computation.
@@ -90,13 +89,5 @@ func resizeForBlurHash(img image.Image) image.Image {
 		}
 	}
 
-	return dst
-}
-
-// resizeImage resizes an image using simple scaling.
-// This is used internally and kept for potential future use.
-func resizeImage(src image.Image, width, height int) *image.RGBA {
-	dst := image.NewRGBA(image.Rect(0, 0, width, height))
-	draw.Draw(dst, dst.Bounds(), src, src.Bounds().Min, draw.Src)
 	return dst
 }

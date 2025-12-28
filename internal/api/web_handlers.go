@@ -26,10 +26,12 @@ func (s *Server) registerWebRoutes() {
 
 // === DTOs ===
 
+// GetJoinPageInput contains parameters for the join page.
 type GetJoinPageInput struct {
 	Code string `path:"code" doc:"Invite code"`
 }
 
+// HTMLOutput represents an HTML response.
 type HTMLOutput struct {
 	ContentType string `header:"Content-Type"`
 	Body        string
@@ -38,9 +40,10 @@ type HTMLOutput struct {
 // === Handlers ===
 
 func (s *Server) handleGetJoinPage(ctx context.Context, input *GetJoinPageInput) (*HTMLOutput, error) {
-	// Check if invite exists
+	// Check if invite exists - return error page HTML if not found (not an error for the caller)
 	_, err := s.services.Invite.GetInviteDetails(ctx, input.Code)
 	if err != nil {
+		//nolint:nilerr // Intentional: return HTML error page, not HTTP error
 		return &HTMLOutput{
 			ContentType: "text/html; charset=utf-8",
 			Body: `<!DOCTYPE html>
@@ -98,7 +101,7 @@ func (s *Server) handleGetJoinPage(ctx context.Context, input *GetJoinPageInput)
 	}, nil
 }
 
-func (s *Server) handleAssetLinks(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAssetLinks(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`[{
   "relation": ["delegate_permission/common.handle_all_urls"],
@@ -110,7 +113,7 @@ func (s *Server) handleAssetLinks(w http.ResponseWriter, r *http.Request) {
 }]`))
 }
 
-func (s *Server) handleAppleAppSiteAssociation(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAppleAppSiteAssociation(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`{
   "applinks": {

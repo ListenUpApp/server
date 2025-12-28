@@ -67,10 +67,12 @@ func (s *Server) registerSettingsRoutes() {
 
 // === DTOs ===
 
+// GetUserSettingsInput contains parameters for getting user settings.
 type GetUserSettingsInput struct {
 	Authorization string `header:"Authorization"`
 }
 
+// UserSettingsResponse contains user settings data in API responses.
 type UserSettingsResponse struct {
 	DefaultPlaybackSpeed   float32   `json:"default_playback_speed" doc:"Default playback speed"`
 	DefaultSkipForwardSec  int       `json:"default_skip_forward_sec" doc:"Default skip forward seconds"`
@@ -80,10 +82,12 @@ type UserSettingsResponse struct {
 	UpdatedAt              time.Time `json:"updated_at" doc:"Last update time"`
 }
 
+// UserSettingsOutput wraps the user settings response for Huma.
 type UserSettingsOutput struct {
 	Body UserSettingsResponse
 }
 
+// UpdateUserSettingsRequest is the request body for updating user settings.
 type UpdateUserSettingsRequest struct {
 	DefaultPlaybackSpeed   *float32 `json:"default_playback_speed" validate:"omitempty,gt=0,lte=4" doc:"Default playback speed"`
 	DefaultSkipForwardSec  *int     `json:"default_skip_forward_sec" validate:"omitempty,gte=5,lte=300" doc:"Default skip forward seconds"`
@@ -92,16 +96,19 @@ type UpdateUserSettingsRequest struct {
 	ShakeToResetSleepTimer *bool    `json:"shake_to_reset_sleep_timer" doc:"Shake to reset sleep timer"`
 }
 
+// UpdateUserSettingsInput wraps the update user settings request for Huma.
 type UpdateUserSettingsInput struct {
 	Authorization string `header:"Authorization"`
 	Body          UpdateUserSettingsRequest
 }
 
+// GetBookPreferencesInput contains parameters for getting book preferences.
 type GetBookPreferencesInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Book ID"`
 }
 
+// BookPreferencesResponse contains book preferences data in API responses.
 type BookPreferencesResponse struct {
 	BookID                    string    `json:"book_id" doc:"Book ID"`
 	PlaybackSpeed             *float32  `json:"playback_speed,omitempty" doc:"Playback speed override"`
@@ -110,16 +117,19 @@ type BookPreferencesResponse struct {
 	UpdatedAt                 time.Time `json:"updated_at" doc:"Last update time"`
 }
 
+// BookPreferencesOutput wraps the book preferences response for Huma.
 type BookPreferencesOutput struct {
 	Body BookPreferencesResponse
 }
 
+// UpdateBookPreferencesRequest is the request body for updating book preferences.
 type UpdateBookPreferencesRequest struct {
 	PlaybackSpeed             *float32 `json:"playback_speed" validate:"omitempty,gt=0,lte=4" doc:"Playback speed override"`
 	SkipForwardSec            *int     `json:"skip_forward_sec" validate:"omitempty,gte=5,lte=300" doc:"Skip forward override"`
 	HideFromContinueListening *bool    `json:"hide_from_continue_listening" doc:"Hide from continue listening"`
 }
 
+// UpdateBookPreferencesInput wraps the update book preferences request for Huma.
 type UpdateBookPreferencesInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Book ID"`
@@ -230,18 +240,21 @@ func (s *Server) handleUpdateBookPreferences(ctx context.Context, input *UpdateB
 
 // === Playback Prepare ===
 
+// PreparePlaybackRequest is the request body for preparing audio playback.
 type PreparePlaybackRequest struct {
-	BookID      string   `json:"book_id" doc:"Book ID"`
-	AudioFileID string   `json:"audio_file_id" doc:"Audio file ID"`
+	BookID       string   `json:"book_id" doc:"Book ID"`
+	AudioFileID  string   `json:"audio_file_id" doc:"Audio file ID"`
 	Capabilities []string `json:"capabilities" doc:"Codecs the client can play (e.g., aac, mp3, opus)"`
-	Spatial     bool     `json:"spatial" doc:"Whether client prefers spatial audio"`
+	Spatial      bool     `json:"spatial" doc:"Whether client prefers spatial audio"`
 }
 
+// PreparePlaybackInput wraps the prepare playback request for Huma.
 type PreparePlaybackInput struct {
 	Authorization string `header:"Authorization"`
 	Body          PreparePlaybackRequest
 }
 
+// PreparePlaybackResponse contains playback preparation data in API responses.
 type PreparePlaybackResponse struct {
 	Ready          bool   `json:"ready" doc:"True if audio is ready to stream"`
 	StreamURL      string `json:"stream_url" doc:"URL to stream the audio"`
@@ -251,6 +264,7 @@ type PreparePlaybackResponse struct {
 	Progress       int    `json:"progress" doc:"Transcode progress (0-100)"`
 }
 
+// PreparePlaybackOutput wraps the prepare playback response for Huma.
 type PreparePlaybackOutput struct {
 	Body PreparePlaybackResponse
 }
@@ -313,7 +327,7 @@ func (s *Server) handlePreparePlayback(ctx context.Context, input *PreparePlayba
 	}
 
 	// Build response based on job status
-	switch job.Status {
+	switch job.Status { //nolint:exhaustive // Only handling the relevant status values
 	case "completed":
 		// Transcode ready - return HLS stream URL
 		streamURL := baseURL + "/api/v1/audio/" + input.Body.BookID + "/" + input.Body.AudioFileID + "/transcode/playlist.m3u8"

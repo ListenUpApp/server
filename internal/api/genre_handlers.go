@@ -124,10 +124,12 @@ func (s *Server) registerGenreRoutes() {
 
 // === DTOs ===
 
+// ListGenresInput contains parameters for listing genres.
 type ListGenresInput struct {
 	Authorization string `header:"Authorization"`
 }
 
+// GenreResponse contains genre data in API responses.
 type GenreResponse struct {
 	ID          string    `json:"id" doc:"Genre ID"`
 	Name        string    `json:"name" doc:"Genre name"`
@@ -142,14 +144,17 @@ type GenreResponse struct {
 	UpdatedAt   time.Time `json:"updated_at" doc:"Last update time"`
 }
 
+// ListGenresResponse contains a list of genres.
 type ListGenresResponse struct {
 	Genres []GenreResponse `json:"genres" doc:"List of genres"`
 }
 
+// ListGenresOutput wraps the list genres response for Huma.
 type ListGenresOutput struct {
 	Body ListGenresResponse
 }
 
+// CreateGenreRequest is the request body for creating a genre.
 type CreateGenreRequest struct {
 	Name        string `json:"name" validate:"required,min=1,max=100" doc:"Genre name"`
 	ParentID    string `json:"parent_id,omitempty" validate:"omitempty,max=50" doc:"Parent genre ID"`
@@ -157,20 +162,24 @@ type CreateGenreRequest struct {
 	Color       string `json:"color,omitempty" validate:"omitempty,max=20" doc:"Display color"`
 }
 
+// CreateGenreInput wraps the create genre request for Huma.
 type CreateGenreInput struct {
 	Authorization string `header:"Authorization"`
 	Body          CreateGenreRequest
 }
 
+// GenreOutput wraps the genre response for Huma.
 type GenreOutput struct {
 	Body GenreResponse
 }
 
+// GetGenreInput contains parameters for getting a genre.
 type GetGenreInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Genre ID"`
 }
 
+// UpdateGenreRequest is the request body for updating a genre.
 type UpdateGenreRequest struct {
 	Name        *string `json:"name,omitempty" validate:"omitempty,min=1,max=100" doc:"Genre name"`
 	Description *string `json:"description,omitempty" validate:"omitempty,max=1000" doc:"Description"`
@@ -178,83 +187,100 @@ type UpdateGenreRequest struct {
 	SortOrder   *int    `json:"sort_order,omitempty" validate:"omitempty,gte=0,lte=9999" doc:"Sort order"`
 }
 
+// UpdateGenreInput wraps the update genre request for Huma.
 type UpdateGenreInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Genre ID"`
 	Body          UpdateGenreRequest
 }
 
+// DeleteGenreInput contains parameters for deleting a genre.
 type DeleteGenreInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Genre ID"`
 }
 
+// GetGenreChildrenInput contains parameters for getting genre children.
 type GetGenreChildrenInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Genre ID"`
 }
 
+// GenreChildrenOutput wraps the genre children response for Huma.
 type GenreChildrenOutput struct {
 	Body ListGenresResponse
 }
 
+// GetGenreBooksInput contains parameters for getting books in a genre.
 type GetGenreBooksInput struct {
-	Authorization       string `header:"Authorization"`
-	ID                  string `path:"id" doc:"Genre ID"`
-	IncludeDescendants  bool   `query:"include_descendants" doc:"Include books from child genres"`
+	Authorization      string `header:"Authorization"`
+	ID                 string `path:"id" doc:"Genre ID"`
+	IncludeDescendants bool   `query:"include_descendants" doc:"Include books from child genres"`
 }
 
+// GenreBooksResponse contains book IDs in a genre.
 type GenreBooksResponse struct {
 	BookIDs []string `json:"book_ids" doc:"Book IDs in genre"`
 }
 
+// GenreBooksOutput wraps the genre books response for Huma.
 type GenreBooksOutput struct {
 	Body GenreBooksResponse
 }
 
+// MoveGenreRequest is the request body for moving a genre.
 type MoveGenreRequest struct {
 	NewParentID string `json:"new_parent_id" doc:"New parent genre ID (empty for root)"`
 }
 
+// MoveGenreInput wraps the move genre request for Huma.
 type MoveGenreInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Genre ID"`
 	Body          MoveGenreRequest
 }
 
+// MergeGenresRequest is the request body for merging genres.
 type MergeGenresRequest struct {
 	SourceID string `json:"source_id" validate:"required" doc:"Genre to merge from"`
 	TargetID string `json:"target_id" validate:"required" doc:"Genre to merge into"`
 }
 
+// MergeGenresInput wraps the merge genres request for Huma.
 type MergeGenresInput struct {
 	Authorization string `header:"Authorization"`
 	Body          MergeGenresRequest
 }
 
+// ListUnmappedGenresInput contains parameters for listing unmapped genres.
 type ListUnmappedGenresInput struct {
 	Authorization string `header:"Authorization"`
 }
 
+// UnmappedGenreResponse represents an unmapped genre string.
 type UnmappedGenreResponse struct {
-	RawValue   string `json:"raw_value" doc:"Raw genre string"`
-	BookCount  int    `json:"book_count" doc:"Number of books with this genre"`
+	RawValue    string    `json:"raw_value" doc:"Raw genre string"`
+	BookCount   int       `json:"book_count" doc:"Number of books with this genre"`
 	FirstSeenAt time.Time `json:"first_seen_at" doc:"When first encountered"`
 }
 
+// ListUnmappedGenresResponse contains a list of unmapped genres.
 type ListUnmappedGenresResponse struct {
 	UnmappedGenres []UnmappedGenreResponse `json:"unmapped_genres" doc:"List of unmapped genres"`
 }
 
+// ListUnmappedGenresOutput wraps the list unmapped genres response for Huma.
 type ListUnmappedGenresOutput struct {
 	Body ListUnmappedGenresResponse
 }
 
+// MapUnmappedGenreRequest is the request body for mapping an unmapped genre.
 type MapUnmappedGenreRequest struct {
 	RawValue string   `json:"raw_value" validate:"required,max=200" doc:"Raw genre string to map"`
 	GenreIDs []string `json:"genre_ids" validate:"required,min=1,max=20" doc:"Genre IDs to map to"`
 }
 
+// MapUnmappedGenreInput wraps the map unmapped genre request for Huma.
 type MapUnmappedGenreInput struct {
 	Authorization string `header:"Authorization"`
 	Body          MapUnmappedGenreRequest

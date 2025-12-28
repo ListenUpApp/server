@@ -32,10 +32,12 @@ func (s *Server) registerLibraryRoutes() {
 
 // === DTOs ===
 
+// ListLibrariesInput contains parameters for listing libraries.
 type ListLibrariesInput struct {
 	Authorization string `header:"Authorization"`
 }
 
+// LibraryResponse contains library data in API responses.
 type LibraryResponse struct {
 	ID        string    `json:"id" doc:"Library ID"`
 	Name      string    `json:"name" doc:"Library name"`
@@ -46,19 +48,23 @@ type LibraryResponse struct {
 	UpdatedAt time.Time `json:"updated_at" doc:"Last update time"`
 }
 
+// ListLibrariesResponse contains a list of libraries.
 type ListLibrariesResponse struct {
 	Libraries []LibraryResponse `json:"libraries" doc:"List of libraries"`
 }
 
+// ListLibrariesOutput wraps the list libraries response for Huma.
 type ListLibrariesOutput struct {
 	Body ListLibrariesResponse
 }
 
+// GetLibraryInput contains parameters for getting a library.
 type GetLibraryInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Library ID"`
 }
 
+// LibraryOutput wraps the library response for Huma.
 type LibraryOutput struct {
 	Body LibraryResponse
 }

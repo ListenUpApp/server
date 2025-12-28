@@ -12,7 +12,7 @@ import (
 
 // APIError is a custom error type that implements huma.StatusError.
 // It maps domain errors to HTTP responses with consistent structure.
-type APIError struct {
+type APIError struct { //nolint:revive // API prefix is intentional for clarity
 	status  int
 	Code    string `json:"code" doc:"Machine-readable error code"`
 	Message string `json:"message" doc:"Human-readable error message"`
@@ -30,7 +30,7 @@ func (e *APIError) GetStatus() int {
 }
 
 // ContentType returns the content type for the error response.
-func (e *APIError) ContentType(ct string) string {
+func (e *APIError) ContentType(_ string) string {
 	return "application/json"
 }
 

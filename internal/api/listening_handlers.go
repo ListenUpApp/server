@@ -73,6 +73,7 @@ func (s *Server) registerListeningRoutes() {
 
 // === DTOs ===
 
+// RecordListeningEventRequest is the request body for recording a listening event.
 type RecordListeningEventRequest struct {
 	BookID          string   `json:"book_id" validate:"required" doc:"Book ID"`
 	StartPositionMs int64    `json:"start_position_ms" validate:"gte=0" doc:"Start position in ms"`
@@ -84,11 +85,13 @@ type RecordListeningEventRequest struct {
 	DeviceName      string   `json:"device_name" validate:"omitempty,max=100" doc:"Device name"`
 }
 
+// RecordListeningEventInput wraps the record listening event request for Huma.
 type RecordListeningEventInput struct {
 	Authorization string `header:"Authorization"`
 	Body          RecordListeningEventRequest
 }
 
+// ListeningEventResponse contains listening event data in API responses.
 type ListeningEventResponse struct {
 	ID              string    `json:"id" doc:"Event ID"`
 	BookID          string    `json:"book_id" doc:"Book ID"`
@@ -101,6 +104,7 @@ type ListeningEventResponse struct {
 	DeviceID        string    `json:"device_id" doc:"Device ID"`
 }
 
+// ProgressResponse contains playback progress data.
 type ProgressResponse struct {
 	UserID            string    `json:"user_id" doc:"User ID"`
 	BookID            string    `json:"book_id" doc:"Book ID"`
@@ -114,34 +118,41 @@ type ProgressResponse struct {
 	IsFinished        bool      `json:"is_finished" doc:"Whether finished"`
 }
 
+// RecordListeningEventResponse contains the event and updated progress.
 type RecordListeningEventResponse struct {
 	Event    ListeningEventResponse `json:"event" doc:"Created event"`
 	Progress ProgressResponse       `json:"progress" doc:"Updated progress"`
 }
 
+// RecordListeningEventOutput wraps the record listening event response for Huma.
 type RecordListeningEventOutput struct {
 	Body RecordListeningEventResponse
 }
 
+// GetProgressInput contains parameters for getting book progress.
 type GetProgressInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Book ID"`
 }
 
+// ProgressOutput wraps the progress response for Huma.
 type ProgressOutput struct {
 	Body ProgressResponse
 }
 
+// ResetProgressInput contains parameters for resetting book progress.
 type ResetProgressInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Book ID"`
 }
 
+// GetContinueListeningInput contains parameters for getting continue listening items.
 type GetContinueListeningInput struct {
 	Authorization string `header:"Authorization"`
 	Limit         int    `query:"limit" doc:"Max items (default 10)"`
 }
 
+// ContinueListeningItemResponse represents an item in continue listening.
 type ContinueListeningItemResponse struct {
 	BookID            string    `json:"book_id" doc:"Book ID"`
 	Title             string    `json:"title" doc:"Book title"`
@@ -154,39 +165,47 @@ type ContinueListeningItemResponse struct {
 	LastPlayedAt      time.Time `json:"last_played_at" doc:"Last played"`
 }
 
+// ContinueListeningResponse contains continue listening items.
 type ContinueListeningResponse struct {
 	Items []ContinueListeningItemResponse `json:"items" doc:"Continue listening items"`
 }
 
+// ContinueListeningOutput wraps the continue listening response for Huma.
 type ContinueListeningOutput struct {
 	Body ContinueListeningResponse
 }
 
+// GetUserStatsInput contains parameters for getting user stats.
 type GetUserStatsInput struct {
 	Authorization string `header:"Authorization"`
 }
 
+// UserStatsResponse contains user listening statistics.
 type UserStatsResponse struct {
 	TotalListenTimeMs int64 `json:"total_listen_time_ms" doc:"Total listen time"`
 	BooksStarted      int   `json:"books_started" doc:"Books started"`
 	BooksFinished     int   `json:"books_finished" doc:"Books finished"`
 }
 
+// UserStatsOutput wraps the user stats response for Huma.
 type UserStatsOutput struct {
 	Body UserStatsResponse
 }
 
+// GetBookStatsInput contains parameters for getting book stats.
 type GetBookStatsInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Book ID"`
 }
 
+// BookStatsResponse contains book listening statistics.
 type BookStatsResponse struct {
 	TotalListenTimeMs int64 `json:"total_listen_time_ms" doc:"Total listen time"`
 	TotalListeners    int   `json:"total_listeners" doc:"Total listeners"`
 	CompletedCount    int   `json:"completed_count" doc:"Times completed"`
 }
 
+// BookStatsOutput wraps the book stats response for Huma.
 type BookStatsOutput struct {
 	Body BookStatsResponse
 }

@@ -58,16 +58,19 @@ func (s *Server) registerSyncRoutes() {
 
 // === DTOs ===
 
+// GetSyncManifestInput contains parameters for getting the sync manifest.
 type GetSyncManifestInput struct {
 	Authorization string `header:"Authorization"`
 }
 
+// SyncManifestCountsResponse contains entity counts for the sync manifest.
 type SyncManifestCountsResponse struct {
 	Books        int `json:"books" doc:"Total books"`
 	Contributors int `json:"contributors" doc:"Total contributors"`
 	Series       int `json:"series" doc:"Total series"`
 }
 
+// SyncManifestResponse contains the sync manifest data.
 type SyncManifestResponse struct {
 	LibraryVersion string                     `json:"library_version" doc:"Library version timestamp"`
 	Checkpoint     string                     `json:"checkpoint" doc:"Checkpoint for delta sync"`
@@ -75,10 +78,12 @@ type SyncManifestResponse struct {
 	Counts         SyncManifestCountsResponse `json:"counts" doc:"Entity counts"`
 }
 
+// SyncManifestOutput wraps the sync manifest response for Huma.
 type SyncManifestOutput struct {
 	Body SyncManifestResponse
 }
 
+// GetSyncBooksInput contains parameters for getting books for sync.
 type GetSyncBooksInput struct {
 	Authorization string `header:"Authorization"`
 	Cursor        string `query:"cursor" doc:"Pagination cursor"`
@@ -86,6 +91,7 @@ type GetSyncBooksInput struct {
 	UpdatedAfter  string `query:"updated_after" doc:"For delta sync, only return items updated after this time (RFC3339)"`
 }
 
+// SyncBooksResponse contains books for sync.
 type SyncBooksResponse struct {
 	NextCursor     string      `json:"next_cursor,omitempty" doc:"Next page cursor"`
 	Books          []*dto.Book `json:"books" doc:"Books"`
@@ -93,10 +99,12 @@ type SyncBooksResponse struct {
 	HasMore        bool        `json:"has_more" doc:"Whether more pages exist"`
 }
 
+// SyncBooksOutput wraps the sync books response for Huma.
 type SyncBooksOutput struct {
 	Body SyncBooksResponse
 }
 
+// GetSyncContributorsInput contains parameters for getting contributors for sync.
 type GetSyncContributorsInput struct {
 	Authorization string `header:"Authorization"`
 	Cursor        string `query:"cursor" doc:"Pagination cursor"`
@@ -104,6 +112,7 @@ type GetSyncContributorsInput struct {
 	UpdatedAfter  string `query:"updated_after" doc:"For delta sync, only return items updated after this time (RFC3339)"`
 }
 
+// SyncContributorResponse contains contributor data for sync.
 type SyncContributorResponse struct {
 	ID            string    `json:"id" doc:"Contributor ID"`
 	Name          string    `json:"name" doc:"Name"`
@@ -120,6 +129,7 @@ type SyncContributorResponse struct {
 	UpdatedAt     time.Time `json:"updated_at" doc:"Updated time"`
 }
 
+// SyncContributorsResponse contains contributors for sync.
 type SyncContributorsResponse struct {
 	NextCursor            string                    `json:"next_cursor,omitempty" doc:"Next page cursor"`
 	Contributors          []SyncContributorResponse `json:"contributors" doc:"Contributors"`
@@ -127,10 +137,12 @@ type SyncContributorsResponse struct {
 	HasMore               bool                      `json:"has_more" doc:"Whether more pages exist"`
 }
 
+// SyncContributorsOutput wraps the sync contributors response for Huma.
 type SyncContributorsOutput struct {
 	Body SyncContributorsResponse
 }
 
+// GetSyncSeriesInput contains parameters for getting series for sync.
 type GetSyncSeriesInput struct {
 	Authorization string `header:"Authorization"`
 	Cursor        string `query:"cursor" doc:"Pagination cursor"`
@@ -138,6 +150,7 @@ type GetSyncSeriesInput struct {
 	UpdatedAfter  string `query:"updated_after" doc:"For delta sync, only return items updated after this time (RFC3339)"`
 }
 
+// SyncSeriesItemResponse contains series data for sync.
 type SyncSeriesItemResponse struct {
 	ID          string                `json:"id" doc:"Series ID"`
 	Name        string                `json:"name" doc:"Name"`
@@ -148,6 +161,7 @@ type SyncSeriesItemResponse struct {
 	UpdatedAt   time.Time             `json:"updated_at" doc:"Updated time"`
 }
 
+// SyncSeriesResponse contains series for sync.
 type SyncSeriesResponse struct {
 	NextCursor       string                   `json:"next_cursor,omitempty" doc:"Next page cursor"`
 	Series           []SyncSeriesItemResponse `json:"series" doc:"Series"`
@@ -155,6 +169,7 @@ type SyncSeriesResponse struct {
 	HasMore          bool                     `json:"has_more" doc:"Whether more pages exist"`
 }
 
+// SyncSeriesOutput wraps the sync series response for Huma.
 type SyncSeriesOutput struct {
 	Body SyncSeriesResponse
 }

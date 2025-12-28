@@ -14,7 +14,7 @@ import (
 // iTunes will serve the largest available size up to this.
 const MaxCoverSize = "7000x7000bb.jpg"
 
-// sizePattern matches iTunes artwork size patterns like "100x100bb.jpg"
+// sizePattern matches iTunes artwork size patterns like "100x100bb.jpg".
 var sizePattern = regexp.MustCompile(`/\d+x\d+bb\.jpg$`)
 
 // MaxCoverURL transforms an iTunes artwork URL to request maximum resolution.

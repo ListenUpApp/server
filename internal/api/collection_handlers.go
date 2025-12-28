@@ -92,11 +92,13 @@ func (s *Server) registerCollectionRoutes() {
 
 // === DTOs ===
 
+// ListCollectionsInput contains parameters for listing collections.
 type ListCollectionsInput struct {
 	Authorization string `header:"Authorization"`
 	LibraryID     string `path:"libraryId" doc:"Library ID"`
 }
 
+// CollectionResponse contains collection data in API responses.
 type CollectionResponse struct {
 	ID        string    `json:"id" doc:"Collection ID"`
 	LibraryID string    `json:"library_id" doc:"Library ID"`
@@ -108,73 +110,88 @@ type CollectionResponse struct {
 	UpdatedAt time.Time `json:"updated_at" doc:"Last update time"`
 }
 
+// ListCollectionsResponse contains a list of collections.
 type ListCollectionsResponse struct {
 	Collections []CollectionResponse `json:"collections" doc:"List of collections"`
 }
 
+// ListCollectionsOutput wraps the list collections response for Huma.
 type ListCollectionsOutput struct {
 	Body ListCollectionsResponse
 }
 
+// CreateCollectionRequest is the request body for creating a collection.
 type CreateCollectionRequest struct {
 	Name string `json:"name" validate:"required,min=1,max=100" doc:"Collection name"`
 }
 
+// CreateCollectionInput wraps the create collection request for Huma.
 type CreateCollectionInput struct {
 	Authorization string `header:"Authorization"`
 	LibraryID     string `path:"libraryId" doc:"Library ID"`
 	Body          CreateCollectionRequest
 }
 
+// CollectionOutput wraps the collection response for Huma.
 type CollectionOutput struct {
 	Body CollectionResponse
 }
 
+// GetCollectionInput contains parameters for getting a collection.
 type GetCollectionInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Collection ID"`
 }
 
+// UpdateCollectionRequest is the request body for updating a collection.
 type UpdateCollectionRequest struct {
 	Name string `json:"name" validate:"required,min=1,max=100" doc:"New collection name"`
 }
 
+// UpdateCollectionInput wraps the update collection request for Huma.
 type UpdateCollectionInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Collection ID"`
 	Body          UpdateCollectionRequest
 }
 
+// DeleteCollectionInput contains parameters for deleting a collection.
 type DeleteCollectionInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Collection ID"`
 }
 
+// GetCollectionBooksInput contains parameters for getting collection books.
 type GetCollectionBooksInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Collection ID"`
 }
 
+// CollectionBookResponse represents a book in collection responses.
 type CollectionBookResponse struct {
 	ID        string  `json:"id" doc:"Book ID"`
 	Title     string  `json:"title" doc:"Book title"`
 	CoverPath *string `json:"cover_path,omitempty" doc:"Cover image path"`
 }
 
+// CollectionBooksResponse contains books in a collection.
 type CollectionBooksResponse struct {
 	Books []CollectionBookResponse `json:"books" doc:"Books in collection"`
 }
 
+// CollectionBooksOutput wraps the collection books response for Huma.
 type CollectionBooksOutput struct {
 	Body CollectionBooksResponse
 }
 
+// AddBookToCollectionInput contains parameters for adding a book to a collection.
 type AddBookToCollectionInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Collection ID"`
 	BookID        string `path:"bookId" doc:"Book ID"`
 }
 
+// RemoveBookFromCollectionInput contains parameters for removing a book from a collection.
 type RemoveBookFromCollectionInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Collection ID"`

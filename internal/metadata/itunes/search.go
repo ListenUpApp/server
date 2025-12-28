@@ -64,7 +64,8 @@ func (c *Client) SearchAudiobooks(ctx context.Context, query string) ([]Audioboo
 
 	// Convert to AudiobookResult with high-res cover URLs
 	results := make([]AudiobookResult, 0, len(searchResp.Results))
-	for _, r := range searchResp.Results {
+	for i := range searchResp.Results {
+		r := &searchResp.Results[i]
 		// Only include audiobooks
 		if r.WrapperType != "audiobook" && r.CollectionType != "Audiobook" {
 			continue

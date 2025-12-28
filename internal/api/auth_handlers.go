@@ -50,6 +50,7 @@ func (s *Server) registerAuthRoutes() {
 
 // === DTOs ===
 
+// DeviceInfo contains device metadata for session tracking.
 type DeviceInfo struct {
 	DeviceType      string `json:"device_type,omitempty" validate:"omitempty,max=50" doc:"Device type (mobile, tablet, desktop, web, tv)"`
 	Platform        string `json:"platform,omitempty" validate:"omitempty,max=50" doc:"Platform (iOS, Android, Windows, macOS, Linux, Web)"`
@@ -63,6 +64,7 @@ type DeviceInfo struct {
 	BrowserVersion  string `json:"browser_version,omitempty" validate:"omitempty,max=50" doc:"Browser version (for web clients)"`
 }
 
+// SetupRequest is the request body for initial server setup.
 type SetupRequest struct {
 	Email     string `json:"email" validate:"required,email,max=254" doc:"Admin email address"`
 	Password  string `json:"password" validate:"required,min=8,max=1024" doc:"Admin password"`
@@ -70,41 +72,49 @@ type SetupRequest struct {
 	LastName  string `json:"last_name" validate:"required,min=1,max=100" doc:"Admin last name"`
 }
 
+// SetupInput wraps the setup request for Huma.
 type SetupInput struct {
 	Body SetupRequest
 }
 
+// LoginRequest is the request body for user login.
 type LoginRequest struct {
 	Email      string     `json:"email" validate:"required,email,max=254" doc:"User email"`
 	Password   string     `json:"password" validate:"required,max=1024" doc:"User password"`
 	DeviceInfo DeviceInfo `json:"device_info,omitempty" doc:"Client device info"`
 }
 
+// LoginInput wraps the login request with headers for Huma.
 type LoginInput struct {
 	Body          LoginRequest
 	XForwardedFor string `header:"X-Forwarded-For"`
 	XRealIP       string `header:"X-Real-IP"`
 }
 
+// RefreshRequest is the request body for token refresh.
 type RefreshRequest struct {
 	RefreshToken string     `json:"refresh_token" validate:"required" doc:"Refresh token"`
 	DeviceInfo   DeviceInfo `json:"device_info,omitempty" doc:"Updated device info"`
 }
 
+// RefreshInput wraps the refresh request with headers for Huma.
 type RefreshInput struct {
 	Body          RefreshRequest
 	XForwardedFor string `header:"X-Forwarded-For"`
 	XRealIP       string `header:"X-Real-IP"`
 }
 
+// LogoutRequest is the request body for logout.
 type LogoutRequest struct {
 	SessionID string `json:"session_id" validate:"required,max=100" doc:"Session ID to revoke"`
 }
 
+// LogoutInput wraps the logout request for Huma.
 type LogoutInput struct {
 	Body LogoutRequest
 }
 
+// UserResponse contains user information in auth responses.
 type UserResponse struct {
 	ID          string    `json:"id" doc:"User ID"`
 	Email       string    `json:"email" doc:"User email"`
@@ -117,6 +127,7 @@ type UserResponse struct {
 	LastLoginAt time.Time `json:"last_login_at" doc:"Last login timestamp"`
 }
 
+// AuthResponse contains authentication tokens and user info.
 type AuthResponse struct {
 	AccessToken  string       `json:"access_token" doc:"PASETO access token"`
 	RefreshToken string       `json:"refresh_token" doc:"Refresh token"`
@@ -126,14 +137,17 @@ type AuthResponse struct {
 	User         UserResponse `json:"user" doc:"Authenticated user"`
 }
 
+// AuthOutput wraps the auth response for Huma.
 type AuthOutput struct {
 	Body AuthResponse
 }
 
+// MessageResponse contains a simple message.
 type MessageResponse struct {
 	Message string `json:"message" doc:"Success message"`
 }
 
+// MessageOutput wraps the message response for Huma.
 type MessageOutput struct {
 	Body MessageResponse
 }

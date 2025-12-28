@@ -18,6 +18,7 @@ import (
 // Audible API sometimes returns rating values as strings like "4.8" instead of 4.8.
 type FlexibleFloat32 float32
 
+// UnmarshalJSON handles JSON values that can be either a number or a string.
 func (f *FlexibleFloat32) UnmarshalJSON(data []byte) error {
 	// Try unmarshaling as a number first
 	var num float32
@@ -80,7 +81,7 @@ func New(logger *slog.Logger) *Client {
 			Transport: &http.Transport{
 				DisableCompression: true,
 			},
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 				// Don't follow redirects automatically - we handle them manually
 				return http.ErrUseLastResponse
 			},

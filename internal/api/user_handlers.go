@@ -19,10 +19,12 @@ func (s *Server) registerUserRoutes() {
 	}, s.handleGetCurrentUser)
 }
 
+// AuthenticatedInput contains the authorization header for authenticated requests.
 type AuthenticatedInput struct {
 	Authorization string `header:"Authorization" doc:"Bearer token"`
 }
 
+// UserOutput wraps the user response for Huma.
 type UserOutput struct {
 	Body UserResponse
 }

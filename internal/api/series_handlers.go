@@ -85,12 +85,14 @@ func (s *Server) registerSeriesRoutes() {
 
 // === DTOs ===
 
+// ListSeriesInput contains parameters for listing series.
 type ListSeriesInput struct {
 	Authorization string `header:"Authorization"`
 	Cursor        string `query:"cursor" doc:"Pagination cursor"`
 	Limit         int    `query:"limit" doc:"Items per page (default 50)"`
 }
 
+// SeriesResponse contains series data in API responses.
 type SeriesResponse struct {
 	ID          string    `json:"id" doc:"Series ID"`
 	Name        string    `json:"name" doc:"Series name"`
@@ -100,58 +102,69 @@ type SeriesResponse struct {
 	UpdatedAt   time.Time `json:"updated_at" doc:"Last update time"`
 }
 
+// ListSeriesResponse contains a paginated list of series.
 type ListSeriesResponse struct {
 	Series     []SeriesResponse `json:"series" doc:"List of series"`
 	NextCursor string           `json:"next_cursor,omitempty" doc:"Next page cursor"`
 	HasMore    bool             `json:"has_more" doc:"Whether more pages exist"`
 }
 
+// ListSeriesOutput wraps the list series response for Huma.
 type ListSeriesOutput struct {
 	Body ListSeriesResponse
 }
 
+// CreateSeriesRequest is the request body for creating a series.
 type CreateSeriesRequest struct {
 	Name        string `json:"name" validate:"required,min=1,max=200" doc:"Series name"`
 	Description string `json:"description,omitempty" validate:"omitempty,max=2000" doc:"Description"`
 	ASIN        string `json:"asin,omitempty" validate:"omitempty,max=20" doc:"Audible ASIN"`
 }
 
+// CreateSeriesInput wraps the create series request for Huma.
 type CreateSeriesInput struct {
 	Authorization string `header:"Authorization"`
 	Body          CreateSeriesRequest
 }
 
+// SeriesOutput wraps the series response for Huma.
 type SeriesOutput struct {
 	Body SeriesResponse
 }
 
+// GetSeriesInput contains parameters for getting a series.
 type GetSeriesInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Series ID"`
 }
 
+// UpdateSeriesRequest is the request body for updating a series.
 type UpdateSeriesRequest struct {
 	Name        *string `json:"name,omitempty" validate:"omitempty,min=1,max=200" doc:"Series name"`
 	Description *string `json:"description,omitempty" validate:"omitempty,max=2000" doc:"Description"`
 	ASIN        *string `json:"asin,omitempty" validate:"omitempty,max=20" doc:"Audible ASIN"`
 }
 
+// UpdateSeriesInput wraps the update series request for Huma.
 type UpdateSeriesInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Series ID"`
 	Body          UpdateSeriesRequest
 }
 
+// DeleteSeriesInput contains parameters for deleting a series.
 type DeleteSeriesInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Series ID"`
 }
 
+// GetSeriesBooksInput contains parameters for getting books in a series.
 type GetSeriesBooksInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Series ID"`
 }
 
+// SeriesBookResponse represents a book in series responses.
 type SeriesBookResponse struct {
 	ID             string  `json:"id" doc:"Book ID"`
 	Title          string  `json:"title" doc:"Book title"`
@@ -159,19 +172,23 @@ type SeriesBookResponse struct {
 	CoverPath      *string `json:"cover_path,omitempty" doc:"Cover image path"`
 }
 
+// SeriesBooksResponse contains books in a series.
 type SeriesBooksResponse struct {
 	Books []SeriesBookResponse `json:"books" doc:"Books in series"`
 }
 
+// SeriesBooksOutput wraps the series books response for Huma.
 type SeriesBooksOutput struct {
 	Body SeriesBooksResponse
 }
 
+// MergeSeriesRequest is the request body for merging series.
 type MergeSeriesRequest struct {
 	SourceID string `json:"source_id" validate:"required" doc:"Series to merge from"`
 	TargetID string `json:"target_id" validate:"required" doc:"Series to merge into"`
 }
 
+// MergeSeriesInput wraps the merge series request for Huma.
 type MergeSeriesInput struct {
 	Authorization string `header:"Authorization"`
 	Body          MergeSeriesRequest

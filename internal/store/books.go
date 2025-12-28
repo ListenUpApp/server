@@ -106,12 +106,19 @@ func (s *Store) CreateBook(ctx context.Context, book *domain.Book) error {
 		)
 	}
 
-	// Index for search asynchronously
+	// Index for search asynchronously with timeout.
+	// Use a detached context with timeout rather than the request context
+	// (which may be canceled early) or Background (which never times out).
 	if s.searchIndexer != nil {
 		go func() {
-			if err := s.searchIndexer.IndexBook(context.Background(), book); err != nil {
+			indexCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			if err := s.searchIndexer.IndexBook(indexCtx, book); err != nil {
 				if s.logger != nil {
-					s.logger.Warn("failed to index book for search", "book_id", book.ID, "error", err)
+					s.logger.Warn("failed to index book for search",
+						slog.String("book_id", book.ID),
+						slog.Any("error", err))
 				}
 			}
 		}()
@@ -280,7 +287,6 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 
 	// Use Transaction to update book and indices atomically.
 	err = s.db.Update(func(txn *badger.Txn) error {
-		book.Touch()
 		// Update book.
 		data, err := json.Marshal(book)
 		if err != nil {

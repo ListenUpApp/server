@@ -69,15 +69,16 @@ func (s *Server) registerTagRoutes() {
 		Tags:        []string{"Tags"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleGetTagBooks)
-
 }
 
 // === DTOs ===
 
+// ListTagsInput contains parameters for listing tags.
 type ListTagsInput struct {
 	Authorization string `header:"Authorization"`
 }
 
+// TagResponse contains tag data in API responses.
 type TagResponse struct {
 	ID        string    `json:"id" doc:"Tag ID"`
 	Name      string    `json:"name" doc:"Tag name"`
@@ -87,62 +88,73 @@ type TagResponse struct {
 	UpdatedAt time.Time `json:"updated_at" doc:"Last update time"`
 }
 
+// ListTagsResponse contains a list of tags.
 type ListTagsResponse struct {
 	Tags []TagResponse `json:"tags" doc:"List of tags"`
 }
 
+// ListTagsOutput wraps the list tags response for Huma.
 type ListTagsOutput struct {
 	Body ListTagsResponse
 }
 
+// CreateTagRequest is the request body for creating a tag.
 type CreateTagRequest struct {
 	Name  string `json:"name" validate:"required,min=1,max=50" doc:"Tag name"`
 	Color string `json:"color,omitempty" validate:"omitempty,max=20" doc:"Display color"`
 }
 
+// CreateTagInput wraps the create tag request for Huma.
 type CreateTagInput struct {
 	Authorization string `header:"Authorization"`
 	Body          CreateTagRequest
 }
 
+// TagOutput wraps the tag response for Huma.
 type TagOutput struct {
 	Body TagResponse
 }
 
+// GetTagInput contains parameters for getting a tag.
 type GetTagInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Tag ID"`
 }
 
+// UpdateTagRequest is the request body for updating a tag.
 type UpdateTagRequest struct {
 	Name  *string `json:"name,omitempty" validate:"omitempty,min=1,max=50" doc:"Tag name"`
 	Color *string `json:"color,omitempty" validate:"omitempty,max=20" doc:"Display color"`
 }
 
+// UpdateTagInput wraps the update tag request for Huma.
 type UpdateTagInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Tag ID"`
 	Body          UpdateTagRequest
 }
 
+// DeleteTagInput contains parameters for deleting a tag.
 type DeleteTagInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Tag ID"`
 }
 
+// GetTagBooksInput contains parameters for getting tag books.
 type GetTagBooksInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Tag ID"`
 }
 
+// TagBooksResponse contains book IDs with a tag.
 type TagBooksResponse struct {
 	BookIDs []string `json:"book_ids" doc:"Book IDs with this tag"`
 }
 
+// TagBooksOutput wraps the tag books response for Huma.
 type TagBooksOutput struct {
 	Body TagBooksResponse
 }
-
 
 // === Handlers ===
 
@@ -273,4 +285,3 @@ func (s *Server) handleGetTagBooks(ctx context.Context, input *GetTagBooksInput)
 
 	return &TagBooksOutput{Body: TagBooksResponse{BookIDs: bookIDs}}, nil
 }
-

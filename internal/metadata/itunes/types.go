@@ -19,15 +19,15 @@ type searchResponse struct {
 
 // searchResult is a single result from iTunes search.
 type searchResult struct {
-	WrapperType        string `json:"wrapperType"`
-	CollectionType     string `json:"collectionType"`
-	CollectionID       int64  `json:"collectionId"`
-	CollectionName     string `json:"collectionName"`
-	ArtistName         string `json:"artistName"`
-	ArtworkURL60       string `json:"artworkUrl60"`
-	ArtworkURL100      string `json:"artworkUrl100"`
-	CollectionPrice    float64 `json:"collectionPrice,omitempty"`
-	TrackCount         int    `json:"trackCount,omitempty"`
-	ReleaseDate        string `json:"releaseDate,omitempty"`
-	PrimaryGenreName   string `json:"primaryGenreName,omitempty"`
+	WrapperType      string  `json:"wrapperType"`
+	CollectionType   string  `json:"collectionType"`
+	CollectionID     int64   `json:"collectionId"`
+	CollectionName   string  `json:"collectionName"`
+	ArtistName       string  `json:"artistName"`
+	ArtworkURL60     string  `json:"artworkUrl60"`
+	ArtworkURL100    string  `json:"artworkUrl100"`
+	CollectionPrice  float64 `json:"collectionPrice,omitempty"`
+	TrackCount       int     `json:"trackCount,omitempty"`
+	ReleaseDate      string  `json:"releaseDate,omitempty"`
+	PrimaryGenreName string  `json:"primaryGenreName,omitempty"`
 }

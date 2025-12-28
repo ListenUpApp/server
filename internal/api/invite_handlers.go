@@ -29,10 +29,12 @@ func (s *Server) registerInviteRoutes() {
 	}, s.handleClaimInvite)
 }
 
+// InviteCodeParam contains the invite code path parameter.
 type InviteCodeParam struct {
 	Code string `path:"code" doc:"Invite code"`
 }
 
+// InviteDetailsResponse contains invite details in API responses.
 type InviteDetailsResponse struct {
 	Name       string `json:"name" doc:"Invitee name"`
 	Email      string `json:"email" doc:"Invitee email"`
@@ -41,15 +43,18 @@ type InviteDetailsResponse struct {
 	Valid      bool   `json:"valid" doc:"Whether invite is valid"`
 }
 
+// InviteDetailsOutput wraps the invite details response for Huma.
 type InviteDetailsOutput struct {
 	Body InviteDetailsResponse
 }
 
+// ClaimInviteRequest is the request body for claiming an invite.
 type ClaimInviteRequest struct {
 	Password   string     `json:"password" validate:"required,min=8,max=1024" doc:"New user password"`
 	DeviceInfo DeviceInfo `json:"device_info,omitempty" doc:"Device information"`
 }
 
+// ClaimInviteInput wraps the claim invite request for Huma.
 type ClaimInviteInput struct {
 	Code string `path:"code" doc:"Invite code to claim"`
 	Body ClaimInviteRequest
