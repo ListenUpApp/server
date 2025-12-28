@@ -21,6 +21,7 @@ const (
 	contributorPrefix            = "contributor:"
 	contributorByNamePrefix      = "idx:contributors:name:"       // For deduplication
 	contributorByAliasPrefix     = "idx:contributors:alias:"      // For alias lookup: idx:contributors:alias:{normalized}:{contributorID}
+	contributorByASINPrefix      = "idx:contributors:asin:"       // For Audible deduplication
 	contributorByUpdatedAtPrefix = "idx:contributors:updated_at:" // Format: idx:contributors:updated_at:{RFC3339Nano}:contributor:{uuid}
 	contributorByDeletedAtPrefix = "idx:contributors:deleted_at:" // Format: idx:contributors:deleted_at:{RFC3339Nano}:contributor:{uuid}
 )
@@ -69,6 +70,14 @@ func (s *Store) CreateContributor(ctx context.Context, contributor *domain.Contr
 			}
 		}
 
+		// Create ASIN index if present
+		if contributor.ASIN != "" {
+			asinKey := []byte(contributorByASINPrefix + contributor.ASIN)
+			if err := txn.Set(asinKey, []byte(contributor.ID)); err != nil {
+				return err
+			}
+		}
+
 		// Create updated_at index for sync support
 		updatedAtKey := formatTimestampIndexKey(contributorByUpdatedAtPrefix, contributor.UpdatedAt, "contributor", contributor.ID)
 		if err := txn.Set(updatedAtKey, []byte{}); err != nil {
@@ -113,6 +122,36 @@ func (s *Store) GetContributor(_ context.Context, id string) (*domain.Contributo
 	}
 
 	return &contributor, nil
+}
+
+// GetContributorByASIN retrieves a contributor by their Audible ASIN.
+func (s *Store) GetContributorByASIN(ctx context.Context, asin string) (*domain.Contributor, error) {
+	if asin == "" {
+		return nil, ErrContributorNotFound
+	}
+
+	indexKey := []byte(contributorByASINPrefix + asin)
+
+	var contributorID string
+	err := s.db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get(indexKey)
+		if err != nil {
+			return err
+		}
+		return item.Value(func(val []byte) error {
+			contributorID = string(val)
+			return nil
+		})
+	})
+
+	if err != nil {
+		if errors.Is(err, badger.ErrKeyNotFound) {
+			return nil, ErrContributorNotFound
+		}
+		return nil, fmt.Errorf("lookup contributor by ASIN: %w", err)
+	}
+
+	return s.GetContributor(ctx, contributorID)
 }
 
 // GetContributorsByIDs retrieves multiple contributors by their IDs.
@@ -195,6 +234,24 @@ func (s *Store) UpdateContributor(ctx context.Context, contributor *domain.Contr
 			if !oldAliasSet[newAlias] {
 				aliasKey := []byte(contributorByAliasPrefix + newAlias)
 				if err := txn.Set(aliasKey, []byte(contributor.ID)); err != nil {
+					return err
+				}
+			}
+		}
+
+		// Update ASIN index if changed
+		if oldContributor.ASIN != contributor.ASIN {
+			// Delete old ASIN index
+			if oldContributor.ASIN != "" {
+				oldASINKey := []byte(contributorByASINPrefix + oldContributor.ASIN)
+				if err := txn.Delete(oldASINKey); err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
+					return err
+				}
+			}
+			// Create new ASIN index
+			if contributor.ASIN != "" {
+				newASINKey := []byte(contributorByASINPrefix + contributor.ASIN)
+				if err := txn.Set(newASINKey, []byte(contributor.ID)); err != nil {
 					return err
 				}
 			}
@@ -664,6 +721,14 @@ func (s *Store) DeleteContributor(ctx context.Context, id string) error {
 		for _, alias := range contributor.Aliases {
 			aliasKey := []byte(contributorByAliasPrefix + normalizeContributorName(alias))
 			if err := txn.Delete(aliasKey); err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
+				// Best effort cleanup
+			}
+		}
+
+		// Remove ASIN index entry
+		if contributor.ASIN != "" {
+			asinKey := []byte(contributorByASINPrefix + contributor.ASIN)
+			if err := txn.Delete(asinKey); err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
 				// Best effort cleanup
 			}
 		}

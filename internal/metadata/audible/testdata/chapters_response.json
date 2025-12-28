@@ -1,0 +1,32 @@
+{
+  "content_metadata": {
+    "chapter_info": {
+      "chapters": [
+        {
+          "title": "Opening Credits",
+          "start_offset_ms": 0,
+          "start_offset_sec": 0,
+          "length_ms": 45000
+        },
+        {
+          "title": "Prelude to the Stormlight Archive",
+          "start_offset_ms": 45000,
+          "start_offset_sec": 45,
+          "length_ms": 720000
+        },
+        {
+          "title": "Prologue: To Kill",
+          "start_offset_ms": 765000,
+          "start_offset_sec": 765,
+          "length_ms": 1800000
+        },
+        {
+          "title": "Chapter 1: Kaladin",
+          "start_offset_ms": 2565000,
+          "start_offset_sec": 2565,
+          "length_ms": 3600000
+        }
+      ]
+    }
+  }
+}

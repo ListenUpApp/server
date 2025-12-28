@@ -1,399 +1,367 @@
 package api
 
 import (
-	"encoding/json/v2"
-	"errors"
+	"context"
 	"net/http"
-	"os"
-	"strconv"
 	"time"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/listenupapp/listenup-server/internal/domain"
-	"github.com/listenupapp/listenup-server/internal/http/response"
+	"github.com/listenupapp/listenup-server/internal/id"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
-// handleListSeries returns a paginated list of series.
-// Note: Series visibility is not filtered by ACL yet - returns all series.
-// TODO: Filter to only show series with at least one accessible book.
-func (s *Server) handleListSeries(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
+func (s *Server) registerSeriesRoutes() {
+	huma.Register(s.api, huma.Operation{
+		OperationID: "listSeries",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/series",
+		Summary:     "List series",
+		Description: "Returns a paginated list of all series",
+		Tags:        []string{"Series"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleListSeries)
 
-	params := parsePaginationParams(r)
+	huma.Register(s.api, huma.Operation{
+		OperationID: "createSeries",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/series",
+		Summary:     "Create series",
+		Description: "Creates a new series",
+		Tags:        []string{"Series"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleCreateSeries)
 
-	series, err := s.services.Sync.GetSeriesForSync(ctx, userID, params)
-	if err != nil {
-		s.logger.Error("Failed to list series", "error", err, "user_id", userID)
-		response.InternalError(w, "Failed to retrieve series", s.logger)
-		return
-	}
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getSeries",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/series/{id}",
+		Summary:     "Get series",
+		Description: "Returns a series by ID",
+		Tags:        []string{"Series"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetSeries)
 
-	response.Success(w, series, s.logger)
+	huma.Register(s.api, huma.Operation{
+		OperationID: "updateSeries",
+		Method:      http.MethodPatch,
+		Path:        "/api/v1/series/{id}",
+		Summary:     "Update series",
+		Description: "Updates a series",
+		Tags:        []string{"Series"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleUpdateSeries)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "deleteSeries",
+		Method:      http.MethodDelete,
+		Path:        "/api/v1/series/{id}",
+		Summary:     "Delete series",
+		Description: "Soft deletes a series",
+		Tags:        []string{"Series"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleDeleteSeries)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getSeriesBooks",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/series/{id}/books",
+		Summary:     "Get series books",
+		Description: "Returns all books in a series",
+		Tags:        []string{"Series"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetSeriesBooks)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "mergeSeries",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/series/merge",
+		Summary:     "Merge series",
+		Description: "Merges source series into target series",
+		Tags:        []string{"Series"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleMergeSeries)
 }
 
-// handleGetSeries returns a single series by ID.
-// Note: Series visibility is not filtered by ACL yet.
-// TODO: Return 404 if user has no access to any books in this series.
-func (s *Server) handleGetSeries(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-	id := chi.URLParam(r, "id")
+// === DTOs ===
 
-	if id == "" {
-		response.BadRequest(w, "Series ID is required", s.logger)
-		return
-	}
-
-	series, err := s.store.GetSeries(ctx, id)
-	if err != nil {
-		if errors.Is(err, store.ErrSeriesNotFound) {
-			response.NotFound(w, "Series not found", s.logger)
-			return
-		}
-		s.logger.Error("Failed to get series", "error", err, "id", id, "user_id", userID)
-		response.InternalError(w, "Failed to retrieve series", s.logger)
-		return
-	}
-
-	response.Success(w, series, s.logger)
+// ListSeriesInput contains parameters for listing series.
+type ListSeriesInput struct {
+	Authorization string `header:"Authorization"`
+	Cursor        string `query:"cursor" doc:"Pagination cursor"`
+	Limit         int    `query:"limit" doc:"Items per page (default 50)"`
 }
 
-// handleGetSeriesBooks returns all books in a series that the user can access.
-func (s *Server) handleGetSeriesBooks(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-	id := chi.URLParam(r, "id")
-
-	if id == "" {
-		response.BadRequest(w, "Series ID is required", s.logger)
-		return
-	}
-
-	// Get all books in the series
-	allBooks, err := s.store.GetBooksBySeries(ctx, id)
-	if err != nil {
-		s.logger.Error("Failed to get series books", "error", err, "id", id, "user_id", userID)
-		response.InternalError(w, "Failed to retrieve series books", s.logger)
-		return
-	}
-
-	// Filter to only books the user can access
-	accessibleBooks := make([]*domain.Book, 0, len(allBooks))
-	for _, book := range allBooks {
-		canAccess, err := s.store.CanUserAccessBook(ctx, userID, book.ID)
-		if err != nil {
-			s.logger.Warn("Failed to check book access", "book_id", book.ID, "user_id", userID, "error", err)
-			continue
-		}
-		if canAccess {
-			accessibleBooks = append(accessibleBooks, book)
-		}
-	}
-
-	response.Success(w, map[string]interface{}{
-		"series_id": id,
-		"books":     accessibleBooks,
-	}, s.logger)
+// SeriesResponse contains series data in API responses.
+type SeriesResponse struct {
+	ID          string    `json:"id" doc:"Series ID"`
+	Name        string    `json:"name" doc:"Series name"`
+	Description string    `json:"description,omitempty" doc:"Description"`
+	ASIN        string    `json:"asin,omitempty" doc:"Audible ASIN"`
+	CreatedAt   time.Time `json:"created_at" doc:"Creation time"`
+	UpdatedAt   time.Time `json:"updated_at" doc:"Last update time"`
 }
 
-// handleSyncSeries handles GET /api/v1/sync/series for syncing series.
-func (s *Server) handleSyncSeries(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-
-	params := parsePaginationParams(r)
-
-	series, err := s.services.Sync.GetSeriesForSync(ctx, userID, params)
-	if err != nil {
-		s.logger.Error("Failed to sync series", "error", err)
-		response.InternalError(w, "Failed to sync series", s.logger)
-		return
-	}
-
-	response.Success(w, series, s.logger)
+// ListSeriesResponse contains a paginated list of series.
+type ListSeriesResponse struct {
+	Series     []SeriesResponse `json:"series" doc:"List of series"`
+	NextCursor string           `json:"next_cursor,omitempty" doc:"Next page cursor"`
+	HasMore    bool             `json:"has_more" doc:"Whether more pages exist"`
 }
 
-// SeriesUpdateRequest is the request body for PATCH /api/v1/series/{id}.
-// Uses pointer fields for PATCH semantics - only provided fields are updated.
-// NOTE: omitempty is NOT used here because we need to distinguish between
-// "not provided" (nil) and "set to empty string" (pointer to "").
-type SeriesUpdateRequest struct {
-	Name        *string `json:"name"`
-	Description *string `json:"description"`
+// ListSeriesOutput wraps the list series response for Huma.
+type ListSeriesOutput struct {
+	Body ListSeriesResponse
 }
 
-// handleUpdateSeries updates a series's metadata.
-// PATCH /api/v1/series/{id}
-//
-// Allows updating: name, description.
-// Uses PATCH semantics - only provided fields are updated.
-// Cover image is handled separately via upload endpoint.
-func (s *Server) handleUpdateSeries(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-	id := chi.URLParam(r, "id")
+// CreateSeriesRequest is the request body for creating a series.
+type CreateSeriesRequest struct {
+	Name        string `json:"name" validate:"required,min=1,max=200" doc:"Series name"`
+	Description string `json:"description,omitempty" validate:"omitempty,max=2000" doc:"Description"`
+	ASIN        string `json:"asin,omitempty" validate:"omitempty,max=20" doc:"Audible ASIN"`
+}
 
-	if id == "" {
-		response.BadRequest(w, "Series ID is required", s.logger)
-		return
+// CreateSeriesInput wraps the create series request for Huma.
+type CreateSeriesInput struct {
+	Authorization string `header:"Authorization"`
+	Body          CreateSeriesRequest
+}
+
+// SeriesOutput wraps the series response for Huma.
+type SeriesOutput struct {
+	Body SeriesResponse
+}
+
+// GetSeriesInput contains parameters for getting a series.
+type GetSeriesInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Series ID"`
+}
+
+// UpdateSeriesRequest is the request body for updating a series.
+type UpdateSeriesRequest struct {
+	Name        *string `json:"name,omitempty" validate:"omitempty,min=1,max=200" doc:"Series name"`
+	Description *string `json:"description,omitempty" validate:"omitempty,max=2000" doc:"Description"`
+	ASIN        *string `json:"asin,omitempty" validate:"omitempty,max=20" doc:"Audible ASIN"`
+}
+
+// UpdateSeriesInput wraps the update series request for Huma.
+type UpdateSeriesInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Series ID"`
+	Body          UpdateSeriesRequest
+}
+
+// DeleteSeriesInput contains parameters for deleting a series.
+type DeleteSeriesInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Series ID"`
+}
+
+// GetSeriesBooksInput contains parameters for getting books in a series.
+type GetSeriesBooksInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Series ID"`
+}
+
+// SeriesBookResponse represents a book in series responses.
+type SeriesBookResponse struct {
+	ID             string  `json:"id" doc:"Book ID"`
+	Title          string  `json:"title" doc:"Book title"`
+	SeriesPosition *string `json:"series_position,omitempty" doc:"Position in series"`
+	CoverPath      *string `json:"cover_path,omitempty" doc:"Cover image path"`
+}
+
+// SeriesBooksResponse contains books in a series.
+type SeriesBooksResponse struct {
+	Books []SeriesBookResponse `json:"books" doc:"Books in series"`
+}
+
+// SeriesBooksOutput wraps the series books response for Huma.
+type SeriesBooksOutput struct {
+	Body SeriesBooksResponse
+}
+
+// MergeSeriesRequest is the request body for merging series.
+type MergeSeriesRequest struct {
+	SourceID string `json:"source_id" validate:"required" doc:"Series to merge from"`
+	TargetID string `json:"target_id" validate:"required" doc:"Series to merge into"`
+}
+
+// MergeSeriesInput wraps the merge series request for Huma.
+type MergeSeriesInput struct {
+	Authorization string `header:"Authorization"`
+	Body          MergeSeriesRequest
+}
+
+// === Handlers ===
+
+func (s *Server) handleListSeries(ctx context.Context, input *ListSeriesInput) (*ListSeriesOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
 	}
 
-	var req SeriesUpdateRequest
-	if err := json.UnmarshalRead(r.Body, &req); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
+	limit := input.Limit
+	if limit <= 0 {
+		limit = 50
 	}
 
-	// Get existing series
-	series, err := s.store.GetSeries(ctx, id)
+	result, err := s.store.ListSeries(ctx, store.PaginationParams{
+		Cursor: input.Cursor,
+		Limit:  limit,
+	})
 	if err != nil {
-		if errors.Is(err, store.ErrSeriesNotFound) {
-			response.NotFound(w, "Series not found", s.logger)
-			return
-		}
-		s.logger.Error("Failed to get series", "error", err, "id", id, "user_id", userID)
-		response.InternalError(w, "Failed to retrieve series", s.logger)
-		return
+		return nil, err
 	}
 
-	// Apply non-nil fields (PATCH semantics)
-	if req.Name != nil {
-		if *req.Name == "" {
-			response.BadRequest(w, "name cannot be empty", s.logger)
-			return
-		}
-		series.Name = *req.Name
+	resp := make([]SeriesResponse, len(result.Items))
+	for i, series := range result.Items {
+		resp[i] = mapSeriesResponse(series)
 	}
 
-	if req.Description != nil {
-		series.Description = *req.Description
+	return &ListSeriesOutput{
+		Body: ListSeriesResponse{
+			Series:     resp,
+			NextCursor: result.NextCursor,
+			HasMore:    result.HasMore,
+		},
+	}, nil
+}
+
+func (s *Server) handleCreateSeries(ctx context.Context, input *CreateSeriesInput) (*SeriesOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
 	}
 
-	// Update timestamp
+	seriesID, err := id.Generate("sr")
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	series := &domain.Series{
+		Syncable: domain.Syncable{
+			ID:        seriesID,
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		Name:        input.Body.Name,
+		Description: input.Body.Description,
+		ASIN:        input.Body.ASIN,
+	}
+
+	if err := s.store.CreateSeries(ctx, series); err != nil {
+		return nil, err
+	}
+
+	return &SeriesOutput{Body: mapSeriesResponse(series)}, nil
+}
+
+func (s *Server) handleGetSeries(ctx context.Context, input *GetSeriesInput) (*SeriesOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
+	}
+
+	series, err := s.store.GetSeries(ctx, input.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &SeriesOutput{Body: mapSeriesResponse(series)}, nil
+}
+
+func (s *Server) handleUpdateSeries(ctx context.Context, input *UpdateSeriesInput) (*SeriesOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
+	}
+
+	series, err := s.store.GetSeries(ctx, input.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply updates
+	if input.Body.Name != nil {
+		series.Name = *input.Body.Name
+	}
+	if input.Body.Description != nil {
+		series.Description = *input.Body.Description
+	}
+	if input.Body.ASIN != nil {
+		series.ASIN = *input.Body.ASIN
+	}
 	series.UpdatedAt = time.Now()
 
-	// Save updated series
 	if err := s.store.UpdateSeries(ctx, series); err != nil {
-		s.logger.Error("Failed to update series", "error", err, "id", id, "user_id", userID)
-		response.InternalError(w, "Failed to update series", s.logger)
-		return
+		return nil, err
 	}
 
-	s.logger.Info("Series updated",
-		"series_id", id,
-		"user_id", userID,
-	)
-
-	response.Success(w, series, s.logger)
+	return &SeriesOutput{Body: mapSeriesResponse(series)}, nil
 }
 
-// handleUploadSeriesCover handles cover image uploads for a series.
-// PUT /api/v1/series/{id}/cover.
-// Content-Type: multipart/form-data with "file" field.
-func (s *Server) handleUploadSeriesCover(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-	seriesID := chi.URLParam(r, "id")
-
-	if seriesID == "" {
-		response.BadRequest(w, "Series ID is required", s.logger)
-		return
+func (s *Server) handleDeleteSeries(ctx context.Context, input *DeleteSeriesInput) (*MessageOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
 	}
 
-	// Get the series to verify it exists
-	series, err := s.store.GetSeries(ctx, seriesID)
+	if err := s.store.DeleteSeries(ctx, input.ID); err != nil {
+		return nil, err
+	}
+
+	return &MessageOutput{Body: MessageResponse{Message: "Series deleted"}}, nil
+}
+
+func (s *Server) handleGetSeriesBooks(ctx context.Context, input *GetSeriesBooksInput) (*SeriesBooksOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
+	}
+
+	books, err := s.store.GetBooksBySeries(ctx, input.ID)
 	if err != nil {
-		if errors.Is(err, store.ErrSeriesNotFound) {
-			response.NotFound(w, "Series not found", s.logger)
-			return
+		return nil, err
+	}
+
+	resp := make([]SeriesBookResponse, len(books))
+	for i, b := range books {
+		book := SeriesBookResponse{
+			ID:    b.ID,
+			Title: b.Title,
 		}
-		s.logger.Error("Failed to get series for cover upload", "error", err, "series_id", seriesID, "user_id", userID)
-		response.InternalError(w, "Failed to retrieve series", s.logger)
-		return
-	}
-
-	// Parse multipart form
-	if err := r.ParseMultipartForm(MaxUploadSize); err != nil {
-		response.BadRequest(w, "Failed to parse form data", s.logger)
-		return
-	}
-
-	// Get the uploaded file
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		response.BadRequest(w, "No file uploaded. Use 'file' field in multipart form", s.logger)
-		return
-	}
-	defer file.Close()
-
-	// Validate file size
-	if header.Size > MaxUploadSize {
-		response.BadRequest(w, "File too large. Maximum size is 10MB", s.logger)
-		return
-	}
-
-	// Read file content
-	imgData := make([]byte, header.Size)
-	if _, err := file.Read(imgData); err != nil {
-		s.logger.Error("Failed to read uploaded file", "error", err, "series_id", seriesID)
-		response.InternalError(w, "Failed to read uploaded file", s.logger)
-		return
-	}
-
-	// Validate it's an image by checking magic bytes
-	contentType := detectImageType(imgData)
-	if contentType == "" {
-		response.BadRequest(w, "Invalid image format. Supported formats: JPEG, PNG, WebP, GIF", s.logger)
-		return
-	}
-
-	// Save the cover image (overwrites any existing cover)
-	if err := s.storage.SeriesCovers.Save(seriesID, imgData); err != nil {
-		s.logger.Error("Failed to save series cover image", "error", err, "series_id", seriesID)
-		response.InternalError(w, "Failed to save cover image", s.logger)
-		return
-	}
-
-	// Update series's CoverImage field to mark it has a custom cover
-	series.CoverImage = &domain.ImageFileInfo{
-		Filename: header.Filename,
-		Format:   contentType,
-		Size:     header.Size,
-	}
-
-	// Update timestamp
-	series.UpdatedAt = time.Now()
-
-	// Save series update
-	if err := s.store.UpdateSeries(ctx, series); err != nil {
-		s.logger.Error("Failed to update series after cover upload", "error", err, "series_id", seriesID)
-		response.InternalError(w, "Failed to update series", s.logger)
-		return
-	}
-
-	s.logger.Info("Series cover uploaded successfully",
-		"series_id", seriesID,
-		"filename", header.Filename,
-		"size", header.Size,
-		"format", contentType,
-	)
-
-	response.Success(w, map[string]string{
-		"cover_url": "/api/v1/series/" + seriesID + "/cover",
-	}, s.logger)
-}
-
-// handleGetSeriesCover serves cover images for series.
-// GET /api/v1/series/{id}/cover.
-func (s *Server) handleGetSeriesCover(w http.ResponseWriter, r *http.Request) {
-	seriesID := chi.URLParam(r, "id")
-	if seriesID == "" {
-		response.BadRequest(w, "Series ID is required", s.logger)
-		return
-	}
-
-	// Check if cover exists
-	if !s.storage.SeriesCovers.Exists(seriesID) {
-		response.NotFound(w, "Cover not found for this series", s.logger)
-		return
-	}
-
-	// Get cover file info for Last-Modified header
-	coverPath := s.storage.SeriesCovers.Path(seriesID)
-	fileInfo, err := os.Stat(coverPath)
-	if err != nil {
-		s.logger.Error("Failed to stat series cover file", "series_id", seriesID, "error", err)
-		response.InternalError(w, "Failed to retrieve cover", s.logger)
-		return
-	}
-
-	// Compute ETag from hash
-	hash, err := s.storage.SeriesCovers.Hash(seriesID)
-	if err != nil {
-		s.logger.Error("Failed to compute series cover hash", "series_id", seriesID, "error", err)
-		response.InternalError(w, "Failed to retrieve cover", s.logger)
-		return
-	}
-	etag := `"` + hash + `"`
-
-	// Check If-None-Match for cache validation
-	if match := r.Header.Get("If-None-Match"); match == etag {
-		w.WriteHeader(http.StatusNotModified)
-		return
-	}
-
-	// Get cover data
-	data, err := s.storage.SeriesCovers.Get(seriesID)
-	if err != nil {
-		s.logger.Error("Failed to read series cover file", "series_id", seriesID, "error", err)
-		response.InternalError(w, "Failed to retrieve cover", s.logger)
-		return
-	}
-
-	// Set caching headers
-	w.Header().Set("Content-Type", "image/jpeg")
-	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
-	w.Header().Set("Cache-Control", CacheOneWeek)
-	w.Header().Set("ETag", etag)
-	w.Header().Set("Last-Modified", fileInfo.ModTime().UTC().Format(http.TimeFormat))
-
-	// Write image data
-	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(data); err != nil {
-		s.logger.Error("Failed to write series cover response", "series_id", seriesID, "error", err)
-	}
-}
-
-// handleDeleteSeriesCover deletes a series cover image.
-// DELETE /api/v1/series/{id}/cover.
-func (s *Server) handleDeleteSeriesCover(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-	seriesID := chi.URLParam(r, "id")
-
-	if seriesID == "" {
-		response.BadRequest(w, "Series ID is required", s.logger)
-		return
-	}
-
-	// Get the series to verify it exists
-	series, err := s.store.GetSeries(ctx, seriesID)
-	if err != nil {
-		if errors.Is(err, store.ErrSeriesNotFound) {
-			response.NotFound(w, "Series not found", s.logger)
-			return
+		// Find series position
+		for _, bs := range b.Series {
+			if bs.SeriesID == input.ID {
+				pos := bs.Sequence
+				book.SeriesPosition = &pos
+				break
+			}
 		}
-		s.logger.Error("Failed to get series for cover deletion", "error", err, "series_id", seriesID, "user_id", userID)
-		response.InternalError(w, "Failed to retrieve series", s.logger)
-		return
+		if b.CoverImage != nil && b.CoverImage.Path != "" {
+			book.CoverPath = &b.CoverImage.Path
+		}
+		resp[i] = book
 	}
 
-	// Delete the cover image from storage
-	if err := s.storage.SeriesCovers.Delete(seriesID); err != nil {
-		s.logger.Error("Failed to delete series cover", "error", err, "series_id", seriesID)
-		response.InternalError(w, "Failed to delete cover", s.logger)
-		return
+	return &SeriesBooksOutput{Body: SeriesBooksResponse{Books: resp}}, nil
+}
+
+func (s *Server) handleMergeSeries(ctx context.Context, input *MergeSeriesInput) (*SeriesOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
 	}
 
-	// Clear series's CoverImage field
-	series.CoverImage = nil
+	// TODO: Implement series merging
+	return nil, huma.Error501NotImplemented("Series merging not yet implemented")
+}
 
-	// Update timestamp
-	series.UpdatedAt = time.Now()
+// === Mappers ===
 
-	// Save series update
-	if err := s.store.UpdateSeries(ctx, series); err != nil {
-		s.logger.Error("Failed to update series after cover deletion", "error", err, "series_id", seriesID)
-		response.InternalError(w, "Failed to update series", s.logger)
-		return
+func mapSeriesResponse(series *domain.Series) SeriesResponse {
+	return SeriesResponse{
+		ID:          series.ID,
+		Name:        series.Name,
+		Description: series.Description,
+		ASIN:        series.ASIN,
+		CreatedAt:   series.CreatedAt,
+		UpdatedAt:   series.UpdatedAt,
 	}
-
-	s.logger.Info("Series cover deleted successfully",
-		"series_id", seriesID,
-		"user_id", userID,
-	)
-
-	w.WriteHeader(http.StatusNoContent)
 }

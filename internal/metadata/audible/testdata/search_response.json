@@ -1,0 +1,50 @@
+{
+  "products": [
+    {
+      "asin": "B08G9PRS1K",
+      "title": "The Way of Kings",
+      "subtitle": "The Stormlight Archive, Book 1",
+      "publisher_name": "Macmillan Audio",
+      "release_date": "2020-08-04",
+      "runtime_length_min": 2713,
+      "merchandising_summary": "<p>An epic fantasy novel by Brandon Sanderson.</p>",
+      "product_images": {
+        "500": "https://m.media-amazon.com/images/I/91KzZWpgmyL._SL500_.jpg",
+        "1024": "https://m.media-amazon.com/images/I/91KzZWpgmyL._SL1024_.jpg"
+      },
+      "authors": [
+        {"asin": "B001IGFHW6", "name": "Brandon Sanderson", "role": "author"}
+      ],
+      "narrators": [
+        {"asin": "B003VWPBV2", "name": "Michael Kramer", "role": "narrator"},
+        {"asin": "B003VWPHWQ", "name": "Kate Reading", "role": "narrator"}
+      ],
+      "series": [
+        {"asin": "B01CKIXDCS", "title": "The Stormlight Archive", "sequence": "1"}
+      ],
+      "language": "english"
+    },
+    {
+      "asin": "B002V0QK4C",
+      "title": "Mistborn",
+      "subtitle": "The Final Empire",
+      "publisher_name": "Macmillan Audio",
+      "release_date": "2008-11-01",
+      "runtime_length_min": 1028,
+      "merchandising_summary": "<p>The first book in the Mistborn trilogy.</p>",
+      "product_images": {
+        "500": "https://m.media-amazon.com/images/I/81GxQu7bXZL._SL500_.jpg"
+      },
+      "authors": [
+        {"asin": "B001IGFHW6", "name": "Brandon Sanderson", "role": "author"}
+      ],
+      "narrators": [
+        {"asin": "B003VWPBV2", "name": "Michael Kramer", "role": "narrator"}
+      ],
+      "series": [
+        {"asin": "B006K1QC4G", "title": "Mistborn", "sequence": "1"}
+      ],
+      "language": "english"
+    }
+  ]
+}

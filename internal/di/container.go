@@ -40,6 +40,12 @@ func NewContainer() *do.RootScope {
 	do.Provide(injector, providers.ProvideSearchIndex)
 	do.Provide(injector, providers.ProvideSearchService)
 
+	// Metadata layer
+	do.Provide(injector, providers.ProvideAudibleClient)
+	do.Provide(injector, providers.ProvideMetadataService)
+	do.Provide(injector, providers.ProvideITunesClient)
+	do.Provide(injector, providers.ProvideCoverService)
+
 	// Auth layer
 	do.Provide(injector, providers.ProvideTokenService)
 
@@ -48,6 +54,7 @@ func NewContainer() *do.RootScope {
 	do.Provide(injector, providers.ProvideSessionService)
 	do.Provide(injector, providers.ProvideAuthService)
 	do.Provide(injector, providers.ProvideBookService)
+	do.Provide(injector, providers.ProvideChapterService)
 	do.Provide(injector, providers.ProvideCollectionService)
 	do.Provide(injector, providers.ProvideSharingService)
 	do.Provide(injector, providers.ProvideSyncService)
@@ -85,6 +92,10 @@ func Bootstrap(injector *do.RootScope) error {
 	_ = do.MustInvoke[*processor.EventProcessor](injector)
 	_ = do.MustInvoke[*providers.SearchIndexHandle](injector)
 	_ = do.MustInvoke[*service.SearchService](injector)
+	_ = do.MustInvoke[*providers.AudibleClientHandle](injector)
+	_ = do.MustInvoke[*providers.MetadataServiceHandle](injector)
+	_ = do.MustInvoke[*providers.ITunesClientHandle](injector)
+	_ = do.MustInvoke[*service.CoverService](injector)
 	_ = do.MustInvoke[*auth.TokenService](injector)
 
 	// Business services
@@ -92,6 +103,7 @@ func Bootstrap(injector *do.RootScope) error {
 	_ = do.MustInvoke[*service.SessionService](injector)
 	_ = do.MustInvoke[*service.AuthService](injector)
 	_ = do.MustInvoke[*service.BookService](injector)
+	_ = do.MustInvoke[*service.ChapterService](injector)
 	_ = do.MustInvoke[*service.CollectionService](injector)
 	_ = do.MustInvoke[*service.SharingService](injector)
 	_ = do.MustInvoke[*service.SyncService](injector)

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -34,7 +35,7 @@ type TranscodeService struct {
 	ffmpegPath string
 
 	// Worker management
-	ctx       context.Context
+	ctx       context.Context //nolint:containedctx // Context needed for worker lifecycle management
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
 	jobNotify chan struct{} // Signal that new jobs are available
@@ -156,7 +157,7 @@ func (s *TranscodeService) CreateJob(
 			}
 			// Delete old output files
 			if existing.OutputPath != "" {
-				os.RemoveAll(existing.OutputPath)
+				_ = os.RemoveAll(existing.OutputPath)
 			}
 
 		case domain.TranscodeStatusPending, domain.TranscodeStatusRunning:
@@ -190,7 +191,7 @@ func (s *TranscodeService) CreateJob(
 				}
 			}
 		}
-	} else if err != store.ErrNotFound {
+	} else if !errors.Is(err, store.ErrNotFound) {
 		return nil, fmt.Errorf("check existing job: %w", err)
 	}
 
@@ -524,7 +525,7 @@ func (s *TranscodeService) executeTranscode(ctx context.Context, job *domain.Tra
 		slog.Any("args", args),
 	)
 
-	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...)
+	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...) //nolint:gosec // ffmpegPath is validated at service init
 
 	// Capture stderr for progress parsing
 	stderr, err := cmd.StderrPipe()
@@ -645,7 +646,7 @@ func (s *TranscodeService) getSourceDuration(ctx context.Context, path string) (
 		return 0, err
 	}
 
-	cmd := exec.CommandContext(ctx, ffprobe,
+	cmd := exec.CommandContext(ctx, ffprobe, //nolint:gosec // ffprobe path is from exec.LookPath
 		"-v", "quiet",
 		"-show_entries", "format=duration",
 		"-of", "default=noprint_wrappers=1:nokey=1",
@@ -673,7 +674,7 @@ func (s *TranscodeService) getSourceInfo(ctx context.Context, path string) (bitr
 	}
 
 	// Get bitrate
-	cmdBitrate := exec.CommandContext(ctx, ffprobe,
+	cmdBitrate := exec.CommandContext(ctx, ffprobe, //nolint:gosec // ffprobe path is from exec.LookPath
 		"-v", "quiet",
 		"-select_streams", "a:0",
 		"-show_entries", "stream=bit_rate",
@@ -699,7 +700,7 @@ func (s *TranscodeService) getSourceInfo(ctx context.Context, path string) (bitr
 	}
 
 	// Get channels
-	cmdChannels := exec.CommandContext(ctx, ffprobe,
+	cmdChannels := exec.CommandContext(ctx, ffprobe, //nolint:gosec // ffprobe path is from exec.LookPath
 		"-v", "quiet",
 		"-select_streams", "a:0",
 		"-show_entries", "stream=channels",
@@ -771,7 +772,7 @@ func (s *TranscodeService) recoverStalledJobs() {
 // Some codecs (e.g., AC-4) are proprietary and FFmpeg doesn't include decoders.
 func (s *TranscodeService) canDecodeCodec(ctx context.Context, codec string) bool {
 	// Check FFmpeg decoders list
-	cmd := exec.CommandContext(ctx, s.ffmpegPath, "-decoders")
+	cmd := exec.CommandContext(ctx, s.ffmpegPath, "-decoders") //nolint:gosec // ffmpegPath is validated at service init
 	output, err := cmd.Output()
 	if err != nil {
 		s.logger.Warn("could not check FFmpeg decoders", slog.Any("error", err))

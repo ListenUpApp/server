@@ -37,6 +37,7 @@ func NewProcessor(storage *Storage, logger *slog.Logger) *Processor {
 // ExtractAndProcess extracts cover art from an audio file and stores it.
 // Returns CoverInfo containing the hash, size, and format for database storage.
 // Returns nil (no error) if the audio file has no embedded cover.
+// BlurHash is NOT computed during extraction for performance - use ComputeBlurHashForBook separately.
 func (p *Processor) ExtractAndProcess(ctx context.Context, audioFilePath, bookID string) (*CoverInfo, error) {
 	// Open audio file.
 	file, err := audiometa.OpenContext(ctx, audioFilePath)
@@ -84,14 +85,6 @@ func (p *Processor) ExtractAndProcess(ctx context.Context, audioFilePath, bookID
 		return nil, fmt.Errorf("failed to compute cover hash: %w", err)
 	}
 
-	// Compute BlurHash for placeholder
-	coverPath := p.storage.Path(bookID)
-	blurHash, err := ComputeBlurHash(coverPath)
-	if err != nil {
-		// Non-fatal: log and continue without BlurHash
-		p.logger.Debug("failed to compute BlurHash", "book_id", bookID, "error", err)
-	}
-
 	// Determine MIME type from artwork data.
 	format := detectImageFormat(artwork.Data)
 
@@ -103,11 +96,18 @@ func (p *Processor) ExtractAndProcess(ctx context.Context, audioFilePath, bookID
 	)
 
 	return &CoverInfo{
-		Hash:     hash,
-		Size:     int64(len(artwork.Data)),
-		Format:   format,
-		BlurHash: blurHash,
+		Hash:   hash,
+		Size:   int64(len(artwork.Data)),
+		Format: format,
+		// BlurHash computed separately for performance
 	}, nil
+}
+
+// ComputeBlurHashForBook computes and returns the BlurHash for a book's cover.
+// This is separate from extraction to allow async/lazy computation.
+func (p *Processor) ComputeBlurHashForBook(bookID string) (string, error) {
+	coverPath := p.storage.Path(bookID)
+	return ComputeBlurHash(coverPath)
 }
 
 // detectImageFormat detects the MIME type from image data magic bytes.
@@ -138,6 +138,7 @@ func detectImageFormat(data []byte) string {
 // ProcessExternalCover reads an external cover image file and stores it.
 // This is used as a fallback when no embedded artwork is found.
 // Returns CoverInfo containing the hash, size, and format.
+// BlurHash is NOT computed during processing for performance - use ComputeBlurHashForBook separately.
 func (p *Processor) ProcessExternalCover(coverPath, bookID string) (*CoverInfo, error) {
 	// Read the external cover file.
 	data, err := os.ReadFile(coverPath)
@@ -156,14 +157,6 @@ func (p *Processor) ProcessExternalCover(coverPath, bookID string) (*CoverInfo, 
 		return nil, fmt.Errorf("failed to compute cover hash: %w", err)
 	}
 
-	// Compute BlurHash for placeholder
-	storagePath := p.storage.Path(bookID)
-	blurHash, err := ComputeBlurHash(storagePath)
-	if err != nil {
-		// Non-fatal: log and continue without BlurHash
-		p.logger.Debug("failed to compute BlurHash", "book_id", bookID, "error", err)
-	}
-
 	// Determine MIME type from image data.
 	format := detectImageFormat(data)
 
@@ -175,9 +168,9 @@ func (p *Processor) ProcessExternalCover(coverPath, bookID string) (*CoverInfo, 
 	)
 
 	return &CoverInfo{
-		Hash:     hash,
-		Size:     int64(len(data)),
-		Format:   format,
-		BlurHash: blurHash,
+		Hash:   hash,
+		Size:   int64(len(data)),
+		Format: format,
+		// BlurHash computed separately for performance
 	}, nil
 }

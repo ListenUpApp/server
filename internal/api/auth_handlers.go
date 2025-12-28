@@ -1,222 +1,263 @@
 package api
 
 import (
-	"encoding/json/v2"
+	"context"
 	"net/http"
-	"strings"
+	"time"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/listenupapp/listenup-server/internal/auth"
-	domainerrors "github.com/listenupapp/listenup-server/internal/errors"
-	"github.com/listenupapp/listenup-server/internal/http/response"
 	"github.com/listenupapp/listenup-server/internal/service"
 )
 
-// handleSetup creates the first (root) user and completes server setup.
-// POST /api/v1/auth/setup.
-func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
-	var req service.SetupRequest
-	if err := json.UnmarshalRead(r.Body, &req); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
+func (s *Server) registerAuthRoutes() {
+	huma.Register(s.api, huma.Operation{
+		OperationID: "setup",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/auth/setup",
+		Summary:     "Initial server setup",
+		Description: "Creates the first admin user. Can only be called once.",
+		Tags:        []string{"Authentication"},
+	}, s.handleSetup)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "login",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/auth/login",
+		Summary:     "User login",
+		Description: "Authenticates a user and returns access and refresh tokens",
+		Tags:        []string{"Authentication"},
+	}, s.handleLogin)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "refresh",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/auth/refresh",
+		Summary:     "Refresh tokens",
+		Description: "Exchanges a refresh token for new tokens",
+		Tags:        []string{"Authentication"},
+	}, s.handleRefresh)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "logout",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/auth/logout",
+		Summary:     "Logout",
+		Description: "Revokes the specified session",
+		Tags:        []string{"Authentication"},
+	}, s.handleLogout)
+}
+
+// === DTOs ===
+
+// DeviceInfo contains device metadata for session tracking.
+type DeviceInfo struct {
+	DeviceType      string `json:"device_type,omitempty" validate:"omitempty,max=50" doc:"Device type (mobile, tablet, desktop, web, tv)"`
+	Platform        string `json:"platform,omitempty" validate:"omitempty,max=50" doc:"Platform (iOS, Android, Windows, macOS, Linux, Web)"`
+	PlatformVersion string `json:"platform_version,omitempty" validate:"omitempty,max=50" doc:"Platform version (17.2, 14.0, etc.)"`
+	ClientName      string `json:"client_name,omitempty" validate:"omitempty,max=100" doc:"Client name (ListenUp Mobile, etc.)"`
+	ClientVersion   string `json:"client_version,omitempty" validate:"omitempty,max=50" doc:"Client version (1.0.0)"`
+	ClientBuild     string `json:"client_build,omitempty" validate:"omitempty,max=50" doc:"Client build number"`
+	DeviceName      string `json:"device_name,omitempty" validate:"omitempty,max=100" doc:"Human-readable device name"`
+	DeviceModel     string `json:"device_model,omitempty" validate:"omitempty,max=100" doc:"Device model (iPhone 15 Pro, etc.)"`
+	BrowserName     string `json:"browser_name,omitempty" validate:"omitempty,max=100" doc:"Browser name (for web clients)"`
+	BrowserVersion  string `json:"browser_version,omitempty" validate:"omitempty,max=50" doc:"Browser version (for web clients)"`
+}
+
+// SetupRequest is the request body for initial server setup.
+type SetupRequest struct {
+	Email     string `json:"email" validate:"required,email,max=254" doc:"Admin email address"`
+	Password  string `json:"password" validate:"required,min=8,max=1024" doc:"Admin password"`
+	FirstName string `json:"first_name" validate:"required,min=1,max=100" doc:"Admin first name"`
+	LastName  string `json:"last_name" validate:"required,min=1,max=100" doc:"Admin last name"`
+}
+
+// SetupInput wraps the setup request for Huma.
+type SetupInput struct {
+	Body SetupRequest
+}
+
+// LoginRequest is the request body for user login.
+type LoginRequest struct {
+	Email      string     `json:"email" validate:"required,email,max=254" doc:"User email"`
+	Password   string     `json:"password" validate:"required,max=1024" doc:"User password"`
+	DeviceInfo DeviceInfo `json:"device_info,omitempty" doc:"Client device info"`
+}
+
+// LoginInput wraps the login request with headers for Huma.
+type LoginInput struct {
+	Body          LoginRequest
+	XForwardedFor string `header:"X-Forwarded-For"`
+	XRealIP       string `header:"X-Real-IP"`
+}
+
+// RefreshRequest is the request body for token refresh.
+type RefreshRequest struct {
+	RefreshToken string     `json:"refresh_token" validate:"required" doc:"Refresh token"`
+	DeviceInfo   DeviceInfo `json:"device_info,omitempty" doc:"Updated device info"`
+}
+
+// RefreshInput wraps the refresh request with headers for Huma.
+type RefreshInput struct {
+	Body          RefreshRequest
+	XForwardedFor string `header:"X-Forwarded-For"`
+	XRealIP       string `header:"X-Real-IP"`
+}
+
+// LogoutRequest is the request body for logout.
+type LogoutRequest struct {
+	SessionID string `json:"session_id" validate:"required,max=100" doc:"Session ID to revoke"`
+}
+
+// LogoutInput wraps the logout request for Huma.
+type LogoutInput struct {
+	Body LogoutRequest
+}
+
+// UserResponse contains user information in auth responses.
+type UserResponse struct {
+	ID          string    `json:"id" doc:"User ID"`
+	Email       string    `json:"email" doc:"User email"`
+	DisplayName string    `json:"display_name" doc:"Display name"`
+	FirstName   string    `json:"first_name" doc:"First name"`
+	LastName    string    `json:"last_name" doc:"Last name"`
+	IsRoot      bool      `json:"is_root" doc:"Whether user is root admin"`
+	CreatedAt   time.Time `json:"created_at" doc:"Creation timestamp"`
+	UpdatedAt   time.Time `json:"updated_at" doc:"Last update timestamp"`
+	LastLoginAt time.Time `json:"last_login_at" doc:"Last login timestamp"`
+}
+
+// AuthResponse contains authentication tokens and user info.
+type AuthResponse struct {
+	AccessToken  string       `json:"access_token" doc:"PASETO access token"`
+	RefreshToken string       `json:"refresh_token" doc:"Refresh token"`
+	SessionID    string       `json:"session_id" doc:"Session identifier"`
+	TokenType    string       `json:"token_type" doc:"Token type (Bearer)"`
+	ExpiresIn    int          `json:"expires_in" doc:"Token expiry in seconds"`
+	User         UserResponse `json:"user" doc:"Authenticated user"`
+}
+
+// AuthOutput wraps the auth response for Huma.
+type AuthOutput struct {
+	Body AuthResponse
+}
+
+// MessageResponse contains a simple message.
+type MessageResponse struct {
+	Message string `json:"message" doc:"Success message"`
+}
+
+// MessageOutput wraps the message response for Huma.
+type MessageOutput struct {
+	Body MessageResponse
+}
+
+// === Handlers ===
+
+func (s *Server) handleSetup(ctx context.Context, input *SetupInput) (*AuthOutput, error) {
+	req := service.SetupRequest{
+		Email:     input.Body.Email,
+		Password:  input.Body.Password,
+		FirstName: input.Body.FirstName,
+		LastName:  input.Body.LastName,
 	}
 
-	// Validate required fields
-	if req.Email == "" || req.Password == "" {
-		response.BadRequest(w, "Email and password are required", s.logger)
-		return
-	}
-
-	// Setup server with root user
-	authResp, err := s.services.Auth.Setup(r.Context(), req)
+	resp, err := s.services.Auth.Setup(ctx, req)
 	if err != nil {
-		s.logger.Error("Setup failed", "error", err)
-
-		// Check for specific domain errors
-		if domainerrors.Is(err, domainerrors.ErrAlreadyConfigured) {
-			response.Conflict(w, "Server is already set up", s.logger)
-			return
-		}
-		if domainerrors.Is(err, domainerrors.ErrAlreadyExists) {
-			response.Conflict(w, "Email already in use", s.logger)
-			return
-		}
-		if domainerrors.Is(err, domainerrors.ErrValidation) {
-			response.BadRequest(w, err.Error(), s.logger)
-			return
-		}
-
-		response.InternalError(w, "Failed to complete setup", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, authResp, s.logger)
+	return &AuthOutput{Body: mapAuthResponse(resp)}, nil
 }
 
-// handleLogin authenticates a user and creates a session.
-// POST /api/v1/auth/login.
-func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
-	var reqBody struct {
-		Email      string          `json:"email"`
-		Password   string          `json:"password"`
-		DeviceInfo auth.DeviceInfo `json:"device_info"`
+func (s *Server) handleLogin(ctx context.Context, input *LoginInput) (*AuthOutput, error) {
+	req := service.LoginRequest{
+		Email:    input.Body.Email,
+		Password: input.Body.Password,
+		DeviceInfo: auth.DeviceInfo{
+			DeviceType:      input.Body.DeviceInfo.DeviceType,
+			Platform:        input.Body.DeviceInfo.Platform,
+			PlatformVersion: input.Body.DeviceInfo.PlatformVersion,
+			ClientName:      input.Body.DeviceInfo.ClientName,
+			ClientVersion:   input.Body.DeviceInfo.ClientVersion,
+			ClientBuild:     input.Body.DeviceInfo.ClientBuild,
+			DeviceName:      input.Body.DeviceInfo.DeviceName,
+			DeviceModel:     input.Body.DeviceInfo.DeviceModel,
+		},
+		IPAddress: extractIP(input.XForwardedFor, input.XRealIP),
 	}
 
-	if err := json.UnmarshalRead(r.Body, &reqBody); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
-	}
-
-	// Validate required fields
-	if reqBody.Email == "" || reqBody.Password == "" {
-		response.BadRequest(w, "Email and password are required", s.logger)
-		return
-	}
-
-	// Build login request with IP address
-	loginReq := service.LoginRequest{
-		Email:      reqBody.Email,
-		Password:   reqBody.Password,
-		DeviceInfo: reqBody.DeviceInfo,
-		IPAddress:  getIPAddress(r),
-	}
-
-	// Authenticate
-	authResp, err := s.services.Auth.Login(r.Context(), loginReq)
+	resp, err := s.services.Auth.Login(ctx, req)
 	if err != nil {
-		s.logger.Warn("Login failed",
-			"email", reqBody.Email,
-			"error", err,
-		)
-
-		// Check for specific domain errors
-		if domainerrors.Is(err, domainerrors.ErrInvalidCredentials) {
-			response.Unauthorized(w, "Invalid email or password", s.logger)
-			return
-		}
-		if domainerrors.Is(err, domainerrors.ErrValidation) {
-			response.BadRequest(w, err.Error(), s.logger)
-			return
-		}
-
-		response.InternalError(w, "Login failed", s.logger)
-		return
+		return nil, err
 	}
 
-	response.Success(w, authResp, s.logger)
+	return &AuthOutput{Body: mapAuthResponse(resp)}, nil
 }
 
-// handleRefresh generates new tokens using a refresh token.
-// POST /api/v1/auth/refresh.
-func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
-	var reqBody struct {
-		RefreshToken string          `json:"refresh_token"`
-		DeviceInfo   auth.DeviceInfo `json:"device_info"` // Optional
+func (s *Server) handleRefresh(ctx context.Context, input *RefreshInput) (*AuthOutput, error) {
+	req := service.RefreshRequest{
+		RefreshToken: input.Body.RefreshToken,
+		DeviceInfo: auth.DeviceInfo{
+			DeviceType:      input.Body.DeviceInfo.DeviceType,
+			Platform:        input.Body.DeviceInfo.Platform,
+			PlatformVersion: input.Body.DeviceInfo.PlatformVersion,
+			ClientName:      input.Body.DeviceInfo.ClientName,
+			ClientVersion:   input.Body.DeviceInfo.ClientVersion,
+			ClientBuild:     input.Body.DeviceInfo.ClientBuild,
+			DeviceName:      input.Body.DeviceInfo.DeviceName,
+			DeviceModel:     input.Body.DeviceInfo.DeviceModel,
+		},
+		IPAddress: extractIP(input.XForwardedFor, input.XRealIP),
 	}
 
-	if err := json.UnmarshalRead(r.Body, &reqBody); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
-	}
-
-	if reqBody.RefreshToken == "" {
-		response.BadRequest(w, "Refresh token is required", s.logger)
-		return
-	}
-
-	// Build refresh request
-	refreshReq := service.RefreshRequest{
-		RefreshToken: reqBody.RefreshToken,
-		DeviceInfo:   reqBody.DeviceInfo,
-		IPAddress:    getIPAddress(r),
-	}
-
-	// Refresh tokens
-	authResp, err := s.services.Auth.RefreshTokens(r.Context(), refreshReq)
+	resp, err := s.services.Auth.RefreshTokens(ctx, req)
 	if err != nil {
-		if domainerrors.Is(err, domainerrors.ErrTokenExpired) {
-			response.Unauthorized(w, "Invalid or expired refresh token", s.logger)
-			return
+		return nil, err
+	}
+
+	return &AuthOutput{Body: mapAuthResponse(resp)}, nil
+}
+
+func (s *Server) handleLogout(ctx context.Context, input *LogoutInput) (*MessageOutput, error) {
+	if err := s.services.Auth.Logout(ctx, input.Body.SessionID); err != nil {
+		return nil, err
+	}
+
+	return &MessageOutput{Body: MessageResponse{Message: "Logged out successfully"}}, nil
+}
+
+// === Helpers ===
+
+func mapAuthResponse(resp *service.AuthResponse) AuthResponse {
+	return AuthResponse{
+		AccessToken:  resp.AccessToken,
+		RefreshToken: resp.RefreshToken,
+		SessionID:    resp.SessionID,
+		TokenType:    resp.TokenType,
+		ExpiresIn:    resp.ExpiresIn,
+		User: UserResponse{
+			ID:          resp.User.ID,
+			Email:       resp.User.Email,
+			DisplayName: resp.User.DisplayName,
+			FirstName:   resp.User.FirstName,
+			LastName:    resp.User.LastName,
+			IsRoot:      resp.User.IsRoot,
+			CreatedAt:   resp.User.CreatedAt,
+			UpdatedAt:   resp.User.UpdatedAt,
+			LastLoginAt: resp.User.LastLoginAt,
+		},
+	}
+}
+
+func extractIP(xForwardedFor, xRealIP string) string {
+	if xForwardedFor != "" {
+		for i := 0; i < len(xForwardedFor); i++ {
+			if xForwardedFor[i] == ',' {
+				return xForwardedFor[:i]
+			}
 		}
-
-		s.logger.Error("Token refresh failed", "error", err)
-		response.InternalError(w, "Failed to refresh tokens", s.logger)
-		return
+		return xForwardedFor
 	}
-
-	response.Success(w, authResp, s.logger)
-}
-
-// handleLogout revokes the current session.
-// POST /api/v1/auth/logout.
-func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	var reqBody struct {
-		SessionID string `json:"session_id"`
-	}
-
-	if err := json.UnmarshalRead(r.Body, &reqBody); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
-	}
-
-	if reqBody.SessionID == "" {
-		response.BadRequest(w, "Session ID is required", s.logger)
-		return
-	}
-
-	// Logout
-	if err := s.services.Auth.Logout(r.Context(), reqBody.SessionID); err != nil {
-		s.logger.Error("Logout failed",
-			"session_id", reqBody.SessionID,
-			"error", err,
-		)
-		response.InternalError(w, "Failed to logout", s.logger)
-		return
-	}
-
-	response.Success(w, map[string]string{
-		"message": "Logged out successfully",
-	}, s.logger)
-}
-
-// handleGetCurrentUser returns the authenticated user's information.
-// GET /api/v1/users/me.
-func (s *Server) handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
-	userID := mustGetUserID(r.Context())
-
-	user, err := s.store.GetUser(r.Context(), userID)
-	if err != nil {
-		s.logger.Error("Failed to get current user",
-			"user_id", userID,
-			"error", err,
-		)
-		response.InternalError(w, "Failed to get user", s.logger)
-		return
-	}
-
-	response.Success(w, user, s.logger)
-}
-
-// getIPAddress extracts the client IP address from the request.
-// Checks X-Forwarded-For and X-Real-IP headers before falling back to RemoteAddr.
-func getIPAddress(r *http.Request) string {
-	// Check X-Forwarded-For (may contain multiple IPs, first is client)
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		ips := strings.Split(xff, ",")
-		if len(ips) > 0 {
-			return strings.TrimSpace(ips[0])
-		}
-	}
-
-	// Check X-Real-IP
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		return xri
-	}
-
-	// Fall back to RemoteAddr
-	ip := r.RemoteAddr
-	// Strip port if present
-	if idx := strings.LastIndex(ip, ":"); idx != -1 {
-		ip = ip[:idx]
-	}
-	return ip
+	return xRealIP
 }

@@ -16,10 +16,8 @@ type Client struct {
 	EventChan   chan Event
 	Done        chan struct{}
 	ID          string
-	// SECURITY TODO: Currently broadcasting to all clients regardless of user/collection
-	// Issue: Any connected client receives all library events
-	// Risk: Medium - self-hosted single-user deployments are fine, multi-user is not
-	// When we fix, filter events by:
+	// Filtering fields - events are filtered in broadcast() to only deliver
+	// events matching these criteria. Empty string means "receive all".
 	UserID     string
 	Collection string
 }
@@ -104,18 +102,27 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-// broadcast sends an event to all connected clients.
+// broadcast sends an event to connected clients, filtered by user/collection.
 func (m *Manager) broadcast(event Event) {
-	var delivered, dropped int
+	var delivered, dropped, filtered int
 
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	for _, client := range m.clients {
-		// TODO: Filter by user/collection when multi-user is implemented
-		// if event.UserID != "" && event.UserID != client.UserID {.
-		//     continue.
-		// }
+		// Filter by user when event is user-specific.
+		// Empty event.UserID means broadcast to all users.
+		if event.UserID != "" && client.UserID != "" && event.UserID != client.UserID {
+			filtered++
+			continue
+		}
+
+		// Filter by collection when event is collection-specific.
+		// Empty event.CollectionID means broadcast to all collections.
+		if event.CollectionID != "" && client.Collection != "" && event.CollectionID != client.Collection {
+			filtered++
+			continue
+		}
 
 		// Non-blocking send (drop if client is slow/stuck).
 		select {
@@ -134,12 +141,15 @@ func (m *Manager) broadcast(event Event) {
 			slog.String("event_type", string(event.Type)),
 			slog.Group("stats",
 				slog.Int("delivered", delivered),
+				slog.Int("filtered", filtered),
 				slog.Int("dropped", dropped)))
 	}
 }
 
 // Connect registers a new SSE client and returns the client object.
-func (m *Manager) Connect() (*Client, error) {
+// The userID and collectionID are used to filter events - only events matching
+// these criteria will be delivered to this client. Empty strings mean "all".
+func (m *Manager) Connect(userID, collectionID string) (*Client, error) {
 	clientID, err := id.Generate("sse")
 	if err != nil {
 		return nil, err
@@ -147,6 +157,8 @@ func (m *Manager) Connect() (*Client, error) {
 
 	client := &Client{
 		ID:          clientID,
+		UserID:      userID,
+		Collection:  collectionID,
 		EventChan:   make(chan Event, 100), // Buffer 100 events per client
 		Done:        make(chan struct{}),
 		ConnectedAt: time.Now(),
@@ -159,6 +171,7 @@ func (m *Manager) Connect() (*Client, error) {
 
 	m.logger.Info("SSE client connected",
 		slog.String("client_id", clientID),
+		slog.String("user_id", userID),
 		slog.Int("total_clients", totalClients))
 	return client, nil
 }
@@ -184,8 +197,9 @@ func (m *Manager) Disconnect(clientID string) {
 		slog.Int("total_clients", totalClients))
 }
 
-// Emit queues an event for broadcasting to all clients.
+// Emit queues an event for broadcasting to clients.
 // This implements the store.EventEmitter interface.
+// Events are filtered by UserID/CollectionID in broadcast().
 func (m *Manager) Emit(event any) {
 	// Type assert to Event - this is safe because store only emits Event types.
 	evt, ok := event.(Event)
@@ -194,11 +208,6 @@ func (m *Manager) Emit(event any) {
 			slog.String("type", "unknown"))
 		return
 	}
-
-	// SECURITY TODO: Currently broadcasting to ALL clients.
-	// This is acceptable for single-library, single-user deployments.
-	// Must add filtering before multi-user support.
-	// See: Client.UserID TODO above.
 
 	select {
 	case m.events <- evt:

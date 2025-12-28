@@ -7,4 +7,5 @@ type Series struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description,omitempty"`
 	CoverImage  *ImageFileInfo `json:"cover_image,omitempty"`
+	ASIN        string         `json:"asin,omitempty"` // Audible series identifier
 }

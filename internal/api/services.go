@@ -21,6 +21,9 @@ type Services struct {
 	Invite     *service.InviteService
 	Admin      *service.AdminService
 	Transcode  *service.TranscodeService
+	Metadata   *service.MetadataService // Audible metadata fetching
+	Chapter    *service.ChapterService  // Chapter name alignment
+	Cover      *service.CoverService    // Multi-source cover search and download
 }
 
 // StorageServices groups file storage handlers used by the API server.

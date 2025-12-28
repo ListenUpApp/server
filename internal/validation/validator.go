@@ -4,11 +4,10 @@ package validation
 import (
 	"errors"
 	"fmt"
-	"net/http"
 	"reflect"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/listenupapp/listenup-server/internal/store"
+	domainerrors "github.com/listenupapp/listenup-server/internal/errors"
 )
 
 // Validator wraps go-playground/validator with domain error conversion.
@@ -46,26 +45,24 @@ func (v *Validator) Validate(s any) error {
 	return nil
 }
 
-// formatError converts validator errors to store.Error.
+// formatError converts validator errors to domain errors.
 func (v *Validator) formatError(err error) error {
 	var validationErrs validator.ValidationErrors
 	if !errors.As(err, &validationErrs) {
 		return err
 	}
 
-	// Return first validation error
+	// Collect all field errors
+	fieldErrors := make(map[string]string)
 	for _, e := range validationErrs {
-		msg := fmt.Sprintf("%s: %s", e.Field(), v.friendlyMessage(e))
-		return &store.Error{
-			Code:    http.StatusBadRequest,
-			Message: msg,
-			Err:     err,
-		}
+		fieldErrors[e.Field()] = v.friendlyMessage(e)
 	}
 
-	return err
+	// Return domain validation error with details
+	return domainerrors.ValidationWithDetails("validation failed", fieldErrors)
 }
 
+//nolint:gocyclo // Switch statement covering validation tags is intentionally exhaustive.
 func (v *Validator) friendlyMessage(e validator.FieldError) string {
 	switch e.Tag() {
 	case "required":
@@ -76,6 +73,30 @@ func (v *Validator) friendlyMessage(e validator.FieldError) string {
 		return fmt.Sprintf("must be at least %s characters", e.Param())
 	case "max":
 		return fmt.Sprintf("must not exceed %s characters", e.Param())
+	case "len":
+		return fmt.Sprintf("must be exactly %s characters", e.Param())
+	case "url":
+		return "must be a valid URL"
+	case "uuid":
+		return "must be a valid UUID"
+	case "oneof":
+		return fmt.Sprintf("must be one of: %s", e.Param())
+	case "gte":
+		return fmt.Sprintf("must be greater than or equal to %s", e.Param())
+	case "lte":
+		return fmt.Sprintf("must be less than or equal to %s", e.Param())
+	case "gt":
+		return fmt.Sprintf("must be greater than %s", e.Param())
+	case "lt":
+		return fmt.Sprintf("must be less than %s", e.Param())
+	case "gtefield":
+		return fmt.Sprintf("must be greater than or equal to %s", e.Param())
+	case "gtfield":
+		return fmt.Sprintf("must be greater than %s", e.Param())
+	case "ltefield":
+		return fmt.Sprintf("must be less than or equal to %s", e.Param())
+	case "ltfield":
+		return fmt.Sprintf("must be less than %s", e.Param())
 	default:
 		return "is invalid"
 	}

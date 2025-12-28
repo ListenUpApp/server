@@ -2,303 +2,401 @@ package api
 
 import (
 	"context"
-	"encoding/json/v2"
-	"errors"
-	"fmt"
 	"net/http"
+	"strings"
+	"time"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/listenupapp/listenup-server/internal/domain"
-	"github.com/listenupapp/listenup-server/internal/http/response"
-	"github.com/listenupapp/listenup-server/internal/store"
+	"github.com/listenupapp/listenup-server/internal/service"
 )
 
-// PreparePlaybackRequest is the request body for preparing playback.
+func (s *Server) registerPlaybackRoutes() {
+	huma.Register(s.api, huma.Operation{
+		OperationID: "preparePlayback",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/playback/prepare",
+		Summary:     "Prepare audio playback",
+		Description: "Negotiates audio format based on client capabilities. Returns stream URL for playable formats, or triggers transcoding for incompatible formats.",
+		Tags:        []string{"Playback"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handlePreparePlayback)
+}
+
+func (s *Server) registerSettingsRoutes() {
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getUserSettings",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/settings",
+		Summary:     "Get user settings",
+		Description: "Returns user playback settings",
+		Tags:        []string{"Settings"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetUserSettings)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "updateUserSettings",
+		Method:      http.MethodPatch,
+		Path:        "/api/v1/settings",
+		Summary:     "Update user settings",
+		Description: "Updates user playback settings",
+		Tags:        []string{"Settings"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleUpdateUserSettings)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getBookPreferences",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/books/{id}/preferences",
+		Summary:     "Get book preferences",
+		Description: "Returns per-book preferences",
+		Tags:        []string{"Settings"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetBookPreferences)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "updateBookPreferences",
+		Method:      http.MethodPatch,
+		Path:        "/api/v1/books/{id}/preferences",
+		Summary:     "Update book preferences",
+		Description: "Updates per-book preferences",
+		Tags:        []string{"Settings"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleUpdateBookPreferences)
+}
+
+// === DTOs ===
+
+// GetUserSettingsInput contains parameters for getting user settings.
+type GetUserSettingsInput struct {
+	Authorization string `header:"Authorization"`
+}
+
+// UserSettingsResponse contains user settings data in API responses.
+type UserSettingsResponse struct {
+	DefaultPlaybackSpeed   float32   `json:"default_playback_speed" doc:"Default playback speed"`
+	DefaultSkipForwardSec  int       `json:"default_skip_forward_sec" doc:"Default skip forward seconds"`
+	DefaultSkipBackwardSec int       `json:"default_skip_backward_sec" doc:"Default skip backward seconds"`
+	DefaultSleepTimerMin   *int      `json:"default_sleep_timer_min,omitempty" doc:"Default sleep timer minutes"`
+	ShakeToResetSleepTimer bool      `json:"shake_to_reset_sleep_timer" doc:"Shake to reset sleep timer"`
+	UpdatedAt              time.Time `json:"updated_at" doc:"Last update time"`
+}
+
+// UserSettingsOutput wraps the user settings response for Huma.
+type UserSettingsOutput struct {
+	Body UserSettingsResponse
+}
+
+// UpdateUserSettingsRequest is the request body for updating user settings.
+type UpdateUserSettingsRequest struct {
+	DefaultPlaybackSpeed   *float32 `json:"default_playback_speed" validate:"omitempty,gt=0,lte=4" doc:"Default playback speed"`
+	DefaultSkipForwardSec  *int     `json:"default_skip_forward_sec" validate:"omitempty,gte=5,lte=300" doc:"Default skip forward seconds"`
+	DefaultSkipBackwardSec *int     `json:"default_skip_backward_sec" validate:"omitempty,gte=5,lte=300" doc:"Default skip backward seconds"`
+	DefaultSleepTimerMin   *int     `json:"default_sleep_timer_min" validate:"omitempty,gte=1,lte=480" doc:"Default sleep timer minutes"`
+	ShakeToResetSleepTimer *bool    `json:"shake_to_reset_sleep_timer" doc:"Shake to reset sleep timer"`
+}
+
+// UpdateUserSettingsInput wraps the update user settings request for Huma.
+type UpdateUserSettingsInput struct {
+	Authorization string `header:"Authorization"`
+	Body          UpdateUserSettingsRequest
+}
+
+// GetBookPreferencesInput contains parameters for getting book preferences.
+type GetBookPreferencesInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Book ID"`
+}
+
+// BookPreferencesResponse contains book preferences data in API responses.
+type BookPreferencesResponse struct {
+	BookID                    string    `json:"book_id" doc:"Book ID"`
+	PlaybackSpeed             *float32  `json:"playback_speed,omitempty" doc:"Playback speed override"`
+	SkipForwardSec            *int      `json:"skip_forward_sec,omitempty" doc:"Skip forward override"`
+	HideFromContinueListening bool      `json:"hide_from_continue_listening" doc:"Hide from continue listening"`
+	UpdatedAt                 time.Time `json:"updated_at" doc:"Last update time"`
+}
+
+// BookPreferencesOutput wraps the book preferences response for Huma.
+type BookPreferencesOutput struct {
+	Body BookPreferencesResponse
+}
+
+// UpdateBookPreferencesRequest is the request body for updating book preferences.
+type UpdateBookPreferencesRequest struct {
+	PlaybackSpeed             *float32 `json:"playback_speed" validate:"omitempty,gt=0,lte=4" doc:"Playback speed override"`
+	SkipForwardSec            *int     `json:"skip_forward_sec" validate:"omitempty,gte=5,lte=300" doc:"Skip forward override"`
+	HideFromContinueListening *bool    `json:"hide_from_continue_listening" doc:"Hide from continue listening"`
+}
+
+// UpdateBookPreferencesInput wraps the update book preferences request for Huma.
+type UpdateBookPreferencesInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Book ID"`
+	Body          UpdateBookPreferencesRequest
+}
+
+// === Handlers ===
+
+func (s *Server) handleGetUserSettings(ctx context.Context, input *GetUserSettingsInput) (*UserSettingsOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	settings, err := s.services.Listening.GetUserSettings(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &UserSettingsOutput{
+		Body: UserSettingsResponse{
+			DefaultPlaybackSpeed:   settings.DefaultPlaybackSpeed,
+			DefaultSkipForwardSec:  settings.DefaultSkipForwardSec,
+			DefaultSkipBackwardSec: settings.DefaultSkipBackwardSec,
+			DefaultSleepTimerMin:   settings.DefaultSleepTimerMin,
+			ShakeToResetSleepTimer: settings.ShakeToResetSleepTimer,
+			UpdatedAt:              settings.UpdatedAt,
+		},
+	}, nil
+}
+
+func (s *Server) handleUpdateUserSettings(ctx context.Context, input *UpdateUserSettingsInput) (*UserSettingsOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	settings, err := s.services.Listening.UpdateUserSettings(ctx, userID, service.UpdateUserSettingsRequest{
+		DefaultPlaybackSpeed:   input.Body.DefaultPlaybackSpeed,
+		DefaultSkipForwardSec:  input.Body.DefaultSkipForwardSec,
+		DefaultSkipBackwardSec: input.Body.DefaultSkipBackwardSec,
+		DefaultSleepTimerMin:   input.Body.DefaultSleepTimerMin,
+		ShakeToResetSleepTimer: input.Body.ShakeToResetSleepTimer,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &UserSettingsOutput{
+		Body: UserSettingsResponse{
+			DefaultPlaybackSpeed:   settings.DefaultPlaybackSpeed,
+			DefaultSkipForwardSec:  settings.DefaultSkipForwardSec,
+			DefaultSkipBackwardSec: settings.DefaultSkipBackwardSec,
+			DefaultSleepTimerMin:   settings.DefaultSleepTimerMin,
+			ShakeToResetSleepTimer: settings.ShakeToResetSleepTimer,
+			UpdatedAt:              settings.UpdatedAt,
+		},
+	}, nil
+}
+
+func (s *Server) handleGetBookPreferences(ctx context.Context, input *GetBookPreferencesInput) (*BookPreferencesOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	prefs, err := s.services.Listening.GetBookPreferences(ctx, userID, input.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &BookPreferencesOutput{
+		Body: BookPreferencesResponse{
+			BookID:                    prefs.BookID,
+			PlaybackSpeed:             prefs.PlaybackSpeed,
+			SkipForwardSec:            prefs.SkipForwardSec,
+			HideFromContinueListening: prefs.HideFromContinueListening,
+			UpdatedAt:                 prefs.UpdatedAt,
+		},
+	}, nil
+}
+
+func (s *Server) handleUpdateBookPreferences(ctx context.Context, input *UpdateBookPreferencesInput) (*BookPreferencesOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	prefs, err := s.services.Listening.UpdateBookPreferences(ctx, userID, input.ID, service.UpdateBookPreferencesRequest{
+		PlaybackSpeed:             input.Body.PlaybackSpeed,
+		SkipForwardSec:            input.Body.SkipForwardSec,
+		HideFromContinueListening: input.Body.HideFromContinueListening,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &BookPreferencesOutput{
+		Body: BookPreferencesResponse{
+			BookID:                    prefs.BookID,
+			PlaybackSpeed:             prefs.PlaybackSpeed,
+			SkipForwardSec:            prefs.SkipForwardSec,
+			HideFromContinueListening: prefs.HideFromContinueListening,
+			UpdatedAt:                 prefs.UpdatedAt,
+		},
+	}, nil
+}
+
+// === Playback Prepare ===
+
+// PreparePlaybackRequest is the request body for preparing audio playback.
 type PreparePlaybackRequest struct {
-	BookID       string   `json:"book_id"`
-	AudioFileID  string   `json:"audio_file_id"`
-	Capabilities []string `json:"capabilities"` // Codecs device can decode (e.g., ["aac", "ac4"])
-	Spatial      bool     `json:"spatial"`      // Client wants spatial/surround audio
+	BookID       string   `json:"book_id" doc:"Book ID"`
+	AudioFileID  string   `json:"audio_file_id" doc:"Audio file ID"`
+	Capabilities []string `json:"capabilities" doc:"Codecs the client can play (e.g., aac, mp3, opus)"`
+	Spatial      bool     `json:"spatial" doc:"Whether client prefers spatial audio"`
 }
 
-// PreparePlaybackResponse is the response from the prepare endpoint.
+// PreparePlaybackInput wraps the prepare playback request for Huma.
+type PreparePlaybackInput struct {
+	Authorization string `header:"Authorization"`
+	Body          PreparePlaybackRequest
+}
+
+// PreparePlaybackResponse contains playback preparation data in API responses.
 type PreparePlaybackResponse struct {
-	// Ready indicates if the audio is ready to stream.
-	// If false, check TranscodeJobID for progress.
-	Ready bool `json:"ready"`
-
-	// StreamURL is the URL to stream the audio.
-	// Points to original or transcoded variant based on client capabilities.
-	StreamURL string `json:"stream_url"`
-
-	// Variant indicates which variant is being served.
-	// "original" means the source file, "transcoded" means the converted AAC version.
-	Variant string `json:"variant"`
-
-	// Codec is the codec of the stream that will be served.
-	Codec string `json:"codec"`
-
-	// TranscodeJobID is set when transcoding is in progress (Ready=false).
-	// Client can subscribe to SSE events for this job ID.
-	TranscodeJobID string `json:"transcode_job_id,omitempty"`
-
-	// Progress is the current transcoding progress (0-100) when Ready=false.
-	Progress int `json:"progress,omitempty"`
+	Ready          bool   `json:"ready" doc:"True if audio is ready to stream"`
+	StreamURL      string `json:"stream_url" doc:"URL to stream the audio"`
+	Variant        string `json:"variant" doc:"Which variant: original or transcoded"`
+	Codec          string `json:"codec" doc:"Codec of the stream"`
+	TranscodeJobID string `json:"transcode_job_id,omitempty" doc:"Job ID if transcoding in progress"`
+	Progress       int    `json:"progress" doc:"Transcode progress (0-100)"`
 }
 
-// handlePreparePlayback negotiates the best audio format for playback.
-// POST /api/v1/playback/prepare
-//
-// The client sends its supported codecs, and the server returns:
-// - Original stream URL if the format is supported
-// - Transcoded stream URL if transcode is ready
-// - Transcode job info if transcoding is in progress
-func (s *Server) handlePreparePlayback(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
+// PreparePlaybackOutput wraps the prepare playback response for Huma.
+type PreparePlaybackOutput struct {
+	Body PreparePlaybackResponse
+}
 
-	var req PreparePlaybackRequest
-	if err := json.UnmarshalRead(r.Body, &req); err != nil {
-		response.BadRequest(w, "Invalid request body", s.logger)
-		return
-	}
-
-	if req.BookID == "" {
-		response.BadRequest(w, "book_id is required", s.logger)
-		return
-	}
-
-	if req.AudioFileID == "" {
-		response.BadRequest(w, "audio_file_id is required", s.logger)
-		return
-	}
-
-	// Get book (handles access control).
-	book, err := s.services.Book.GetBook(ctx, userID, req.BookID)
+func (s *Server) handlePreparePlayback(ctx context.Context, input *PreparePlaybackInput) (*PreparePlaybackOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
 	if err != nil {
-		if errors.Is(err, store.ErrBookNotFound) {
-			response.NotFound(w, "Book not found", s.logger)
-			return
-		}
-		s.logger.Error("Failed to get book", "error", err, "book_id", req.BookID)
-		response.InternalError(w, "Failed to retrieve book", s.logger)
-		return
+		return nil, err
 	}
 
-	// Find the audio file.
-	audioFile := book.GetAudioFileByID(req.AudioFileID)
+	// Get the book
+	book, err := s.store.GetBook(ctx, input.Body.BookID, userID)
+	if err != nil {
+		return nil, huma.Error404NotFound("book not found")
+	}
+
+	// Find the audio file
+	audioFile := book.GetAudioFileByID(input.Body.AudioFileID)
 	if audioFile == nil {
-		response.NotFound(w, "Audio file not found", s.logger)
-		return
+		return nil, huma.Error404NotFound("audio file not found")
 	}
 
-	// Determine playback strategy based on spatial preference and capabilities.
-	clientSupportsSource := s.clientSupportsCodec(req.Capabilities, audioFile.Codec)
-	sourceNeedsTranscode := domain.NeedsTranscode(audioFile.Codec)
+	// Check if client can play the source format
+	sourceCodec := audioFile.Codec
+	canPlay := s.canClientPlayCodec(sourceCodec, input.Body.Capabilities)
 
-	s.logger.Debug("PreparePlayback decision",
-		"audio_file_id", audioFile.ID,
-		"source_codec", audioFile.Codec,
-		"client_capabilities", req.Capabilities,
-		"spatial", req.Spatial,
-		"client_supports_source", clientSupportsSource,
-		"source_needs_transcode", sourceNeedsTranscode,
-	)
+	// Build base URL for streaming from request context
+	// The actual base URL will be provided by the client in the stream URL it receives
+	baseURL := ""
 
-	// Decision matrix:
-	// 1. Source doesn't need transcode (e.g., AAC) - serve original regardless
-	// 2. Spatial ON + client supports source (e.g., Samsung with AC-4) - serve original
-	// 3. Spatial ON + client doesn't support source - transcode to 5.1
-	// 4. Spatial OFF - transcode to stereo
-
-	if !sourceNeedsTranscode {
-		// Source is already universally playable (AAC, MP3, etc.)
-		// Serve original
-		resp := PreparePlaybackResponse{
-			Ready:     true,
-			StreamURL: s.buildStreamURL(req.BookID, req.AudioFileID, "original"),
-			Variant:   "original",
-			Codec:     audioFile.Codec,
-		}
-		response.Success(w, resp, s.logger)
-		return
-	}
-
-	if req.Spatial && clientSupportsSource {
-		// Client wants spatial AND can decode source natively (Samsung, Apple with Atmos)
-		// Serve original
-		resp := PreparePlaybackResponse{
-			Ready:     true,
-			StreamURL: s.buildStreamURL(req.BookID, req.AudioFileID, "original"),
-			Variant:   "original",
-			Codec:     audioFile.Codec,
-		}
-		response.Success(w, resp, s.logger)
-		return
-	}
-
-	// Need to transcode - determine variant
-	variant := domain.TranscodeVariantStereo
-	if req.Spatial {
-		variant = domain.TranscodeVariantSpatial
-	}
-
-	// Call prepareTranscodedPlayback with variant
-	resp, err := s.prepareTranscodedPlayback(ctx, book, audioFile, variant)
-	if err != nil {
-		s.logger.Error("Failed to prepare transcoded playback",
-			"error", err,
-			"book_id", req.BookID,
-			"audio_file_id", req.AudioFileID,
-			"variant", variant,
-		)
-		response.InternalError(w, "Failed to prepare playback", s.logger)
-		return
-	}
-
-	response.Success(w, resp, s.logger)
-}
-
-// prepareTranscodedPlayback handles the case where transcoding is needed.
-func (s *Server) prepareTranscodedPlayback(
-	ctx context.Context,
-	book *domain.Book,
-	audioFile *domain.AudioFileInfo,
-	variant domain.TranscodeVariant,
-) (*PreparePlaybackResponse, error) {
-	// Check if transcoding is disabled.
-	if s.services.Transcode == nil || !s.services.Transcode.IsEnabled() {
-		// Transcoding disabled - serve original and hope for the best.
-		return &PreparePlaybackResponse{
-			Ready:     true,
-			StreamURL: s.buildStreamURL(book.ID, audioFile.ID, "original"),
-			Variant:   "original",
-			Codec:     audioFile.Codec,
+	if canPlay {
+		// Client can play original format - return direct stream URL
+		streamURL := baseURL + "/api/v1/audio/" + input.Body.BookID + "/" + input.Body.AudioFileID
+		return &PreparePlaybackOutput{
+			Body: PreparePlaybackResponse{
+				Ready:     true,
+				StreamURL: streamURL,
+				Variant:   "original",
+				Codec:     sourceCodec,
+				Progress:  100,
+			},
 		}, nil
 	}
 
-	// Check if HLS content is ready for this variant (first segment available for early playback).
-	// This allows streaming to start before transcoding completes.
-	if _, ok := s.services.Transcode.GetHLSPathIfReadyForVariant(ctx, audioFile.ID, variant); ok {
-		return &PreparePlaybackResponse{
-			Ready:     true,
-			StreamURL: s.buildStreamURL(book.ID, audioFile.ID, "transcoded"),
-			Variant:   "transcoded",
-			Codec:     "aac",
-		}, nil
-	}
+	// Client cannot play source format - need transcoding
+	variant := s.selectTranscodeVariant(input.Body.Spatial, sourceCodec)
 
-	// Need to transcode - create/get job with high priority (user requested) and specified variant.
+	// Check for existing transcode job or create one
 	job, err := s.services.Transcode.CreateJob(
 		ctx,
-		book.ID,
-		audioFile.ID,
+		input.Body.BookID,
+		input.Body.AudioFileID,
 		audioFile.Path,
-		audioFile.Codec,
+		sourceCodec,
 		10, // High priority for user-requested playback
 		variant,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("create transcode job: %w", err)
+		return nil, huma.Error500InternalServerError("failed to prepare transcoding: " + err.Error())
 	}
 
-	// Handle job status.
-	switch job.Status {
-	case domain.TranscodeStatusCompleted:
-		// Job completed - HLS files should be available.
-		return &PreparePlaybackResponse{
-			Ready:     true,
-			StreamURL: s.buildStreamURL(book.ID, audioFile.ID, "transcoded"),
-			Variant:   "transcoded",
-			Codec:     "aac",
-		}, nil
-
-	case domain.TranscodeStatusFailed:
-		// Job failed - codec may be unsupported.
-		// Return error so client knows playback isn't possible.
-		return nil, fmt.Errorf("transcode failed: %s", job.Error)
-
-	case domain.TranscodeStatusRunning:
-		// Check if HLS is ready for early playback (first segment available).
-		if _, ok := s.services.Transcode.GetHLSPathIfReadyForVariant(ctx, audioFile.ID, variant); ok {
-			return &PreparePlaybackResponse{
+	// Build response based on job status
+	switch job.Status { //nolint:exhaustive // Only handling the relevant status values
+	case "completed":
+		// Transcode ready - return HLS stream URL
+		streamURL := baseURL + "/api/v1/audio/" + input.Body.BookID + "/" + input.Body.AudioFileID + "/transcode/playlist.m3u8"
+		return &PreparePlaybackOutput{
+			Body: PreparePlaybackResponse{
 				Ready:     true,
-				StreamURL: s.buildStreamURL(book.ID, audioFile.ID, "transcoded"),
+				StreamURL: streamURL,
 				Variant:   "transcoded",
 				Codec:     "aac",
-			}, nil
-		}
-		// HLS not yet ready - return progress.
-		fallthrough
+				Progress:  100,
+			},
+		}, nil
+
+	case "failed":
+		// Transcode failed - return error details
+		return nil, huma.Error500InternalServerError("transcoding failed: " + job.Error)
 
 	default:
-		// Transcode pending or running (HLS not yet ready).
-		return &PreparePlaybackResponse{
-			Ready:          false,
-			StreamURL:      s.buildStreamURL(book.ID, audioFile.ID, "transcoded"),
-			Variant:        "transcoded",
-			Codec:          "aac",
-			TranscodeJobID: job.ID,
-			Progress:       job.Progress,
+		// Pending or running - return progress
+		return &PreparePlaybackOutput{
+			Body: PreparePlaybackResponse{
+				Ready:          false,
+				StreamURL:      "",
+				Variant:        "transcoded",
+				Codec:          "aac",
+				TranscodeJobID: job.ID,
+				Progress:       job.Progress,
+			},
 		}, nil
 	}
 }
 
-// clientSupportsCodec checks if the client's capability list includes the codec.
-func (s *Server) clientSupportsCodec(capabilities []string, codec string) bool {
-	// If no capabilities provided, assume client supports common codecs.
-	if len(capabilities) == 0 {
-		return !domain.NeedsTranscode(codec)
-	}
-
-	// Normalize codec name for comparison.
-	normalizedCodec := normalizeCodecName(codec)
+// canClientPlayCodec checks if the client's capabilities include the given codec.
+func (s *Server) canClientPlayCodec(codec string, capabilities []string) bool {
+	// Normalize codec name
+	codec = normalizeCodec(codec)
 
 	for _, cap := range capabilities {
-		if normalizeCodecName(cap) == normalizedCodec {
+		if normalizeCodec(cap) == codec {
 			return true
 		}
 	}
-
 	return false
 }
 
-// normalizeCodecName normalizes codec names for comparison.
-func normalizeCodecName(codec string) string {
+// normalizeCodec normalizes codec names for comparison.
+func normalizeCodec(codec string) string {
+	codec = strings.ToLower(codec)
+	// Handle common aliases
 	switch codec {
-	case "aac", "mp4a", "mp4a-latm":
+	case "m4a", "m4b", "mp4a":
 		return "aac"
-	case "mp3", "mp3float", "libmp3lame":
-		return "mp3"
-	case "opus", "libopus":
-		return "opus"
-	case "vorbis", "libvorbis":
-		return "vorbis"
-	case "flac":
-		return "flac"
-	case "pcm_s16le", "pcm_s24le", "pcm_s32le", "pcm_f32le":
-		return "pcm"
-	case "ac3", "eac3", "ac-3", "e-ac-3":
-		return "ac3"
-	case "ac4", "ac-4":
-		return "ac4"
-	case "dts", "dca":
-		return "dts"
-	case "wma", "wmav1", "wmav2", "wmapro":
-		return "wma"
-	case "truehd", "mlp":
-		return "truehd"
+	case "mp4":
+		return "aac"
 	default:
 		return codec
 	}
 }
 
-// buildStreamURL constructs the URL for streaming audio.
-func (s *Server) buildStreamURL(bookID, audioFileID, variant string) string {
-	if variant == "transcoded" {
-		// Return HLS playlist URL directly.
-		// We can't use redirects because HTTP redirects don't forward Authorization headers,
-		// which breaks authentication when ExoPlayer follows the redirect.
-		return fmt.Sprintf("/api/v1/transcode/%s/playlist.m3u8", audioFileID)
+// selectTranscodeVariant chooses the appropriate transcode variant.
+func (s *Server) selectTranscodeVariant(preferSpatial bool, sourceCodec string) domain.TranscodeVariant {
+	// If client prefers spatial and source is a surround format, use spatial variant
+	// AC-3, E-AC-3, AC-4, TrueHD, DTS typically contain surround audio
+	if preferSpatial {
+		codec := strings.ToLower(sourceCodec)
+		if codec == "ac3" || codec == "eac3" || codec == "ac4" || codec == "ac-4" ||
+			codec == "truehd" || codec == "dts" {
+			return domain.TranscodeVariantSpatial
+		}
 	}
-	return fmt.Sprintf("/api/v1/books/%s/audio/%s", bookID, audioFileID)
+	return domain.TranscodeVariantStereo
 }

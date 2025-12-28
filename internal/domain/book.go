@@ -27,7 +27,8 @@ type Book struct {
 	PublishYear   string            `json:"publish_year,omitempty"`
 	Language      string            `json:"language,omitempty"`
 	ASIN          string            `json:"asin,omitempty"`
-	GenreIDs      []string          `json:"genre_ids,omitempty"` // References to normalized Genre entities
+	AudibleRegion string            `json:"audible_region,omitempty"` // Region used for ASIN lookup
+	GenreIDs      []string          `json:"genre_ids,omitempty"`      // References to normalized Genre entities
 	Contributors  []BookContributor `json:"contributors"`
 	Series        []BookSeries      `json:"series,omitempty"` // Multiple series with sequence per series
 	AudioFiles    []AudioFileInfo   `json:"audio_files"`

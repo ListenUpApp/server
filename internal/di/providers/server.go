@@ -49,6 +49,9 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 	inviteService := do.MustInvoke[*service.InviteService](i)
 	adminService := do.MustInvoke[*service.AdminService](i)
 	transcodeHandle := do.MustInvoke[*TranscodeServiceHandle](i)
+	metadataHandle := do.MustInvoke[*MetadataServiceHandle](i)
+	chapterService := do.MustInvoke[*service.ChapterService](i)
+	coverService := do.MustInvoke[*service.CoverService](i)
 
 	sseHandler := sse.NewHandler(sseHandle.Manager, log.Logger)
 
@@ -66,6 +69,9 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 		Invite:     inviteService,
 		Admin:      adminService,
 		Transcode:  transcodeHandle.TranscodeService,
+		Metadata:   metadataHandle.MetadataService,
+		Chapter:    chapterService,
+		Cover:      coverService,
 	}
 
 	storage := &api.StorageServices{

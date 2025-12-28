@@ -11,14 +11,14 @@ type Syncable struct {
 	ID        string     `json:"id"`
 }
 
-// Touch updates the UpdatedAt timestamp to the current timeime.
+// Touch updates the UpdatedAt timestamp to the current time.
 // Call this whenever the underlying entity changes.
 func (s *Syncable) Touch() {
 	s.UpdatedAt = time.Now()
 }
 
 // InitTimestamps sets both CreatedAt and UpdatedAt to now.
-// Call this when creeating a new entity.
+// Call this when creating a new entity.
 func (s *Syncable) InitTimestamps() {
 	now := time.Now()
 	s.CreatedAt = now

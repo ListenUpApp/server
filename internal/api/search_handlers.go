@@ -3,181 +3,149 @@ package api
 import (
 	"context"
 	"net/http"
-	"strconv"
-	"strings"
-	"time"
 
-	"github.com/listenupapp/listenup-server/internal/http/response"
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/listenupapp/listenup-server/internal/search"
 )
 
-// handleSearch performs a federated search across books, contributors, and series.
-// Query parameters:
-//   - q: search query (required)
-//   - types: comma-separated list of types to search (book, contributor, series)
-//   - genre: genre slug for filtering
-//   - genre_path: genre path for hierarchical filtering (e.g., /fiction/fantasy)
-//   - min_duration: minimum duration in seconds
-//   - max_duration: maximum duration in seconds
-//   - limit: max results (default 20, max 100)
-//   - offset: pagination offset
-func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
-
-	// Check if search service is available
-	if s.services.Search == nil {
-		response.Error(w, http.StatusServiceUnavailable, "Search service not available", s.logger)
-		return
-	}
-
-	// Parse query parameter (required)
-	query := r.URL.Query().Get("q")
-	if query == "" {
-		response.BadRequest(w, "Query parameter 'q' is required", s.logger)
-		return
-	}
-
-	// Build search params from query string
-	params := s.parseSearchParams(r)
-	params.Query = query
-
-	// Add timeout to prevent long-running searches
-	searchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	// Execute search
-	result, err := s.services.Search.Search(searchCtx, params)
-	if err != nil {
-		if searchCtx.Err() == context.DeadlineExceeded {
-			s.logger.Warn("search timed out", "query", query, "user_id", userID)
-			response.Error(w, http.StatusGatewayTimeout, "Search timed out", s.logger)
-			return
-		}
-		s.logger.Error("search failed", "query", query, "error", err, "user_id", userID)
-		response.InternalError(w, "Search failed", s.logger)
-		return
-	}
-
-	response.Success(w, result, s.logger)
+func (s *Server) registerSearchRoutes() {
+	huma.Register(s.api, huma.Operation{
+		OperationID: "search",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/search",
+		Summary:     "Search library",
+		Description: "Federated search across books, contributors, and series",
+		Tags:        []string{"Search"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleSearch)
 }
 
-// handleReindex triggers a full reindex of the search index.
-// This is an admin operation that rebuilds the search index from scratch.
-func (s *Server) handleReindex(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := mustGetUserID(ctx)
+// === DTOs ===
 
-	if s.services.Search == nil {
-		response.Error(w, http.StatusServiceUnavailable, "Search service not available", s.logger)
-		return
-	}
-
-	// TODO: Add admin check once we have roles
-	// For now, any authenticated user can trigger reindex
-
-	s.logger.Info("reindex triggered", "user_id", userID)
-
-	// Run reindex in background
-	go func() {
-		reindexCtx := context.Background()
-		if err := s.services.Search.ReindexAll(reindexCtx); err != nil {
-			s.logger.Error("reindex failed", "error", err)
-		} else {
-			count, _ := s.services.Search.DocumentCount()
-			s.logger.Info("reindex completed", "documents", count)
-		}
-	}()
-
-	response.Success(w, map[string]string{
-		"status":  "started",
-		"message": "Reindex started in background",
-	}, s.logger)
+// SearchInput contains parameters for searching the library.
+type SearchInput struct {
+	Authorization string   `header:"Authorization"`
+	Query         string   `query:"q" validate:"required,min=1,max=200" doc:"Search query"`
+	Types         []string `query:"types" validate:"omitempty,max=3" doc:"Types to search (book, contributor, series). Omit for all."`
+	Limit         int      `query:"limit" validate:"omitempty,gte=1,lte=100" doc:"Max results per type (default 10)"`
+	GenreSlug     string   `query:"genre" validate:"omitempty,max=100" doc:"Filter by genre slug"`
 }
 
-// handleSearchStats returns search index statistics.
-func (s *Server) handleSearchStats(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	_ = mustGetUserID(ctx) // Validates auth
-
-	if s.services.Search == nil {
-		response.Error(w, http.StatusServiceUnavailable, "Search service not available", s.logger)
-		return
-	}
-
-	count, err := s.services.Search.DocumentCount()
-	if err != nil {
-		s.logger.Error("failed to get document count", "error", err)
-		response.InternalError(w, "Failed to get search statistics", s.logger)
-		return
-	}
-
-	response.Success(w, map[string]interface{}{
-		"document_count": count,
-	}, s.logger)
+// SearchBookResult contains book search result data.
+type SearchBookResult struct {
+	ID           string  `json:"id" doc:"Book ID"`
+	Title        string  `json:"title" doc:"Book title"`
+	AuthorName   string  `json:"author_name,omitempty" doc:"Primary author name"`
+	NarratorName string  `json:"narrator_name,omitempty" doc:"Primary narrator name"`
+	SeriesName   string  `json:"series_name,omitempty" doc:"Series name"`
+	CoverPath    *string `json:"cover_path,omitempty" doc:"Cover image path"`
+	Score        float64 `json:"score" doc:"Search relevance score"`
 }
 
-// parseSearchParams parses search parameters from the query string.
-func (s *Server) parseSearchParams(r *http.Request) search.SearchParams {
+// SearchContributorResult contains contributor search result data.
+type SearchContributorResult struct {
+	ID        string  `json:"id" doc:"Contributor ID"`
+	Name      string  `json:"name" doc:"Contributor name"`
+	BookCount int     `json:"book_count" doc:"Number of books"`
+	Score     float64 `json:"score" doc:"Search relevance score"`
+}
+
+// SearchSeriesResult contains series search result data.
+type SearchSeriesResult struct {
+	ID        string  `json:"id" doc:"Series ID"`
+	Name      string  `json:"name" doc:"Series name"`
+	BookCount int     `json:"book_count" doc:"Number of books"`
+	Score     float64 `json:"score" doc:"Search relevance score"`
+}
+
+// SearchResponse contains search results.
+type SearchResponse struct {
+	Books        []SearchBookResult        `json:"books,omitempty" doc:"Book results"`
+	Contributors []SearchContributorResult `json:"contributors,omitempty" doc:"Contributor results"`
+	Series       []SearchSeriesResult      `json:"series,omitempty" doc:"Series results"`
+	TotalHits    int                       `json:"total_hits" doc:"Total matches across all types"`
+}
+
+// SearchOutput wraps the search response for Huma.
+type SearchOutput struct {
+	Body SearchResponse
+}
+
+// === Handlers ===
+
+func (s *Server) handleSearch(ctx context.Context, input *SearchInput) (*SearchOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
+	}
+
+	limit := input.Limit
+	if limit <= 0 {
+		limit = 10
+	}
+
+	// Build search params
 	params := search.SearchParams{
-		Limit:  20,
-		Offset: 0,
+		Query: input.Query,
+		Limit: limit,
 	}
 
-	// Parse types
-	if types := r.URL.Query().Get("types"); types != "" {
-		params.Types = append(params.Types, splitAndTrim(types, ",")...)
-	}
-
-	// Parse genre slugs
-	if genre := r.URL.Query().Get("genre"); genre != "" {
-		params.GenreSlugs = splitAndTrim(genre, ",")
-	}
-
-	// Parse genre path (hierarchical filtering)
-	if genrePath := r.URL.Query().Get("genre_path"); genrePath != "" {
-		params.GenrePath = genrePath
-	}
-
-	// Parse duration filters
-	if minDur := r.URL.Query().Get("min_duration"); minDur != "" {
-		if v, err := strconv.ParseInt(minDur, 10, 64); err == nil {
-			params.MinDuration = v
-		}
-	}
-
-	if maxDur := r.URL.Query().Get("max_duration"); maxDur != "" {
-		if v, err := strconv.ParseInt(maxDur, 10, 64); err == nil {
-			params.MaxDuration = v
-		}
-	}
-
-	// Parse pagination
-	if limit := r.URL.Query().Get("limit"); limit != "" {
-		if v, err := strconv.Atoi(limit); err == nil && v > 0 {
-			if v > 100 {
-				v = 100 // Cap at 100
+	// Parse types - use string values that match DocType constants
+	if len(input.Types) > 0 {
+		for _, t := range input.Types {
+			switch t {
+			case "book":
+				params.Types = append(params.Types, string(search.DocTypeBook))
+			case "contributor":
+				params.Types = append(params.Types, string(search.DocTypeContributor))
+			case "series":
+				params.Types = append(params.Types, string(search.DocTypeSeries))
 			}
-			params.Limit = v
 		}
 	}
 
-	if offset := r.URL.Query().Get("offset"); offset != "" {
-		if v, err := strconv.Atoi(offset); err == nil && v >= 0 {
-			params.Offset = v
+	// Genre filter
+	if input.GenreSlug != "" {
+		params.GenreSlugs = []string{input.GenreSlug}
+	}
+
+	result, err := s.services.Search.Search(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := SearchResponse{
+		TotalHits: min(int(result.Total), int(^uint(0)>>1)), //nolint:gosec // Safe: capped at max int
+	}
+
+	// Categorize hits by type
+	for i := range result.Hits {
+		hit := &result.Hits[i]
+		switch hit.Type {
+		case search.DocTypeBook:
+			resp.Books = append(resp.Books, SearchBookResult{
+				ID:           hit.ID,
+				Title:        hit.Name,
+				AuthorName:   hit.Author,
+				NarratorName: hit.Narrator,
+				SeriesName:   hit.SeriesName,
+				Score:        hit.Score,
+			})
+		case search.DocTypeContributor:
+			resp.Contributors = append(resp.Contributors, SearchContributorResult{
+				ID:        hit.ID,
+				Name:      hit.Name,
+				BookCount: hit.BookCount,
+				Score:     hit.Score,
+			})
+		case search.DocTypeSeries:
+			resp.Series = append(resp.Series, SearchSeriesResult{
+				ID:        hit.ID,
+				Name:      hit.Name,
+				BookCount: hit.BookCount,
+				Score:     hit.Score,
+			})
 		}
 	}
 
-	return params
-}
-
-// splitAndTrim splits a string by separator and trims whitespace, filtering empty parts.
-func splitAndTrim(s, sep string) []string {
-	var result []string
-	for _, part := range strings.Split(s, sep) {
-		if trimmed := strings.TrimSpace(part); trimmed != "" {
-			result = append(result, trimmed)
-		}
-	}
-	return result
+	return &SearchOutput{Body: resp}, nil
 }

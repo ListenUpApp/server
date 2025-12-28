@@ -17,6 +17,7 @@ import (
 const (
 	seriesPrefix            = "series:"
 	seriesByNamePrefix      = "idx:series:name:"       // For deduplication
+	seriesByASINPrefix      = "idx:series:asin:"       // For Audible deduplication
 	seriesByUpdatedAtPrefix = "idx:series:updated_at:" // Format: idx:series:updated_at:{RFC3339Nano}:series:{uuid}
 	seriesByDeletedAtPrefix = "idx:series:deleted_at:" // Format: idx:series:deleted_at:{RFC3339Nano}:series:{uuid}
 )
@@ -55,6 +56,14 @@ func (s *Store) CreateSeries(ctx context.Context, series *domain.Series) error {
 		nameKey := []byte(seriesByNamePrefix + normalizeSeriesName(series.Name))
 		if err := txn.Set(nameKey, []byte(series.ID)); err != nil {
 			return err
+		}
+
+		// Create ASIN index if present
+		if series.ASIN != "" {
+			asinKey := []byte(seriesByASINPrefix + series.ASIN)
+			if err := txn.Set(asinKey, []byte(series.ID)); err != nil {
+				return err
+			}
 		}
 
 		// Create updated_at index for sync support
@@ -103,6 +112,36 @@ func (s *Store) GetSeries(ctx context.Context, id string) (*domain.Series, error
 	return &series, nil
 }
 
+// GetSeriesByASIN retrieves a series by its Audible ASIN.
+func (s *Store) GetSeriesByASIN(ctx context.Context, asin string) (*domain.Series, error) {
+	if asin == "" {
+		return nil, ErrSeriesNotFound
+	}
+
+	indexKey := []byte(seriesByASINPrefix + asin)
+
+	var seriesID string
+	err := s.db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get(indexKey)
+		if err != nil {
+			return err
+		}
+		return item.Value(func(val []byte) error {
+			seriesID = string(val)
+			return nil
+		})
+	})
+
+	if err != nil {
+		if errors.Is(err, badger.ErrKeyNotFound) {
+			return nil, ErrSeriesNotFound
+		}
+		return nil, fmt.Errorf("lookup series by ASIN: %w", err)
+	}
+
+	return s.GetSeries(ctx, seriesID)
+}
+
 // UpdateSeries updates an existing series.
 func (s *Store) UpdateSeries(ctx context.Context, series *domain.Series) error {
 	key := []byte(seriesPrefix + series.ID)
@@ -137,6 +176,24 @@ func (s *Store) UpdateSeries(ctx context.Context, series *domain.Series) error {
 			newNameKey := []byte(seriesByNamePrefix + normalizeSeriesName(series.Name))
 			if err := txn.Set(newNameKey, []byte(series.ID)); err != nil {
 				return err
+			}
+		}
+
+		// Update ASIN index if changed
+		if oldSeries.ASIN != series.ASIN {
+			// Delete old ASIN index
+			if oldSeries.ASIN != "" {
+				oldASINKey := []byte(seriesByASINPrefix + oldSeries.ASIN)
+				if err := txn.Delete(oldASINKey); err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
+					return err
+				}
+			}
+			// Create new ASIN index
+			if series.ASIN != "" {
+				newASINKey := []byte(seriesByASINPrefix + series.ASIN)
+				if err := txn.Set(newASINKey, []byte(series.ID)); err != nil {
+					return err
+				}
 			}
 		}
 

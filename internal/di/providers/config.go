@@ -9,7 +9,7 @@ import (
 )
 
 // ProvideConfig provides the application configuration.
-func ProvideConfig(i do.Injector) (*config.Config, error) {
+func ProvideConfig(_ do.Injector) (*config.Config, error) {
 	return config.LoadConfig()
 }
 

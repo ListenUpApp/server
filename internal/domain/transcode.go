@@ -5,6 +5,7 @@ import "time"
 // TranscodeStatus represents the state of a transcode job.
 type TranscodeStatus string
 
+// Transcode status constants.
 const (
 	TranscodeStatusPending   TranscodeStatus = "pending"
 	TranscodeStatusRunning   TranscodeStatus = "running"
@@ -15,6 +16,7 @@ const (
 // TranscodeVariant identifies the output format variant.
 type TranscodeVariant string
 
+// Transcode variant constants.
 const (
 	TranscodeVariantStereo  TranscodeVariant = "stereo"  // 2-channel AAC
 	TranscodeVariantSpatial TranscodeVariant = "spatial" // 6-channel AAC (5.1)
