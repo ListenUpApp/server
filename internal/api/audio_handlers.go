@@ -15,12 +15,17 @@ import (
 // registerAudioRoutes sets up audio streaming routes.
 // These are handled directly by chi for performance (not huma).
 func (s *Server) registerAudioRoutes() {
-	// Audio streaming with range support
+	// Audio streaming with range support (new URL format)
 	s.router.Get("/api/v1/audio/{bookId}/{fileId}", s.handleStreamAudio)
 	s.router.Head("/api/v1/audio/{bookId}/{fileId}", s.handleStreamAudio)
 
+	// Legacy URL format (for client compatibility)
+	s.router.Get("/api/v1/books/{bookId}/audio/{fileId}", s.handleStreamAudio)
+	s.router.Head("/api/v1/books/{bookId}/audio/{fileId}", s.handleStreamAudio)
+
 	// Transcoded audio (HLS segments, etc.)
 	s.router.Get("/api/v1/audio/{bookId}/{fileId}/transcode/{*}", s.handleTranscodedAudio)
+	s.router.Get("/api/v1/books/{bookId}/audio/{fileId}/transcode/{*}", s.handleTranscodedAudio)
 }
 
 // handleStreamAudio streams audio files with range request support.

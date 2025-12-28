@@ -3,15 +3,24 @@ package api
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/service"
 )
 
 func (s *Server) registerPlaybackRoutes() {
-	// Nothing special here - playback routes are covered by listening handlers
-	// This is a placeholder for any future playback-specific routes
+	huma.Register(s.api, huma.Operation{
+		OperationID: "preparePlayback",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/playback/prepare",
+		Summary:     "Prepare audio playback",
+		Description: "Negotiates audio format based on client capabilities. Returns stream URL for playable formats, or triggers transcoding for incompatible formats.",
+		Tags:        []string{"Playback"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handlePreparePlayback)
 }
 
 func (s *Server) registerSettingsRoutes() {
@@ -217,4 +226,163 @@ func (s *Server) handleUpdateBookPreferences(ctx context.Context, input *UpdateB
 			UpdatedAt:                 prefs.UpdatedAt,
 		},
 	}, nil
+}
+
+// === Playback Prepare ===
+
+type PreparePlaybackRequest struct {
+	BookID      string   `json:"book_id" doc:"Book ID"`
+	AudioFileID string   `json:"audio_file_id" doc:"Audio file ID"`
+	Capabilities []string `json:"capabilities" doc:"Codecs the client can play (e.g., aac, mp3, opus)"`
+	Spatial     bool     `json:"spatial" doc:"Whether client prefers spatial audio"`
+}
+
+type PreparePlaybackInput struct {
+	Authorization string `header:"Authorization"`
+	Body          PreparePlaybackRequest
+}
+
+type PreparePlaybackResponse struct {
+	Ready          bool   `json:"ready" doc:"True if audio is ready to stream"`
+	StreamURL      string `json:"stream_url" doc:"URL to stream the audio"`
+	Variant        string `json:"variant" doc:"Which variant: original or transcoded"`
+	Codec          string `json:"codec" doc:"Codec of the stream"`
+	TranscodeJobID string `json:"transcode_job_id,omitempty" doc:"Job ID if transcoding in progress"`
+	Progress       int    `json:"progress" doc:"Transcode progress (0-100)"`
+}
+
+type PreparePlaybackOutput struct {
+	Body PreparePlaybackResponse
+}
+
+func (s *Server) handlePreparePlayback(ctx context.Context, input *PreparePlaybackInput) (*PreparePlaybackOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get the book
+	book, err := s.store.GetBook(ctx, input.Body.BookID, userID)
+	if err != nil {
+		return nil, huma.Error404NotFound("book not found")
+	}
+
+	// Find the audio file
+	audioFile := book.GetAudioFileByID(input.Body.AudioFileID)
+	if audioFile == nil {
+		return nil, huma.Error404NotFound("audio file not found")
+	}
+
+	// Check if client can play the source format
+	sourceCodec := audioFile.Codec
+	canPlay := s.canClientPlayCodec(sourceCodec, input.Body.Capabilities)
+
+	// Build base URL for streaming from request context
+	// The actual base URL will be provided by the client in the stream URL it receives
+	baseURL := ""
+
+	if canPlay {
+		// Client can play original format - return direct stream URL
+		streamURL := baseURL + "/api/v1/audio/" + input.Body.BookID + "/" + input.Body.AudioFileID
+		return &PreparePlaybackOutput{
+			Body: PreparePlaybackResponse{
+				Ready:     true,
+				StreamURL: streamURL,
+				Variant:   "original",
+				Codec:     sourceCodec,
+				Progress:  100,
+			},
+		}, nil
+	}
+
+	// Client cannot play source format - need transcoding
+	variant := s.selectTranscodeVariant(input.Body.Spatial, sourceCodec)
+
+	// Check for existing transcode job or create one
+	job, err := s.services.Transcode.CreateJob(
+		ctx,
+		input.Body.BookID,
+		input.Body.AudioFileID,
+		audioFile.Path,
+		sourceCodec,
+		10, // High priority for user-requested playback
+		variant,
+	)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("failed to prepare transcoding: " + err.Error())
+	}
+
+	// Build response based on job status
+	switch job.Status {
+	case "completed":
+		// Transcode ready - return HLS stream URL
+		streamURL := baseURL + "/api/v1/audio/" + input.Body.BookID + "/" + input.Body.AudioFileID + "/transcode/playlist.m3u8"
+		return &PreparePlaybackOutput{
+			Body: PreparePlaybackResponse{
+				Ready:     true,
+				StreamURL: streamURL,
+				Variant:   "transcoded",
+				Codec:     "aac",
+				Progress:  100,
+			},
+		}, nil
+
+	case "failed":
+		// Transcode failed - return error details
+		return nil, huma.Error500InternalServerError("transcoding failed: " + job.Error)
+
+	default:
+		// Pending or running - return progress
+		return &PreparePlaybackOutput{
+			Body: PreparePlaybackResponse{
+				Ready:          false,
+				StreamURL:      "",
+				Variant:        "transcoded",
+				Codec:          "aac",
+				TranscodeJobID: job.ID,
+				Progress:       job.Progress,
+			},
+		}, nil
+	}
+}
+
+// canClientPlayCodec checks if the client's capabilities include the given codec.
+func (s *Server) canClientPlayCodec(codec string, capabilities []string) bool {
+	// Normalize codec name
+	codec = normalizeCodec(codec)
+
+	for _, cap := range capabilities {
+		if normalizeCodec(cap) == codec {
+			return true
+		}
+	}
+	return false
+}
+
+// normalizeCodec normalizes codec names for comparison.
+func normalizeCodec(codec string) string {
+	codec = strings.ToLower(codec)
+	// Handle common aliases
+	switch codec {
+	case "m4a", "m4b", "mp4a":
+		return "aac"
+	case "mp4":
+		return "aac"
+	default:
+		return codec
+	}
+}
+
+// selectTranscodeVariant chooses the appropriate transcode variant.
+func (s *Server) selectTranscodeVariant(preferSpatial bool, sourceCodec string) domain.TranscodeVariant {
+	// If client prefers spatial and source is a surround format, use spatial variant
+	// AC-3, E-AC-3, AC-4, TrueHD, DTS typically contain surround audio
+	if preferSpatial {
+		codec := strings.ToLower(sourceCodec)
+		if codec == "ac3" || codec == "eac3" || codec == "ac4" || codec == "ac-4" ||
+			codec == "truehd" || codec == "dts" {
+			return domain.TranscodeVariantSpatial
+		}
+	}
+	return domain.TranscodeVariantStereo
 }
