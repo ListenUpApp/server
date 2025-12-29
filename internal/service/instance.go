@@ -119,3 +119,27 @@ func (s *InstanceService) SetRootUser(ctx context.Context, userID string) error 
 
 	return nil
 }
+
+// SetOpenRegistration enables or disables public registration.
+// When enabled, new users can register but require admin approval.
+func (s *InstanceService) SetOpenRegistration(ctx context.Context, enabled bool) error {
+	instance, err := s.GetInstance(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get instance: %w", err)
+	}
+
+	instance.SetOpenRegistration(enabled)
+
+	if err := s.store.UpdateInstance(ctx, instance); err != nil {
+		return fmt.Errorf("failed to update instance: %w", err)
+	}
+
+	if s.logger != nil {
+		s.logger.Info("Open registration setting changed",
+			"instance_id", instance.ID,
+			"enabled", enabled,
+		)
+	}
+
+	return nil
+}

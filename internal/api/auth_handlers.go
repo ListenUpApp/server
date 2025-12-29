@@ -21,6 +21,15 @@ func (s *Server) registerAuthRoutes() {
 	}, s.handleSetup)
 
 	huma.Register(s.api, huma.Operation{
+		OperationID: "register",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/auth/register",
+		Summary:     "Register new user",
+		Description: "Creates a new user account (requires open registration to be enabled). User will be in pending status until approved by admin.",
+		Tags:        []string{"Authentication"},
+	}, s.handleRegister)
+
+	huma.Register(s.api, huma.Operation{
 		OperationID: "login",
 		Method:      http.MethodPost,
 		Path:        "/api/v1/auth/login",
@@ -114,6 +123,30 @@ type LogoutInput struct {
 	Body LogoutRequest
 }
 
+// RegisterRequest is the request body for user registration.
+type RegisterRequest struct {
+	Email     string `json:"email" validate:"required,email,max=254" doc:"User email address"`
+	Password  string `json:"password" validate:"required,min=8,max=1024" doc:"User password"`
+	FirstName string `json:"first_name" validate:"required,min=1,max=100" doc:"User first name"`
+	LastName  string `json:"last_name" validate:"required,min=1,max=100" doc:"User last name"`
+}
+
+// RegisterInput wraps the register request for Huma.
+type RegisterInput struct {
+	Body RegisterRequest
+}
+
+// RegisterResponse contains the result of a registration.
+type RegisterResponse struct {
+	UserID  string `json:"user_id" doc:"Created user ID"`
+	Message string `json:"message" doc:"Status message"`
+}
+
+// RegisterOutput wraps the register response for Huma.
+type RegisterOutput struct {
+	Body RegisterResponse
+}
+
 // UserResponse contains user information in auth responses.
 type UserResponse struct {
 	ID          string    `json:"id" doc:"User ID"`
@@ -168,6 +201,27 @@ func (s *Server) handleSetup(ctx context.Context, input *SetupInput) (*AuthOutpu
 	}
 
 	return &AuthOutput{Body: mapAuthResponse(resp)}, nil
+}
+
+func (s *Server) handleRegister(ctx context.Context, input *RegisterInput) (*RegisterOutput, error) {
+	req := service.RegisterRequest{
+		Email:     input.Body.Email,
+		Password:  input.Body.Password,
+		FirstName: input.Body.FirstName,
+		LastName:  input.Body.LastName,
+	}
+
+	resp, err := s.services.Auth.Register(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return &RegisterOutput{
+		Body: RegisterResponse{
+			UserID:  resp.UserID,
+			Message: resp.Message,
+		},
+	}, nil
 }
 
 func (s *Server) handleLogin(ctx context.Context, input *LoginInput) (*AuthOutput, error) {

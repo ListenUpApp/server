@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
 	domainerrors "github.com/listenupapp/listenup-server/internal/errors"
@@ -170,4 +171,84 @@ func (s *AdminService) ensureOtherAdminExists(ctx context.Context, excludeUserID
 	}
 
 	return domainerrors.Forbidden("cannot remove the last admin")
+}
+
+// ListPendingUsers returns all users awaiting approval.
+func (s *AdminService) ListPendingUsers(ctx context.Context) ([]*domain.User, error) {
+	users, err := s.store.ListPendingUsers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list pending users: %w", err)
+	}
+	return users, nil
+}
+
+// ApproveUser approves a pending user, allowing them to log in.
+func (s *AdminService) ApproveUser(ctx context.Context, adminUserID, targetUserID string) (*domain.User, error) {
+	// Get target user
+	user, err := s.store.GetUser(ctx, targetUserID)
+	if err != nil {
+		if errors.Is(err, store.ErrUserNotFound) {
+			return nil, domainerrors.NotFound("user not found")
+		}
+		return nil, fmt.Errorf("get user: %w", err)
+	}
+
+	// Must be pending
+	if !user.IsPending() {
+		return nil, domainerrors.Validation("user is not pending approval")
+	}
+
+	// Approve the user
+	user.Status = domain.UserStatusActive
+	user.ApprovedBy = adminUserID
+	user.ApprovedAt = time.Now()
+	user.Touch()
+
+	if err := s.store.UpdateUser(ctx, user); err != nil {
+		return nil, fmt.Errorf("update user: %w", err)
+	}
+
+	if s.logger != nil {
+		s.logger.Info("User approved by admin",
+			"admin_id", adminUserID,
+			"user_id", targetUserID,
+			"email", user.Email,
+		)
+	}
+
+	return user, nil
+}
+
+// DenyUser denies a pending user registration request.
+// This soft-deletes the user account.
+func (s *AdminService) DenyUser(ctx context.Context, adminUserID, targetUserID string) error {
+	// Get target user
+	user, err := s.store.GetUser(ctx, targetUserID)
+	if err != nil {
+		if errors.Is(err, store.ErrUserNotFound) {
+			return domainerrors.NotFound("user not found")
+		}
+		return fmt.Errorf("get user: %w", err)
+	}
+
+	// Must be pending
+	if !user.IsPending() {
+		return domainerrors.Validation("user is not pending approval")
+	}
+
+	// Soft delete the user
+	user.MarkDeleted()
+	if err := s.store.UpdateUser(ctx, user); err != nil {
+		return fmt.Errorf("delete user: %w", err)
+	}
+
+	if s.logger != nil {
+		s.logger.Info("User registration denied by admin",
+			"admin_id", adminUserID,
+			"user_id", targetUserID,
+			"email", user.Email,
+		)
+	}
+
+	return nil
 }
