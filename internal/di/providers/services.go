@@ -11,6 +11,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/logger"
 	"github.com/listenupapp/listenup-server/internal/scanner"
 	"github.com/listenupapp/listenup-server/internal/service"
+	"github.com/listenupapp/listenup-server/internal/sse"
 )
 
 // ProvideInstanceService provides the server instance service.
@@ -151,6 +152,7 @@ func ProvideInviteService(i do.Injector) (*service.InviteService, error) {
 func ProvideAdminService(i do.Injector) (*service.AdminService, error) {
 	storeHandle := do.MustInvoke[*StoreHandle](i)
 	log := do.MustInvoke[*logger.Logger](i)
+	registrationBroadcaster := do.MustInvoke[*sse.RegistrationBroadcaster](i)
 
-	return service.NewAdminService(storeHandle.Store, log.Logger), nil
+	return service.NewAdminService(storeHandle.Store, log.Logger, registrationBroadcaster), nil
 }

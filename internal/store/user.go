@@ -9,6 +9,7 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/sse"
 )
 
 const (
@@ -273,4 +274,20 @@ func (s *Store) ListPendingUsers(_ context.Context) ([]*domain.User, error) {
 // Lowercases and trims whitespace.
 func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
+}
+
+// BroadcastUserPending broadcasts a user.pending SSE event to admin users.
+// Called when a new user registers and is awaiting approval.
+func (s *Store) BroadcastUserPending(user *domain.User) {
+	if s.eventEmitter != nil {
+		s.eventEmitter.Emit(sse.NewUserPendingEvent(user))
+	}
+}
+
+// BroadcastUserApproved broadcasts a user.approved SSE event to admin users.
+// Called when a pending user is approved by an admin.
+func (s *Store) BroadcastUserApproved(user *domain.User) {
+	if s.eventEmitter != nil {
+		s.eventEmitter.Emit(sse.NewUserApprovedEvent(user))
+	}
 }

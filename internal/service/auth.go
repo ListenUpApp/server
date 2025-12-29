@@ -243,6 +243,9 @@ func (s *AuthService) Register(ctx context.Context, req RegisterRequest) (*Regis
 		return nil, fmt.Errorf("create user: %w", err)
 	}
 
+	// Broadcast SSE event for admin users
+	s.store.BroadcastUserPending(user)
+
 	if s.logger != nil {
 		s.logger.Info("User registered (pending approval)",
 			"user_id", userID,

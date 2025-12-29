@@ -9,20 +9,23 @@ import (
 
 	"github.com/listenupapp/listenup-server/internal/domain"
 	domainerrors "github.com/listenupapp/listenup-server/internal/errors"
+	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
 // AdminService handles admin-only user management operations.
 type AdminService struct {
-	store  *store.Store
-	logger *slog.Logger
+	store                   *store.Store
+	logger                  *slog.Logger
+	registrationBroadcaster *sse.RegistrationBroadcaster
 }
 
 // NewAdminService creates a new admin service.
-func NewAdminService(store *store.Store, logger *slog.Logger) *AdminService {
+func NewAdminService(store *store.Store, logger *slog.Logger, registrationBroadcaster *sse.RegistrationBroadcaster) *AdminService {
 	return &AdminService{
-		store:  store,
-		logger: logger,
+		store:                   store,
+		logger:                  logger,
+		registrationBroadcaster: registrationBroadcaster,
 	}
 }
 
@@ -208,6 +211,14 @@ func (s *AdminService) ApproveUser(ctx context.Context, adminUserID, targetUserI
 		return nil, fmt.Errorf("update user: %w", err)
 	}
 
+	// Broadcast SSE event for admin users
+	s.store.BroadcastUserApproved(user)
+
+	// Notify the pending user directly via their registration SSE stream
+	if s.registrationBroadcaster != nil {
+		s.registrationBroadcaster.NotifyApproved(targetUserID)
+	}
+
 	if s.logger != nil {
 		s.logger.Info("User approved by admin",
 			"admin_id", adminUserID,
@@ -240,6 +251,11 @@ func (s *AdminService) DenyUser(ctx context.Context, adminUserID, targetUserID s
 	user.MarkDeleted()
 	if err := s.store.UpdateUser(ctx, user); err != nil {
 		return fmt.Errorf("delete user: %w", err)
+	}
+
+	// Notify the pending user directly via their registration SSE stream
+	if s.registrationBroadcaster != nil {
+		s.registrationBroadcaster.NotifyDenied(targetUserID)
 	}
 
 	if s.logger != nil {

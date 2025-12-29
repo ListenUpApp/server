@@ -32,6 +32,7 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 	cfg := do.MustInvoke[*config.Config](i)
 	storeHandle := do.MustInvoke[*StoreHandle](i)
 	sseHandle := do.MustInvoke[*SSEManagerHandle](i)
+	registrationBroadcaster := do.MustInvoke[*sse.RegistrationBroadcaster](i)
 	log := do.MustInvoke[*logger.Logger](i)
 	storages := do.MustInvoke[*ImageStorages](i)
 
@@ -80,7 +81,7 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 		SeriesCovers:      storages.SeriesCovers,
 	}
 
-	handler := api.NewServer(storeHandle.Store, services, storage, sseHandler, log.Logger)
+	handler := api.NewServer(storeHandle.Store, services, storage, sseHandler, registrationBroadcaster, log.Logger)
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Server.Port,

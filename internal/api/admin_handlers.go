@@ -53,6 +53,17 @@ func (s *Server) registerAdminRoutes() {
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleListUsers)
 
+	// Pending users - must be registered BEFORE /users/{id} to avoid route conflict
+	huma.Register(s.api, huma.Operation{
+		OperationID: "listPendingUsers",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/admin/users/pending",
+		Summary:     "List pending users",
+		Description: "Lists all users awaiting approval",
+		Tags:        []string{"Admin"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleListPendingUsers)
+
 	huma.Register(s.api, huma.Operation{
 		OperationID: "getAdminUser",
 		Method:      http.MethodGet,
@@ -83,16 +94,7 @@ func (s *Server) registerAdminRoutes() {
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleDeleteAdminUser)
 
-	// Pending users / Open registration
-	huma.Register(s.api, huma.Operation{
-		OperationID: "listPendingUsers",
-		Method:      http.MethodGet,
-		Path:        "/api/v1/admin/users/pending",
-		Summary:     "List pending users",
-		Description: "Lists all users awaiting approval",
-		Tags:        []string{"Admin"},
-		Security:    []map[string][]string{{"bearer": {}}},
-	}, s.handleListPendingUsers)
+	// Open registration settings
 
 	huma.Register(s.api, huma.Operation{
 		OperationID: "approveUser",
@@ -189,15 +191,18 @@ type ListUsersInput struct {
 
 // AdminUserResponse is the API response for a user in admin context.
 type AdminUserResponse struct {
-	ID        string    `json:"id" doc:"User ID"`
-	Email     string    `json:"email" doc:"Email address"`
-	FirstName string    `json:"first_name" doc:"First name"`
-	LastName  string    `json:"last_name" doc:"Last name"`
-	Role      string    `json:"role" doc:"User role"`
-	Status    string    `json:"status" doc:"User status (active, pending)"`
-	IsRoot    bool      `json:"is_root" doc:"Is root user"`
-	CreatedAt time.Time `json:"created_at" doc:"Creation time"`
-	UpdatedAt time.Time `json:"updated_at" doc:"Last update time"`
+	ID          string    `json:"id" doc:"User ID"`
+	Email       string    `json:"email" doc:"Email address"`
+	DisplayName string    `json:"display_name" doc:"Display name"`
+	FirstName   string    `json:"first_name" doc:"First name"`
+	LastName    string    `json:"last_name" doc:"Last name"`
+	Role        string    `json:"role" doc:"User role"`
+	Status      string    `json:"status" doc:"User status (active, pending)"`
+	IsRoot      bool      `json:"is_root" doc:"Is root user"`
+	InvitedBy   string    `json:"invited_by,omitempty" doc:"User ID who invited this user"`
+	LastLoginAt time.Time `json:"last_login_at,omitempty" doc:"Last login timestamp"`
+	CreatedAt   time.Time `json:"created_at" doc:"Creation time"`
+	UpdatedAt   time.Time `json:"updated_at" doc:"Last update time"`
 }
 
 // ListUsersResponse is the API response for listing users.
@@ -497,14 +502,17 @@ func mapAdminUserResponse(u *domain.User) AdminUserResponse {
 		status = "active" // Backward compatibility
 	}
 	return AdminUserResponse{
-		ID:        u.ID,
-		Email:     u.Email,
-		FirstName: u.FirstName,
-		LastName:  u.LastName,
-		Role:      string(u.Role),
-		Status:    status,
-		IsRoot:    u.IsRoot,
-		CreatedAt: u.CreatedAt,
-		UpdatedAt: u.UpdatedAt,
+		ID:          u.ID,
+		Email:       u.Email,
+		DisplayName: u.DisplayName,
+		FirstName:   u.FirstName,
+		LastName:    u.LastName,
+		Role:        string(u.Role),
+		Status:      status,
+		IsRoot:      u.IsRoot,
+		InvitedBy:   u.InvitedBy,
+		LastLoginAt: u.LastLoginAt,
+		CreatedAt:   u.CreatedAt,
+		UpdatedAt:   u.UpdatedAt,
 	}
 }

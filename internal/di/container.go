@@ -25,6 +25,7 @@ func NewContainer() *do.RootScope {
 
 	// Database layer
 	do.Provide(injector, providers.ProvideSSEManager)
+	do.Provide(injector, providers.ProvideRegistrationBroadcaster)
 	do.Provide(injector, providers.ProvideStore)
 	do.Provide(injector, providers.ProvideBootstrap)
 

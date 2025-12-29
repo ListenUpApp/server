@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/go-chi/chi/v5"
 	"github.com/listenupapp/listenup-server/internal/auth"
 	"github.com/listenupapp/listenup-server/internal/service"
 )
@@ -55,6 +56,21 @@ func (s *Server) registerAuthRoutes() {
 		Description: "Revokes the specified session",
 		Tags:        []string{"Authentication"},
 	}, s.handleLogout)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "checkRegistrationStatus",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/auth/registration-status/{user_id}",
+		Summary:     "Check registration status",
+		Description: "Checks if a pending registration has been approved. Used by clients to poll for approval after registering.",
+		Tags:        []string{"Authentication"},
+	}, s.handleCheckRegistrationStatus)
+
+	// SSE endpoint for real-time registration status (handled via chi directly, not huma)
+	s.router.Get("/api/v1/auth/registration-status/{user_id}/stream", func(w http.ResponseWriter, r *http.Request) {
+		userID := chi.URLParam(r, "user_id")
+		s.registrationStatusHandler.ServeHTTP(w, r, userID)
+	})
 }
 
 // === DTOs ===
@@ -145,6 +161,23 @@ type RegisterResponse struct {
 // RegisterOutput wraps the register response for Huma.
 type RegisterOutput struct {
 	Body RegisterResponse
+}
+
+// CheckRegistrationStatusInput is the Huma input for checking registration status.
+type CheckRegistrationStatusInput struct {
+	UserID string `path:"user_id" doc:"User ID from registration"`
+}
+
+// RegistrationStatusResponse contains the registration approval status.
+type RegistrationStatusResponse struct {
+	UserID   string `json:"user_id" doc:"User ID"`
+	Status   string `json:"status" doc:"Registration status (pending, approved, denied)"`
+	Approved bool   `json:"approved" doc:"Whether the registration has been approved"`
+}
+
+// RegistrationStatusOutput wraps the registration status response for Huma.
+type RegistrationStatusOutput struct {
+	Body RegistrationStatusResponse
 }
 
 // UserResponse contains user information in auth responses.
@@ -279,6 +312,35 @@ func (s *Server) handleLogout(ctx context.Context, input *LogoutInput) (*Message
 	}
 
 	return &MessageOutput{Body: MessageResponse{Message: "Logged out successfully"}}, nil
+}
+
+func (s *Server) handleCheckRegistrationStatus(ctx context.Context, input *CheckRegistrationStatusInput) (*RegistrationStatusOutput, error) {
+	user, err := s.store.GetUser(ctx, input.UserID)
+	if err != nil {
+		// Return "denied" for not found (could be deleted/denied)
+		return &RegistrationStatusOutput{
+			Body: RegistrationStatusResponse{
+				UserID:   input.UserID,
+				Status:   "denied",
+				Approved: false,
+			},
+		}, nil
+	}
+
+	status := string(user.Status)
+	if status == "" {
+		status = "active" // Backward compatibility for users without status
+	}
+
+	approved := status == "active"
+
+	return &RegistrationStatusOutput{
+		Body: RegistrationStatusResponse{
+			UserID:   user.ID,
+			Status:   status,
+			Approved: approved,
+		},
+	}, nil
 }
 
 // === Helpers ===

@@ -56,6 +56,13 @@ const (
 	EventTranscodeComplete EventType = "transcode.complete"
 	// EventTranscodeFailed represents a transcode job failure.
 	EventTranscodeFailed EventType = "transcode.failed"
+
+	// EventUserPending represents a new user registration awaiting approval.
+	// Only sent to admin users.
+	EventUserPending EventType = "user.pending"
+	// EventUserApproved represents a pending user being approved.
+	// Only sent to admin users.
+	EventUserApproved EventType = "user.approved"
 )
 
 // Event represents an SSE event to be sent to clients.
@@ -137,6 +144,16 @@ type TranscodeFailedEventData struct {
 	BookID      string `json:"book_id"`
 	AudioFileID string `json:"audio_file_id"`
 	Error       string `json:"error"`
+}
+
+// UserPendingEventData is the data payload for user pending events.
+type UserPendingEventData struct {
+	User *domain.User `json:"user"`
+}
+
+// UserApprovedEventData is the data payload for user approved events.
+type UserApprovedEventData struct {
+	User *domain.User `json:"user"`
 }
 
 // NewBookCreatedEvent creates a book.created event.
@@ -282,6 +299,24 @@ func NewTranscodeFailedEvent(jobID, bookID, audioFileID, errMsg string) Event {
 			AudioFileID: audioFileID,
 			Error:       errMsg,
 		},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewUserPendingEvent creates a user.pending event for admin users.
+func NewUserPendingEvent(user *domain.User) Event {
+	return Event{
+		Type:      EventUserPending,
+		Data:      UserPendingEventData{User: user},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewUserApprovedEvent creates a user.approved event for admin users.
+func NewUserApprovedEvent(user *domain.User) Event {
+	return Event{
+		Type:      EventUserApproved,
+		Data:      UserApprovedEventData{User: user},
 		Timestamp: time.Now(),
 	}
 }
