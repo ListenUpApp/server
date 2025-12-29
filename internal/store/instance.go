@@ -8,6 +8,7 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/id"
 )
 
 var (
@@ -50,11 +51,13 @@ func (s *Store) CreateInstance(_ context.Context) (*domain.Instance, error) {
 		return nil, ErrServerAlreadyExists
 	}
 
-	// Create new instance.
+	// Create new instance with unique library ID.
+	// This ID is the "fingerprint" of this library - it never changes unless
+	// the database is wiped. Clients use this to detect when they need to resync.
 	now := time.Now()
 	instance := &domain.Instance{
-		ID:         "server-001", // Single server ID
-		RootUserID: "",           // No root user initially - setup required
+		ID:         id.MustGenerate("lib"),
+		RootUserID: "", // No root user initially - setup required
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}
