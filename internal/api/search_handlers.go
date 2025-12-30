@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/listenupapp/listenup-server/internal/search"
@@ -24,46 +25,53 @@ func (s *Server) registerSearchRoutes() {
 
 // SearchInput contains parameters for searching the library.
 type SearchInput struct {
-	Authorization string   `header:"Authorization"`
-	Query         string   `query:"q" validate:"required,min=1,max=200" doc:"Search query"`
-	Types         []string `query:"types" validate:"omitempty,max=3" doc:"Types to search (book, contributor, series). Omit for all."`
-	Limit         int      `query:"limit" validate:"omitempty,gte=1,lte=100" doc:"Max results per type (default 10)"`
-	GenreSlug     string   `query:"genre" validate:"omitempty,max=100" doc:"Filter by genre slug"`
+	Authorization string `header:"Authorization"`
+	Query         string `query:"q" validate:"required,min=1,max=200" doc:"Search query"`
+	Types         string `query:"types" validate:"omitempty,max=100" doc:"Comma-separated types to search (book,contributor,series). Omit for all."`
+	Limit         int    `query:"limit" validate:"omitempty,gte=1,lte=100" doc:"Max results per type (default 10)"`
+	Offset        int    `query:"offset" validate:"omitempty,gte=0" doc:"Pagination offset (default 0)"`
+	GenreSlug     string `query:"genre" validate:"omitempty,max=100" doc:"Filter by genre slug"`
+	Facets        bool   `query:"facets" doc:"Include facets in response"`
 }
 
-// SearchBookResult contains book search result data.
-type SearchBookResult struct {
-	ID           string  `json:"id" doc:"Book ID"`
-	Title        string  `json:"title" doc:"Book title"`
-	AuthorName   string  `json:"author_name,omitempty" doc:"Primary author name"`
-	NarratorName string  `json:"narrator_name,omitempty" doc:"Primary narrator name"`
-	SeriesName   string  `json:"series_name,omitempty" doc:"Series name"`
-	CoverPath    *string `json:"cover_path,omitempty" doc:"Cover image path"`
-	Score        float64 `json:"score" doc:"Search relevance score"`
+// SearchHitResult contains a single search result (book, contributor, or series).
+type SearchHitResult struct {
+	ID         string            `json:"id" doc:"Entity ID"`
+	Type       string            `json:"type" doc:"Type: book, contributor, or series"`
+	Score      float64           `json:"score" doc:"Search relevance score"`
+	Name       string            `json:"name" doc:"Display name (title for books)"`
+	Subtitle   string            `json:"subtitle,omitempty" doc:"Subtitle (for books)"`
+	Author     string            `json:"author,omitempty" doc:"Author name (for books)"`
+	Narrator   string            `json:"narrator,omitempty" doc:"Narrator name (for books)"`
+	SeriesName string            `json:"series_name,omitempty" doc:"Series name (for books)"`
+	Duration   int64             `json:"duration,omitempty" doc:"Duration in ms (for books)"`
+	BookCount  int               `json:"book_count,omitempty" doc:"Number of books (for contributors/series)"`
+	GenreSlugs []string          `json:"genre_slugs,omitempty" doc:"Genre slugs (for books)"`
+	Tags       []string          `json:"tags,omitempty" doc:"Tag slugs (for books)"`
+	Highlights map[string]string `json:"highlights,omitempty" doc:"Highlighted matches"`
 }
 
-// SearchContributorResult contains contributor search result data.
-type SearchContributorResult struct {
-	ID        string  `json:"id" doc:"Contributor ID"`
-	Name      string  `json:"name" doc:"Contributor name"`
-	BookCount int     `json:"book_count" doc:"Number of books"`
-	Score     float64 `json:"score" doc:"Search relevance score"`
+// SearchFacets contains facet counts for filtering.
+type SearchFacets struct {
+	Types     []FacetCount `json:"types,omitempty" doc:"Type facets"`
+	Genres    []FacetCount `json:"genres,omitempty" doc:"Genre facets"`
+	Authors   []FacetCount `json:"authors,omitempty" doc:"Author facets"`
+	Narrators []FacetCount `json:"narrators,omitempty" doc:"Narrator facets"`
 }
 
-// SearchSeriesResult contains series search result data.
-type SearchSeriesResult struct {
-	ID        string  `json:"id" doc:"Series ID"`
-	Name      string  `json:"name" doc:"Series name"`
-	BookCount int     `json:"book_count" doc:"Number of books"`
-	Score     float64 `json:"score" doc:"Search relevance score"`
+// FacetCount represents a facet value and its count.
+type FacetCount struct {
+	Value string `json:"value" doc:"Facet value"`
+	Count int    `json:"count" doc:"Number of matches"`
 }
 
-// SearchResponse contains search results.
+// SearchResponse contains search results in the format expected by mobile clients.
 type SearchResponse struct {
-	Books        []SearchBookResult        `json:"books,omitempty" doc:"Book results"`
-	Contributors []SearchContributorResult `json:"contributors,omitempty" doc:"Contributor results"`
-	Series       []SearchSeriesResult      `json:"series,omitempty" doc:"Series results"`
-	TotalHits    int                       `json:"total_hits" doc:"Total matches across all types"`
+	Query  string            `json:"query" doc:"Original search query"`
+	Total  int64             `json:"total" doc:"Total matches"`
+	TookMs int64             `json:"took_ms" doc:"Search duration in milliseconds"`
+	Hits   []SearchHitResult `json:"hits" doc:"Search results"`
+	Facets *SearchFacets     `json:"facets,omitempty" doc:"Facet counts for filtering"`
 }
 
 // SearchOutput wraps the search response for Huma.
@@ -89,9 +97,10 @@ func (s *Server) handleSearch(ctx context.Context, input *SearchInput) (*SearchO
 		Limit: limit,
 	}
 
-	// Parse types - use string values that match DocType constants
-	if len(input.Types) > 0 {
-		for _, t := range input.Types {
+	// Parse types - comma-separated string to slice
+	if input.Types != "" {
+		for _, t := range strings.Split(input.Types, ",") {
+			t = strings.TrimSpace(t)
 			switch t {
 			case "book":
 				params.Types = append(params.Types, string(search.DocTypeBook))
@@ -114,37 +123,29 @@ func (s *Server) handleSearch(ctx context.Context, input *SearchInput) (*SearchO
 	}
 
 	resp := SearchResponse{
-		TotalHits: min(int(result.Total), int(^uint(0)>>1)), //nolint:gosec // Safe: capped at max int
+		Query:  input.Query,
+		Total:  int64(result.Total), //nolint:gosec // Safe: total count won't exceed int64
+		TookMs: result.TookMs,
+		Hits:   make([]SearchHitResult, 0, len(result.Hits)),
 	}
 
-	// Categorize hits by type
+	// Convert search hits to response format
 	for i := range result.Hits {
 		hit := &result.Hits[i]
-		switch hit.Type {
-		case search.DocTypeBook:
-			resp.Books = append(resp.Books, SearchBookResult{
-				ID:           hit.ID,
-				Title:        hit.Name,
-				AuthorName:   hit.Author,
-				NarratorName: hit.Narrator,
-				SeriesName:   hit.SeriesName,
-				Score:        hit.Score,
-			})
-		case search.DocTypeContributor:
-			resp.Contributors = append(resp.Contributors, SearchContributorResult{
-				ID:        hit.ID,
-				Name:      hit.Name,
-				BookCount: hit.BookCount,
-				Score:     hit.Score,
-			})
-		case search.DocTypeSeries:
-			resp.Series = append(resp.Series, SearchSeriesResult{
-				ID:        hit.ID,
-				Name:      hit.Name,
-				BookCount: hit.BookCount,
-				Score:     hit.Score,
-			})
+		respHit := SearchHitResult{
+			ID:         hit.ID,
+			Type:       string(hit.Type),
+			Score:      hit.Score,
+			Name:       hit.Name,
+			Author:     hit.Author,
+			Narrator:   hit.Narrator,
+			SeriesName: hit.SeriesName,
+			Duration:   hit.Duration,
+			BookCount:  hit.BookCount,
+			GenreSlugs: hit.GenreSlugs,
+			Tags:       hit.Tags,
 		}
+		resp.Hits = append(resp.Hits, respHit)
 	}
 
 	return &SearchOutput{Body: resp}, nil

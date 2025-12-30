@@ -188,6 +188,12 @@ func (s *Store) GetBook(ctx context.Context, id string, userID string) (*domain.
 	return book, nil
 }
 
+// GetBookNoAccessCheck retrieves a book by ID without access control.
+// Use for system-level operations like search indexing where user context isn't available.
+func (s *Store) GetBookNoAccessCheck(ctx context.Context, id string) (*domain.Book, error) {
+	return s.getBookInternal(ctx, id)
+}
+
 // getBookInternal retrieves a book by ID without access control.
 // For internal store use only.
 func (s *Store) getBookInternal(_ context.Context, id string) (*domain.Book, error) {

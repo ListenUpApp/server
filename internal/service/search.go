@@ -102,6 +102,30 @@ func (s *SearchService) DeleteSeries(_ context.Context, seriesID string) error {
 	return s.index.DeleteDocument(seriesID)
 }
 
+// UpdateBookTags updates just the tags field of a book in the index.
+// This re-indexes the entire book document with updated tags.
+func (s *SearchService) UpdateBookTags(ctx context.Context, bookID string, tagSlugs []string) error {
+	book, err := s.store.GetBookNoAccessCheck(ctx, bookID)
+	if err != nil {
+		return fmt.Errorf("get book: %w", err)
+	}
+
+	doc, err := s.buildBookDocument(ctx, book)
+	if err != nil {
+		return fmt.Errorf("build document: %w", err)
+	}
+
+	// Add tags to the document
+	doc.Tags = tagSlugs
+
+	if err := s.index.IndexDocument(doc); err != nil {
+		return fmt.Errorf("index document: %w", err)
+	}
+
+	s.logger.Debug("updated book tags in index", "id", bookID, "tags", tagSlugs)
+	return nil
+}
+
 // DocumentCount returns the number of indexed documents.
 func (s *SearchService) DocumentCount() (uint64, error) {
 	return s.index.DocumentCount()
@@ -253,14 +277,20 @@ func (s *SearchService) buildBookDocument(ctx context.Context, book *domain.Book
 	// Get genre paths and slugs with ancestor expansion
 	genrePaths, genreSlugs := s.expandGenrePaths(ctx, book.GenreIDs)
 
-	return search.BookToSearchDocument(
+	// Get tag slugs for the book
+	tagSlugs, _ := s.store.GetTagSlugsForBook(ctx, book.ID)
+
+	doc := search.BookToSearchDocument(
 		book,
 		authorName,
 		narratorName,
 		seriesName,
 		genrePaths,
 		genreSlugs,
-	), nil
+	)
+	doc.Tags = tagSlugs
+
+	return doc, nil
 }
 
 // expandGenrePaths takes a list of genre IDs and returns:

@@ -24,6 +24,14 @@ type BookSeriesInfo struct {
 	Sequence string `json:"sequence,omitempty"` // Position in this series
 }
 
+// BookTag is the client-facing representation of a book-tag relationship.
+// Includes denormalized tag info for immediate rendering.
+type BookTag struct {
+	ID        string `json:"id"`
+	Slug      string `json:"slug"`
+	BookCount int    `json:"book_count"`
+}
+
 // Book is the client-facing representation of a book.
 //
 // Philosophy: SSE events are UI updates, not database replication.
@@ -49,4 +57,5 @@ type Book struct {
 	SeriesInfo []BookSeriesInfo `json:"series_info,omitempty"` // Resolved series with names and sequences
 	SeriesName string           `json:"series_name,omitempty"` // Primary series name (first in list, for backward compat)
 	Genres     []string         `json:"genres,omitempty"`      // Resolved genre names
+	Tags       []BookTag        `json:"tags,omitempty"`        // Tags applied to this book
 }

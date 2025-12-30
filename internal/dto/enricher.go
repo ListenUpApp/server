@@ -13,6 +13,7 @@ type Store interface {
 	GetContributorsByIDs(ctx context.Context, ids []string) ([]*domain.Contributor, error)
 	GetGenresByIDs(ctx context.Context, ids []string) ([]*domain.Genre, error)
 	GetSeries(ctx context.Context, id string) (*domain.Series, error)
+	GetTagsForBook(ctx context.Context, bookID string) ([]*domain.Tag, error)
 }
 
 // Enricher denormalizes domain models for client consumption.
@@ -132,6 +133,19 @@ func (e *Enricher) EnrichBook(ctx context.Context, book *domain.Book) (*Book, er
 			dto.Genres = make([]string, 0, len(genres))
 			for _, g := range genres {
 				dto.Genres = append(dto.Genres, g.Name)
+			}
+		}
+	}
+
+	// Enrich tags.
+	// Tag lookup failures are non-fatal - just skip tags.
+	if tags, err := e.store.GetTagsForBook(ctx, book.ID); err == nil && len(tags) > 0 {
+		dto.Tags = make([]BookTag, len(tags))
+		for i, tag := range tags {
+			dto.Tags[i] = BookTag{
+				ID:        tag.ID,
+				Slug:      tag.Slug,
+				BookCount: tag.BookCount,
 			}
 		}
 	}
@@ -286,6 +300,19 @@ func (e *Enricher) EnrichBooks(ctx context.Context, books []*domain.Book) ([]*Bo
 			for _, genreID := range book.GenreIDs {
 				if genre, ok := genreMap[genreID]; ok {
 					dto.Genres = append(dto.Genres, genre.Name)
+				}
+			}
+		}
+
+		// Enrich tags.
+		// Tag lookup failures are non-fatal - just skip tags.
+		if tags, err := e.store.GetTagsForBook(ctx, book.ID); err == nil && len(tags) > 0 {
+			dto.Tags = make([]BookTag, len(tags))
+			for j, tag := range tags {
+				dto.Tags[j] = BookTag{
+					ID:        tag.ID,
+					Slug:      tag.Slug,
+					BookCount: tag.BookCount,
 				}
 			}
 		}

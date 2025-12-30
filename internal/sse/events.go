@@ -77,6 +77,11 @@ const (
 	EventLensDeleted     EventType = "lens.deleted"
 	EventLensBookAdded   EventType = "lens.book_added"
 	EventLensBookRemoved EventType = "lens.book_removed"
+
+	// Tag events (broadcast to all)
+	EventTagCreated     EventType = "tag.created"
+	EventBookTagAdded   EventType = "book.tag_added"
+	EventBookTagRemoved EventType = "book.tag_removed"
 )
 
 // Event represents an SSE event to be sent to clients.
@@ -520,6 +525,68 @@ func NewLensBookRemovedEvent(lens *domain.Lens, bookID string) Event {
 			BookID:    bookID,
 			BookCount: len(lens.BookIDs),
 			Timestamp: time.Now(),
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// TagEventData is the data payload for tag CRUD events.
+type TagEventData struct {
+	ID        string    `json:"id"`
+	Slug      string    `json:"slug"`
+	BookCount int       `json:"book_count"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// BookTagEventData is the data payload for book tag add/remove events.
+type BookTagEventData struct {
+	BookID string       `json:"book_id"`
+	Tag    TagEventData `json:"tag"`
+}
+
+// NewTagCreatedEvent creates a tag.created event.
+func NewTagCreatedEvent(tag *domain.Tag) Event {
+	return Event{
+		Type: EventTagCreated,
+		Data: TagEventData{
+			ID:        tag.ID,
+			Slug:      tag.Slug,
+			BookCount: tag.BookCount,
+			CreatedAt: tag.CreatedAt,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewBookTagAddedEvent creates a book.tag_added event.
+func NewBookTagAddedEvent(bookID string, tag *domain.Tag) Event {
+	return Event{
+		Type: EventBookTagAdded,
+		Data: BookTagEventData{
+			BookID: bookID,
+			Tag: TagEventData{
+				ID:        tag.ID,
+				Slug:      tag.Slug,
+				BookCount: tag.BookCount,
+				CreatedAt: tag.CreatedAt,
+			},
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewBookTagRemovedEvent creates a book.tag_removed event.
+func NewBookTagRemovedEvent(bookID string, tag *domain.Tag) Event {
+	return Event{
+		Type: EventBookTagRemoved,
+		Data: BookTagEventData{
+			BookID: bookID,
+			Tag: TagEventData{
+				ID:        tag.ID,
+				Slug:      tag.Slug,
+				BookCount: tag.BookCount,
+				CreatedAt: tag.CreatedAt,
+			},
 		},
 		Timestamp: time.Now(),
 	}

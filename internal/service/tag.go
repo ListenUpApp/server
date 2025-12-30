@@ -2,212 +2,224 @@ package service
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"log/slog"
-	"time"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
-	"github.com/listenupapp/listenup-server/internal/validation"
+	"github.com/listenupapp/listenup-server/internal/util"
 )
 
-// TagService orchestrates tag operations.
+// TagService orchestrates global tag operations.
+// Tags are community-wide — no user ownership, but requires book access to tag.
 type TagService struct {
-	store     *store.Store
-	logger    *slog.Logger
-	validator *validation.Validator
+	store      *store.Store
+	sseManager *sse.Manager
+	search     *SearchService
+	logger     *slog.Logger
 }
 
 // NewTagService creates a new tag service.
-func NewTagService(store *store.Store, logger *slog.Logger) *TagService {
+func NewTagService(store *store.Store, sseManager *sse.Manager, search *SearchService, logger *slog.Logger) *TagService {
 	return &TagService{
-		store:     store,
-		logger:    logger,
-		validator: validation.New(),
+		store:      store,
+		sseManager: sseManager,
+		search:     search,
+		logger:     logger,
 	}
 }
 
-// ListTags returns all tags for a user.
-func (s *TagService) ListTags(ctx context.Context, userID string) ([]*domain.Tag, error) {
-	return s.store.ListTagsForUser(ctx, userID)
+// Tag service errors.
+var (
+	ErrInvalidTagSlug = errors.New("tag slug is empty after normalization")
+	ErrTagNotFound    = errors.New("tag not found")
+	ErrForbidden      = errors.New("access denied: cannot access this book")
+)
+
+// ListTags returns all global tags ordered by popularity.
+func (s *TagService) ListTags(ctx context.Context) ([]*domain.Tag, error) {
+	return s.store.ListTags(ctx)
 }
 
-// GetTag returns a single tag by ID.
-func (s *TagService) GetTag(ctx context.Context, userID, tagID string) (*domain.Tag, error) {
-	t, err := s.store.GetTag(ctx, tagID)
-	if err != nil {
-		return nil, err
+// GetTagBySlug returns a tag by its slug.
+func (s *TagService) GetTagBySlug(ctx context.Context, slug string) (*domain.Tag, error) {
+	t, err := s.store.GetTagBySlug(ctx, slug)
+	if errors.Is(err, store.ErrTagNotFound) {
+		return nil, ErrTagNotFound
 	}
-
-	// Verify ownership.
-	if t.OwnerID != userID {
-		return nil, store.ErrTagNotFound // Don't leak existence.
-	}
-
-	return t, nil
+	return t, err
 }
 
-// CreateTagRequest contains fields for creating a tag.
-type CreateTagRequest struct {
-	Name  string `json:"name" validate:"required,min=1,max=50"`
-	Color string `json:"color"`
-}
-
-// CreateTag creates a new tag.
-func (s *TagService) CreateTag(ctx context.Context, userID string, req CreateTagRequest) (*domain.Tag, error) {
-	if err := s.validator.Validate(req); err != nil {
-		return nil, err
-	}
-
-	// Use GetOrCreate to handle duplicates gracefully.
-	t, err := s.store.GetOrCreateTagByName(ctx, userID, req.Name)
-	if err != nil {
-		return nil, err
-	}
-
-	// Update color if provided and different.
-	if req.Color != "" && t.Color != req.Color {
-		t.Color = req.Color
-		t.Touch()
-		if err := s.store.UpdateTag(ctx, t); err != nil {
-			return nil, err
-		}
-	}
-
-	s.logger.Info("tag created", "id", t.ID, "name", req.Name, "user", userID)
-	return t, nil
-}
-
-// UpdateTagRequest contains fields for updating a tag.
-type UpdateTagRequest struct {
-	Name  *string `json:"name"`
-	Color *string `json:"color"`
-}
-
-// UpdateTag updates a tag.
-func (s *TagService) UpdateTag(ctx context.Context, userID, tagID string, req UpdateTagRequest) (*domain.Tag, error) {
-	t, err := s.store.GetTag(ctx, tagID)
-	if err != nil {
-		return nil, err
-	}
-
-	// Verify ownership.
-	if t.OwnerID != userID {
-		return nil, store.ErrTagNotFound
-	}
-
-	if req.Name != nil {
-		t.Name = *req.Name
-		// Optionally update slug too - for now keep it stable.
-	}
-	if req.Color != nil {
-		t.Color = *req.Color
-	}
-
-	t.Touch()
-
-	if err := s.store.UpdateTag(ctx, t); err != nil {
-		return nil, err
-	}
-
-	return t, nil
-}
-
-// DeleteTag deletes a tag.
-func (s *TagService) DeleteTag(ctx context.Context, userID, tagID string) error {
-	t, err := s.store.GetTag(ctx, tagID)
-	if err != nil {
-		return err
-	}
-
-	// Verify ownership.
-	if t.OwnerID != userID {
-		return store.ErrTagNotFound // Don't leak existence.
-	}
-
-	return s.store.DeleteTag(ctx, tagID)
+// GetTagsForBook returns all tags on a book.
+func (s *TagService) GetTagsForBook(ctx context.Context, bookID string) ([]*domain.Tag, error) {
+	return s.store.GetTagsForBook(ctx, bookID)
 }
 
 // AddTagToBook adds a tag to a book.
-func (s *TagService) AddTagToBook(ctx context.Context, userID, bookID, tagID string) error {
-	// Verify tag ownership.
-	t, err := s.store.GetTag(ctx, tagID)
+// Creates the tag if it doesn't exist.
+// Requires user to have read access to the book.
+func (s *TagService) AddTagToBook(ctx context.Context, userID, bookID, rawInput string) (*domain.Tag, bool, error) {
+	// 1. Verify user can access this book.
+	canAccess, err := s.store.CanUserAccessBook(ctx, userID, bookID)
 	if err != nil {
-		return err
+		return nil, false, err
 	}
-	if t.OwnerID != userID {
-		return store.ErrTagNotFound
-	}
-
-	bt := &domain.BookTag{
-		BookID:    bookID,
-		TagID:     tagID,
-		UserID:    userID,
-		CreatedAt: time.Now().UnixMilli(),
+	if !canAccess {
+		return nil, false, ErrForbidden
 	}
 
-	return s.store.AddBookTag(ctx, bt)
+	// 2. Normalize input to slug.
+	slug := util.NormalizeTagSlug(rawInput)
+	if slug == "" {
+		return nil, false, ErrInvalidTagSlug
+	}
+
+	// 3. Find or create tag.
+	tag, created, err := s.store.FindOrCreateTagBySlug(ctx, slug)
+	if err != nil {
+		return nil, false, err
+	}
+
+	// 4. Add relationship (idempotent).
+	if err := s.store.AddTagToBook(ctx, bookID, tag.ID); err != nil {
+		return nil, false, err
+	}
+
+	// 5. Re-fetch tag to get updated book count.
+	tag, err = s.store.GetTagByID(ctx, tag.ID)
+	if err != nil {
+		return nil, false, err
+	}
+
+	// 6. Trigger search re-index (async, best effort).
+	s.reindexBookTags(ctx, bookID)
+
+	// 7. Emit SSE events.
+	if created {
+		s.sseManager.Emit(sse.NewTagCreatedEvent(tag))
+	}
+	s.sseManager.Emit(sse.NewBookTagAddedEvent(bookID, tag))
+
+	s.logger.Info("tag added to book",
+		"tag_slug", tag.Slug,
+		"book_id", bookID,
+		"user_id", userID,
+		"created", created,
+	)
+
+	return tag, created, nil
 }
 
 // RemoveTagFromBook removes a tag from a book.
-func (s *TagService) RemoveTagFromBook(ctx context.Context, userID, bookID, tagID string) error {
-	// Verify tag ownership.
-	t, err := s.store.GetTag(ctx, tagID)
+// Requires user to have read access to the book.
+func (s *TagService) RemoveTagFromBook(ctx context.Context, userID, bookID, slug string) error {
+	// 1. Verify user can access this book.
+	canAccess, err := s.store.CanUserAccessBook(ctx, userID, bookID)
 	if err != nil {
 		return err
 	}
-	if t.OwnerID != userID {
-		return store.ErrTagNotFound
+	if !canAccess {
+		return ErrForbidden
 	}
 
-	return s.store.RemoveBookTag(ctx, bookID, userID, tagID)
+	// 2. Find tag by slug (must exist).
+	tag, err := s.store.GetTagBySlug(ctx, slug)
+	if errors.Is(err, store.ErrTagNotFound) {
+		return ErrTagNotFound
+	}
+	if err != nil {
+		return err
+	}
+
+	// 3. Remove relationship (idempotent).
+	if err := s.store.RemoveTagFromBook(ctx, bookID, tag.ID); err != nil {
+		return err
+	}
+
+	// 4. Re-fetch tag to get updated book count.
+	tag, err = s.store.GetTagByID(ctx, tag.ID)
+	if err != nil {
+		// Tag might have been deleted in rare race, but we already removed the relationship.
+		s.logger.Warn("could not fetch tag after removal", "tag_id", tag.ID, "error", err)
+	}
+
+	// 5. Trigger search re-index.
+	s.reindexBookTags(ctx, bookID)
+
+	// 6. Emit SSE event (no EventTagDeleted — orphans persist).
+	if tag != nil {
+		s.sseManager.Emit(sse.NewBookTagRemovedEvent(bookID, tag))
+	}
+
+	s.logger.Info("tag removed from book",
+		"tag_slug", slug,
+		"book_id", bookID,
+		"user_id", userID,
+	)
+
+	return nil
 }
 
-// GetTagsForBook returns tags for a book (user-specific).
-func (s *TagService) GetTagsForBook(ctx context.Context, userID, bookID string) ([]*domain.Tag, error) {
-	tagIDs, err := s.store.GetTagIDsForBook(ctx, bookID, userID)
+// GetBooksForTag returns books with a specific tag, filtered by user's access.
+func (s *TagService) GetBooksForTag(ctx context.Context, userID, slug string) ([]*domain.Book, error) {
+	// 1. Find tag by slug.
+	tag, err := s.store.GetTagBySlug(ctx, slug)
+	if errors.Is(err, store.ErrTagNotFound) {
+		return nil, ErrTagNotFound
+	}
 	if err != nil {
 		return nil, err
 	}
 
-	tags := make([]*domain.Tag, 0, len(tagIDs))
-	for _, tagID := range tagIDs {
-		t, err := s.store.GetTag(ctx, tagID)
+	// 2. Get all book IDs with this tag.
+	bookIDs, err := s.store.GetBookIDsForTag(ctx, tag.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Filter by user access and fetch books.
+	var books []*domain.Book
+	for _, bookID := range bookIDs {
+		canAccess, err := s.store.CanUserAccessBook(ctx, userID, bookID)
 		if err != nil {
 			continue
 		}
-		tags = append(tags, t)
-	}
+		if !canAccess {
+			continue
+		}
 
-	return tags, nil
-}
-
-// GetBooksForTag returns books with a specific tag.
-func (s *TagService) GetBooksForTag(ctx context.Context, userID, tagID string) ([]string, error) {
-	// Verify ownership.
-	t, err := s.store.GetTag(ctx, tagID)
-	if err != nil {
-		return nil, err
-	}
-	if t.OwnerID != userID {
-		return nil, fmt.Errorf("tag not found")
-	}
-
-	return s.store.GetBookIDsForTag(ctx, tagID)
-}
-
-// SetBookTags sets all tags for a book by a user.
-func (s *TagService) SetBookTags(ctx context.Context, userID, bookID string, tagIDs []string) error {
-	// Verify all tags belong to user.
-	for _, tagID := range tagIDs {
-		t, err := s.store.GetTag(ctx, tagID)
+		book, err := s.store.GetBook(ctx, bookID, userID)
 		if err != nil {
-			return fmt.Errorf("tag %s not found: %w", tagID, err)
+			continue
 		}
-		if t.OwnerID != userID {
-			return fmt.Errorf("tag %s not found", tagID)
-		}
+		books = append(books, book)
 	}
 
-	return s.store.SetBookTags(ctx, bookID, userID, tagIDs)
+	return books, nil
+}
+
+// reindexBookTags triggers search re-indexing for a book's tags.
+func (s *TagService) reindexBookTags(ctx context.Context, bookID string) {
+	if s.search == nil {
+		return
+	}
+
+	// Get tag slugs for the book.
+	slugs, err := s.store.GetTagSlugsForBook(ctx, bookID)
+	if err != nil {
+		s.logger.Warn("failed to get tag slugs for reindex", "book_id", bookID, "error", err)
+		return
+	}
+
+	// Reindex the book with updated tags.
+	if err := s.search.UpdateBookTags(ctx, bookID, slugs); err != nil {
+		s.logger.Warn("failed to reindex book tags", "book_id", bookID, "error", err)
+	}
+}
+
+// CleanupTagsForDeletedBook removes tag associations for a deleted book.
+// Called from book deletion flow.
+func (s *TagService) CleanupTagsForDeletedBook(ctx context.Context, bookID string) error {
+	return s.store.CleanupTagsForDeletedBook(ctx, bookID)
 }

@@ -84,36 +84,6 @@ func (s *Server) registerBookRoutes() {
 	}, s.handleSetBookGenres)
 
 	huma.Register(s.api, huma.Operation{
-		OperationID: "getBookTags",
-		Method:      http.MethodGet,
-		Path:        "/api/v1/books/{id}/tags",
-		Summary:     "Get book tags",
-		Description: "Returns tags for a book",
-		Tags:        []string{"Books"},
-		Security:    []map[string][]string{{"bearer": {}}},
-	}, s.handleGetBookTags)
-
-	huma.Register(s.api, huma.Operation{
-		OperationID: "addBookTag",
-		Method:      http.MethodPost,
-		Path:        "/api/v1/books/{id}/tags",
-		Summary:     "Add book tag",
-		Description: "Adds a tag to a book",
-		Tags:        []string{"Books"},
-		Security:    []map[string][]string{{"bearer": {}}},
-	}, s.handleAddBookTag)
-
-	huma.Register(s.api, huma.Operation{
-		OperationID: "removeBookTag",
-		Method:      http.MethodDelete,
-		Path:        "/api/v1/books/{id}/tags/{tagId}",
-		Summary:     "Remove book tag",
-		Description: "Removes a tag from a book",
-		Tags:        []string{"Books"},
-		Security:    []map[string][]string{{"bearer": {}}},
-	}, s.handleRemoveBookTag)
-
-	huma.Register(s.api, huma.Operation{
 		OperationID: "applyBookMatch",
 		Method:      http.MethodPost,
 		Path:        "/api/v1/books/{id}/match",
@@ -284,41 +254,6 @@ type SetGenresInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Book ID"`
 	Body          SetGenresRequest
-}
-
-// TagIDsResponse contains tag IDs.
-type TagIDsResponse struct {
-	TagIDs []string `json:"tag_ids" doc:"Tag IDs"`
-}
-
-// TagsOutput wraps the tags response for Huma.
-type TagsOutput struct {
-	Body TagIDsResponse
-}
-
-// GetBookTagsInput contains parameters for getting book tags.
-type GetBookTagsInput struct {
-	Authorization string `header:"Authorization"`
-	ID            string `path:"id" doc:"Book ID"`
-}
-
-// AddTagRequest is the request body for adding a tag.
-type AddTagRequest struct {
-	TagID string `json:"tag_id" validate:"required" doc:"Tag ID"`
-}
-
-// AddTagInput wraps the add tag request for Huma.
-type AddTagInput struct {
-	Authorization string `header:"Authorization"`
-	ID            string `path:"id" doc:"Book ID"`
-	Body          AddTagRequest
-}
-
-// RemoveTagInput contains parameters for removing a tag.
-type RemoveTagInput struct {
-	Authorization string `header:"Authorization"`
-	ID            string `path:"id" doc:"Book ID"`
-	TagID         string `path:"tagId" doc:"Tag ID"`
 }
 
 // ApplyMatchRequest is the request body for applying Audible metadata.
@@ -593,51 +528,6 @@ func (s *Server) handleSetBookGenres(ctx context.Context, input *SetGenresInput)
 	}
 
 	return &GenresOutput{Body: GenreIDsResponse{GenreIDs: input.Body.GenreIDs}}, nil
-}
-
-func (s *Server) handleGetBookTags(ctx context.Context, input *GetBookTagsInput) (*TagsOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
-	if err != nil {
-		return nil, err
-	}
-
-	tags, err := s.services.Tag.GetTagsForBook(ctx, userID, input.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	tagIDs := make([]string, len(tags))
-	for i, t := range tags {
-		tagIDs[i] = t.ID
-	}
-
-	return &TagsOutput{Body: TagIDsResponse{TagIDs: tagIDs}}, nil
-}
-
-func (s *Server) handleAddBookTag(ctx context.Context, input *AddTagInput) (*MessageOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.services.Tag.AddTagToBook(ctx, userID, input.ID, input.Body.TagID); err != nil {
-		return nil, err
-	}
-
-	return &MessageOutput{Body: MessageResponse{Message: "Tag added"}}, nil
-}
-
-func (s *Server) handleRemoveBookTag(ctx context.Context, input *RemoveTagInput) (*MessageOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.services.Tag.RemoveTagFromBook(ctx, userID, input.ID, input.TagID); err != nil {
-		return nil, err
-	}
-
-	return &MessageOutput{Body: MessageResponse{Message: "Tag removed"}}, nil
 }
 
 // === Helpers ===

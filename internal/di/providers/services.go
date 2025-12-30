@@ -130,9 +130,11 @@ func ProvideGenreService(i do.Injector) (*service.GenreService, error) {
 // ProvideTagService provides the tag service.
 func ProvideTagService(i do.Injector) (*service.TagService, error) {
 	storeHandle := do.MustInvoke[*StoreHandle](i)
+	sseHandle := do.MustInvoke[*SSEManagerHandle](i)
+	searchService := do.MustInvoke[*service.SearchService](i)
 	log := do.MustInvoke[*logger.Logger](i)
 
-	return service.NewTagService(storeHandle.Store, log.Logger), nil
+	return service.NewTagService(storeHandle.Store, sseHandle.Manager, searchService, log.Logger), nil
 }
 
 // ProvideInviteService provides the invite service.

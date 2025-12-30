@@ -29,7 +29,7 @@ type Options struct {
 
 // mappingVersion is incremented whenever the index mapping changes.
 // This triggers an automatic rebuild on startup when the version doesn't match.
-const mappingVersion = "3"
+const mappingVersion = "4"
 
 // NewSearchIndex creates or opens a search index.
 // If an existing index is found, it opens it. Otherwise, creates a new one.
