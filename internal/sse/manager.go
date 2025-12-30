@@ -113,7 +113,9 @@ func isAdminOnlyEvent(eventType EventType) bool {
 		EventUserPending,
 		EventUserApproved,
 		EventScanStarted,
-		EventScanComplete:
+		EventScanComplete,
+		EventInboxBookAdded,
+		EventInboxBookReleased:
 		return true
 	default:
 		return false

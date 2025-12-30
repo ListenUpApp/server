@@ -7,7 +7,9 @@ import (
 	"sync"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/dto"
 	"github.com/listenupapp/listenup-server/internal/scanner"
+	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/watcher"
 )
 
@@ -26,6 +28,12 @@ type BookStore interface {
 	GetGenreAliasByRaw(ctx context.Context, raw string) (*domain.GenreAlias, error)
 	TrackUnmappedGenre(ctx context.Context, raw string, bookID string) error
 	AddBookGenre(ctx context.Context, bookID, genreID string) error
+
+	// Inbox workflow methods.
+	GetServerSettings(ctx context.Context) (*domain.ServerSettings, error)
+	GetDefaultLibrary(ctx context.Context) (*domain.Library, error)
+	GetInboxForLibrary(ctx context.Context, libraryID string) (*domain.Collection, error)
+	AdminAddBookToCollection(ctx context.Context, bookID, collectionID string) error
 }
 
 // EventProcessor processes file system events and orchestrates incremental scanning.
@@ -39,9 +47,11 @@ type BookStore interface {
 //   - All file types trigger a rescan of the affected folder (simple, idempotent).
 //   - Non-blocking (TryLock prevents queueing).
 type EventProcessor struct {
-	scanner *scanner.Scanner
-	store   BookStore
-	logger  *slog.Logger
+	scanner      *scanner.Scanner
+	store        BookStore
+	enricher     *dto.Enricher
+	eventEmitter *sse.Manager
+	logger       *slog.Logger
 
 	// folderLocks provides per-folder mutexes to prevent concurrent scans.
 	// of the same folder. Type-safe concurrent map using generics.
@@ -49,12 +59,14 @@ type EventProcessor struct {
 }
 
 // NewEventProcessor creates a new EventProcessor instance.
-func NewEventProcessor(scanner *scanner.Scanner, store BookStore, logger *slog.Logger) *EventProcessor {
+func NewEventProcessor(scanner *scanner.Scanner, store BookStore, enricher *dto.Enricher, eventEmitter *sse.Manager, logger *slog.Logger) *EventProcessor {
 	return &EventProcessor{
-		scanner:     scanner,
-		store:       store,
-		logger:      logger,
-		folderLocks: NewSyncMap[string, *sync.Mutex](),
+		scanner:      scanner,
+		store:        store,
+		enricher:     enricher,
+		eventEmitter: eventEmitter,
+		logger:       logger,
+		folderLocks:  NewSyncMap[string, *sync.Mutex](),
 	}
 }
 
@@ -237,6 +249,9 @@ func (ep *EventProcessor) handleAudioFile(ctx context.Context, bookFolder, fileP
 				"error", broadcastErr,
 			)
 		}
+
+		// Add to inbox if workflow is enabled
+		ep.addBookToInboxIfEnabled(ctx, book)
 	} else {
 		// Book exists - update it with new scan data
 		if updateErr := scanner.UpdateBookFromScan(ctx, existingBook, item, ep.store); updateErr != nil {
@@ -479,4 +494,54 @@ func (ep *EventProcessor) getFolderLock(folderPath string) *sync.Mutex {
 	actual, _ := ep.folderLocks.LoadOrStore(folderPath, newLock)
 
 	return actual
+}
+
+// addBookToInboxIfEnabled adds a newly created book to the inbox if the workflow is enabled.
+// This allows admins to review new books before they become visible to users.
+func (ep *EventProcessor) addBookToInboxIfEnabled(ctx context.Context, book *domain.Book) {
+	// Check if inbox workflow is enabled
+	settings, err := ep.store.GetServerSettings(ctx)
+	if err != nil || !settings.InboxEnabled {
+		return
+	}
+
+	// Get the inbox collection for the default library
+	library, err := ep.store.GetDefaultLibrary(ctx)
+	if err != nil || library == nil {
+		ep.logger.Warn("failed to get default library for inbox",
+			"error", err,
+		)
+		return
+	}
+
+	inboxCollection, err := ep.store.GetInboxForLibrary(ctx, library.ID)
+	if err != nil || inboxCollection == nil {
+		ep.logger.Warn("failed to get inbox collection",
+			"library_id", library.ID,
+			"error", err,
+		)
+		return
+	}
+
+	// Add book to inbox collection
+	if err := ep.store.AdminAddBookToCollection(ctx, book.ID, inboxCollection.ID); err != nil {
+		ep.logger.Warn("failed to add book to inbox",
+			"book_id", book.ID,
+			"error", err,
+		)
+		return
+	}
+
+	ep.logger.Info("added book to inbox",
+		"book_id", book.ID,
+		"title", book.Title,
+	)
+
+	// Emit SSE event for admin clients
+	if ep.enricher != nil && ep.eventEmitter != nil {
+		enrichedBook, err := ep.enricher.EnrichBook(ctx, book)
+		if err == nil {
+			ep.eventEmitter.Emit(sse.NewInboxBookAddedEvent(enrichedBook))
+		}
+	}
 }

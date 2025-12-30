@@ -16,8 +16,10 @@ import (
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/go-chi/chi/v5"
 	"github.com/listenupapp/listenup-server/internal/auth"
+	"github.com/listenupapp/listenup-server/internal/dto"
 	"github.com/listenupapp/listenup-server/internal/config"
 	"github.com/listenupapp/listenup-server/internal/service"
+	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
 	"github.com/stretchr/testify/require"
 )
@@ -72,16 +74,26 @@ func setupTestServer(t *testing.T) *testServer {
 	// Create logger (discard output in tests)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
+	// Create SSE manager and enricher for services that emit events
+	sseManager := sse.NewManager(logger)
+	enricher := dto.NewEnricher(st)
+
 	// Create services
 	sessionService := service.NewSessionService(st, tokenService, logger)
 	instanceService := service.NewInstanceService(st, logger, cfg)
 	authService := service.NewAuthService(st, tokenService, sessionService, instanceService, logger)
 	syncService := service.NewSyncService(st, logger)
+	lensService := service.NewLensService(st, sseManager, logger)
+	inboxService := service.NewInboxService(st, enricher, sseManager, logger)
+	settingsService := service.NewSettingsService(st, inboxService, logger)
 
 	services := &Services{
 		Instance: instanceService,
 		Auth:     authService,
 		Sync:     syncService,
+		Lens:     lensService,
+		Settings: settingsService,
+		Inbox:    inboxService,
 	}
 
 	// Create chi router

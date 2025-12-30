@@ -36,6 +36,10 @@ type Book struct {
 	TotalDuration int64             `json:"total_duration"`
 	TotalSize     int64             `json:"total_size"`
 	Abridged      bool              `json:"abridged,omitempty"`
+
+	// Inbox staging: collection IDs to assign when book is released from Inbox.
+	// Empty when book is not in Inbox or has no staged assignments.
+	StagedCollectionIDs []string `json:"staged_collection_ids,omitempty"`
 }
 
 // AudioFileInfo represents an audio file within a book.

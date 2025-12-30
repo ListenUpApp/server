@@ -5,6 +5,7 @@ import (
 
 	"github.com/samber/do/v2"
 
+	"github.com/listenupapp/listenup-server/internal/dto"
 	"github.com/listenupapp/listenup-server/internal/logger"
 	"github.com/listenupapp/listenup-server/internal/media/images"
 	"github.com/listenupapp/listenup-server/internal/processor"
@@ -25,9 +26,11 @@ func ProvideScanner(i do.Injector) (*scanner.Scanner, error) {
 func ProvideEventProcessor(i do.Injector) (*processor.EventProcessor, error) {
 	fileScanner := do.MustInvoke[*scanner.Scanner](i)
 	storeHandle := do.MustInvoke[*StoreHandle](i)
+	sseHandle := do.MustInvoke[*SSEManagerHandle](i)
 	log := do.MustInvoke[*logger.Logger](i)
 
-	return processor.NewEventProcessor(fileScanner, storeHandle.Store, log.Logger), nil
+	enricher := dto.NewEnricher(storeHandle.Store)
+	return processor.NewEventProcessor(fileScanner, storeHandle.Store, enricher, sseHandle.Manager, log.Logger), nil
 }
 
 // RunInitialScan starts an initial library scan in a goroutine.

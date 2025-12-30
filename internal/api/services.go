@@ -25,6 +25,8 @@ type Services struct {
 	Chapter    *service.ChapterService  // Chapter name alignment
 	Cover      *service.CoverService    // Multi-source cover search and download
 	Lens       *service.LensService     // Personal curation lenses
+	Inbox      *service.InboxService    // Inbox staging workflow
+	Settings   *service.SettingsService // Server-wide settings
 }
 
 // StorageServices groups file storage handlers used by the API server.

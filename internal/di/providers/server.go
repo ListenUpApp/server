@@ -66,6 +66,8 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 	chapterService := do.MustInvoke[*service.ChapterService](i)
 	coverService := do.MustInvoke[*service.CoverService](i)
 	lensService := do.MustInvoke[*service.LensService](i)
+	inboxService := do.MustInvoke[*service.InboxService](i)
+	settingsService := do.MustInvoke[*service.SettingsService](i)
 
 	tokenVerifier := &sseTokenVerifier{authService: authService}
 	sseHandler := sse.NewHandler(sseHandle.Manager, log.Logger, tokenVerifier)
@@ -88,6 +90,8 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 		Chapter:    chapterService,
 		Cover:      coverService,
 		Lens:       lensService,
+		Inbox:      inboxService,
+		Settings:   settingsService,
 	}
 
 	storage := &api.StorageServices{

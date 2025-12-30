@@ -8,6 +8,7 @@ import (
 
 	"github.com/listenupapp/listenup-server/internal/auth"
 	"github.com/listenupapp/listenup-server/internal/config"
+	"github.com/listenupapp/listenup-server/internal/dto"
 	"github.com/listenupapp/listenup-server/internal/logger"
 	"github.com/listenupapp/listenup-server/internal/scanner"
 	"github.com/listenupapp/listenup-server/internal/service"
@@ -167,4 +168,23 @@ func ProvideLensService(i do.Injector) (*service.LensService, error) {
 	log := do.MustInvoke[*logger.Logger](i)
 
 	return service.NewLensService(storeHandle.Store, sseHandle.Manager, log.Logger), nil
+}
+
+// ProvideInboxService provides the inbox staging workflow service.
+func ProvideInboxService(i do.Injector) (*service.InboxService, error) {
+	storeHandle := do.MustInvoke[*StoreHandle](i)
+	sseHandle := do.MustInvoke[*SSEManagerHandle](i)
+	log := do.MustInvoke[*logger.Logger](i)
+
+	enricher := dto.NewEnricher(storeHandle.Store)
+	return service.NewInboxService(storeHandle.Store, enricher, sseHandle.Manager, log.Logger), nil
+}
+
+// ProvideSettingsService provides the server settings service.
+func ProvideSettingsService(i do.Injector) (*service.SettingsService, error) {
+	storeHandle := do.MustInvoke[*StoreHandle](i)
+	inboxService := do.MustInvoke[*service.InboxService](i)
+	log := do.MustInvoke[*logger.Logger](i)
+
+	return service.NewSettingsService(storeHandle.Store, inboxService, log.Logger), nil
 }

@@ -149,6 +149,23 @@ func (m *mockBookStore) AddBookGenre(_ context.Context, _ string, _ string) erro
 	return nil
 }
 
+// Inbox workflow methods - return nil/error to disable inbox in tests.
+func (m *mockBookStore) GetServerSettings(_ context.Context) (*domain.ServerSettings, error) {
+	return nil, store.ErrNotFound // Inbox disabled in tests
+}
+
+func (m *mockBookStore) GetDefaultLibrary(_ context.Context) (*domain.Library, error) {
+	return nil, store.ErrNotFound
+}
+
+func (m *mockBookStore) GetInboxForLibrary(_ context.Context, _ string) (*domain.Collection, error) {
+	return nil, store.ErrNotFound
+}
+
+func (m *mockBookStore) AdminAddBookToCollection(_ context.Context, _, _ string) error {
+	return nil
+}
+
 // TestEventProcessor_ProcessEvent_AudioFile tests processing an audio file event.
 func TestEventProcessor_ProcessEvent_AudioFile(t *testing.T) {
 	// Create temp directory for test.
@@ -170,7 +187,7 @@ func TestEventProcessor_ProcessEvent_AudioFile(t *testing.T) {
 	}))
 	mockStore := newMockBookStore()
 	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
-	processor := NewEventProcessor(scnr, mockStore, logger)
+	processor := NewEventProcessor(scnr, mockStore, nil, nil, logger)
 
 	// Create event.
 	event := watcher.Event{
@@ -213,7 +230,7 @@ func TestEventProcessor_ProcessEvent_CoverFile(t *testing.T) {
 	}))
 	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 	mockStore := newMockBookStore()
-	processor := NewEventProcessor(scnr, mockStore, logger)
+	processor := NewEventProcessor(scnr, mockStore, nil, nil, logger)
 
 	// Create event.
 	event := watcher.Event{
@@ -250,7 +267,7 @@ func TestEventProcessor_ProcessEvent_MetadataFile(t *testing.T) {
 	}))
 	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 	mockStore := newMockBookStore()
-	processor := NewEventProcessor(scnr, mockStore, logger)
+	processor := NewEventProcessor(scnr, mockStore, nil, nil, logger)
 
 	// Create event.
 	event := watcher.Event{
@@ -287,7 +304,7 @@ func TestEventProcessor_ProcessEvent_IgnoredFile(t *testing.T) {
 	}))
 	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 	mockStore := newMockBookStore()
-	processor := NewEventProcessor(scnr, mockStore, logger)
+	processor := NewEventProcessor(scnr, mockStore, nil, nil, logger)
 
 	// Create event.
 	event := watcher.Event{
@@ -321,7 +338,7 @@ func TestEventProcessor_ProcessEvent_RemovedFile(t *testing.T) {
 	}))
 	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 	mockStore := newMockBookStore()
-	processor := NewEventProcessor(scnr, mockStore, logger)
+	processor := NewEventProcessor(scnr, mockStore, nil, nil, logger)
 
 	// Create event for a removed file (file doesn't need to exist).
 	removedFile := filepath.Join(bookFolder, "chapter01.mp3")
@@ -354,7 +371,7 @@ func TestEventProcessor_ProcessEvent_RemovedFile_AllFilesGone(t *testing.T) {
 	}))
 	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 	mockStore := newMockBookStore()
-	processor := NewEventProcessor(scnr, mockStore, logger)
+	processor := NewEventProcessor(scnr, mockStore, nil, nil, logger)
 
 	// Simulate removal of last audio file.
 	removedFile := filepath.Join(bookFolder, "chapter01.mp3")
@@ -399,7 +416,7 @@ func TestEventProcessor_ConcurrentEvents(t *testing.T) {
 	}))
 	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 	mockStore := newMockBookStore()
-	processor := NewEventProcessor(scnr, mockStore, logger)
+	processor := NewEventProcessor(scnr, mockStore, nil, nil, logger)
 
 	// Track how many events were actually processed (not skipped due to lock).
 	var processedCount atomic.Int32
@@ -468,7 +485,7 @@ func TestEventProcessor_MultiFileBookEvolution(t *testing.T) {
 	}))
 	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 	mockStore := newMockBookStore()
-	processor := NewEventProcessor(scnr, mockStore, logger)
+	processor := NewEventProcessor(scnr, mockStore, nil, nil, logger)
 
 	ctx := context.Background()
 
@@ -570,7 +587,7 @@ func TestEventProcessor_DiscFolderHandling(t *testing.T) {
 	}))
 	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 	mockStore := newMockBookStore()
-	processor := NewEventProcessor(scnr, mockStore, logger)
+	processor := NewEventProcessor(scnr, mockStore, nil, nil, logger)
 
 	ctx := context.Background()
 
@@ -618,7 +635,7 @@ func TestEventProcessor_GetFolderLock(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError,
 	}))
-	processor := NewEventProcessor(nil, nil, logger)
+	processor := NewEventProcessor(nil, nil, nil, nil, logger)
 
 	folderPath := "/library/Author/Book"
 
@@ -657,7 +674,7 @@ func TestEventProcessor_GetFolderLock_Concurrent(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError,
 	}))
-	processor := NewEventProcessor(nil, nil, logger)
+	processor := NewEventProcessor(nil, nil, nil, nil, logger)
 
 	folderPath := "/library/Author/Book"
 	numGoroutines := 100
@@ -706,7 +723,7 @@ func TestEventProcessor_ModifiedEvent(t *testing.T) {
 	}))
 	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 	mockStore := newMockBookStore()
-	processor := NewEventProcessor(scnr, mockStore, logger)
+	processor := NewEventProcessor(scnr, mockStore, nil, nil, logger)
 
 	// Create modified event.
 	event := watcher.Event{

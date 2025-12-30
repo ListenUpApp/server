@@ -746,6 +746,9 @@ func (s *Store) ListAllCollectionsByLibrary(ctx context.Context, libraryID strin
 
 // GetInboxForLibrary returns the Inbox collection for a library.
 // The Inbox is the system collection where IsInbox = true.
+// If no inbox exists (e.g., on databases created before the inbox feature),
+// one is created automatically. This makes the feature self-healing and
+// backward compatible.
 func (s *Store) GetInboxForLibrary(ctx context.Context, libraryID string) (*domain.Collection, error) {
 	collections, err := s.ListAllCollectionsByLibrary(ctx, libraryID)
 	if err != nil {
@@ -759,7 +762,40 @@ func (s *Store) GetInboxForLibrary(ctx context.Context, libraryID string) (*doma
 		}
 	}
 
-	return nil, ErrCollectionNotFound
+	// No inbox exists - create one (backward compatibility for existing databases)
+	library, err := s.GetLibrary(ctx, libraryID)
+	if err != nil {
+		return nil, fmt.Errorf("get library for inbox creation: %w", err)
+	}
+
+	inboxID, err := id.Generate("coll")
+	if err != nil {
+		return nil, fmt.Errorf("generate inbox ID: %w", err)
+	}
+
+	inbox := &domain.Collection{
+		ID:        inboxID,
+		LibraryID: libraryID,
+		OwnerID:   library.OwnerID,
+		Name:      "Inbox",
+		IsInbox:   true,
+		BookIDs:   []string{},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	if err := s.CreateCollection(ctx, inbox); err != nil {
+		return nil, fmt.Errorf("create inbox collection: %w", err)
+	}
+
+	if s.logger != nil {
+		s.logger.Info("created inbox collection for existing library",
+			"library_id", libraryID,
+			"inbox_id", inboxID,
+		)
+	}
+
+	return inbox, nil
 }
 
 // AddBookToCollection adds a book to a collection.

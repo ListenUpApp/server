@@ -82,6 +82,10 @@ const (
 	EventTagCreated     EventType = "tag.created"
 	EventBookTagAdded   EventType = "book.tag_added"
 	EventBookTagRemoved EventType = "book.tag_removed"
+
+	// Inbox events (admin-only)
+	EventInboxBookAdded    EventType = "inbox.book_added"
+	EventInboxBookReleased EventType = "inbox.book_released"
 )
 
 // Event represents an SSE event to be sent to clients.
@@ -588,6 +592,34 @@ func NewBookTagRemovedEvent(bookID string, tag *domain.Tag) Event {
 				CreatedAt: tag.CreatedAt,
 			},
 		},
+		Timestamp: time.Now(),
+	}
+}
+
+// InboxBookAddedEventData is the data payload for inbox book added events.
+type InboxBookAddedEventData struct {
+	Book *dto.Book `json:"book"`
+}
+
+// InboxBookReleasedEventData is the data payload for inbox book released events.
+type InboxBookReleasedEventData struct {
+	BookID string `json:"book_id"`
+}
+
+// NewInboxBookAddedEvent creates an inbox.book_added event.
+func NewInboxBookAddedEvent(book *dto.Book) Event {
+	return Event{
+		Type:      EventInboxBookAdded,
+		Data:      InboxBookAddedEventData{Book: book},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewInboxBookReleasedEvent creates an inbox.book_released event.
+func NewInboxBookReleasedEvent(bookID string) Event {
+	return Event{
+		Type:      EventInboxBookReleased,
+		Data:      InboxBookReleasedEventData{BookID: bookID},
 		Timestamp: time.Now(),
 	}
 }

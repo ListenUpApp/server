@@ -164,9 +164,28 @@ func (s *Store) GetBooksForUser(ctx context.Context, userID string) ([]*domain.B
 		return nil, fmt.Errorf("scan for uncollected books: %w", err)
 	}
 
-	// Load only the accessible books
+	// Get inbox collection to filter out staging books
+	// Books in Inbox are hidden from all users until released
+	library, _ := s.GetDefaultLibrary(ctx)
+	var inboxBookIDs map[string]bool
+	if library != nil {
+		inbox, err := s.GetInboxForLibrary(ctx, library.ID)
+		if err == nil && inbox != nil {
+			inboxBookIDs = make(map[string]bool, len(inbox.BookIDs))
+			for _, bookID := range inbox.BookIDs {
+				inboxBookIDs[bookID] = true
+			}
+		}
+	}
+
+	// Load only the accessible books (excluding inbox books)
 	accessibleBooks := make([]*domain.Book, 0, len(accessibleBookIDs))
 	for bookID := range accessibleBookIDs {
+		// Skip books in inbox (staging area)
+		if inboxBookIDs != nil && inboxBookIDs[bookID] {
+			continue
+		}
+
 		book, err := s.getBookInternal(ctx, bookID)
 		if err != nil {
 			if s.logger != nil {
@@ -306,6 +325,20 @@ func (s *Store) GetBooksForUserUpdatedAfter(ctx context.Context, userID string, 
 		return nil, err
 	}
 
+	// Get inbox collection to filter out staging books
+	// Books in Inbox are hidden from all users until released
+	library, _ := s.GetDefaultLibrary(ctx)
+	var inboxBookIDs map[string]bool
+	if library != nil {
+		inbox, err := s.GetInboxForLibrary(ctx, library.ID)
+		if err == nil && inbox != nil {
+			inboxBookIDs = make(map[string]bool, len(inbox.BookIDs))
+			for _, bookID := range inbox.BookIDs {
+				inboxBookIDs[bookID] = true
+			}
+		}
+	}
+
 	var accessibleBooks []*domain.Book
 
 	// Iterate over the global updated_at index starting from timestamp
@@ -333,6 +366,11 @@ func (s *Store) GetBooksForUserUpdatedAfter(ctx context.Context, userID string, 
 
 			// We only care about books (though currently this index only has books)
 			if entityType != "book" {
+				continue
+			}
+
+			// Skip books in inbox (staging area)
+			if inboxBookIDs != nil && inboxBookIDs[bookID] {
 				continue
 			}
 

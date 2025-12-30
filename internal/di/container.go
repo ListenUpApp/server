@@ -64,6 +64,8 @@ func NewContainer() *do.RootScope {
 	do.Provide(injector, providers.ProvideTagService)
 	do.Provide(injector, providers.ProvideInviteService)
 	do.Provide(injector, providers.ProvideLensService)
+	do.Provide(injector, providers.ProvideInboxService)
+	do.Provide(injector, providers.ProvideSettingsService)
 	do.Provide(injector, providers.ProvideAdminService)
 
 	// Workers
