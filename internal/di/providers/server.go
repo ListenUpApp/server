@@ -9,6 +9,7 @@ import (
 
 	"github.com/listenupapp/listenup-server/internal/api"
 	"github.com/listenupapp/listenup-server/internal/config"
+	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/logger"
 	"github.com/listenupapp/listenup-server/internal/mdns"
 	"github.com/listenupapp/listenup-server/internal/service"
@@ -18,6 +19,17 @@ import (
 // HTTPServerHandle wraps http.Server with Shutdownable.
 type HTTPServerHandle struct {
 	*http.Server
+}
+
+// sseTokenVerifier adapts AuthService to the sse.TokenVerifier interface.
+type sseTokenVerifier struct {
+	authService *service.AuthService
+}
+
+// VerifyAccessToken implements sse.TokenVerifier.
+func (v *sseTokenVerifier) VerifyAccessToken(ctx context.Context, token string) (*domain.User, error) {
+	user, _, err := v.authService.VerifyAccessToken(ctx, token)
+	return user, err
 }
 
 // Shutdown implements do.Shutdownable.
@@ -54,7 +66,8 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 	chapterService := do.MustInvoke[*service.ChapterService](i)
 	coverService := do.MustInvoke[*service.CoverService](i)
 
-	sseHandler := sse.NewHandler(sseHandle.Manager, log.Logger)
+	tokenVerifier := &sseTokenVerifier{authService: authService}
+	sseHandler := sse.NewHandler(sseHandle.Manager, log.Logger, tokenVerifier)
 
 	services := &api.Services{
 		Instance:   instanceService,
@@ -81,7 +94,7 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 		SeriesCovers:      storages.SeriesCovers,
 	}
 
-	handler := api.NewServer(storeHandle.Store, services, storage, sseHandler, registrationBroadcaster, log.Logger)
+	handler := api.NewServer(storeHandle.Store, services, storage, sseHandler, sseHandle.Manager, registrationBroadcaster, log.Logger)
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Server.Port,

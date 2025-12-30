@@ -7,6 +7,8 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/sse"
+	"github.com/listenupapp/listenup-server/internal/store"
 )
 
 func (s *Server) registerShareRoutes() {
@@ -167,6 +169,9 @@ func (s *Server) handleShareCollection(ctx context.Context, input *ShareCollecti
 		return nil, err
 	}
 
+	// Emit book.created events to the shared user for all books in the collection
+	go s.emitBooksForShare(context.Background(), input.ID, input.Body.UserID, true)
+
 	return &ShareOutput{Body: mapShareResponse(share)}, nil
 }
 
@@ -231,9 +236,18 @@ func (s *Server) handleDeleteShare(ctx context.Context, input *DeleteShareInput)
 		return nil, err
 	}
 
+	// Get the share before deleting to know which user and collection to notify
+	share, err := s.store.GetShare(ctx, input.ID)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := s.services.Sharing.UnshareCollection(ctx, userID, input.ID); err != nil {
 		return nil, err
 	}
+
+	// Emit book.deleted events to the previously shared user for all books in the collection
+	go s.emitBooksForShare(context.Background(), share.CollectionID, share.SharedWithUserID, false)
 
 	return &MessageOutput{Body: MessageResponse{Message: "Share removed"}}, nil
 }
@@ -267,5 +281,44 @@ func mapShareResponse(s *domain.CollectionShare) ShareResponse {
 		SharedByUserID:   s.SharedByUserID,
 		Permission:       s.Permission.String(),
 		CreatedAt:        s.CreatedAt,
+	}
+}
+
+// emitBooksForShare emits events for all books in a collection to a specific user.
+// Used when sharing/unsharing to notify the affected user.
+// isCreated=true emits book.created events, isCreated=false emits book.deleted events.
+func (s *Server) emitBooksForShare(ctx context.Context, collectionID, userID string, isCreated bool) {
+	// Get the collection to find the owner and book IDs
+	coll, err := s.store.AdminGetCollection(ctx, collectionID)
+	if err != nil {
+		if err != store.ErrCollectionNotFound {
+			s.logger.Error("failed to get collection for share notification", "collection_id", collectionID, "error", err)
+		}
+		return
+	}
+
+	// Emit events for each book to the specific user
+	for _, bookID := range coll.BookIDs {
+		if isCreated {
+			// For book.created, we need the full enriched book data
+			book, err := s.store.GetBook(ctx, bookID, coll.OwnerID)
+			if err != nil {
+				s.logger.Error("failed to get book for share notification", "book_id", bookID, "error", err)
+				continue
+			}
+
+			enrichedBook, err := s.store.EnrichBook(ctx, book)
+			if err != nil {
+				s.logger.Error("failed to enrich book for share notification", "book_id", bookID, "error", err)
+				continue
+			}
+
+			event := sse.NewBookCreatedEvent(enrichedBook)
+			s.sseManager.EmitToUser(userID, event)
+		} else {
+			// For book.deleted, we just need the book ID
+			event := sse.NewBookDeletedEvent(bookID, time.Now())
+			s.sseManager.EmitToUser(userID, event)
+		}
 	}
 }

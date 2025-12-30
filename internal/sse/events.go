@@ -63,6 +63,13 @@ const (
 	// EventUserApproved represents a pending user being approved.
 	// Only sent to admin users.
 	EventUserApproved EventType = "user.approved"
+
+	// Collection events (admin-only)
+	EventCollectionCreated     EventType = "collection.created"
+	EventCollectionUpdated     EventType = "collection.updated"
+	EventCollectionDeleted     EventType = "collection.deleted"
+	EventCollectionBookAdded   EventType = "collection.book_added"
+	EventCollectionBookRemoved EventType = "collection.book_removed"
 )
 
 // Event represents an SSE event to be sent to clients.
@@ -154,6 +161,22 @@ type UserPendingEventData struct {
 // UserApprovedEventData is the data payload for user approved events.
 type UserApprovedEventData struct {
 	User *domain.User `json:"user"`
+}
+
+// CollectionEventData is the data payload for collection CRUD events.
+type CollectionEventData struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	BookCount int       `json:"book_count"`
+	CreatedAt time.Time `json:"created_at,omitempty"`
+	UpdatedAt time.Time `json:"updated_at,omitempty"`
+}
+
+// CollectionBookEventData is the data payload for collection book add/remove events.
+type CollectionBookEventData struct {
+	CollectionID   string `json:"collection_id"`
+	CollectionName string `json:"collection_name"`
+	BookID         string `json:"book_id"`
 }
 
 // NewBookCreatedEvent creates a book.created event.
@@ -317,6 +340,72 @@ func NewUserApprovedEvent(user *domain.User) Event {
 	return Event{
 		Type:      EventUserApproved,
 		Data:      UserApprovedEventData{User: user},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewCollectionCreatedEvent creates a collection.created event.
+func NewCollectionCreatedEvent(id, name string, bookCount int) Event {
+	return Event{
+		Type: EventCollectionCreated,
+		Data: CollectionEventData{
+			ID:        id,
+			Name:      name,
+			BookCount: bookCount,
+			CreatedAt: time.Now(),
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewCollectionUpdatedEvent creates a collection.updated event.
+func NewCollectionUpdatedEvent(id, name string, bookCount int) Event {
+	return Event{
+		Type: EventCollectionUpdated,
+		Data: CollectionEventData{
+			ID:        id,
+			Name:      name,
+			BookCount: bookCount,
+			UpdatedAt: time.Now(),
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewCollectionDeletedEvent creates a collection.deleted event.
+func NewCollectionDeletedEvent(id, name string) Event {
+	return Event{
+		Type: EventCollectionDeleted,
+		Data: CollectionEventData{
+			ID:   id,
+			Name: name,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewCollectionBookAddedEvent creates a collection.book_added event.
+func NewCollectionBookAddedEvent(collectionID, collectionName, bookID string) Event {
+	return Event{
+		Type: EventCollectionBookAdded,
+		Data: CollectionBookEventData{
+			CollectionID:   collectionID,
+			CollectionName: collectionName,
+			BookID:         bookID,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewCollectionBookRemovedEvent creates a collection.book_removed event.
+func NewCollectionBookRemovedEvent(collectionID, collectionName, bookID string) Event {
+	return Event{
+		Type: EventCollectionBookRemoved,
+		Data: CollectionBookEventData{
+			CollectionID:   collectionID,
+			CollectionName: collectionName,
+			BookID:         bookID,
+		},
 		Timestamp: time.Now(),
 	}
 }

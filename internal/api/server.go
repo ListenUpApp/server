@@ -21,6 +21,7 @@ type Server struct {
 	services                  *Services
 	storage                   *StorageServices
 	sseHandler                *sse.Handler
+	sseManager                *sse.Manager
 	registrationBroadcaster   *sse.RegistrationBroadcaster
 	registrationStatusHandler *sse.RegistrationStatusHandler
 	router                    chi.Router
@@ -35,6 +36,7 @@ func NewServer(
 	services *Services,
 	storage *StorageServices,
 	sseHandler *sse.Handler,
+	sseManager *sse.Manager,
 	registrationBroadcaster *sse.RegistrationBroadcaster,
 	logger *slog.Logger,
 ) *Server {
@@ -71,6 +73,7 @@ func NewServer(
 		services:                  services,
 		storage:                   storage,
 		sseHandler:                sseHandler,
+		sseManager:                sseManager,
 		registrationBroadcaster:   registrationBroadcaster,
 		registrationStatusHandler: registrationStatusHandler,
 		router:                    router,
@@ -129,6 +132,7 @@ func (s *Server) registerRoutes() {
 	s.registerInviteRoutes()
 	s.registerUserRoutes()
 	s.registerAdminRoutes()
+	s.registerAdminCollectionRoutes()
 	s.registerBookRoutes()
 	s.registerMetadataRoutes()
 	s.registerSeriesRoutes()

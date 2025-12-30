@@ -1,25 +1,46 @@
 package sse
 
 import (
+	"context"
 	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
+
+	"github.com/listenupapp/listenup-server/internal/domain"
 )
+
+// TokenVerifier verifies access tokens and returns the associated user.
+// This interface breaks the import cycle between sse and service packages.
+type TokenVerifier interface {
+	VerifyAccessToken(ctx context.Context, token string) (*domain.User, error)
+}
 
 // Handler handles SSE connections at GET /api/v1/sync/stream.
 type Handler struct {
-	manager *Manager
-	logger  *slog.Logger
+	manager       *Manager
+	logger        *slog.Logger
+	tokenVerifier TokenVerifier
 }
 
 // NewHandler creates a new SSE Handler.
-func NewHandler(manager *Manager, logger *slog.Logger) *Handler {
+func NewHandler(manager *Manager, logger *slog.Logger, tokenVerifier TokenVerifier) *Handler {
 	return &Handler{
-		manager: manager,
-		logger:  logger,
+		manager:       manager,
+		logger:        logger,
+		tokenVerifier: tokenVerifier,
 	}
+}
+
+// extractBearerToken extracts the token from a Bearer authorization header.
+func extractBearerToken(authHeader string) string {
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 || parts[0] != "Bearer" {
+		return ""
+	}
+	return parts[1]
 }
 
 // ServeHTTP handles the SSE connection.
@@ -27,6 +48,21 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Only accept GET requests.
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Authenticate the request.
+	authHeader := r.Header.Get("Authorization")
+	token := extractBearerToken(authHeader)
+	if token == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	user, err := h.tokenVerifier.VerifyAccessToken(r.Context(), token)
+	if err != nil {
+		h.logger.Debug("SSE auth failed", slog.String("error", err.Error()))
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
@@ -51,10 +87,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Register client.
-	// TODO: Extract userID from auth token when SSE auth is implemented.
-	// For now, empty strings mean "receive all events" (single-user compatible).
-	client, err := h.manager.Connect("", "")
+	// Register client with authenticated user info.
+	client, err := h.manager.Connect(user.ID, user.IsAdmin())
 	if err != nil {
 		h.logger.Error("failed to register SSE client", slog.String("error", err.Error()))
 		http.Error(w, "Failed to establish connection", http.StatusInternalServerError)
