@@ -1,9 +1,16 @@
 package store
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 )
+
+// ErrLensNotFound is returned when a lens is not found in the store.
+var ErrLensNotFound = errors.New("lens not found")
+
+// ErrDuplicateLens is returned when trying to create a lens that already exists.
+var ErrDuplicateLens = errors.New("lens already exists")
 
 // Error is a domain error with an HTTP status code.
 type Error struct {

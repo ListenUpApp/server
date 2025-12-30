@@ -24,6 +24,7 @@ type Services struct {
 	Metadata   *service.MetadataService // Audible metadata fetching
 	Chapter    *service.ChapterService  // Chapter name alignment
 	Cover      *service.CoverService    // Multi-source cover search and download
+	Lens       *service.LensService     // Personal curation lenses
 }
 
 // StorageServices groups file storage handlers used by the API server.

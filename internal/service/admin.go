@@ -18,14 +18,16 @@ type AdminService struct {
 	store                   *store.Store
 	logger                  *slog.Logger
 	registrationBroadcaster *sse.RegistrationBroadcaster
+	lensService             *LensService
 }
 
 // NewAdminService creates a new admin service.
-func NewAdminService(store *store.Store, logger *slog.Logger, registrationBroadcaster *sse.RegistrationBroadcaster) *AdminService {
+func NewAdminService(store *store.Store, logger *slog.Logger, registrationBroadcaster *sse.RegistrationBroadcaster, lensService *LensService) *AdminService {
 	return &AdminService{
 		store:                   store,
 		logger:                  logger,
 		registrationBroadcaster: registrationBroadcaster,
+		lensService:             lensService,
 	}
 }
 
@@ -217,6 +219,19 @@ func (s *AdminService) ApproveUser(ctx context.Context, adminUserID, targetUserI
 	// Notify the pending user directly via their registration SSE stream
 	if s.registrationBroadcaster != nil {
 		s.registrationBroadcaster.NotifyApproved(targetUserID)
+	}
+
+	// Create default "To Read" lens for the newly approved user (best effort)
+	if s.lensService != nil {
+		if err := s.lensService.CreateDefaultLens(ctx, targetUserID); err != nil {
+			if s.logger != nil {
+				s.logger.Warn("Failed to create default lens for approved user",
+					"user_id", targetUserID,
+					"error", err,
+				)
+			}
+			// Non-fatal: user can still create lenses manually
+		}
 	}
 
 	if s.logger != nil {

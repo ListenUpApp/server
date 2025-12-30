@@ -233,6 +233,17 @@ func (s *Server) handleSetup(ctx context.Context, input *SetupInput) (*AuthOutpu
 		return nil, err
 	}
 
+	// Create default "To Read" lens for the root user (best effort)
+	if resp.User != nil {
+		if err := s.services.Lens.CreateDefaultLens(ctx, resp.User.ID); err != nil {
+			s.logger.Warn("Failed to create default lens for root user",
+				"user_id", resp.User.ID,
+				"error", err,
+			)
+			// Non-fatal: root user can create lenses manually
+		}
+	}
+
 	return &AuthOutput{Body: mapAuthResponse(resp)}, nil
 }
 

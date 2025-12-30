@@ -65,6 +65,7 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 	metadataHandle := do.MustInvoke[*MetadataServiceHandle](i)
 	chapterService := do.MustInvoke[*service.ChapterService](i)
 	coverService := do.MustInvoke[*service.CoverService](i)
+	lensService := do.MustInvoke[*service.LensService](i)
 
 	tokenVerifier := &sseTokenVerifier{authService: authService}
 	sseHandler := sse.NewHandler(sseHandle.Manager, log.Logger, tokenVerifier)
@@ -86,6 +87,7 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 		Metadata:   metadataHandle.MetadataService,
 		Chapter:    chapterService,
 		Cover:      coverService,
+		Lens:       lensService,
 	}
 
 	storage := &api.StorageServices{

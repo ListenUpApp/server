@@ -70,6 +70,13 @@ const (
 	EventCollectionDeleted     EventType = "collection.deleted"
 	EventCollectionBookAdded   EventType = "collection.book_added"
 	EventCollectionBookRemoved EventType = "collection.book_removed"
+
+	// Lens events (broadcast to all)
+	EventLensCreated     EventType = "lens.created"
+	EventLensUpdated     EventType = "lens.updated"
+	EventLensDeleted     EventType = "lens.deleted"
+	EventLensBookAdded   EventType = "lens.book_added"
+	EventLensBookRemoved EventType = "lens.book_removed"
 )
 
 // Event represents an SSE event to be sent to clients.
@@ -177,6 +184,35 @@ type CollectionBookEventData struct {
 	CollectionID   string `json:"collection_id"`
 	CollectionName string `json:"collection_name"`
 	BookID         string `json:"book_id"`
+}
+
+// LensEventData is the data payload for lens CRUD events.
+type LensEventData struct {
+	ID               string    `json:"id"`
+	OwnerID          string    `json:"owner_id"`
+	Name             string    `json:"name"`
+	Description      string    `json:"description,omitempty"`
+	BookCount        int       `json:"book_count"`
+	OwnerDisplayName string    `json:"owner_display_name"`
+	OwnerAvatarColor string    `json:"owner_avatar_color"`
+	CreatedAt        time.Time `json:"created_at,omitempty"`
+	UpdatedAt        time.Time `json:"updated_at,omitempty"`
+}
+
+// LensDeletedEventData is the data payload for lens delete events.
+type LensDeletedEventData struct {
+	ID        string    `json:"id"`
+	OwnerID   string    `json:"owner_id"`
+	DeletedAt time.Time `json:"deleted_at"`
+}
+
+// LensBookEventData is the data payload for lens book add/remove events.
+type LensBookEventData struct {
+	LensID    string    `json:"lens_id"`
+	OwnerID   string    `json:"owner_id"`
+	BookID    string    `json:"book_id"`
+	BookCount int       `json:"book_count"`
+	Timestamp time.Time `json:"timestamp"`
 }
 
 // NewBookCreatedEvent creates a book.created event.
@@ -405,6 +441,85 @@ func NewCollectionBookRemovedEvent(collectionID, collectionName, bookID string) 
 			CollectionID:   collectionID,
 			CollectionName: collectionName,
 			BookID:         bookID,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewLensCreatedEvent creates a lens.created event.
+func NewLensCreatedEvent(lens *domain.Lens, ownerDisplayName, ownerAvatarColor string) Event {
+	return Event{
+		Type: EventLensCreated,
+		Data: LensEventData{
+			ID:               lens.ID,
+			OwnerID:          lens.OwnerID,
+			Name:             lens.Name,
+			Description:      lens.Description,
+			BookCount:        len(lens.BookIDs),
+			OwnerDisplayName: ownerDisplayName,
+			OwnerAvatarColor: ownerAvatarColor,
+			CreatedAt:        lens.CreatedAt,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewLensUpdatedEvent creates a lens.updated event.
+func NewLensUpdatedEvent(lens *domain.Lens, ownerDisplayName, ownerAvatarColor string) Event {
+	return Event{
+		Type: EventLensUpdated,
+		Data: LensEventData{
+			ID:               lens.ID,
+			OwnerID:          lens.OwnerID,
+			Name:             lens.Name,
+			Description:      lens.Description,
+			BookCount:        len(lens.BookIDs),
+			OwnerDisplayName: ownerDisplayName,
+			OwnerAvatarColor: ownerAvatarColor,
+			UpdatedAt:        lens.UpdatedAt,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewLensDeletedEvent creates a lens.deleted event.
+func NewLensDeletedEvent(lensID, ownerID string) Event {
+	return Event{
+		Type: EventLensDeleted,
+		Data: LensDeletedEventData{
+			ID:        lensID,
+			OwnerID:   ownerID,
+			DeletedAt: time.Now(),
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewLensBookAddedEvent creates a lens.book_added event.
+func NewLensBookAddedEvent(lens *domain.Lens, bookID string) Event {
+	return Event{
+		Type: EventLensBookAdded,
+		Data: LensBookEventData{
+			LensID:    lens.ID,
+			OwnerID:   lens.OwnerID,
+			BookID:    bookID,
+			BookCount: len(lens.BookIDs),
+			Timestamp: time.Now(),
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewLensBookRemovedEvent creates a lens.book_removed event.
+func NewLensBookRemovedEvent(lens *domain.Lens, bookID string) Event {
+	return Event{
+		Type: EventLensBookRemoved,
+		Data: LensBookEventData{
+			LensID:    lens.ID,
+			OwnerID:   lens.OwnerID,
+			BookID:    bookID,
+			BookCount: len(lens.BookIDs),
+			Timestamp: time.Now(),
 		},
 		Timestamp: time.Now(),
 	}

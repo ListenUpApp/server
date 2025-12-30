@@ -153,6 +153,16 @@ func ProvideAdminService(i do.Injector) (*service.AdminService, error) {
 	storeHandle := do.MustInvoke[*StoreHandle](i)
 	log := do.MustInvoke[*logger.Logger](i)
 	registrationBroadcaster := do.MustInvoke[*sse.RegistrationBroadcaster](i)
+	lensService := do.MustInvoke[*service.LensService](i)
 
-	return service.NewAdminService(storeHandle.Store, log.Logger, registrationBroadcaster), nil
+	return service.NewAdminService(storeHandle.Store, log.Logger, registrationBroadcaster, lensService), nil
+}
+
+// ProvideLensService provides the lens service.
+func ProvideLensService(i do.Injector) (*service.LensService, error) {
+	storeHandle := do.MustInvoke[*StoreHandle](i)
+	sseHandle := do.MustInvoke[*SSEManagerHandle](i)
+	log := do.MustInvoke[*logger.Logger](i)
+
+	return service.NewLensService(storeHandle.Store, sseHandle.Manager, log.Logger), nil
 }
