@@ -62,7 +62,8 @@ func TestInstanceService_GetInstance(t *testing.T) {
 	instance, err := service.GetInstance(ctx)
 	require.NoError(t, err)
 	assert.NotNil(t, instance)
-	assert.Equal(t, "server-001", instance.ID)
+	assert.NotEmpty(t, instance.ID)
+	assert.Contains(t, instance.ID, "lib-")
 	assert.True(t, instance.IsSetupRequired())
 	assert.Empty(t, instance.RootUserID)
 }
@@ -89,7 +90,8 @@ func TestInstanceService_InitializeInstance_Creates(t *testing.T) {
 	instance, err := service.InitializeInstance(ctx)
 	require.NoError(t, err)
 	assert.NotNil(t, instance)
-	assert.Equal(t, "server-001", instance.ID)
+	assert.NotEmpty(t, instance.ID)
+	assert.Contains(t, instance.ID, "lib-")
 	assert.True(t, instance.IsSetupRequired())
 	assert.Empty(t, instance.RootUserID)
 }

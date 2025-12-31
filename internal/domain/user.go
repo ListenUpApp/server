@@ -12,24 +12,48 @@ const (
 	RoleMember Role = "member"
 )
 
+// UserStatus represents the user's account status.
+type UserStatus string
+
+const (
+	// UserStatusActive indicates the user can log in and use the system.
+	UserStatusActive UserStatus = "active"
+	// UserStatusPending indicates the user is awaiting admin approval.
+	UserStatusPending UserStatus = "pending"
+)
+
 // User represents an authenticated user account in the system.
 type User struct {
 	Syncable
-	Email        string    `json:"email"`
-	PasswordHash string    `json:"password_hash,omitempty"` // Stored hashed, filter from API responses
-	IsRoot       bool      `json:"is_root"`
-	Role         Role      `json:"role"`                 // admin or member
-	InvitedBy    string    `json:"invited_by,omitempty"` // User ID who invited this user
-	DisplayName  string    `json:"display_name"`
-	FirstName    string    `json:"first_name"`
-	LastName     string    `json:"last_name"`
-	LastLoginAt  time.Time `json:"last_login_at"`
+	Email        string     `json:"email"`
+	PasswordHash string     `json:"password_hash,omitempty"` // Stored hashed, filter from API responses
+	IsRoot       bool       `json:"is_root"`
+	Role         Role       `json:"role"`                 // admin or member
+	Status       UserStatus `json:"status,omitempty"`     // active or pending (empty = active for backward compat)
+	InvitedBy    string     `json:"invited_by,omitempty"` // User ID who invited this user
+	ApprovedBy   string     `json:"approved_by,omitempty"`
+	ApprovedAt   time.Time  `json:"approved_at,omitempty"`
+	DisplayName  string     `json:"display_name"`
+	FirstName    string     `json:"first_name"`
+	LastName     string     `json:"last_name"`
+	LastLoginAt  time.Time  `json:"last_login_at"`
 }
 
 // IsAdmin returns true if the user has administrative privileges.
 // Root users are automatically admins, regardless of their role field.
 func (u *User) IsAdmin() bool {
 	return u.IsRoot || u.Role == RoleAdmin
+}
+
+// IsActive returns true if the user can log in and use the system.
+// Empty status is treated as active for backward compatibility with existing users.
+func (u *User) IsActive() bool {
+	return u.Status == "" || u.Status == UserStatusActive
+}
+
+// IsPending returns true if the user is awaiting admin approval.
+func (u *User) IsPending() bool {
+	return u.Status == UserStatusPending
 }
 
 // FullName returns the user's full name, composed from first and last names.

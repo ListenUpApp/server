@@ -9,6 +9,7 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/sse"
 )
 
 const (
@@ -224,8 +225,69 @@ func (s *Store) ListUsers(_ context.Context) ([]*domain.User, error) {
 	return users, nil
 }
 
+// ListPendingUsers returns all users with pending status (awaiting approval).
+func (s *Store) ListPendingUsers(_ context.Context) ([]*domain.User, error) {
+	prefix := []byte(userPrefix)
+	var users []*domain.User
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = prefix
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+
+			err := item.Value(func(val []byte) error {
+				var user domain.User
+				if unmarshalErr := json.Unmarshal(val, &user); unmarshalErr != nil {
+					// Skip malformed users
+					return nil //nolint:nilerr // intentionally skip malformed entries
+				}
+
+				// Skip deleted users and non-pending users
+				if user.IsDeleted() || !user.IsPending() {
+					return nil
+				}
+
+				users = append(users, &user)
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("list pending users: %w", err)
+	}
+
+	return users, nil
+}
+
 // normalizeEmail normalizes an email address for consistent lookups.
 // Lowercases and trims whitespace.
 func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
+}
+
+// BroadcastUserPending broadcasts a user.pending SSE event to admin users.
+// Called when a new user registers and is awaiting approval.
+func (s *Store) BroadcastUserPending(user *domain.User) {
+	if s.eventEmitter != nil {
+		s.eventEmitter.Emit(sse.NewUserPendingEvent(user))
+	}
+}
+
+// BroadcastUserApproved broadcasts a user.approved SSE event to admin users.
+// Called when a pending user is approved by an admin.
+func (s *Store) BroadcastUserApproved(user *domain.User) {
+	if s.eventEmitter != nil {
+		s.eventEmitter.Emit(sse.NewUserApprovedEvent(user))
+	}
 }

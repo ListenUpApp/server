@@ -113,3 +113,9 @@ func ProvideSlogLogger(i do.Injector) (*slog.Logger, error) {
 	log := do.MustInvoke[*logger.Logger](i)
 	return log.Logger, nil
 }
+
+// ProvideRegistrationBroadcaster provides the registration status broadcaster for pending users.
+func ProvideRegistrationBroadcaster(i do.Injector) (*sse.RegistrationBroadcaster, error) {
+	log := do.MustInvoke[*logger.Logger](i)
+	return sse.NewRegistrationBroadcaster(log.Logger), nil
+}

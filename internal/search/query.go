@@ -71,6 +71,8 @@ type SearchHit struct {
 	SeriesName string            `json:"series_name,omitempty"`
 	Duration   int64             `json:"duration,omitempty"`
 	BookCount  int               `json:"book_count,omitempty"`
+	GenreSlugs []string          `json:"genre_slugs,omitempty"`
+	Tags       []string          `json:"tags,omitempty"`
 	Highlights map[string]string `json:"highlights,omitempty"`
 }
 
@@ -166,6 +168,32 @@ func (s *SearchIndex) Search(ctx context.Context, params SearchParams) (*SearchR
 		}
 		if bc, ok := hit.Fields["book_count"].(float64); ok {
 			searchHit.BookCount = int(bc)
+		}
+
+		// Extract genre slugs (stored as array)
+		if gs, ok := hit.Fields["genre_slugs"].([]interface{}); ok {
+			searchHit.GenreSlugs = make([]string, 0, len(gs))
+			for _, g := range gs {
+				if s, ok := g.(string); ok {
+					searchHit.GenreSlugs = append(searchHit.GenreSlugs, s)
+				}
+			}
+		} else if gs, ok := hit.Fields["genre_slugs"].(string); ok {
+			// Single value case
+			searchHit.GenreSlugs = []string{gs}
+		}
+
+		// Extract tags (stored as array)
+		if ts, ok := hit.Fields["tags"].([]interface{}); ok {
+			searchHit.Tags = make([]string, 0, len(ts))
+			for _, t := range ts {
+				if s, ok := t.(string); ok {
+					searchHit.Tags = append(searchHit.Tags, s)
+				}
+			}
+		} else if ts, ok := hit.Fields["tags"].(string); ok {
+			// Single value case
+			searchHit.Tags = []string{ts}
 		}
 
 		// Extract highlights

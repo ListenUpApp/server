@@ -98,10 +98,19 @@ func buildIndexMapping() mapping.IndexMapping {
 	genrePathsFieldMapping.Analyzer = keyword.Name
 	docMapping.AddFieldMappingsAt("genre_paths", genrePathsFieldMapping)
 
-	// Genre slugs - for exact genre filtering
+	// Genre slugs - for exact genre filtering and display
 	genreSlugsFieldMapping := bleve.NewTextFieldMapping()
 	genreSlugsFieldMapping.Analyzer = keyword.Name
+	genreSlugsFieldMapping.Store = true // Store for retrieval in search results
 	docMapping.AddFieldMappingsAt("genre_slugs", genreSlugsFieldMapping)
+
+	// Tags - community-applied content descriptors
+	// Keyword analyzer keeps compound slugs intact (e.g., "slow-burn")
+	tagsFieldMapping := bleve.NewTextFieldMapping()
+	tagsFieldMapping.Analyzer = keyword.Name
+	tagsFieldMapping.Store = true
+	tagsFieldMapping.IncludeTermVectors = true // For faceting
+	docMapping.AddFieldMappingsAt("tags", tagsFieldMapping)
 
 	// --- Numeric fields (range queries, sorting) ---
 

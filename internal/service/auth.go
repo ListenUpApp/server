@@ -86,6 +86,20 @@ type RefreshRequest struct {
 	IPAddress    string          `json:"-"`           // Extracted from request by handler
 }
 
+// RegisterRequest contains user registration data for open registration.
+type RegisterRequest struct {
+	Email     string `json:"email" validate:"required,email"`
+	Password  string `json:"password" validate:"required,min=8,max=1024"`
+	FirstName string `json:"first_name" validate:"required"`
+	LastName  string `json:"last_name" validate:"required"`
+}
+
+// RegisterResponse contains the result of a registration request.
+type RegisterResponse struct {
+	UserID  string `json:"user_id"`
+	Message string `json:"message"`
+}
+
 // AuthResponse contains authentication tokens and user data.
 type AuthResponse struct {
 	User *domain.User `json:"user"`
@@ -177,6 +191,74 @@ func (s *AuthService) Setup(ctx context.Context, req SetupRequest) (*AuthRespons
 	}, nil
 }
 
+// Register creates a new user account when open registration is enabled.
+// The user is created with pending status and must be approved by an admin.
+func (s *AuthService) Register(ctx context.Context, req RegisterRequest) (*RegisterResponse, error) {
+	// Validate request
+	if err := validate.Struct(req); err != nil {
+		return nil, formatValidationError(err)
+	}
+
+	// Check if open registration is enabled
+	instance, err := s.instanceService.GetInstance(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get instance: %w", err)
+	}
+	if !instance.OpenRegistration {
+		return nil, domainerrors.Forbidden("registration is not open")
+	}
+
+	// Hash password
+	passwordHash, err := auth.HashPassword(req.Password)
+	if err != nil {
+		return nil, fmt.Errorf("hash password: %w", err)
+	}
+
+	// Create user with pending status
+	userID, err := id.Generate("user")
+	if err != nil {
+		return nil, fmt.Errorf("generate user ID: %w", err)
+	}
+
+	user := &domain.User{
+		Syncable: domain.Syncable{
+			ID: userID,
+		},
+		Email:        req.Email,
+		PasswordHash: passwordHash,
+		IsRoot:       false,
+		Role:         domain.RoleMember,
+		Status:       domain.UserStatusPending,
+		FirstName:    req.FirstName,
+		LastName:     req.LastName,
+		DisplayName:  req.FirstName + " " + req.LastName,
+	}
+	user.InitTimestamps()
+
+	// Save user
+	if err := s.store.CreateUser(ctx, user); err != nil {
+		if errors.Is(err, store.ErrEmailExists) {
+			return nil, domainerrors.AlreadyExists("email already in use")
+		}
+		return nil, fmt.Errorf("create user: %w", err)
+	}
+
+	// Broadcast SSE event for admin users
+	s.store.BroadcastUserPending(user)
+
+	if s.logger != nil {
+		s.logger.Info("User registered (pending approval)",
+			"user_id", userID,
+			"email", user.Email,
+		)
+	}
+
+	return &RegisterResponse{
+		UserID:  userID,
+		Message: "Registration submitted. Please wait for admin approval.",
+	}, nil
+}
+
 // Login authenticates a user and creates a new session.
 func (s *AuthService) Login(ctx context.Context, req LoginRequest) (*AuthResponse, error) {
 	// Validate request
@@ -206,6 +288,11 @@ func (s *AuthService) Login(ctx context.Context, req LoginRequest) (*AuthRespons
 	}
 	if !valid {
 		return nil, domainerrors.InvalidCredentials("invalid email or password")
+	}
+
+	// Check if user is pending approval
+	if user.IsPending() {
+		return nil, domainerrors.Forbidden("your account is pending admin approval")
 	}
 
 	// Update last login

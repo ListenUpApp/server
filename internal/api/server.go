@@ -17,14 +17,17 @@ import (
 
 // Server holds dependencies for HTTP handlers.
 type Server struct {
-	store           *store.Store
-	services        *Services
-	storage         *StorageServices
-	sseHandler      *sse.Handler
-	router          chi.Router
-	api             huma.API
-	logger          *slog.Logger
-	authRateLimiter *RateLimiter
+	store                     *store.Store
+	services                  *Services
+	storage                   *StorageServices
+	sseHandler                *sse.Handler
+	sseManager                *sse.Manager
+	registrationBroadcaster   *sse.RegistrationBroadcaster
+	registrationStatusHandler *sse.RegistrationStatusHandler
+	router                    chi.Router
+	api                       huma.API
+	logger                    *slog.Logger
+	authRateLimiter           *RateLimiter
 }
 
 // NewServer creates a new HTTP server with all routes configured.
@@ -33,6 +36,8 @@ func NewServer(
 	services *Services,
 	storage *StorageServices,
 	sseHandler *sse.Handler,
+	sseManager *sse.Manager,
+	registrationBroadcaster *sse.RegistrationBroadcaster,
 	logger *slog.Logger,
 ) *Server {
 	router := chi.NewRouter()
@@ -60,15 +65,21 @@ func NewServer(
 	// Register custom error handler for domain errors
 	RegisterErrorHandler()
 
+	// Create registration status handler for pending user SSE
+	registrationStatusHandler := sse.NewRegistrationStatusHandler(registrationBroadcaster, logger)
+
 	s := &Server{
-		store:           st,
-		services:        services,
-		storage:         storage,
-		sseHandler:      sseHandler,
-		router:          router,
-		api:             api,
-		logger:          logger,
-		authRateLimiter: NewRateLimiter(20, time.Minute, 10),
+		store:                     st,
+		services:                  services,
+		storage:                   storage,
+		sseHandler:                sseHandler,
+		sseManager:                sseManager,
+		registrationBroadcaster:   registrationBroadcaster,
+		registrationStatusHandler: registrationStatusHandler,
+		router:                    router,
+		api:                       api,
+		logger:                    logger,
+		authRateLimiter:           NewRateLimiter(20, time.Minute, 10),
 	}
 
 	s.registerRoutes()
@@ -121,12 +132,16 @@ func (s *Server) registerRoutes() {
 	s.registerInviteRoutes()
 	s.registerUserRoutes()
 	s.registerAdminRoutes()
+	s.registerAdminCollectionRoutes()
+	s.registerAdminInboxRoutes()
+	s.registerAdminSettingsRoutes()
 	s.registerBookRoutes()
 	s.registerMetadataRoutes()
 	s.registerSeriesRoutes()
 	s.registerContributorRoutes()
 	s.registerCollectionRoutes()
 	s.registerShareRoutes()
+	s.registerLensRoutes()
 	s.registerLibraryRoutes()
 	s.registerSyncRoutes()
 	s.registerListeningRoutes()

@@ -53,6 +53,17 @@ func (s *Server) registerAdminRoutes() {
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleListUsers)
 
+	// Pending users - must be registered BEFORE /users/{id} to avoid route conflict
+	huma.Register(s.api, huma.Operation{
+		OperationID: "listPendingUsers",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/admin/users/pending",
+		Summary:     "List pending users",
+		Description: "Lists all users awaiting approval",
+		Tags:        []string{"Admin"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleListPendingUsers)
+
 	huma.Register(s.api, huma.Operation{
 		OperationID: "getAdminUser",
 		Method:      http.MethodGet,
@@ -82,6 +93,38 @@ func (s *Server) registerAdminRoutes() {
 		Tags:        []string{"Admin"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleDeleteAdminUser)
+
+	// Open registration settings
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "approveUser",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/admin/users/{id}/approve",
+		Summary:     "Approve user",
+		Description: "Approves a pending user, allowing them to log in",
+		Tags:        []string{"Admin"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleApproveUser)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "denyUser",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/admin/users/{id}/deny",
+		Summary:     "Deny user",
+		Description: "Denies a pending user registration",
+		Tags:        []string{"Admin"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleDenyUser)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "setOpenRegistration",
+		Method:      http.MethodPut,
+		Path:        "/api/v1/admin/settings/open-registration",
+		Summary:     "Set open registration",
+		Description: "Enables or disables public registration",
+		Tags:        []string{"Admin"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleSetOpenRegistration)
 }
 
 // === DTOs ===
@@ -148,14 +191,18 @@ type ListUsersInput struct {
 
 // AdminUserResponse is the API response for a user in admin context.
 type AdminUserResponse struct {
-	ID        string    `json:"id" doc:"User ID"`
-	Email     string    `json:"email" doc:"Email address"`
-	FirstName string    `json:"first_name" doc:"First name"`
-	LastName  string    `json:"last_name" doc:"Last name"`
-	Role      string    `json:"role" doc:"User role"`
-	IsRoot    bool      `json:"is_root" doc:"Is root user"`
-	CreatedAt time.Time `json:"created_at" doc:"Creation time"`
-	UpdatedAt time.Time `json:"updated_at" doc:"Last update time"`
+	ID          string    `json:"id" doc:"User ID"`
+	Email       string    `json:"email" doc:"Email address"`
+	DisplayName string    `json:"display_name" doc:"Display name"`
+	FirstName   string    `json:"first_name" doc:"First name"`
+	LastName    string    `json:"last_name" doc:"Last name"`
+	Role        string    `json:"role" doc:"User role"`
+	Status      string    `json:"status" doc:"User status (active, pending)"`
+	IsRoot      bool      `json:"is_root" doc:"Is root user"`
+	InvitedBy   string    `json:"invited_by,omitempty" doc:"User ID who invited this user"`
+	LastLoginAt time.Time `json:"last_login_at,omitempty" doc:"Last login timestamp"`
+	CreatedAt   time.Time `json:"created_at" doc:"Creation time"`
+	UpdatedAt   time.Time `json:"updated_at" doc:"Last update time"`
 }
 
 // ListUsersResponse is the API response for listing users.
@@ -198,6 +245,34 @@ type UpdateAdminUserInput struct {
 type DeleteAdminUserInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"User ID"`
+}
+
+// ListPendingUsersInput is the Huma input for listing pending users.
+type ListPendingUsersInput struct {
+	Authorization string `header:"Authorization"`
+}
+
+// ApproveUserInput is the Huma input for approving a user.
+type ApproveUserInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"User ID"`
+}
+
+// DenyUserInput is the Huma input for denying a user.
+type DenyUserInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"User ID"`
+}
+
+// SetOpenRegistrationRequest is the request body for setting open registration.
+type SetOpenRegistrationRequest struct {
+	Enabled bool `json:"enabled" doc:"Whether open registration is enabled"`
+}
+
+// SetOpenRegistrationInput is the Huma input for setting open registration.
+type SetOpenRegistrationInput struct {
+	Authorization string `header:"Authorization"`
+	Body          SetOpenRegistrationRequest
 }
 
 // === Handlers ===
@@ -295,16 +370,7 @@ func (s *Server) handleListUsers(ctx context.Context, input *ListUsersInput) (*L
 
 	resp := make([]AdminUserResponse, len(users))
 	for i, u := range users {
-		resp[i] = AdminUserResponse{
-			ID:        u.ID,
-			Email:     u.Email,
-			FirstName: u.FirstName,
-			LastName:  u.LastName,
-			Role:      string(u.Role),
-			IsRoot:    u.IsRoot,
-			CreatedAt: u.CreatedAt,
-			UpdatedAt: u.UpdatedAt,
-		}
+		resp[i] = mapAdminUserResponse(u)
 	}
 
 	return &ListUsersOutput{
@@ -322,18 +388,7 @@ func (s *Server) handleGetAdminUser(ctx context.Context, input *GetAdminUserInpu
 		return nil, err
 	}
 
-	return &AdminUserOutput{
-		Body: AdminUserResponse{
-			ID:        user.ID,
-			Email:     user.Email,
-			FirstName: user.FirstName,
-			LastName:  user.LastName,
-			Role:      string(user.Role),
-			IsRoot:    user.IsRoot,
-			CreatedAt: user.CreatedAt,
-			UpdatedAt: user.UpdatedAt,
-		},
-	}, nil
+	return &AdminUserOutput{Body: mapAdminUserResponse(user)}, nil
 }
 
 func (s *Server) handleUpdateAdminUser(ctx context.Context, input *UpdateAdminUserInput) (*AdminUserOutput, error) {
@@ -360,18 +415,7 @@ func (s *Server) handleUpdateAdminUser(ctx context.Context, input *UpdateAdminUs
 		return nil, err
 	}
 
-	return &AdminUserOutput{
-		Body: AdminUserResponse{
-			ID:        user.ID,
-			Email:     user.Email,
-			FirstName: user.FirstName,
-			LastName:  user.LastName,
-			Role:      string(user.Role),
-			IsRoot:    user.IsRoot,
-			CreatedAt: user.CreatedAt,
-			UpdatedAt: user.UpdatedAt,
-		},
-	}, nil
+	return &AdminUserOutput{Body: mapAdminUserResponse(user)}, nil
 }
 
 func (s *Server) handleDeleteAdminUser(ctx context.Context, input *DeleteAdminUserInput) (*MessageOutput, error) {
@@ -385,4 +429,90 @@ func (s *Server) handleDeleteAdminUser(ctx context.Context, input *DeleteAdminUs
 	}
 
 	return &MessageOutput{Body: MessageResponse{Message: "User deleted"}}, nil
+}
+
+func (s *Server) handleListPendingUsers(ctx context.Context, input *ListPendingUsersInput) (*ListUsersOutput, error) {
+	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+		return nil, err
+	}
+
+	users, err := s.services.Admin.ListPendingUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := make([]AdminUserResponse, len(users))
+	for i, u := range users {
+		resp[i] = mapAdminUserResponse(u)
+	}
+
+	return &ListUsersOutput{
+		Body: ListUsersResponse{Users: resp, Total: len(resp)},
+	}, nil
+}
+
+func (s *Server) handleApproveUser(ctx context.Context, input *ApproveUserInput) (*AdminUserOutput, error) {
+	adminUserID, err := s.authenticateAndRequireAdmin(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := s.services.Admin.ApproveUser(ctx, adminUserID, input.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &AdminUserOutput{Body: mapAdminUserResponse(user)}, nil
+}
+
+func (s *Server) handleDenyUser(ctx context.Context, input *DenyUserInput) (*MessageOutput, error) {
+	adminUserID, err := s.authenticateAndRequireAdmin(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.services.Admin.DenyUser(ctx, adminUserID, input.ID); err != nil {
+		return nil, err
+	}
+
+	return &MessageOutput{Body: MessageResponse{Message: "User registration denied"}}, nil
+}
+
+func (s *Server) handleSetOpenRegistration(ctx context.Context, input *SetOpenRegistrationInput) (*MessageOutput, error) {
+	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+		return nil, err
+	}
+
+	if err := s.services.Instance.SetOpenRegistration(ctx, input.Body.Enabled); err != nil {
+		return nil, err
+	}
+
+	message := "Open registration disabled"
+	if input.Body.Enabled {
+		message = "Open registration enabled"
+	}
+
+	return &MessageOutput{Body: MessageResponse{Message: message}}, nil
+}
+
+// mapAdminUserResponse converts a domain.User to AdminUserResponse.
+func mapAdminUserResponse(u *domain.User) AdminUserResponse {
+	status := string(u.Status)
+	if status == "" {
+		status = "active" // Backward compatibility
+	}
+	return AdminUserResponse{
+		ID:          u.ID,
+		Email:       u.Email,
+		DisplayName: u.DisplayName,
+		FirstName:   u.FirstName,
+		LastName:    u.LastName,
+		Role:        string(u.Role),
+		Status:      status,
+		IsRoot:      u.IsRoot,
+		InvitedBy:   u.InvitedBy,
+		LastLoginAt: u.LastLoginAt,
+		CreatedAt:   u.CreatedAt,
+		UpdatedAt:   u.UpdatedAt,
+	}
 }

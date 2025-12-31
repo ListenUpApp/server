@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/dto"
 	"github.com/listenupapp/listenup-server/internal/media/images"
 	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
@@ -63,6 +64,7 @@ type Scanner struct {
 	logger          *slog.Logger
 	imageProcessor  *images.Processor
 	transcodeQueuer TranscodeQueuer
+	enricher        *dto.Enricher
 
 	walker   *Walker
 	grouper  *Grouper
@@ -78,6 +80,7 @@ func NewScanner(store *store.Store, emitter store.EventEmitter, imageProcessor *
 		logger:          logger,
 		imageProcessor:  imageProcessor,
 		transcodeQueuer: NoopTranscodeQueuer{}, // Default to no-op
+		enricher:        dto.NewEnricher(store),
 		walker:          NewWalker(logger),
 		grouper:         NewGrouper(logger),
 		analyzer:        NewAnalyzer(logger),
@@ -368,6 +371,23 @@ func (s *Scanner) saveToDatabase(ctx context.Context, items []*LibraryItemData, 
 	tracker.SetPhase(PhaseApplying)
 	s.logger.Info("saving books to database", "count", len(items))
 
+	// Check if inbox workflow is enabled
+	var inboxEnabled bool
+	var inboxCollection *domain.Collection
+	settings, err := s.store.GetServerSettings(ctx)
+	if err == nil && settings.InboxEnabled {
+		inboxEnabled = true
+		// Get the inbox collection for the default library
+		library, err := s.store.GetDefaultLibrary(ctx)
+		if err == nil && library != nil {
+			inboxCollection, _ = s.store.GetInboxForLibrary(ctx, library.ID)
+		}
+	}
+
+	if inboxEnabled {
+		s.logger.Info("inbox workflow enabled - new books will be staged")
+	}
+
 	batchWriter := s.store.NewBatchWriter(100)
 	defer func() {
 		if err := batchWriter.Flush(ctx); err != nil {
@@ -468,6 +488,25 @@ func (s *Scanner) saveToDatabase(ctx context.Context, items []*LibraryItemData, 
 		}
 
 		result.Added++
+
+		// Add to inbox if workflow is enabled
+		if inboxEnabled && inboxCollection != nil {
+			// Add book to inbox collection using the admin method
+			if err := s.store.AdminAddBookToCollection(ctx, book.ID, inboxCollection.ID); err != nil {
+				s.logger.Warn("failed to add book to inbox",
+					"book_id", book.ID,
+					"error", err,
+				)
+			} else {
+				s.logger.Debug("added book to inbox", "book_id", book.ID, "title", book.Title)
+
+				// Emit SSE event for admin clients
+				enrichedBook, err := s.enricher.EnrichBook(ctx, book)
+				if err == nil {
+					s.eventEmitter.Emit(sse.NewInboxBookAddedEvent(enrichedBook))
+				}
+			}
+		}
 
 		// Queue transcodes for audio files with problematic codecs.
 		s.queueTranscodesForBook(ctx, book)

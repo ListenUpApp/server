@@ -188,6 +188,12 @@ func (s *Store) GetBook(ctx context.Context, id string, userID string) (*domain.
 	return book, nil
 }
 
+// GetBookNoAccessCheck retrieves a book by ID without access control.
+// Use for system-level operations like search indexing where user context isn't available.
+func (s *Store) GetBookNoAccessCheck(ctx context.Context, id string) (*domain.Book, error) {
+	return s.getBookInternal(ctx, id)
+}
+
 // getBookInternal retrieves a book by ID without access control.
 // For internal store use only.
 func (s *Store) getBookInternal(_ context.Context, id string) (*domain.Book, error) {
@@ -445,10 +451,13 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 
 	s.eventEmitter.Emit(sse.NewBookUpdatedEvent(enrichedBook))
 
-	// Reindex for search asynchronously
+	// Reindex for search asynchronously with timeout
 	if s.searchIndexer != nil {
 		go func() {
-			if err := s.searchIndexer.IndexBook(context.Background(), book); err != nil {
+			indexCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			if err := s.searchIndexer.IndexBook(indexCtx, book); err != nil {
 				if s.logger != nil {
 					s.logger.Warn("failed to reindex book for search", "book_id", book.ID, "error", err)
 				}
@@ -554,10 +563,13 @@ func (s *Store) DeleteBook(ctx context.Context, id string) error {
 
 	s.eventEmitter.Emit(sse.NewBookDeletedEvent(book.ID, *book.DeletedAt))
 
-	// Remove from search index asynchronously
+	// Remove from search index asynchronously with timeout
 	if s.searchIndexer != nil {
 		go func() {
-			if err := s.searchIndexer.DeleteBook(context.Background(), id); err != nil {
+			deleteCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			if err := s.searchIndexer.DeleteBook(deleteCtx, id); err != nil {
 				if s.logger != nil {
 					s.logger.Warn("failed to remove book from search index", "book_id", id, "error", err)
 				}
@@ -565,10 +577,13 @@ func (s *Store) DeleteBook(ctx context.Context, id string) error {
 		}()
 	}
 
-	// Delete transcoded files asynchronously
+	// Delete transcoded files asynchronously with timeout
 	if s.transcodeDeleter != nil {
 		go func() {
-			if err := s.transcodeDeleter.DeleteTranscodesForBook(context.Background(), id); err != nil {
+			deleteCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
+
+			if err := s.transcodeDeleter.DeleteTranscodesForBook(deleteCtx, id); err != nil {
 				if s.logger != nil {
 					s.logger.Warn("failed to delete transcodes for book", "book_id", id, "error", err)
 				}

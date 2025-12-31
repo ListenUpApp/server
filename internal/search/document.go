@@ -50,6 +50,9 @@ type SearchDocument struct {
 	// Genre slugs for exact matching
 	GenreSlugs []string `json:"genre_slugs,omitempty"`
 
+	// Tags - community-applied content descriptors
+	Tags []string `json:"tags,omitempty"`
+
 	// Contributor-specific fields
 	Biography string `json:"biography,omitempty"`
 
@@ -103,6 +106,9 @@ func (d *SearchDocument) ToMap() map[string]interface{} {
 	}
 	if len(d.GenreSlugs) > 0 {
 		m["genre_slugs"] = d.GenreSlugs
+	}
+	if len(d.Tags) > 0 {
+		m["tags"] = d.Tags
 	}
 	if d.Duration > 0 {
 		m["duration"] = d.Duration

@@ -746,6 +746,9 @@ func (s *Store) ListAllCollectionsByLibrary(ctx context.Context, libraryID strin
 
 // GetInboxForLibrary returns the Inbox collection for a library.
 // The Inbox is the system collection where IsInbox = true.
+// If no inbox exists (e.g., on databases created before the inbox feature),
+// one is created automatically. This makes the feature self-healing and
+// backward compatible.
 func (s *Store) GetInboxForLibrary(ctx context.Context, libraryID string) (*domain.Collection, error) {
 	collections, err := s.ListAllCollectionsByLibrary(ctx, libraryID)
 	if err != nil {
@@ -759,7 +762,40 @@ func (s *Store) GetInboxForLibrary(ctx context.Context, libraryID string) (*doma
 		}
 	}
 
-	return nil, ErrCollectionNotFound
+	// No inbox exists - create one (backward compatibility for existing databases)
+	library, err := s.GetLibrary(ctx, libraryID)
+	if err != nil {
+		return nil, fmt.Errorf("get library for inbox creation: %w", err)
+	}
+
+	inboxID, err := id.Generate("coll")
+	if err != nil {
+		return nil, fmt.Errorf("generate inbox ID: %w", err)
+	}
+
+	inbox := &domain.Collection{
+		ID:        inboxID,
+		LibraryID: libraryID,
+		OwnerID:   library.OwnerID,
+		Name:      "Inbox",
+		IsInbox:   true,
+		BookIDs:   []string{},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	if err := s.CreateCollection(ctx, inbox); err != nil {
+		return nil, fmt.Errorf("create inbox collection: %w", err)
+	}
+
+	if s.logger != nil {
+		s.logger.Info("created inbox collection for existing library",
+			"library_id", libraryID,
+			"inbox_id", inboxID,
+		)
+	}
+
+	return inbox, nil
 }
 
 // AddBookToCollection adds a book to a collection.
@@ -893,4 +929,104 @@ func (s *Store) GetCollectionsForBook(ctx context.Context, bookID string) ([]*do
 	}
 
 	return collections, nil
+}
+
+// === Admin Methods (bypass ACL) ===
+
+// AdminGetCollection retrieves a collection by ID without access control.
+// For admin use only - bypasses all ACL checks.
+func (s *Store) AdminGetCollection(ctx context.Context, id string) (*domain.Collection, error) {
+	return s.getCollectionInternal(ctx, id)
+}
+
+// AdminListAllCollections returns ALL collections across all libraries.
+// For admin use only - bypasses all ACL checks.
+func (s *Store) AdminListAllCollections(ctx context.Context) ([]*domain.Collection, error) {
+	libraries, err := s.ListLibraries(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list libraries: %w", err)
+	}
+
+	var allCollections []*domain.Collection
+	for _, lib := range libraries {
+		collections, err := s.ListAllCollectionsByLibrary(ctx, lib.ID)
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn("failed to list collections for library", "library_id", lib.ID, "error", err)
+			}
+			continue
+		}
+		allCollections = append(allCollections, collections...)
+	}
+
+	return allCollections, nil
+}
+
+// AdminUpdateCollection updates a collection without access control.
+// For admin use only - bypasses all ACL checks.
+func (s *Store) AdminUpdateCollection(ctx context.Context, coll *domain.Collection) error {
+	return s.updateCollectionInternal(ctx, coll)
+}
+
+// AdminDeleteCollection deletes a collection without access control.
+// For admin use only - bypasses all ACL checks.
+// Cannot delete system collections (Inbox).
+func (s *Store) AdminDeleteCollection(ctx context.Context, id string) error {
+	coll, err := s.getCollectionInternal(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Cannot delete system Inbox collection
+	if coll.IsInbox {
+		return errors.New("cannot delete system collection")
+	}
+
+	// Delete all shares for this collection
+	if err := s.DeleteSharesForCollection(ctx, id); err != nil {
+		return fmt.Errorf("delete shares: %w", err)
+	}
+
+	// Delete the collection
+	if err := s.deleteCollectionInternal(ctx, id); err != nil {
+		return err
+	}
+
+	if s.logger != nil {
+		s.logger.Info("collection deleted by admin", "id", id)
+	}
+
+	return nil
+}
+
+// AdminAddBookToCollection adds a book to a collection without access control.
+// For admin use only - bypasses all ACL checks.
+func (s *Store) AdminAddBookToCollection(ctx context.Context, bookID, collectionID string) error {
+	coll, err := s.getCollectionInternal(ctx, collectionID)
+	if err != nil {
+		return err
+	}
+
+	if !coll.AddBook(bookID) {
+		// Book already in collection
+		return nil
+	}
+
+	return s.updateCollectionInternal(ctx, coll)
+}
+
+// AdminRemoveBookFromCollection removes a book from a collection without access control.
+// For admin use only - bypasses all ACL checks.
+func (s *Store) AdminRemoveBookFromCollection(ctx context.Context, bookID, collectionID string) error {
+	coll, err := s.getCollectionInternal(ctx, collectionID)
+	if err != nil {
+		return err
+	}
+
+	if !coll.RemoveBook(bookID) {
+		// Book not in collection
+		return nil
+	}
+
+	return s.updateCollectionInternal(ctx, coll)
 }

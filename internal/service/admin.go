@@ -5,23 +5,29 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
 	domainerrors "github.com/listenupapp/listenup-server/internal/errors"
+	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
 // AdminService handles admin-only user management operations.
 type AdminService struct {
-	store  *store.Store
-	logger *slog.Logger
+	store                   *store.Store
+	logger                  *slog.Logger
+	registrationBroadcaster *sse.RegistrationBroadcaster
+	lensService             *LensService
 }
 
 // NewAdminService creates a new admin service.
-func NewAdminService(store *store.Store, logger *slog.Logger) *AdminService {
+func NewAdminService(store *store.Store, logger *slog.Logger, registrationBroadcaster *sse.RegistrationBroadcaster, lensService *LensService) *AdminService {
 	return &AdminService{
-		store:  store,
-		logger: logger,
+		store:                   store,
+		logger:                  logger,
+		registrationBroadcaster: registrationBroadcaster,
+		lensService:             lensService,
 	}
 }
 
@@ -170,4 +176,110 @@ func (s *AdminService) ensureOtherAdminExists(ctx context.Context, excludeUserID
 	}
 
 	return domainerrors.Forbidden("cannot remove the last admin")
+}
+
+// ListPendingUsers returns all users awaiting approval.
+func (s *AdminService) ListPendingUsers(ctx context.Context) ([]*domain.User, error) {
+	users, err := s.store.ListPendingUsers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list pending users: %w", err)
+	}
+	return users, nil
+}
+
+// ApproveUser approves a pending user, allowing them to log in.
+func (s *AdminService) ApproveUser(ctx context.Context, adminUserID, targetUserID string) (*domain.User, error) {
+	// Get target user
+	user, err := s.store.GetUser(ctx, targetUserID)
+	if err != nil {
+		if errors.Is(err, store.ErrUserNotFound) {
+			return nil, domainerrors.NotFound("user not found")
+		}
+		return nil, fmt.Errorf("get user: %w", err)
+	}
+
+	// Must be pending
+	if !user.IsPending() {
+		return nil, domainerrors.Validation("user is not pending approval")
+	}
+
+	// Approve the user
+	user.Status = domain.UserStatusActive
+	user.ApprovedBy = adminUserID
+	user.ApprovedAt = time.Now()
+	user.Touch()
+
+	if err := s.store.UpdateUser(ctx, user); err != nil {
+		return nil, fmt.Errorf("update user: %w", err)
+	}
+
+	// Broadcast SSE event for admin users
+	s.store.BroadcastUserApproved(user)
+
+	// Notify the pending user directly via their registration SSE stream
+	if s.registrationBroadcaster != nil {
+		s.registrationBroadcaster.NotifyApproved(targetUserID)
+	}
+
+	// Create default "To Read" lens for the newly approved user (best effort)
+	if s.lensService != nil {
+		if err := s.lensService.CreateDefaultLens(ctx, targetUserID); err != nil {
+			if s.logger != nil {
+				s.logger.Warn("Failed to create default lens for approved user",
+					"user_id", targetUserID,
+					"error", err,
+				)
+			}
+			// Non-fatal: user can still create lenses manually
+		}
+	}
+
+	if s.logger != nil {
+		s.logger.Info("User approved by admin",
+			"admin_id", adminUserID,
+			"user_id", targetUserID,
+			"email", user.Email,
+		)
+	}
+
+	return user, nil
+}
+
+// DenyUser denies a pending user registration request.
+// This soft-deletes the user account.
+func (s *AdminService) DenyUser(ctx context.Context, adminUserID, targetUserID string) error {
+	// Get target user
+	user, err := s.store.GetUser(ctx, targetUserID)
+	if err != nil {
+		if errors.Is(err, store.ErrUserNotFound) {
+			return domainerrors.NotFound("user not found")
+		}
+		return fmt.Errorf("get user: %w", err)
+	}
+
+	// Must be pending
+	if !user.IsPending() {
+		return domainerrors.Validation("user is not pending approval")
+	}
+
+	// Soft delete the user
+	user.MarkDeleted()
+	if err := s.store.UpdateUser(ctx, user); err != nil {
+		return fmt.Errorf("delete user: %w", err)
+	}
+
+	// Notify the pending user directly via their registration SSE stream
+	if s.registrationBroadcaster != nil {
+		s.registrationBroadcaster.NotifyDenied(targetUserID)
+	}
+
+	if s.logger != nil {
+		s.logger.Info("User registration denied by admin",
+			"admin_id", adminUserID,
+			"user_id", targetUserID,
+			"email", user.Email,
+		)
+	}
+
+	return nil
 }

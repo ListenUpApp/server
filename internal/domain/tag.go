@@ -1,22 +1,27 @@
 package domain
 
-// Tag represents a user-created label for personal organization.
-// Tags are flat (no hierarchy) and scoped to a single user.
-// Example: "beach read", "book club 2024", "gift for dad".
+import "time"
+
+// Tag represents a global community tag for categorizing books.
+// Tags are shared across all users — no ownership model.
+// Slug is the source of truth; clients transform for display: "slow-burn" → "Slow Burn".
 type Tag struct {
-	Syncable
-	Name      string `json:"name"`            // Display name
-	Slug      string `json:"slug"`            // URL-safe key
-	OwnerID   string `json:"owner_id"`        // User who owns this tag
-	Color     string `json:"color,omitempty"` // Hex color for UI
-	BookCount int    `json:"book_count"`      // Denormalized count
+	ID        string    `json:"id"`
+	Slug      string    `json:"slug"`       // Canonical form: lowercase, hyphenated
+	BookCount int       `json:"book_count"` // Denormalized count of books with this tag
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// Touch updates the UpdatedAt timestamp.
+func (t *Tag) Touch() {
+	t.UpdatedAt = time.Now()
 }
 
 // BookTag represents the many-to-many relationship between books and tags.
-// Scoped to a user - different users can tag the same book differently.
+// Unlike lenses, this is book-level (not user-scoped) — all users see the same tags on a book.
 type BookTag struct {
-	BookID    string `json:"book_id"`
-	TagID     string `json:"tag_id"`
-	UserID    string `json:"user_id"`
-	CreatedAt int64  `json:"created_at"` // Unix millis
+	BookID    string    `json:"book_id"`
+	TagID     string    `json:"tag_id"`
+	CreatedAt time.Time `json:"created_at"`
 }

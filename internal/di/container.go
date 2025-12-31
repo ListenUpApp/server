@@ -25,6 +25,7 @@ func NewContainer() *do.RootScope {
 
 	// Database layer
 	do.Provide(injector, providers.ProvideSSEManager)
+	do.Provide(injector, providers.ProvideRegistrationBroadcaster)
 	do.Provide(injector, providers.ProvideStore)
 	do.Provide(injector, providers.ProvideBootstrap)
 
@@ -62,6 +63,9 @@ func NewContainer() *do.RootScope {
 	do.Provide(injector, providers.ProvideGenreService)
 	do.Provide(injector, providers.ProvideTagService)
 	do.Provide(injector, providers.ProvideInviteService)
+	do.Provide(injector, providers.ProvideLensService)
+	do.Provide(injector, providers.ProvideInboxService)
+	do.Provide(injector, providers.ProvideSettingsService)
 	do.Provide(injector, providers.ProvideAdminService)
 
 	// Workers
@@ -111,6 +115,7 @@ func Bootstrap(injector *do.RootScope) error {
 	_ = do.MustInvoke[*service.GenreService](injector)
 	_ = do.MustInvoke[*service.TagService](injector)
 	_ = do.MustInvoke[*service.InviteService](injector)
+	_ = do.MustInvoke[*service.LensService](injector)
 	_ = do.MustInvoke[*service.AdminService](injector)
 
 	// Workers

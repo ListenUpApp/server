@@ -18,8 +18,8 @@ type Client struct {
 	ID          string
 	// Filtering fields - events are filtered in broadcast() to only deliver
 	// events matching these criteria. Empty string means "receive all".
-	UserID     string
-	Collection string
+	UserID  string
+	IsAdmin bool
 }
 
 // Manager manages SSE connections and broadcasts events.
@@ -30,6 +30,10 @@ type Manager struct {
 	wg                sync.WaitGroup
 	heartbeatInterval time.Duration
 	mu                sync.RWMutex
+
+	// Shutdown state - protected by shutdownMu
+	shutdownMu sync.RWMutex
+	shutdown   bool
 }
 
 // NewManager creates a new SSE Manager.
@@ -76,6 +80,12 @@ func (m *Manager) Start(ctx context.Context) {
 func (m *Manager) Shutdown(ctx context.Context) error {
 	m.logger.Info("SSE manager shutdown initiated")
 
+	// Mark as shutdown to prevent new events from being accepted.
+	// This must happen BEFORE closing the channel to prevent race.
+	m.shutdownMu.Lock()
+	m.shutdown = true
+	m.shutdownMu.Unlock()
+
 	// Close events channel to stop accepting new events.
 	close(m.events)
 
@@ -102,6 +112,26 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 	return nil
 }
 
+// isAdminOnlyEvent returns true if the event should only be sent to admin users.
+func isAdminOnlyEvent(eventType EventType) bool {
+	switch eventType {
+	case EventCollectionCreated,
+		EventCollectionUpdated,
+		EventCollectionDeleted,
+		EventCollectionBookAdded,
+		EventCollectionBookRemoved,
+		EventUserPending,
+		EventUserApproved,
+		EventScanStarted,
+		EventScanComplete,
+		EventInboxBookAdded,
+		EventInboxBookReleased:
+		return true
+	default:
+		return false
+	}
+}
+
 // broadcast sends an event to connected clients, filtered by user/collection.
 func (m *Manager) broadcast(event Event) {
 	var delivered, dropped, filtered int
@@ -110,16 +140,15 @@ func (m *Manager) broadcast(event Event) {
 	defer m.mu.RUnlock()
 
 	for _, client := range m.clients {
-		// Filter by user when event is user-specific.
-		// Empty event.UserID means broadcast to all users.
-		if event.UserID != "" && client.UserID != "" && event.UserID != client.UserID {
+		// Filter admin-only events to admin users
+		if isAdminOnlyEvent(event.Type) && !client.IsAdmin {
 			filtered++
 			continue
 		}
 
-		// Filter by collection when event is collection-specific.
-		// Empty event.CollectionID means broadcast to all collections.
-		if event.CollectionID != "" && client.Collection != "" && event.CollectionID != client.Collection {
+		// Filter by user when event is user-specific.
+		// Empty event.UserID means broadcast to all users.
+		if event.UserID != "" && client.UserID != "" && event.UserID != client.UserID {
 			filtered++
 			continue
 		}
@@ -147,9 +176,10 @@ func (m *Manager) broadcast(event Event) {
 }
 
 // Connect registers a new SSE client and returns the client object.
-// The userID and collectionID are used to filter events - only events matching
-// these criteria will be delivered to this client. Empty strings mean "all".
-func (m *Manager) Connect(userID, collectionID string) (*Client, error) {
+// The userID is used to filter events - only events matching this user
+// will be delivered to this client. Empty string means "all".
+// The isAdmin flag indicates whether this client has admin privileges.
+func (m *Manager) Connect(userID string, isAdmin bool) (*Client, error) {
 	clientID, err := id.Generate("sse")
 	if err != nil {
 		return nil, err
@@ -158,7 +188,7 @@ func (m *Manager) Connect(userID, collectionID string) (*Client, error) {
 	client := &Client{
 		ID:          clientID,
 		UserID:      userID,
-		Collection:  collectionID,
+		IsAdmin:     isAdmin,
 		EventChan:   make(chan Event, 100), // Buffer 100 events per client
 		Done:        make(chan struct{}),
 		ConnectedAt: time.Now(),
@@ -172,6 +202,7 @@ func (m *Manager) Connect(userID, collectionID string) (*Client, error) {
 	m.logger.Info("SSE client connected",
 		slog.String("client_id", clientID),
 		slog.String("user_id", userID),
+		slog.Bool("is_admin", isAdmin),
 		slog.Int("total_clients", totalClients))
 	return client, nil
 }
@@ -201,6 +232,16 @@ func (m *Manager) Disconnect(clientID string) {
 // This implements the store.EventEmitter interface.
 // Events are filtered by UserID/CollectionID in broadcast().
 func (m *Manager) Emit(event any) {
+	// Check shutdown state first to prevent panic on closed channel
+	m.shutdownMu.RLock()
+	isShutdown := m.shutdown
+	m.shutdownMu.RUnlock()
+
+	if isShutdown {
+		// Silently drop events after shutdown - this is expected during shutdown
+		return
+	}
+
 	// Type assert to Event - this is safe because store only emits Event types.
 	evt, ok := event.(Event)
 	if !ok {
@@ -218,6 +259,36 @@ func (m *Manager) Emit(event any) {
 		// May occur during initial library scans with many rapid changes.
 		m.logger.Error("SSE event channel full, dropping event",
 			slog.String("event_type", string(evt.Type)))
+	}
+}
+
+// EmitToUser queues an event for a specific user only.
+func (m *Manager) EmitToUser(userID string, event Event) {
+	event.UserID = userID
+	m.Emit(event)
+}
+
+// EmitToNonMembers sends an event to all connected users who are NOT in the given user ID set.
+// Used for notifying users who gained or lost access to a book.
+func (m *Manager) EmitToNonMembers(memberUserIDs map[string]bool, event Event) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for _, client := range m.clients {
+		if client.IsAdmin {
+			continue // Admins get collection events, not synthetic book events
+		}
+		if memberUserIDs[client.UserID] {
+			continue // User has access, skip
+		}
+
+		select {
+		case client.EventChan <- event:
+		default:
+			m.logger.Warn("dropped targeted event for slow client",
+				slog.String("client_id", client.ID),
+				slog.String("event_type", string(event.Type)))
+		}
 	}
 }
 

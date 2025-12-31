@@ -8,9 +8,11 @@ import (
 
 	"github.com/listenupapp/listenup-server/internal/auth"
 	"github.com/listenupapp/listenup-server/internal/config"
+	"github.com/listenupapp/listenup-server/internal/dto"
 	"github.com/listenupapp/listenup-server/internal/logger"
 	"github.com/listenupapp/listenup-server/internal/scanner"
 	"github.com/listenupapp/listenup-server/internal/service"
+	"github.com/listenupapp/listenup-server/internal/sse"
 )
 
 // ProvideInstanceService provides the server instance service.
@@ -129,9 +131,11 @@ func ProvideGenreService(i do.Injector) (*service.GenreService, error) {
 // ProvideTagService provides the tag service.
 func ProvideTagService(i do.Injector) (*service.TagService, error) {
 	storeHandle := do.MustInvoke[*StoreHandle](i)
+	sseHandle := do.MustInvoke[*SSEManagerHandle](i)
+	searchService := do.MustInvoke[*service.SearchService](i)
 	log := do.MustInvoke[*logger.Logger](i)
 
-	return service.NewTagService(storeHandle.Store, log.Logger), nil
+	return service.NewTagService(storeHandle.Store, sseHandle.Manager, searchService, log.Logger), nil
 }
 
 // ProvideInviteService provides the invite service.
@@ -151,6 +155,36 @@ func ProvideInviteService(i do.Injector) (*service.InviteService, error) {
 func ProvideAdminService(i do.Injector) (*service.AdminService, error) {
 	storeHandle := do.MustInvoke[*StoreHandle](i)
 	log := do.MustInvoke[*logger.Logger](i)
+	registrationBroadcaster := do.MustInvoke[*sse.RegistrationBroadcaster](i)
+	lensService := do.MustInvoke[*service.LensService](i)
 
-	return service.NewAdminService(storeHandle.Store, log.Logger), nil
+	return service.NewAdminService(storeHandle.Store, log.Logger, registrationBroadcaster, lensService), nil
+}
+
+// ProvideLensService provides the lens service.
+func ProvideLensService(i do.Injector) (*service.LensService, error) {
+	storeHandle := do.MustInvoke[*StoreHandle](i)
+	sseHandle := do.MustInvoke[*SSEManagerHandle](i)
+	log := do.MustInvoke[*logger.Logger](i)
+
+	return service.NewLensService(storeHandle.Store, sseHandle.Manager, log.Logger), nil
+}
+
+// ProvideInboxService provides the inbox staging workflow service.
+func ProvideInboxService(i do.Injector) (*service.InboxService, error) {
+	storeHandle := do.MustInvoke[*StoreHandle](i)
+	sseHandle := do.MustInvoke[*SSEManagerHandle](i)
+	log := do.MustInvoke[*logger.Logger](i)
+
+	enricher := dto.NewEnricher(storeHandle.Store)
+	return service.NewInboxService(storeHandle.Store, enricher, sseHandle.Manager, log.Logger), nil
+}
+
+// ProvideSettingsService provides the server settings service.
+func ProvideSettingsService(i do.Injector) (*service.SettingsService, error) {
+	storeHandle := do.MustInvoke[*StoreHandle](i)
+	inboxService := do.MustInvoke[*service.InboxService](i)
+	log := do.MustInvoke[*logger.Logger](i)
+
+	return service.NewSettingsService(storeHandle.Store, inboxService, log.Logger), nil
 }
