@@ -140,15 +140,17 @@ func (s *InboxService) ReleaseBooks(ctx context.Context, bookIDs []string) (*Rel
 		}
 
 		// Emit book.created event (book now "exists" for users)
-		bookDTO, err := s.enricher.EnrichBook(ctx, book)
-		if err != nil {
-			s.logger.Warn("failed to enrich book for SSE event",
-				"book_id", bookID,
-				"error", err,
-			)
-			// Still count as released, just won't emit proper SSE
-		} else {
-			s.sse.Emit(sse.NewBookCreatedEvent(bookDTO))
+		if s.enricher != nil {
+			bookDTO, err := s.enricher.EnrichBook(ctx, book)
+			if err != nil {
+				s.logger.Warn("failed to enrich book for SSE event",
+					"book_id", bookID,
+					"error", err,
+				)
+				// Still count as released, just won't emit proper SSE
+			} else {
+				s.sse.Emit(sse.NewBookCreatedEvent(bookDTO))
+			}
 		}
 
 		// Emit inbox.book_released event for admins

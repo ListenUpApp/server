@@ -10,12 +10,12 @@ type Lens struct {
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 	ID          string    `json:"id"`
-	OwnerID     string    `json:"owner_id"`     // User who owns this lens
-	Name        string    `json:"name"`         // Display name of the lens
-	Description string    `json:"description"`  // Optional description
-	Color       string    `json:"color"`        // Reserved for future UI customization
-	Icon        string    `json:"icon"`         // Reserved for future UI customization
-	BookIDs     []string  `json:"book_ids"`     // Ordered list of book IDs (newest first)
+	OwnerID     string    `json:"owner_id"`    // User who owns this lens
+	Name        string    `json:"name"`        // Display name of the lens
+	Description string    `json:"description"` // Optional description
+	Color       string    `json:"color"`       // Reserved for future UI customization
+	Icon        string    `json:"icon"`        // Reserved for future UI customization
+	BookIDs     []string  `json:"book_ids"`    // Ordered list of book IDs (newest first)
 }
 
 // AddBook adds a book ID to the lens, prepending it to maintain newest-first ordering.

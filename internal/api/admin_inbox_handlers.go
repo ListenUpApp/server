@@ -151,18 +151,45 @@ func (s *Server) handleListInboxBooks(ctx context.Context, input *ListInboxBooks
 		return nil, huma.Error500InternalServerError("failed to list inbox books", err)
 	}
 
-	// Build response with hydrated collection names
+	// Pre-fetch all contributors and collections to avoid N+1 queries
+	contributorIDs := make(map[string]struct{})
+	collectionIDs := make(map[string]struct{})
+
+	for _, book := range books {
+		for _, c := range book.Contributors {
+			contributorIDs[c.ContributorID] = struct{}{}
+		}
+		for _, collID := range book.StagedCollectionIDs {
+			collectionIDs[collID] = struct{}{}
+		}
+	}
+
+	// Batch fetch contributors
+	contributorMap := make(map[string]string) // id -> name
+	for id := range contributorIDs {
+		if contributor, err := s.store.GetContributor(ctx, id); err == nil {
+			contributorMap[id] = contributor.Name
+		}
+	}
+
+	// Batch fetch collections
+	collectionMap := make(map[string]CollectionRef) // id -> ref
+	for id := range collectionIDs {
+		if coll, err := s.store.AdminGetCollection(ctx, id); err == nil {
+			collectionMap[id] = CollectionRef{ID: coll.ID, Name: coll.Name}
+		}
+	}
+
+	// Build response using pre-fetched data
 	responses := make([]InboxBookResponse, 0, len(books))
 	for _, book := range books {
-		// Get author from contributors
+		// Get author from pre-fetched contributors
 		author := ""
 		for _, c := range book.Contributors {
 			for _, role := range c.Roles {
 				if role.String() == "author" {
-					// Try to get contributor name
-					contributor, err := s.store.GetContributor(ctx, c.ContributorID)
-					if err == nil {
-						author = contributor.Name
+					if name, ok := contributorMap[c.ContributorID]; ok {
+						author = name
 					}
 					break
 				}
@@ -172,17 +199,12 @@ func (s *Server) handleListInboxBooks(ctx context.Context, input *ListInboxBooks
 			}
 		}
 
-		// Hydrate staged collections
+		// Build staged collections from pre-fetched data
 		stagedCollections := make([]CollectionRef, 0, len(book.StagedCollectionIDs))
 		for _, collID := range book.StagedCollectionIDs {
-			coll, err := s.store.AdminGetCollection(ctx, collID)
-			if err != nil {
-				continue
+			if ref, ok := collectionMap[collID]; ok {
+				stagedCollections = append(stagedCollections, ref)
 			}
-			stagedCollections = append(stagedCollections, CollectionRef{
-				ID:   coll.ID,
-				Name: coll.Name,
-			})
 		}
 
 		// Build cover URL

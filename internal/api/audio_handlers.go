@@ -217,8 +217,11 @@ func (s *Server) handleTranscodedAudio(w http.ResponseWriter, r *http.Request) {
 	filePath := filepath.Join(hlsPath, transcodePath)
 
 	// Validate the file is within the HLS directory (security check)
+	// Clean both paths and ensure separator suffix to prevent bypass
+	// (e.g., /tmp/hls matching /tmp/hls_malicious)
+	cleanHlsPath := filepath.Clean(hlsPath) + string(filepath.Separator)
 	cleanPath := filepath.Clean(filePath)
-	if !strings.HasPrefix(cleanPath, hlsPath) {
+	if !strings.HasPrefix(cleanPath, cleanHlsPath) && cleanPath != filepath.Clean(hlsPath) {
 		http.Error(w, "invalid path", http.StatusBadRequest)
 		return
 	}

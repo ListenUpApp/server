@@ -18,10 +18,10 @@ import (
 // Key prefixes for global tag storage.
 // Tags are community-wide — no user ownership.
 const (
-	tagPrefix        = "tag:"                // tag:{id} → Tag JSON
-	tagBySlugPrefix  = "idx:tags:slug:"      // idx:tags:slug:{slug} → tagID
-	tagBooksPrefix   = "idx:tags:books:"     // idx:tags:books:{tagID}:{bookID} → empty
-	bookTagsPrefix   = "idx:books:tags:"     // idx:books:tags:{bookID}:{tagID} → empty
+	tagPrefix       = "tag:"            // tag:{id} → Tag JSON
+	tagBySlugPrefix = "idx:tags:slug:"  // idx:tags:slug:{slug} → tagID
+	tagBooksPrefix  = "idx:tags:books:" // idx:tags:books:{tagID}:{bookID} → empty
+	bookTagsPrefix  = "idx:books:tags:" // idx:books:tags:{bookID}:{tagID} → empty
 )
 
 // Tag errors.

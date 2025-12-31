@@ -78,3 +78,23 @@ func (sm *SyncMap[K, V]) Len() int {
 	defer sm.mu.RUnlock()
 	return len(sm.m)
 }
+
+// Clear removes all entries from the map.
+// This is useful for periodic cleanup to prevent unbounded growth.
+func (sm *SyncMap[K, V]) Clear() {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.m = make(map[K]V)
+}
+
+// Keys returns a slice of all keys in the map.
+// The returned slice is a snapshot and safe to use after the method returns.
+func (sm *SyncMap[K, V]) Keys() []K {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	keys := make([]K, 0, len(sm.m))
+	for k := range sm.m {
+		keys = append(keys, k)
+	}
+	return keys
+}

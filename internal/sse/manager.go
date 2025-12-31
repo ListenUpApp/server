@@ -30,6 +30,10 @@ type Manager struct {
 	wg                sync.WaitGroup
 	heartbeatInterval time.Duration
 	mu                sync.RWMutex
+
+	// Shutdown state - protected by shutdownMu
+	shutdownMu sync.RWMutex
+	shutdown   bool
 }
 
 // NewManager creates a new SSE Manager.
@@ -75,6 +79,12 @@ func (m *Manager) Start(ctx context.Context) {
 // It stops accepting new events, drains remaining events, and closes all clients.
 func (m *Manager) Shutdown(ctx context.Context) error {
 	m.logger.Info("SSE manager shutdown initiated")
+
+	// Mark as shutdown to prevent new events from being accepted.
+	// This must happen BEFORE closing the channel to prevent race.
+	m.shutdownMu.Lock()
+	m.shutdown = true
+	m.shutdownMu.Unlock()
 
 	// Close events channel to stop accepting new events.
 	close(m.events)
@@ -222,6 +232,16 @@ func (m *Manager) Disconnect(clientID string) {
 // This implements the store.EventEmitter interface.
 // Events are filtered by UserID/CollectionID in broadcast().
 func (m *Manager) Emit(event any) {
+	// Check shutdown state first to prevent panic on closed channel
+	m.shutdownMu.RLock()
+	isShutdown := m.shutdown
+	m.shutdownMu.RUnlock()
+
+	if isShutdown {
+		// Silently drop events after shutdown - this is expected during shutdown
+		return
+	}
+
 	// Type assert to Event - this is safe because store only emits Event types.
 	evt, ok := event.(Event)
 	if !ok {

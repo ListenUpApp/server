@@ -478,9 +478,27 @@ func (ep *EventProcessor) handleRemovedFile(ctx context.Context, bookFolder, fil
 	return nil
 }
 
+// maxFolderLocks is the threshold for clearing the folder locks map.
+// When exceeded, old locks are cleared to prevent unbounded memory growth.
+// This is safe because TryLock is non-blocking and held locks remain valid.
+const maxFolderLocks = 1000
+
 // getFolderLock gets or creates a mutex for the given folder.
 // This enables per-folder locking to prevent concurrent scans of the same folder.
 func (ep *EventProcessor) getFolderLock(folderPath string) *sync.Mutex {
+	// Prevent unbounded growth by clearing when threshold is exceeded.
+	// This is safe because:
+	// 1. TryLock is non-blocking - clearing doesn't cause deadlocks
+	// 2. Currently held locks remain valid (mutex objects still in memory)
+	// 3. New events will create fresh locks as needed
+	if ep.folderLocks.Len() > maxFolderLocks {
+		ep.logger.Debug("clearing folder locks map",
+			"size", ep.folderLocks.Len(),
+			"threshold", maxFolderLocks,
+		)
+		ep.folderLocks.Clear()
+	}
+
 	// Try to load existing lock.
 	if lock, ok := ep.folderLocks.Load(folderPath); ok {
 		return lock
