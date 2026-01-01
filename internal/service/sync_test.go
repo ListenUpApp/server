@@ -45,8 +45,8 @@ func setupTestSync(t *testing.T) (*SyncService, *store.Store, func()) {
 	return syncService, testStore, cleanup
 }
 
-// createTestBook creates a test book with the given ID and updatedAt time.
-func createTestBook(id string, updatedAt time.Time) *domain.Book {
+// createSyncTestBook creates a test book with the given ID and updatedAt time.
+func createSyncTestBook(id string, updatedAt time.Time) *domain.Book {
 	return &domain.Book{
 		Syncable: domain.Syncable{
 			ID:        id,
@@ -84,9 +84,9 @@ func TestGetManifest_WithMultipleBooks(t *testing.T) {
 
 	// Create books with different UpdatedAt times.
 	baseTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
-	book1 := createTestBook("book-001", baseTime)
-	book2 := createTestBook("book-002", baseTime.Add(1*time.Hour))
-	book3 := createTestBook("book-003", baseTime.Add(2*time.Hour)) // Latest
+	book1 := createSyncTestBook("book-001", baseTime)
+	book2 := createSyncTestBook("book-002", baseTime.Add(1*time.Hour))
+	book3 := createSyncTestBook("book-003", baseTime.Add(2*time.Hour)) // Latest
 
 	require.NoError(t, testStore.CreateBook(ctx, book1))
 	require.NoError(t, testStore.CreateBook(ctx, book2))
@@ -148,7 +148,7 @@ func TestGetManifest_SingleBook(t *testing.T) {
 
 	// Create a single book.
 	bookTime := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
-	book := createTestBook("book-solo", bookTime)
+	book := createSyncTestBook("book-solo", bookTime)
 	require.NoError(t, testStore.CreateBook(ctx, book))
 
 	manifest, err := syncService.GetManifest(ctx)
@@ -175,9 +175,9 @@ func TestGetManifest_CheckpointOrdering(t *testing.T) {
 
 	// Create books in non-chronological order.
 	baseTime := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
-	oldBook := createTestBook("old-book", baseTime)
-	newestBook := createTestBook("newest-book", baseTime.Add(10*time.Hour))
-	middleBook := createTestBook("middle-book", baseTime.Add(5*time.Hour))
+	oldBook := createSyncTestBook("old-book", baseTime)
+	newestBook := createSyncTestBook("newest-book", baseTime.Add(10*time.Hour))
+	middleBook := createSyncTestBook("middle-book", baseTime.Add(5*time.Hour))
 
 	// Insert in random order.
 	require.NoError(t, testStore.CreateBook(ctx, middleBook))
@@ -216,7 +216,7 @@ func TestManifestResponse_Structure(t *testing.T) {
 
 	// Create a book.
 	now := time.Now()
-	book := createTestBook("book-001", now)
+	book := createSyncTestBook("book-001", now)
 	require.NoError(t, testStore.CreateBook(ctx, book))
 
 	manifest, err := syncService.GetManifest(ctx)
@@ -248,7 +248,7 @@ func TestGetBooksForSync_WithPagination(t *testing.T) {
 	// Create 5 books.
 	baseTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 	for i := 1; i <= 5; i++ {
-		book := createTestBook(fmt.Sprintf("book-%03d", i), baseTime.Add(time.Duration(i)*time.Hour))
+		book := createSyncTestBook(fmt.Sprintf("book-%03d", i), baseTime.Add(time.Duration(i)*time.Hour))
 		require.NoError(t, testStore.CreateBook(ctx, book))
 	}
 
@@ -314,7 +314,7 @@ func TestGetBooksForSync_SinglePage(t *testing.T) {
 	// Create 3 books.
 	baseTime := time.Now()
 	for i := 1; i <= 3; i++ {
-		book := createTestBook(fmt.Sprintf("book-%d", i), baseTime.Add(time.Duration(i)*time.Minute))
+		book := createSyncTestBook(fmt.Sprintf("book-%d", i), baseTime.Add(time.Duration(i)*time.Minute))
 		require.NoError(t, testStore.CreateBook(ctx, book))
 	}
 

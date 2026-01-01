@@ -140,10 +140,13 @@ func (s *ListeningService) GetContinueListening(ctx context.Context, userID stri
 	}
 
 	// Enrich with book details
+	// Use GetBookNoAccessCheck because if a user has progress on a book,
+	// they should see it in continue listening regardless of current collection access
+	// (they had access when they listened to it)
 	items := make([]*domain.ContinueListeningItem, 0, len(progressList))
 	for _, progress := range progressList {
-		// Fetch book details
-		book, err := s.store.GetBook(ctx, progress.BookID, userID)
+		// Fetch book details without access check
+		book, err := s.store.GetBookNoAccessCheck(ctx, progress.BookID)
 		if err != nil {
 			s.logger.Warn("Book not found for progress", "book_id", progress.BookID, "error", err)
 			continue // Skip items where book is missing

@@ -56,6 +56,8 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 	sharingService := do.MustInvoke[*service.SharingService](i)
 	syncService := do.MustInvoke[*service.SyncService](i)
 	listeningService := do.MustInvoke[*service.ListeningService](i)
+	statsService := do.MustInvoke[*service.StatsService](i)
+	socialService := do.MustInvoke[*service.SocialService](i)
 	genreService := do.MustInvoke[*service.GenreService](i)
 	tagService := do.MustInvoke[*service.TagService](i)
 	searchService := do.MustInvoke[*service.SearchService](i)
@@ -80,6 +82,7 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 		Sharing:    sharingService,
 		Sync:       syncService,
 		Listening:  listeningService,
+		Stats:      statsService,
 		Genre:      genreService,
 		Tag:        tagService,
 		Search:     searchService,
@@ -92,6 +95,7 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 		Lens:       lensService,
 		Inbox:      inboxService,
 		Settings:   settingsService,
+		Social:     socialService,
 	}
 
 	storage := &api.StorageServices{

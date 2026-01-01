@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/listenupapp/listenup-server/internal/domain"
@@ -244,6 +245,55 @@ func (s *Store) GetProgressForUser(ctx context.Context, userID string) ([]*domai
 		return nil, err
 	}
 	return results, nil
+}
+
+// GetEventsForUserInRange retrieves events for a user within a time range.
+// Uses the event's EndedAt timestamp for filtering (when listening occurred).
+// start is inclusive, end is exclusive. Zero start = beginning of time.
+func (s *Store) GetEventsForUserInRange(
+	ctx context.Context,
+	userID string,
+	start, end time.Time,
+) ([]*domain.ListeningEvent, error) {
+	allEvents, err := s.GetEventsForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	var filtered []*domain.ListeningEvent
+	for _, e := range allEvents {
+		// Use EndedAt for "when did this listening session complete"
+		if (start.IsZero() || !e.EndedAt.Before(start)) && e.EndedAt.Before(end) {
+			filtered = append(filtered, e)
+		}
+	}
+
+	return filtered, nil
+}
+
+// GetProgressFinishedInRange retrieves books finished within a time range.
+// start is inclusive, end is exclusive. Zero start = beginning of time.
+func (s *Store) GetProgressFinishedInRange(
+	ctx context.Context,
+	userID string,
+	start, end time.Time,
+) ([]*domain.PlaybackProgress, error) {
+	allProgress, err := s.GetProgressForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	var finished []*domain.PlaybackProgress
+	for _, p := range allProgress {
+		if p.IsFinished && p.FinishedAt != nil {
+			finishedAt := *p.FinishedAt
+			if (start.IsZero() || !finishedAt.Before(start)) && finishedAt.Before(end) {
+				finished = append(finished, p)
+			}
+		}
+	}
+
+	return finished, nil
 }
 
 // GetContinueListening returns in-progress books, excluding hidden ones.

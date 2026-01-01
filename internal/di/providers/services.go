@@ -109,6 +109,22 @@ func ProvideListeningService(i do.Injector) (*service.ListeningService, error) {
 	return service.NewListeningService(storeHandle.Store, sseHandle.Manager, log.Logger), nil
 }
 
+// ProvideStatsService provides the listening statistics service.
+func ProvideStatsService(i do.Injector) (*service.StatsService, error) {
+	storeHandle := do.MustInvoke[*StoreHandle](i)
+	log := do.MustInvoke[*logger.Logger](i)
+
+	return service.NewStatsService(storeHandle.Store, log.Logger), nil
+}
+
+// ProvideSocialService provides the social features service.
+func ProvideSocialService(i do.Injector) (*service.SocialService, error) {
+	storeHandle := do.MustInvoke[*StoreHandle](i)
+	log := do.MustInvoke[*logger.Logger](i)
+
+	return service.NewSocialService(storeHandle.Store, log.Logger), nil
+}
+
 // ProvideGenreService provides the genre service.
 func ProvideGenreService(i do.Injector) (*service.GenreService, error) {
 	storeHandle := do.MustInvoke[*StoreHandle](i)

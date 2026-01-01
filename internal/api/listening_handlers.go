@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/service"
 )
 
@@ -178,13 +179,46 @@ type ContinueListeningOutput struct {
 // GetUserStatsInput contains parameters for getting user stats.
 type GetUserStatsInput struct {
 	Authorization string `header:"Authorization"`
+	Period        string `query:"period" enum:"day,week,month,year,all" default:"week" doc:"Time period for stats"`
 }
 
-// UserStatsResponse contains user listening statistics.
+// DailyListeningResponse represents a day's listening for API response.
+type DailyListeningResponse struct {
+	Date          string `json:"date" doc:"Date in YYYY-MM-DD format"`
+	ListenTimeMs  int64  `json:"listen_time_ms" doc:"Total listen time"`
+	BooksListened int    `json:"books_listened" doc:"Distinct books"`
+}
+
+// GenreListeningResponse represents genre breakdown for API response.
+type GenreListeningResponse struct {
+	GenreSlug    string  `json:"genre_slug" doc:"Genre slug"`
+	GenreName    string  `json:"genre_name" doc:"Display name"`
+	ListenTimeMs int64   `json:"listen_time_ms" doc:"Time spent"`
+	Percentage   float64 `json:"percentage" doc:"Percentage of total"`
+}
+
+// StreakDayResponse represents a day in the streak calendar.
+type StreakDayResponse struct {
+	Date         string `json:"date" doc:"Date in YYYY-MM-DD format"`
+	HasListened  bool   `json:"has_listened" doc:"Met minimum threshold"`
+	ListenTimeMs int64  `json:"listen_time_ms" doc:"Total time"`
+	Intensity    int    `json:"intensity" doc:"0-4 for visual gradient"`
+}
+
+// UserStatsResponse contains comprehensive user listening statistics.
 type UserStatsResponse struct {
-	TotalListenTimeMs int64 `json:"total_listen_time_ms" doc:"Total listen time"`
-	BooksStarted      int   `json:"books_started" doc:"Books started"`
-	BooksFinished     int   `json:"books_finished" doc:"Books finished"`
+	Period            string `json:"period" doc:"Query period"`
+	StartDate         string `json:"start_date" doc:"Period start (RFC3339)"`
+	EndDate           string `json:"end_date" doc:"Period end (RFC3339)"`
+	TotalListenTimeMs int64  `json:"total_listen_time_ms" doc:"Total listen time"`
+	BooksStarted      int    `json:"books_started" doc:"Books started in period"`
+	BooksFinished     int    `json:"books_finished" doc:"Books finished in period"`
+	CurrentStreakDays int    `json:"current_streak_days" doc:"Current streak"`
+	LongestStreakDays int    `json:"longest_streak_days" doc:"Longest ever streak"`
+
+	DailyListening []DailyListeningResponse `json:"daily_listening" doc:"Daily breakdown"`
+	GenreBreakdown []GenreListeningResponse `json:"genre_breakdown" doc:"Top genres"`
+	StreakCalendar []StreakDayResponse      `json:"streak_calendar,omitempty" doc:"Past 12 weeks"`
 }
 
 // UserStatsOutput wraps the user stats response for Huma.
@@ -278,8 +312,8 @@ func (s *Server) handleGetProgress(ctx context.Context, input *GetProgressInput)
 		return nil, err
 	}
 
-	// Get book for total duration
-	book, err := s.store.GetBook(ctx, input.ID, userID)
+	// Get book for total duration (no access check - if user has progress, they had access)
+	book, err := s.store.GetBookNoAccessCheck(ctx, input.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -353,18 +387,63 @@ func (s *Server) handleGetUserStats(ctx context.Context, input *GetUserStatsInpu
 		return nil, err
 	}
 
-	stats, err := s.services.Listening.GetUserStats(ctx, userID)
+	period := domain.StatsPeriod(input.Period)
+	if !period.Valid() {
+		period = domain.StatsPeriodWeek
+	}
+
+	stats, err := s.services.Stats.GetUserStats(ctx, userID, period)
 	if err != nil {
 		return nil, err
 	}
 
-	return &UserStatsOutput{
-		Body: UserStatsResponse{
-			TotalListenTimeMs: stats.TotalListenTimeMs,
-			BooksStarted:      stats.BooksStarted,
-			BooksFinished:     stats.BooksFinished,
-		},
-	}, nil
+	// Convert to response format
+	resp := UserStatsResponse{
+		Period:            string(stats.Period),
+		StartDate:         stats.StartDate.Format(time.RFC3339),
+		EndDate:           stats.EndDate.Format(time.RFC3339),
+		TotalListenTimeMs: stats.TotalListenTimeMs,
+		BooksStarted:      stats.BooksStarted,
+		BooksFinished:     stats.BooksFinished,
+		CurrentStreakDays: stats.CurrentStreakDays,
+		LongestStreakDays: stats.LongestStreakDays,
+	}
+
+	// Convert daily listening
+	resp.DailyListening = make([]DailyListeningResponse, len(stats.DailyListening))
+	for i, d := range stats.DailyListening {
+		resp.DailyListening[i] = DailyListeningResponse{
+			Date:          d.Date.Format("2006-01-02"),
+			ListenTimeMs:  d.ListenTimeMs,
+			BooksListened: d.BooksListened,
+		}
+	}
+
+	// Convert genre breakdown
+	resp.GenreBreakdown = make([]GenreListeningResponse, len(stats.GenreBreakdown))
+	for i, g := range stats.GenreBreakdown {
+		resp.GenreBreakdown[i] = GenreListeningResponse{
+			GenreSlug:    g.GenreSlug,
+			GenreName:    g.GenreName,
+			ListenTimeMs: g.ListenTimeMs,
+			Percentage:   g.Percentage,
+		}
+	}
+
+	// Convert streak calendar
+	if stats.StreakCalendar != nil {
+		resp.StreakCalendar = make([]StreakDayResponse, len(stats.StreakCalendar))
+		for i, day := range stats.StreakCalendar {
+			resp.StreakCalendar[i] = StreakDayResponse{
+				Date:         day.Date.Format("2006-01-02"),
+				HasListened:  day.HasListened,
+				ListenTimeMs: day.ListenTimeMs,
+				Intensity:    day.Intensity,
+			}
+		}
+	}
+
+	return &UserStatsOutput{Body: resp}, nil
 }
 
 func (s *Server) handleGetBookStats(ctx context.Context, input *GetBookStatsInput) (*BookStatsOutput, error) {

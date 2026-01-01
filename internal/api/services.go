@@ -15,6 +15,7 @@ type Services struct {
 	Sharing    *service.SharingService
 	Sync       *service.SyncService
 	Listening  *service.ListeningService
+	Stats      *service.StatsService
 	Genre      *service.GenreService
 	Tag        *service.TagService
 	Search     *service.SearchService
@@ -27,6 +28,7 @@ type Services struct {
 	Lens       *service.LensService     // Personal curation lenses
 	Inbox      *service.InboxService    // Inbox staging workflow
 	Settings   *service.SettingsService // Server-wide settings
+	Social     *service.SocialService   // Social features (leaderboards)
 }
 
 // StorageServices groups file storage handlers used by the API server.
