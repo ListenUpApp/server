@@ -23,6 +23,16 @@ func (s *Server) registerListeningRoutes() {
 	}, s.handleRecordListeningEvent)
 
 	huma.Register(s.api, huma.Operation{
+		OperationID: "getListeningEvents",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/listening/events",
+		Summary:     "Get listening events",
+		Description: "Returns listening events for the current user, with optional since timestamp for delta sync",
+		Tags:        []string{"Listening"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetListeningEvents)
+
+	huma.Register(s.api, huma.Operation{
 		OperationID: "getProgress",
 		Method:      http.MethodGet,
 		Path:        "/api/v1/books/{id}/progress",
@@ -240,6 +250,22 @@ type UserStatsOutput struct {
 type GetBookStatsInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Book ID"`
+}
+
+// GetListeningEventsInput contains parameters for fetching listening events.
+type GetListeningEventsInput struct {
+	Authorization string `header:"Authorization"`
+	Since         int64  `query:"since" doc:"Only return events created after this timestamp (epoch ms). Use 0 for all events."`
+}
+
+// GetListeningEventsResponse contains the list of listening events.
+type GetListeningEventsResponse struct {
+	Events []ListeningEventResponse `json:"events" doc:"List of listening events"`
+}
+
+// GetListeningEventsOutput wraps the listening events response for Huma.
+type GetListeningEventsOutput struct {
+	Body GetListeningEventsResponse
 }
 
 // BookStatsResponse contains book listening statistics.
@@ -483,5 +509,50 @@ func (s *Server) handleGetBookStats(ctx context.Context, input *GetBookStatsInpu
 			TotalListeners:    stats.TotalListeners,
 			CompletedCount:    stats.CompletedCount,
 		},
+	}, nil
+}
+
+func (s *Server) handleGetListeningEvents(ctx context.Context, input *GetListeningEventsInput) (*GetListeningEventsOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get events for user, optionally filtered by since timestamp
+	var events []*domain.ListeningEvent
+	if input.Since > 0 {
+		since := time.UnixMilli(input.Since)
+		events, err = s.store.GetEventsForUserInRange(ctx, userID, since, time.Now().Add(time.Hour))
+	} else {
+		events, err = s.store.GetEventsForUser(ctx, userID)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to response format
+	resp := make([]ListeningEventResponse, len(events))
+	for i, e := range events {
+		resp[i] = ListeningEventResponse{
+			ID:              e.ID,
+			BookID:          e.BookID,
+			StartPositionMs: e.StartPositionMs,
+			EndPositionMs:   e.EndPositionMs,
+			DurationMs:      e.DurationMs,
+			StartedAt:       e.StartedAt,
+			EndedAt:         e.EndedAt,
+			PlaybackSpeed:   e.PlaybackSpeed,
+			DeviceID:        e.DeviceID,
+		}
+	}
+
+	slog.Info("fetched listening events",
+		"user_id", userID,
+		"since", input.Since,
+		"count", len(resp),
+	)
+
+	return &GetListeningEventsOutput{
+		Body: GetListeningEventsResponse{Events: resp},
 	}, nil
 }

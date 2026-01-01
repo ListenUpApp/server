@@ -135,8 +135,9 @@ func (s *ListeningService) RecordEvent(ctx context.Context, userID string, req R
 		"progress", progress.Progress,
 	)
 
-	// Emit SSE event so other devices and UI can update
+	// Emit SSE events so other devices and UI can update
 	s.events.Emit(sse.NewProgressUpdatedEvent(userID, progress))
+	s.events.Emit(sse.NewListeningEventCreatedEvent(userID, event))
 
 	return &RecordEventResponse{
 		Event:    event,

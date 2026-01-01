@@ -88,8 +88,9 @@ const (
 	EventInboxBookReleased EventType = "inbox.book_released"
 
 	// Listening events (user-specific)
-	EventProgressUpdated       EventType = "listening.progress_updated"
-	EventReadingSessionUpdated EventType = "reading_session.updated"
+	EventProgressUpdated        EventType = "listening.progress_updated"
+	EventListeningEventCreated  EventType = "listening.event_created"
+	EventReadingSessionUpdated  EventType = "reading_session.updated"
 )
 
 // Event represents an SSE event to be sent to clients.
@@ -651,6 +652,41 @@ func NewProgressUpdatedEvent(userID string, progress *domain.PlaybackProgress) E
 			LastPlayedAt:      progress.LastPlayedAt,
 		},
 		UserID:    userID, // Only send to this user
+		Timestamp: time.Now(),
+	}
+}
+
+// ListeningEventCreatedEventData is the data payload for listening.event_created events.
+// Sent to other devices when a listening event is recorded, enabling offline-first stats.
+type ListeningEventCreatedEventData struct {
+	ID              string    `json:"id"`
+	BookID          string    `json:"book_id"`
+	StartPositionMs int64     `json:"start_position_ms"`
+	EndPositionMs   int64     `json:"end_position_ms"`
+	StartedAt       time.Time `json:"started_at"`
+	EndedAt         time.Time `json:"ended_at"`
+	PlaybackSpeed   float32   `json:"playback_speed"`
+	DeviceID        string    `json:"device_id"`
+	CreatedAt       time.Time `json:"created_at"`
+}
+
+// NewListeningEventCreatedEvent creates a listening.event_created event for a specific user.
+// Used to sync listening events to other devices for offline stats computation.
+func NewListeningEventCreatedEvent(userID string, event *domain.ListeningEvent) Event {
+	return Event{
+		Type: EventListeningEventCreated,
+		Data: ListeningEventCreatedEventData{
+			ID:              event.ID,
+			BookID:          event.BookID,
+			StartPositionMs: event.StartPositionMs,
+			EndPositionMs:   event.EndPositionMs,
+			StartedAt:       event.StartedAt,
+			EndedAt:         event.EndedAt,
+			PlaybackSpeed:   event.PlaybackSpeed,
+			DeviceID:        event.DeviceID,
+			CreatedAt:       event.CreatedAt,
+		},
+		UserID:    userID, // Only send to this user's other devices
 		Timestamp: time.Now(),
 	}
 }
