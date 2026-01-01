@@ -100,13 +100,23 @@ func ProvideSyncService(i do.Injector) (*service.SyncService, error) {
 	return service.NewSyncService(storeHandle.Store, log.Logger), nil
 }
 
-// ProvideListeningService provides the listening progress service.
-func ProvideListeningService(i do.Injector) (*service.ListeningService, error) {
+// ProvideReadingSessionService provides the reading session management service.
+func ProvideReadingSessionService(i do.Injector) (*service.ReadingSessionService, error) {
 	storeHandle := do.MustInvoke[*StoreHandle](i)
 	sseHandle := do.MustInvoke[*SSEManagerHandle](i)
 	log := do.MustInvoke[*logger.Logger](i)
 
-	return service.NewListeningService(storeHandle.Store, sseHandle.Manager, log.Logger), nil
+	return service.NewReadingSessionService(storeHandle.Store, sseHandle.Manager, log.Logger), nil
+}
+
+// ProvideListeningService provides the listening progress service.
+func ProvideListeningService(i do.Injector) (*service.ListeningService, error) {
+	storeHandle := do.MustInvoke[*StoreHandle](i)
+	sseHandle := do.MustInvoke[*SSEManagerHandle](i)
+	readingSessionService := do.MustInvoke[*service.ReadingSessionService](i)
+	log := do.MustInvoke[*logger.Logger](i)
+
+	return service.NewListeningService(storeHandle.Store, sseHandle.Manager, readingSessionService, log.Logger), nil
 }
 
 // ProvideStatsService provides the listening statistics service.

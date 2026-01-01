@@ -9,22 +9,25 @@ import (
 
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/id"
+	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
 // ListeningService handles listening events and playback progress.
 type ListeningService struct {
-	store  *store.Store
-	events store.EventEmitter
-	logger *slog.Logger
+	store                 *store.Store
+	events                store.EventEmitter
+	readingSessionService *ReadingSessionService
+	logger                *slog.Logger
 }
 
 // NewListeningService creates a new listening service.
-func NewListeningService(store *store.Store, events store.EventEmitter, logger *slog.Logger) *ListeningService {
+func NewListeningService(store *store.Store, events store.EventEmitter, readingSessionService *ReadingSessionService, logger *slog.Logger) *ListeningService {
 	return &ListeningService{
-		store:  store,
-		events: events,
-		logger: logger,
+		store:                 store,
+		events:                events,
+		readingSessionService: readingSessionService,
+		logger:                logger,
 	}
 }
 
@@ -85,22 +88,43 @@ func (s *ListeningService) RecordEvent(ctx context.Context, userID string, req R
 	}
 
 	// Get or create progress
-	progress, err := s.store.GetProgress(ctx, userID, req.BookID)
+	existingProgress, err := s.store.GetProgress(ctx, userID, req.BookID)
 	if err != nil && !errors.Is(err, store.ErrProgressNotFound) {
 		return nil, fmt.Errorf("get progress: %w", err)
 	}
 
-	if progress == nil {
+	// Track if book was previously finished
+	wasFinished := existingProgress != nil && existingProgress.IsFinished
+
+	var progress *domain.PlaybackProgress
+	if existingProgress == nil {
 		// First event for this book
 		progress = domain.NewPlaybackProgress(event, book.TotalDuration)
 	} else {
 		// Update existing progress
+		progress = existingProgress
 		progress.UpdateFromEvent(event, book.TotalDuration)
 	}
 
 	// Store progress
 	if err := s.store.UpsertProgress(ctx, progress); err != nil {
 		return nil, fmt.Errorf("store progress: %w", err)
+	}
+
+	// Track reading session (non-blocking - don't fail if session operations fail)
+	if _, err := s.readingSessionService.EnsureActiveSession(ctx, userID, req.BookID); err != nil {
+		s.logger.Warn("failed to ensure reading session", "error", err, "user_id", userID, "book_id", req.BookID)
+	}
+
+	if err := s.readingSessionService.UpdateSessionProgress(ctx, userID, req.BookID, progress.TotalListenTimeMs); err != nil {
+		s.logger.Warn("failed to update session progress", "error", err, "user_id", userID, "book_id", req.BookID)
+	}
+
+	// Check if just completed (99%+)
+	if progress.IsFinished && !wasFinished {
+		if err := s.readingSessionService.CompleteSession(ctx, userID, req.BookID, progress.Progress, progress.TotalListenTimeMs); err != nil {
+			s.logger.Warn("failed to complete session", "error", err, "user_id", userID, "book_id", req.BookID)
+		}
 	}
 
 	s.logger.Debug("recorded listening event",
@@ -110,6 +134,9 @@ func (s *ListeningService) RecordEvent(ctx context.Context, userID string, req R
 		"duration_ms", event.DurationMs,
 		"progress", progress.Progress,
 	)
+
+	// Emit SSE event so other devices and UI can update
+	s.events.Emit(sse.NewProgressUpdatedEvent(userID, progress))
 
 	return &RecordEventResponse{
 		Event:    event,
@@ -184,38 +211,19 @@ func (s *ListeningService) GetContinueListening(ctx context.Context, userID stri
 }
 
 // getAuthorName extracts author name(s) from book contributors.
+// Delegates to the shared getAuthorName function.
 func (s *ListeningService) getAuthorName(ctx context.Context, book *domain.Book) string {
-	// Collect author contributor IDs
-	var authorIDs []string
-	for _, contrib := range book.Contributors {
-		for _, role := range contrib.Roles {
-			if role == domain.RoleAuthor {
-				authorIDs = append(authorIDs, contrib.ContributorID)
-				break
-			}
-		}
-	}
-
-	if len(authorIDs) == 0 {
-		return ""
-	}
-
-	// Fetch contributor details
-	contributors, err := s.store.GetContributorsByIDs(ctx, authorIDs)
-	if err != nil || len(contributors) == 0 {
-		return ""
-	}
-
-	// Build author string
-	authorName := contributors[0].Name
-	if len(contributors) > 1 {
-		authorName += " et al."
-	}
-	return authorName
+	return getAuthorName(ctx, s.store, book)
 }
 
 // ResetProgress removes all progress for a user+book.
 func (s *ListeningService) ResetProgress(ctx context.Context, userID, bookID string) error {
+	// Abandon active reading session before resetting progress
+	if err := s.readingSessionService.AbandonSession(ctx, userID, bookID); err != nil {
+		s.logger.Warn("failed to abandon session on reset", "error", err, "user_id", userID, "book_id", bookID)
+		// Continue with reset even if abandon fails
+	}
+
 	return s.store.DeleteProgress(ctx, userID, bookID)
 }
 

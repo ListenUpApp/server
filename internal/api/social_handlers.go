@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/listenupapp/listenup-server/internal/domain"
@@ -19,6 +20,26 @@ func (s *Server) registerSocialRoutes() {
 		Tags:        []string{"Social"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleGetLeaderboard)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getBookReaders",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/books/{id}/readers",
+		Summary:     "Get book readers",
+		Description: "Returns all users who have read or are reading this book",
+		Tags:        []string{"Social"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetBookReaders)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getUserReadingHistory",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/users/me/reading-sessions",
+		Summary:     "Get user reading history",
+		Description: "Returns the current user's reading session history",
+		Tags:        []string{"Social"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetUserReadingHistory)
 }
 
 // === DTOs ===
@@ -150,4 +171,199 @@ func formatHours(h int64) string {
 
 func formatHoursMinutes(h, m int64) string {
 	return fmt.Sprintf("%dh %dm", h, m)
+}
+
+// === Book Readers DTOs ===
+
+// GetBookReadersInput contains parameters for getting book readers.
+type GetBookReadersInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Book ID"`
+	Limit         int    `query:"limit" default:"10" doc:"Max readers to return"`
+}
+
+// SessionSummaryResponse represents a single reading session in API format.
+type SessionSummaryResponse struct {
+	ID           string  `json:"id" doc:"Session ID"`
+	StartedAt    string  `json:"started_at" doc:"When session started (RFC3339)"`
+	FinishedAt   *string `json:"finished_at,omitempty" doc:"When session finished (RFC3339)"`
+	IsCompleted  bool    `json:"is_completed" doc:"Whether session was completed"`
+	ListenTimeMs int64   `json:"listen_time_ms" doc:"Total listen time in ms"`
+}
+
+// ReaderSummaryResponse represents a user who has read a book in API format.
+type ReaderSummaryResponse struct {
+	UserID             string  `json:"user_id" doc:"User ID"`
+	DisplayName        string  `json:"display_name" doc:"User display name"`
+	AvatarColor        string  `json:"avatar_color" doc:"Generated avatar color"`
+	IsCurrentlyReading bool    `json:"is_currently_reading" doc:"Whether user is actively reading"`
+	CurrentProgress    float64 `json:"current_progress,omitempty" doc:"Current progress (0-1)"`
+	StartedAt          string  `json:"started_at" doc:"When user first started (RFC3339)"`
+	FinishedAt         *string `json:"finished_at,omitempty" doc:"When user last finished (RFC3339)"`
+	CompletionCount    int     `json:"completion_count" doc:"Number of times completed"`
+}
+
+// BookReadersResponse contains all readers of a book.
+type BookReadersResponse struct {
+	YourSessions     []SessionSummaryResponse `json:"your_sessions" doc:"Your reading sessions"`
+	OtherReaders     []ReaderSummaryResponse  `json:"other_readers" doc:"Other users who read this book"`
+	TotalReaders     int                      `json:"total_readers" doc:"Total number of readers"`
+	TotalCompletions int                      `json:"total_completions" doc:"Total completions across all users"`
+}
+
+// GetBookReadersOutput wraps the book readers response for Huma.
+type GetBookReadersOutput struct {
+	Body BookReadersResponse
+}
+
+// === User Reading History DTOs ===
+
+// GetUserReadingHistoryInput contains parameters for getting user reading history.
+type GetUserReadingHistoryInput struct {
+	Authorization string `header:"Authorization"`
+	Limit         int    `query:"limit" default:"20" doc:"Max sessions to return"`
+}
+
+// ReadingHistorySessionResponse represents a session with book metadata in API format.
+type ReadingHistorySessionResponse struct {
+	ID           string  `json:"id" doc:"Session ID"`
+	BookID       string  `json:"book_id" doc:"Book ID"`
+	BookTitle    string  `json:"book_title" doc:"Book title"`
+	BookAuthor   string  `json:"book_author,omitempty" doc:"Book author(s)"`
+	CoverPath    string  `json:"cover_path,omitempty" doc:"Cover image path"`
+	StartedAt    string  `json:"started_at" doc:"When session started (RFC3339)"`
+	FinishedAt   *string `json:"finished_at,omitempty" doc:"When session finished (RFC3339)"`
+	IsCompleted  bool    `json:"is_completed" doc:"Whether session was completed"`
+	ListenTimeMs int64   `json:"listen_time_ms" doc:"Total listen time in ms"`
+}
+
+// UserReadingHistoryResponse contains a user's reading history.
+type UserReadingHistoryResponse struct {
+	Sessions       []ReadingHistorySessionResponse `json:"sessions" doc:"Reading sessions"`
+	TotalSessions  int                             `json:"total_sessions" doc:"Total number of sessions"`
+	TotalCompleted int                             `json:"total_completed" doc:"Number of completed sessions"`
+}
+
+// GetUserReadingHistoryOutput wraps the user reading history response for Huma.
+type GetUserReadingHistoryOutput struct {
+	Body UserReadingHistoryResponse
+}
+
+// === Book Readers Handler ===
+
+func (s *Server) handleGetBookReaders(ctx context.Context, input *GetBookReadersInput) (*GetBookReadersOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	// ACL check - verify user can access this book
+	_, err = s.store.GetBook(ctx, input.ID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate and cap limit
+	limit := input.Limit
+	if limit <= 0 {
+		limit = 10
+	} else if limit > 100 {
+		limit = 100
+	}
+
+	// Get readers from service
+	result, err := s.services.ReadingSession.GetBookReaders(ctx, input.ID, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to API format
+	yourSessions := make([]SessionSummaryResponse, len(result.YourSessions))
+	for i, session := range result.YourSessions {
+		yourSessions[i] = SessionSummaryResponse{
+			ID:           session.ID,
+			StartedAt:    session.StartedAt.Format(time.RFC3339),
+			IsCompleted:  session.IsCompleted,
+			ListenTimeMs: session.ListenTimeMs,
+		}
+		if session.FinishedAt != nil {
+			finishedAt := session.FinishedAt.Format(time.RFC3339)
+			yourSessions[i].FinishedAt = &finishedAt
+		}
+	}
+
+	otherReaders := make([]ReaderSummaryResponse, len(result.OtherReaders))
+	for i, reader := range result.OtherReaders {
+		otherReaders[i] = ReaderSummaryResponse{
+			UserID:             reader.UserID,
+			DisplayName:        reader.DisplayName,
+			AvatarColor:        reader.AvatarColor,
+			IsCurrentlyReading: reader.IsCurrentlyReading,
+			CurrentProgress:    reader.CurrentProgress,
+			StartedAt:          reader.StartedAt.Format(time.RFC3339),
+			CompletionCount:    reader.CompletionCount,
+		}
+		if reader.FinishedAt != nil {
+			finishedAt := reader.FinishedAt.Format(time.RFC3339)
+			otherReaders[i].FinishedAt = &finishedAt
+		}
+	}
+
+	return &GetBookReadersOutput{
+		Body: BookReadersResponse{
+			YourSessions:     yourSessions,
+			OtherReaders:     otherReaders,
+			TotalReaders:     result.TotalReaders,
+			TotalCompletions: result.TotalCompletions,
+		},
+	}, nil
+}
+
+// === User Reading History Handler ===
+
+func (s *Server) handleGetUserReadingHistory(ctx context.Context, input *GetUserReadingHistoryInput) (*GetUserReadingHistoryOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	limit := input.Limit
+	if limit <= 0 {
+		limit = 20
+	} else if limit > 100 {
+		limit = 100
+	}
+
+	// Get reading history from service
+	result, err := s.services.ReadingSession.GetUserReadingHistory(ctx, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to API format
+	sessions := make([]ReadingHistorySessionResponse, len(result.Sessions))
+	for i, session := range result.Sessions {
+		sessions[i] = ReadingHistorySessionResponse{
+			ID:           session.ID,
+			BookID:       session.BookID,
+			BookTitle:    session.BookTitle,
+			BookAuthor:   session.BookAuthor,
+			CoverPath:    session.CoverPath,
+			StartedAt:    session.StartedAt.Format(time.RFC3339),
+			IsCompleted:  session.IsCompleted,
+			ListenTimeMs: session.ListenTimeMs,
+		}
+		if session.FinishedAt != nil {
+			finishedAt := session.FinishedAt.Format(time.RFC3339)
+			sessions[i].FinishedAt = &finishedAt
+		}
+	}
+
+	return &GetUserReadingHistoryOutput{
+		Body: UserReadingHistoryResponse{
+			Sessions:       sessions,
+			TotalSessions:  result.TotalSessions,
+			TotalCompleted: result.TotalCompleted,
+		},
+	}, nil
 }

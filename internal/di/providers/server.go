@@ -70,32 +70,34 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 	lensService := do.MustInvoke[*service.LensService](i)
 	inboxService := do.MustInvoke[*service.InboxService](i)
 	settingsService := do.MustInvoke[*service.SettingsService](i)
+	readingSessionService := do.MustInvoke[*service.ReadingSessionService](i)
 
 	tokenVerifier := &sseTokenVerifier{authService: authService}
 	sseHandler := sse.NewHandler(sseHandle.Manager, log.Logger, tokenVerifier)
 
 	services := &api.Services{
-		Instance:   instanceService,
-		Auth:       authService,
-		Book:       bookService,
-		Collection: collectionService,
-		Sharing:    sharingService,
-		Sync:       syncService,
-		Listening:  listeningService,
-		Stats:      statsService,
-		Genre:      genreService,
-		Tag:        tagService,
-		Search:     searchService,
-		Invite:     inviteService,
-		Admin:      adminService,
-		Transcode:  transcodeHandle.TranscodeService,
-		Metadata:   metadataHandle.MetadataService,
-		Chapter:    chapterService,
-		Cover:      coverService,
-		Lens:       lensService,
-		Inbox:      inboxService,
-		Settings:   settingsService,
-		Social:     socialService,
+		Instance:       instanceService,
+		Auth:           authService,
+		Book:           bookService,
+		Collection:     collectionService,
+		Sharing:        sharingService,
+		Sync:           syncService,
+		Listening:      listeningService,
+		Stats:          statsService,
+		Genre:          genreService,
+		Tag:            tagService,
+		Search:         searchService,
+		Invite:         inviteService,
+		Admin:          adminService,
+		Transcode:      transcodeHandle.TranscodeService,
+		Metadata:       metadataHandle.MetadataService,
+		Chapter:        chapterService,
+		Cover:          coverService,
+		Lens:           lensService,
+		Inbox:          inboxService,
+		Settings:       settingsService,
+		Social:         socialService,
+		ReadingSession: readingSessionService,
 	}
 
 	storage := &api.StorageServices{

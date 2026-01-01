@@ -38,11 +38,34 @@ func (s *StatsService) GetUserStats(
 	now := time.Now()
 	start, end := period.Bounds(now)
 
+	s.logger.Info("calculating user stats",
+		"user_id", userID,
+		"period", period,
+		"range_start", start.Format(time.RFC3339),
+		"range_end", end.Format(time.RFC3339),
+	)
+
 	// Fetch events in range
 	events, err := s.store.GetEventsForUserInRange(ctx, userID, start, end)
 	if err != nil {
 		return nil, err
 	}
+
+	// Calculate total time from events for debugging
+	var totalTimeMs int64
+	for _, e := range events {
+		totalTimeMs += e.DurationMs
+		s.logger.Debug("event in range",
+			"event_id", e.ID,
+			"ended_at", e.EndedAt.Format(time.RFC3339),
+			"duration_ms", e.DurationMs,
+		)
+	}
+	s.logger.Info("found events for stats",
+		"user_id", userID,
+		"event_count", len(events),
+		"total_time_ms", totalTimeMs,
+	)
 
 	// Fetch finished books in range
 	finishedProgress, err := s.store.GetProgressFinishedInRange(ctx, userID, start, end)

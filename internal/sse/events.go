@@ -86,6 +86,10 @@ const (
 	// Inbox events (admin-only)
 	EventInboxBookAdded    EventType = "inbox.book_added"
 	EventInboxBookReleased EventType = "inbox.book_released"
+
+	// Listening events (user-specific)
+	EventProgressUpdated       EventType = "listening.progress_updated"
+	EventReadingSessionUpdated EventType = "reading_session.updated"
 )
 
 // Event represents an SSE event to be sent to clients.
@@ -620,6 +624,58 @@ func NewInboxBookReleasedEvent(bookID string) Event {
 	return Event{
 		Type:      EventInboxBookReleased,
 		Data:      InboxBookReleasedEventData{BookID: bookID},
+		Timestamp: time.Now(),
+	}
+}
+
+// ProgressUpdatedEventData is the data payload for listening.progress_updated events.
+type ProgressUpdatedEventData struct {
+	BookID            string    `json:"book_id"`
+	CurrentPositionMs int64     `json:"current_position_ms"`
+	Progress          float64   `json:"progress"`
+	TotalListenTimeMs int64     `json:"total_listen_time_ms"`
+	IsFinished        bool      `json:"is_finished"`
+	LastPlayedAt      time.Time `json:"last_played_at"`
+}
+
+// NewProgressUpdatedEvent creates a listening.progress_updated event for a specific user.
+func NewProgressUpdatedEvent(userID string, progress *domain.PlaybackProgress) Event {
+	return Event{
+		Type: EventProgressUpdated,
+		Data: ProgressUpdatedEventData{
+			BookID:            progress.BookID,
+			CurrentPositionMs: progress.CurrentPositionMs,
+			Progress:          progress.Progress,
+			TotalListenTimeMs: progress.TotalListenTimeMs,
+			IsFinished:        progress.IsFinished,
+			LastPlayedAt:      progress.LastPlayedAt,
+		},
+		UserID:    userID, // Only send to this user
+		Timestamp: time.Now(),
+	}
+}
+
+// ReadingSessionUpdatedEventData is the data payload for reading_session.updated events.
+type ReadingSessionUpdatedEventData struct {
+	SessionID    string     `json:"session_id"`
+	BookID       string     `json:"book_id"`
+	IsCompleted  bool       `json:"is_completed"`
+	ListenTimeMs int64      `json:"listen_time_ms"`
+	FinishedAt   *time.Time `json:"finished_at,omitempty"`
+}
+
+// NewReadingSessionUpdatedEvent creates a reading_session.updated event.
+// Broadcast to all users so book readers lists can update.
+func NewReadingSessionUpdatedEvent(session *domain.BookReadingSession) Event {
+	return Event{
+		Type: EventReadingSessionUpdated,
+		Data: ReadingSessionUpdatedEventData{
+			SessionID:    session.ID,
+			BookID:       session.BookID,
+			IsCompleted:  session.IsCompleted,
+			ListenTimeMs: session.ListenTimeMs,
+			FinishedAt:   session.FinishedAt,
+		},
 		Timestamp: time.Now(),
 	}
 }
