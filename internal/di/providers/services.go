@@ -109,6 +109,15 @@ func ProvideReadingSessionService(i do.Injector) (*service.ReadingSessionService
 	return service.NewReadingSessionService(storeHandle.Store, sseHandle.Manager, log.Logger), nil
 }
 
+// ProvideActivityService provides the activity feed service.
+func ProvideActivityService(i do.Injector) (*service.ActivityService, error) {
+	storeHandle := do.MustInvoke[*StoreHandle](i)
+	sseHandle := do.MustInvoke[*SSEManagerHandle](i)
+	log := do.MustInvoke[*logger.Logger](i)
+
+	return service.NewActivityService(storeHandle.Store, sseHandle.Manager, log.Logger), nil
+}
+
 // ProvideListeningService provides the listening progress service.
 func ProvideListeningService(i do.Injector) (*service.ListeningService, error) {
 	storeHandle := do.MustInvoke[*StoreHandle](i)

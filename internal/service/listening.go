@@ -13,12 +13,27 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
+// MilestoneRecorder records milestone activities.
+// This avoids a circular dependency between ListeningService and ActivityService.
+type MilestoneRecorder interface {
+	RecordStreakMilestone(ctx context.Context, userID string, days int) error
+	RecordListeningMilestone(ctx context.Context, userID string, hours int) error
+}
+
+// StreakCalculator calculates user streaks.
+// This avoids a circular dependency between ListeningService and SocialService.
+type StreakCalculator interface {
+	CalculateUserStreak(ctx context.Context, userID string) int
+}
+
 // ListeningService handles listening events and playback progress.
 type ListeningService struct {
 	store                 *store.Store
 	events                store.EventEmitter
 	readingSessionService *ReadingSessionService
 	logger                *slog.Logger
+	milestoneRecorder     MilestoneRecorder
+	streakCalculator      StreakCalculator
 }
 
 // NewListeningService creates a new listening service.
@@ -29,6 +44,18 @@ func NewListeningService(store *store.Store, events store.EventEmitter, readingS
 		readingSessionService: readingSessionService,
 		logger:                logger,
 	}
+}
+
+// SetMilestoneRecorder sets the milestone recorder for recording activity milestones.
+// This is set after construction to avoid circular dependencies.
+func (s *ListeningService) SetMilestoneRecorder(recorder MilestoneRecorder) {
+	s.milestoneRecorder = recorder
+}
+
+// SetStreakCalculator sets the streak calculator for computing user streaks.
+// This is set after construction to avoid circular dependencies.
+func (s *ListeningService) SetStreakCalculator(calculator StreakCalculator) {
+	s.streakCalculator = calculator
 }
 
 // RecordEventRequest contains the data for recording a listening event.
@@ -139,10 +166,73 @@ func (s *ListeningService) RecordEvent(ctx context.Context, userID string, req R
 	s.events.Emit(sse.NewProgressUpdatedEvent(userID, progress))
 	s.events.Emit(sse.NewListeningEventCreatedEvent(userID, event))
 
+	// Check for milestone crossings (non-blocking)
+	s.checkMilestones(ctx, userID, progress.TotalListenTimeMs)
+
+	// Note: listening_session activities are created when the reading session ends
+	// (CompleteSession or AbandonSession), not per-event, to avoid spamming the feed.
+
 	return &RecordEventResponse{
 		Event:    event,
 		Progress: progress,
 	}, nil
+}
+
+// checkMilestones checks for and records any milestone crossings.
+// This is non-blocking and logs errors instead of returning them.
+func (s *ListeningService) checkMilestones(ctx context.Context, userID string, newTotalListenTimeMs int64) {
+	if s.milestoneRecorder == nil {
+		return
+	}
+
+	// Get previous milestone state
+	prevState, err := s.store.GetUserMilestoneState(ctx, userID)
+	if err != nil {
+		s.logger.Warn("failed to get milestone state", "user_id", userID, "error", err)
+		return
+	}
+
+	// Initialize if nil (first time tracking)
+	var prevStreakDays, prevListenHours int
+	if prevState != nil {
+		prevStreakDays = prevState.LastStreakDays
+		prevListenHours = prevState.LastListenHoursTotal
+	}
+
+	// Calculate current values
+	currentListenHours := int(newTotalListenTimeMs / (1000 * 60 * 60))
+
+	var currentStreak int
+	if s.streakCalculator != nil {
+		currentStreak = s.streakCalculator.CalculateUserStreak(ctx, userID)
+	}
+
+	// Check for streak milestone
+	if currentStreak > prevStreakDays && domain.IsStreakMilestone(currentStreak) {
+		if err := s.milestoneRecorder.RecordStreakMilestone(ctx, userID, currentStreak); err != nil {
+			s.logger.Warn("failed to record streak milestone",
+				"user_id", userID,
+				"days", currentStreak,
+				"error", err)
+		}
+	}
+
+	// Check for listening hours milestone
+	if crossed, hours := domain.CrossedListeningMilestone(prevListenHours, currentListenHours); crossed {
+		if err := s.milestoneRecorder.RecordListeningMilestone(ctx, userID, hours); err != nil {
+			s.logger.Warn("failed to record listening milestone",
+				"user_id", userID,
+				"hours", hours,
+				"error", err)
+		}
+	}
+
+	// Update milestone state
+	if err := s.store.UpdateUserMilestoneState(ctx, userID, currentStreak, currentListenHours); err != nil {
+		s.logger.Warn("failed to update milestone state",
+			"user_id", userID,
+			"error", err)
+	}
 }
 
 // GetProgress retrieves playback progress for a specific book.

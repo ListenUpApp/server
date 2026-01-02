@@ -81,6 +81,16 @@ func (s *Server) registerListeningRoutes() {
 		Tags:        []string{"Listening"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleGetBookStats)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "endPlaybackSession",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/listening/session/end",
+		Summary:     "End playback session",
+		Description: "Records activity when user pauses/stops playback. Called by client when playback ends.",
+		Tags:        []string{"Listening"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleEndPlaybackSession)
 }
 
 // === DTOs ===
@@ -555,4 +565,35 @@ func (s *Server) handleGetListeningEvents(ctx context.Context, input *GetListeni
 	return &GetListeningEventsOutput{
 		Body: GetListeningEventsResponse{Events: resp},
 	}, nil
+}
+
+// EndPlaybackSessionRequest is the request body for ending a playback session.
+type EndPlaybackSessionRequest struct {
+	BookID     string `json:"book_id" validate:"required" doc:"Book that was being played"`
+	DurationMs int64  `json:"duration_ms" validate:"gte=0" doc:"Duration listened in this session (ms)"`
+}
+
+// EndPlaybackSessionInput wraps the end playback session request for Huma.
+type EndPlaybackSessionInput struct {
+	Authorization string `header:"Authorization"`
+	Body          EndPlaybackSessionRequest
+}
+
+func (s *Server) handleEndPlaybackSession(ctx context.Context, input *EndPlaybackSessionInput) (*MessageOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	slog.Info("ending playback session",
+		"user_id", userID,
+		"book_id", input.Body.BookID,
+		"duration_ms", input.Body.DurationMs,
+	)
+
+	if err := s.services.ReadingSession.EndPlaybackSession(ctx, userID, input.Body.BookID, input.Body.DurationMs); err != nil {
+		return nil, err
+	}
+
+	return &MessageOutput{Body: MessageResponse{Message: "Playback session ended"}}, nil
 }

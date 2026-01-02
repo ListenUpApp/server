@@ -13,11 +13,18 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
+// LensActivityRecorder records lens-related activities.
+// This avoids a circular dependency between LensService and ActivityService.
+type LensActivityRecorder interface {
+	RecordLensCreated(ctx context.Context, userID string, lens *domain.Lens) error
+}
+
 // LensService orchestrates lens operations with ownership enforcement and SSE events.
 type LensService struct {
-	store      *store.Store
-	sseManager *sse.Manager
-	logger     *slog.Logger
+	store            *store.Store
+	sseManager       *sse.Manager
+	logger           *slog.Logger
+	activityRecorder LensActivityRecorder
 }
 
 // NewLensService creates a new lens service.
@@ -27,6 +34,12 @@ func NewLensService(store *store.Store, sseManager *sse.Manager, logger *slog.Lo
 		sseManager: sseManager,
 		logger:     logger,
 	}
+}
+
+// SetActivityRecorder sets the activity recorder for recording social activities.
+// This is set after construction to avoid circular dependencies.
+func (s *LensService) SetActivityRecorder(recorder LensActivityRecorder) {
+	s.activityRecorder = recorder
 }
 
 // CreateLens creates a new lens for the user.
@@ -71,6 +84,17 @@ func (s *LensService) CreateLens(ctx context.Context, ownerID, name, description
 	owner, _ := s.store.GetUser(ctx, ownerID)
 	displayName, avatarColor := s.getOwnerInfo(owner)
 	s.sseManager.Emit(sse.NewLensCreatedEvent(lens, displayName, avatarColor))
+
+	// Record activity for social feed
+	if s.activityRecorder != nil {
+		if err := s.activityRecorder.RecordLensCreated(ctx, ownerID, lens); err != nil {
+			s.logger.Warn("failed to record lens created activity",
+				"lens_id", lensID,
+				"owner_id", ownerID,
+				"error", err,
+			)
+		}
+	}
 
 	return lens, nil
 }

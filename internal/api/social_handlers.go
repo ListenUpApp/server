@@ -22,6 +22,16 @@ func (s *Server) registerSocialRoutes() {
 	}, s.handleGetLeaderboard)
 
 	huma.Register(s.api, huma.Operation{
+		OperationID: "getActivityFeed",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/social/feed",
+		Summary:     "Get activity feed",
+		Description: "Returns recent community activity, filtered by viewer's book access",
+		Tags:        []string{"Social"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetActivityFeed)
+
+	huma.Register(s.api, huma.Operation{
 		OperationID: "getBookReaders",
 		Method:      http.MethodGet,
 		Path:        "/api/v1/books/{id}/readers",
@@ -125,8 +135,12 @@ func (s *Server) handleGetLeaderboard(ctx context.Context, input *GetLeaderboard
 		}
 	}
 
-	// Format community total time
-	totalMinutes := leaderboard.CommunityTotalTimeMs / 60_000
+	// Format community total time (handle negative/invalid values)
+	totalTimeMs := leaderboard.CommunityTotalTimeMs
+	if totalTimeMs < 0 {
+		totalTimeMs = 0
+	}
+	totalMinutes := totalTimeMs / 60_000
 	hours := totalMinutes / 60
 	minutes := totalMinutes % 60
 	var totalTimeLabel string
@@ -364,6 +378,119 @@ func (s *Server) handleGetUserReadingHistory(ctx context.Context, input *GetUser
 			Sessions:       sessions,
 			TotalSessions:  result.TotalSessions,
 			TotalCompleted: result.TotalCompleted,
+		},
+	}, nil
+}
+
+// === Activity Feed DTOs ===
+
+// GetActivityFeedInput contains parameters for getting the activity feed.
+type GetActivityFeedInput struct {
+	Authorization string `header:"Authorization"`
+	Limit         int    `query:"limit" default:"20" doc:"Max activities to return (max 50)"`
+	Before        string `query:"before" doc:"Pagination cursor (RFC3339 timestamp)"`
+}
+
+// ActivityResponse represents a single activity in API format.
+type ActivityResponse struct {
+	ID              string `json:"id" doc:"Activity ID"`
+	Type            string `json:"type" doc:"Activity type (started_book, finished_book, streak_milestone, listening_milestone, lens_created)"`
+	CreatedAt       string `json:"created_at" doc:"When activity occurred (RFC3339)"`
+	UserID          string `json:"user_id" doc:"User who performed the activity"`
+	UserDisplayName string `json:"user_display_name" doc:"User display name"`
+	UserAvatarColor string `json:"user_avatar_color" doc:"Generated avatar color"`
+
+	// Book activities
+	BookID         string `json:"book_id,omitempty" doc:"Book ID (for book activities)"`
+	BookTitle      string `json:"book_title,omitempty" doc:"Book title"`
+	BookAuthorName string `json:"book_author_name,omitempty" doc:"Book author name"`
+	BookCoverPath  string `json:"book_cover_path,omitempty" doc:"Book cover path"`
+	IsReread       bool   `json:"is_reread,omitempty" doc:"Whether this is a re-read (for started_book)"`
+
+	// Milestone activities
+	MilestoneValue int    `json:"milestone_value,omitempty" doc:"Milestone value (days or hours)"`
+	MilestoneUnit  string `json:"milestone_unit,omitempty" doc:"Milestone unit (days or hours)"`
+
+	// Lens activities
+	LensID   string `json:"lens_id,omitempty" doc:"Lens ID (for lens activities)"`
+	LensName string `json:"lens_name,omitempty" doc:"Lens name"`
+}
+
+// ActivityFeedResponse contains the activity feed data.
+type ActivityFeedResponse struct {
+	Activities []ActivityResponse `json:"activities" doc:"Activity entries"`
+	NextCursor *string            `json:"next_cursor,omitempty" doc:"Pagination cursor for next page"`
+}
+
+// GetActivityFeedOutput wraps the activity feed response for Huma.
+type GetActivityFeedOutput struct {
+	Body ActivityFeedResponse
+}
+
+// === Activity Feed Handler ===
+
+func (s *Server) handleGetActivityFeed(ctx context.Context, input *GetActivityFeedInput) (*GetActivityFeedOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate and cap limit
+	limit := input.Limit
+	if limit <= 0 {
+		limit = 20
+	} else if limit > 50 {
+		limit = 50
+	}
+
+	// Parse 'before' cursor
+	var before *time.Time
+	if input.Before != "" {
+		t, err := time.Parse(time.RFC3339, input.Before)
+		if err == nil {
+			before = &t
+		}
+	}
+
+	// Get activities from service
+	activities, err := s.services.Activity.GetFeed(ctx, userID, limit, before)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to API format
+	responses := make([]ActivityResponse, len(activities))
+	for i, a := range activities {
+		responses[i] = ActivityResponse{
+			ID:              a.ID,
+			Type:            string(a.Type),
+			CreatedAt:       a.CreatedAt.Format(time.RFC3339),
+			UserID:          a.UserID,
+			UserDisplayName: a.UserDisplayName,
+			UserAvatarColor: a.UserAvatarColor,
+			BookID:          a.BookID,
+			BookTitle:       a.BookTitle,
+			BookAuthorName:  a.BookAuthorName,
+			BookCoverPath:   a.BookCoverPath,
+			IsReread:        a.IsReread,
+			MilestoneValue:  a.MilestoneValue,
+			MilestoneUnit:   a.MilestoneUnit,
+			LensID:          a.LensID,
+			LensName:        a.LensName,
+		}
+	}
+
+	// Set pagination cursor if we have more
+	var nextCursor *string
+	if len(activities) == limit && len(activities) > 0 {
+		lastTime := activities[len(activities)-1].CreatedAt.Format(time.RFC3339)
+		nextCursor = &lastTime
+	}
+
+	return &GetActivityFeedOutput{
+		Body: ActivityFeedResponse{
+			Activities: responses,
+			NextCursor: nextCursor,
 		},
 	}, nil
 }

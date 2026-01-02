@@ -223,3 +223,18 @@ func (s *Store) GetBookSessions(ctx context.Context, bookID string) ([]*domain.B
 
 	return sessions, nil
 }
+
+// GetUserBookSessions returns all sessions for a specific user and book combination.
+// This is useful for checking if a user has previously read/completed a book.
+func (s *Store) GetUserBookSessions(ctx context.Context, userID, bookID string) ([]*domain.BookReadingSession, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	sessions, err := s.getAllSessionsWithPrefix(ctx, "user_book", userID+":"+bookID+":")
+	if err != nil {
+		return nil, fmt.Errorf("finding sessions for user %s book %s: %w", userID, bookID, err)
+	}
+
+	return sessions, nil
+}

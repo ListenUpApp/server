@@ -30,6 +30,7 @@ type Services struct {
 	Settings       *service.SettingsService       // Server-wide settings
 	Social         *service.SocialService         // Social features (leaderboards)
 	ReadingSession *service.ReadingSessionService // Reading session tracking
+	Activity       *service.ActivityService       // Activity feed
 }
 
 // StorageServices groups file storage handlers used by the API server.

@@ -14,11 +14,20 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
+// ActivityRecorder is the interface for recording activities.
+// This avoids a circular dependency between ReadingSessionService and ActivityService.
+type ActivityRecorder interface {
+	RecordBookStarted(ctx context.Context, userID, bookID string, isReread bool) error
+	RecordBookFinished(ctx context.Context, userID, bookID string) error
+	RecordListeningSession(ctx context.Context, userID, bookID string, durationMs int64) error
+}
+
 // ReadingSessionService manages book reading sessions - tracking when users start and complete books.
 type ReadingSessionService struct {
-	store  *store.Store
-	events store.EventEmitter
-	logger *slog.Logger
+	store            *store.Store
+	events           store.EventEmitter
+	logger           *slog.Logger
+	activityRecorder ActivityRecorder
 }
 
 // NewReadingSessionService creates a new reading session service.
@@ -30,6 +39,12 @@ func NewReadingSessionService(store *store.Store, events store.EventEmitter, log
 	}
 }
 
+// SetActivityRecorder sets the activity recorder for recording social activities.
+// This is set after construction to avoid circular dependencies.
+func (s *ReadingSessionService) SetActivityRecorder(recorder ActivityRecorder) {
+	s.activityRecorder = recorder
+}
+
 // EnsureActiveSession gets the active session for user+book.
 // Creates a new session if none exists or if the existing one is stale (>6 months).
 // If stale, marks the old session as abandoned first.
@@ -37,14 +52,35 @@ func (s *ReadingSessionService) EnsureActiveSession(ctx context.Context, userID,
 	// Get active session
 	session, err := s.store.GetActiveSession(ctx, userID, bookID)
 	if err != nil {
+		s.logger.Error("failed to get active session",
+			"user_id", userID,
+			"book_id", bookID,
+			"error", err)
 		return nil, fmt.Errorf("get active session: %w", err)
 	}
 
+	s.logger.Debug("checked for active session",
+		"user_id", userID,
+		"book_id", bookID,
+		"has_session", session != nil,
+		"session_id", func() string {
+			if session != nil {
+				return session.ID
+			}
+			return ""
+		}())
+
 	now := time.Now()
+	wasStale := false
 
 	// If we have an active session, check if it's stale
 	if session != nil {
 		if session.IsStale(now) {
+			s.logger.Info("abandoning stale session",
+				"session_id", session.ID,
+				"user_id", userID,
+				"book_id", bookID,
+				"started_at", session.StartedAt)
 			// Mark as abandoned before creating new one
 			if err := s.abandonSessionInternal(ctx, session); err != nil {
 				s.logger.Warn("failed to abandon stale session",
@@ -55,11 +91,33 @@ func (s *ReadingSessionService) EnsureActiveSession(ctx context.Context, userID,
 			}
 			// Continue to create new session below
 			session = nil
+			wasStale = true
 		} else {
 			// Active session is fresh, return it
+			s.logger.Debug("returning existing active session",
+				"session_id", session.ID,
+				"user_id", userID,
+				"book_id", bookID)
 			return session, nil
 		}
 	}
+
+	// Before creating new session, check previous sessions to determine if this is a re-read
+	// Get all sessions for this user+book to check history
+	previousSessions, err := s.store.GetUserBookSessions(ctx, userID, bookID)
+	if err != nil {
+		s.logger.Warn("failed to get previous sessions for activity",
+			"user_id", userID,
+			"book_id", bookID,
+			"error", err)
+		// Continue anyway - activity recording is not critical
+		previousSessions = nil
+	}
+
+	// Check if user has completed this book before
+	hasCompletedBefore := slices.ContainsFunc(previousSessions, func(sess *domain.BookReadingSession) bool {
+		return sess.IsCompleted
+	})
 
 	// No active session (or was stale), create new one
 	sessionID, err := id.Generate("rsession")
@@ -80,7 +138,72 @@ func (s *ReadingSessionService) EnsureActiveSession(ctx context.Context, userID,
 	// Emit SSE event for new session
 	s.events.Emit(sse.NewReadingSessionUpdatedEvent(newSession))
 
+	// Record activity for new session
+	// Only fire activity if:
+	// - First-ever session (no previous sessions) → started_book
+	// - New session after completed session → started_book (re-read)
+	// - New session after abandoned/stale session → skip (not interesting)
+	if s.activityRecorder != nil {
+		s.logger.Info("evaluating started_book activity",
+			"user_id", userID,
+			"book_id", bookID,
+			"previous_sessions_count", len(previousSessions),
+			"has_completed_before", hasCompletedBefore,
+			"was_stale", wasStale)
+
+		if len(previousSessions) == 0 {
+			// First-ever session for this user+book
+			s.logger.Info("recording first-time started_book activity",
+				"user_id", userID,
+				"book_id", bookID)
+			if err := s.activityRecorder.RecordBookStarted(ctx, userID, bookID, false); err != nil {
+				s.logger.Warn("failed to record started activity",
+					"user_id", userID,
+					"book_id", bookID,
+					"error", err)
+			}
+		} else if hasCompletedBefore && !wasStale {
+			// Re-read: user completed before and is starting again
+			// (but not if this is just resuming after a stale session)
+			s.logger.Info("recording re-read started_book activity",
+				"user_id", userID,
+				"book_id", bookID)
+			if err := s.activityRecorder.RecordBookStarted(ctx, userID, bookID, true); err != nil {
+				s.logger.Warn("failed to record re-read activity",
+					"user_id", userID,
+					"book_id", bookID,
+					"error", err)
+			}
+		} else {
+			s.logger.Debug("skipping started_book activity (not first or re-read)",
+				"user_id", userID,
+				"book_id", bookID,
+				"previous_sessions_count", len(previousSessions),
+				"has_completed_before", hasCompletedBefore,
+				"was_stale", wasStale)
+		}
+	}
+
 	return newSession, nil
+}
+
+// EndPlaybackSession records a listening_session activity when the user pauses/stops playback.
+// durationMs is how long they listened in this play session (since pressing play).
+func (s *ReadingSessionService) EndPlaybackSession(ctx context.Context, userID, bookID string, durationMs int64) error {
+	if s.activityRecorder == nil {
+		return nil
+	}
+
+	s.logger.Info("ending playback session",
+		"user_id", userID,
+		"book_id", bookID,
+		"duration_ms", durationMs)
+
+	if err := s.activityRecorder.RecordListeningSession(ctx, userID, bookID, durationMs); err != nil {
+		return fmt.Errorf("record listening session: %w", err)
+	}
+
+	return nil
 }
 
 // UpdateSessionProgress updates the session's accumulated listen time.
@@ -132,6 +255,17 @@ func (s *ReadingSessionService) CompleteSession(ctx context.Context, userID, boo
 
 	// Emit SSE event for completed session
 	s.events.Emit(sse.NewReadingSessionUpdatedEvent(session))
+
+	// Record finished_book activity
+	// Note: listening_session activity is recorded via EndPlaybackSession when the client pauses/stops
+	if s.activityRecorder != nil {
+		if err := s.activityRecorder.RecordBookFinished(ctx, userID, bookID); err != nil {
+			s.logger.Warn("failed to record finished activity",
+				"user_id", userID,
+				"book_id", bookID,
+				"error", err)
+		}
+	}
 
 	return nil
 }

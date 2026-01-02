@@ -91,6 +91,9 @@ const (
 	EventProgressUpdated        EventType = "listening.progress_updated"
 	EventListeningEventCreated  EventType = "listening.event_created"
 	EventReadingSessionUpdated  EventType = "reading_session.updated"
+
+	// Activity feed events (broadcast to all)
+	EventActivityCreated EventType = "activity.created"
 )
 
 // Event represents an SSE event to be sent to clients.
@@ -711,6 +714,55 @@ func NewReadingSessionUpdatedEvent(session *domain.BookReadingSession) Event {
 			IsCompleted:  session.IsCompleted,
 			ListenTimeMs: session.ListenTimeMs,
 			FinishedAt:   session.FinishedAt,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// ActivityEventData is the data payload for activity.created events.
+// Contains activity fields directly for immediate rendering in the feed.
+// Fields are at top level (not wrapped) for consistency with client expectations.
+type ActivityEventData struct {
+	ID              string    `json:"id"`
+	UserID          string    `json:"user_id"`
+	Type            string    `json:"type"`
+	CreatedAt       time.Time `json:"created_at"`
+	UserDisplayName string    `json:"user_display_name"`
+	UserAvatarColor string    `json:"user_avatar_color"`
+	BookID          string    `json:"book_id,omitempty"`
+	BookTitle       string    `json:"book_title,omitempty"`
+	BookAuthorName  string    `json:"book_author_name,omitempty"`
+	BookCoverPath   string    `json:"book_cover_path,omitempty"`
+	IsReread        bool      `json:"is_reread,omitempty"`
+	DurationMs      int64     `json:"duration_ms,omitempty"` // For listening_session activities
+	MilestoneValue  int       `json:"milestone_value,omitempty"`
+	MilestoneUnit   string    `json:"milestone_unit,omitempty"`
+	LensID          string    `json:"lens_id,omitempty"`
+	LensName        string    `json:"lens_name,omitempty"`
+}
+
+// NewActivityEvent creates an activity.created event.
+// Broadcast to all users for real-time activity feed updates.
+func NewActivityEvent(activity *domain.Activity) Event {
+	return Event{
+		Type: EventActivityCreated,
+		Data: ActivityEventData{
+			ID:              activity.ID,
+			UserID:          activity.UserID,
+			Type:            string(activity.Type),
+			CreatedAt:       activity.CreatedAt,
+			UserDisplayName: activity.UserDisplayName,
+			UserAvatarColor: activity.UserAvatarColor,
+			BookID:          activity.BookID,
+			BookTitle:       activity.BookTitle,
+			BookAuthorName:  activity.BookAuthorName,
+			BookCoverPath:   activity.BookCoverPath,
+			IsReread:        activity.IsReread,
+			DurationMs:      activity.DurationMs,
+			MilestoneValue:  activity.MilestoneValue,
+			MilestoneUnit:   activity.MilestoneUnit,
+			LensID:          activity.LensID,
+			LensName:        activity.LensName,
 		},
 		Timestamp: time.Now(),
 	}

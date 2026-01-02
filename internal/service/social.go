@@ -75,11 +75,13 @@ func (s *SocialService) GetLeaderboard(
 			continue
 		}
 
-		// Calculate listening time
+		// Calculate listening time (only count positive durations)
 		var totalTimeMs int64
 		booksSet := make(map[string]bool)
 		for _, e := range events {
-			totalTimeMs += e.DurationMs
+			if e.DurationMs > 0 {
+				totalTimeMs += e.DurationMs
+			}
 			booksSet[e.BookID] = true
 		}
 
@@ -91,7 +93,7 @@ func (s *SocialService) GetLeaderboard(
 		booksFinished := len(finishedProgress)
 
 		// Calculate streak
-		streakDays := s.calculateUserStreak(ctx, user.ID)
+		streakDays := s.CalculateUserStreak(ctx, user.ID)
 
 		stats = append(stats, userStats{
 			userID:      user.ID,
@@ -194,8 +196,9 @@ func (s *SocialService) GetLeaderboard(
 	}, nil
 }
 
-// calculateUserStreak calculates the current streak for a user.
-func (s *SocialService) calculateUserStreak(ctx context.Context, userID string) int {
+// CalculateUserStreak calculates the current streak for a user.
+// Exported for use by ListeningService for milestone tracking.
+func (s *SocialService) CalculateUserStreak(ctx context.Context, userID string) int {
 	events, err := s.store.GetEventsForUser(ctx, userID)
 	if err != nil {
 		s.logger.Debug("failed to fetch events for streak", "user_id", userID, "error", err)
@@ -261,6 +264,9 @@ func (s *SocialService) calculateUserStreak(ctx context.Context, userID string) 
 
 // formatDuration formats milliseconds as human-readable duration.
 func formatDuration(ms int64) string {
+	if ms <= 0 {
+		return "0m"
+	}
 	totalMinutes := ms / 60_000
 	hours := totalMinutes / 60
 	minutes := totalMinutes % 60

@@ -71,6 +71,17 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 	inboxService := do.MustInvoke[*service.InboxService](i)
 	settingsService := do.MustInvoke[*service.SettingsService](i)
 	readingSessionService := do.MustInvoke[*service.ReadingSessionService](i)
+	activityService := do.MustInvoke[*service.ActivityService](i)
+
+	// Wire up activity recording to reading session service
+	readingSessionService.SetActivityRecorder(activityService)
+
+	// Wire up milestone tracking to listening service
+	listeningService.SetMilestoneRecorder(activityService)
+	listeningService.SetStreakCalculator(socialService)
+
+	// Wire up activity recording to lens service
+	lensService.SetActivityRecorder(activityService)
 
 	tokenVerifier := &sseTokenVerifier{authService: authService}
 	sseHandler := sse.NewHandler(sseHandle.Manager, log.Logger, tokenVerifier)
@@ -98,6 +109,7 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 		Settings:       settingsService,
 		Social:         socialService,
 		ReadingSession: readingSessionService,
+		Activity:       activityService,
 	}
 
 	storage := &api.StorageServices{

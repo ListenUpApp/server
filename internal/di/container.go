@@ -60,6 +60,7 @@ func NewContainer() *do.RootScope {
 	do.Provide(injector, providers.ProvideSharingService)
 	do.Provide(injector, providers.ProvideSyncService)
 	do.Provide(injector, providers.ProvideReadingSessionService)
+	do.Provide(injector, providers.ProvideActivityService)
 	do.Provide(injector, providers.ProvideListeningService)
 	do.Provide(injector, providers.ProvideStatsService)
 	do.Provide(injector, providers.ProvideSocialService)
