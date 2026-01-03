@@ -377,3 +377,36 @@ func TestStore_ReadingSession_IndexIntegrity(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, bookSessions)
 }
+
+func TestStore_GetAllActiveSessions(t *testing.T) {
+	s, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	// Create 3 sessions: 2 active, 1 completed
+	session1 := domain.NewBookReadingSession("session-1", "user-1", "book-1")
+	session2 := domain.NewBookReadingSession("session-2", "user-2", "book-2")
+	session3 := domain.NewBookReadingSession("session-3", "user-3", "book-3")
+
+	// Mark session3 as completed (not active)
+	session3.MarkCompleted(0.99, 3600000)
+
+	require.NoError(t, s.CreateReadingSession(context.Background(), session1))
+	require.NoError(t, s.CreateReadingSession(context.Background(), session2))
+	require.NoError(t, s.CreateReadingSession(context.Background(), session3))
+
+	// Get all active sessions
+	activeSessions, err := s.GetAllActiveSessions(context.Background())
+	require.NoError(t, err)
+
+	// Should only return 2 active sessions
+	assert.Len(t, activeSessions, 2)
+
+	// Verify they are the right ones
+	sessionIDs := make(map[string]bool)
+	for _, s := range activeSessions {
+		sessionIDs[s.ID] = true
+	}
+	assert.True(t, sessionIDs["session-1"], "session-1 should be active")
+	assert.True(t, sessionIDs["session-2"], "session-2 should be active")
+	assert.False(t, sessionIDs["session-3"], "session-3 should NOT be active (completed)")
+}

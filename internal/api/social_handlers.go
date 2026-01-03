@@ -50,6 +50,26 @@ func (s *Server) registerSocialRoutes() {
 		Tags:        []string{"Social"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleGetUserReadingHistory)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getCurrentlyListening",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/social/currently-listening",
+		Summary:     "Get books others are reading",
+		Description: "Returns books that other users are actively listening to, with reader avatars",
+		Tags:        []string{"Social"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetCurrentlyListening)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getDiscoverBooks",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/social/discover",
+		Summary:     "Get random books for discovery",
+		Description: "Returns random books for discovery, series-aware (only first book in series shown)",
+		Tags:        []string{"Social"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetDiscoverBooks)
 }
 
 // === DTOs ===
@@ -493,4 +513,213 @@ func (s *Server) handleGetActivityFeed(ctx context.Context, input *GetActivityFe
 			NextCursor: nextCursor,
 		},
 	}, nil
+}
+
+// === Currently Listening DTOs ===
+
+// GetCurrentlyListeningInput contains parameters for getting currently listening books.
+type GetCurrentlyListeningInput struct {
+	Authorization string `header:"Authorization"`
+	Limit         int    `query:"limit" default:"10" doc:"Max books to return (max 20)"`
+}
+
+// CurrentlyListeningReaderResponse represents a reader for avatar display.
+type CurrentlyListeningReaderResponse struct {
+	UserID      string `json:"user_id" doc:"User ID"`
+	DisplayName string `json:"display_name" doc:"User display name"`
+	AvatarColor string `json:"avatar_color" doc:"Generated avatar color (hex)"`
+}
+
+// CurrentlyListeningBookResponse represents a book that others are reading.
+type CurrentlyListeningBookResponse struct {
+	ID               string                             `json:"id" doc:"Book ID"`
+	Title            string                             `json:"title" doc:"Book title"`
+	AuthorName       string                             `json:"author_name,omitempty" doc:"Book author(s)"`
+	CoverPath        string                             `json:"cover_path,omitempty" doc:"Cover image path"`
+	CoverBlurHash    string                             `json:"cover_blur_hash,omitempty" doc:"Cover blur hash"`
+	DurationMs       int64                              `json:"duration_ms" doc:"Total duration in ms"`
+	Readers          []CurrentlyListeningReaderResponse `json:"readers" doc:"Up to 3 readers for avatar display"`
+	TotalReaderCount int                                `json:"total_reader_count" doc:"Total number of active readers"`
+}
+
+// CurrentlyListeningResponse contains the currently listening books.
+type CurrentlyListeningResponse struct {
+	Books []CurrentlyListeningBookResponse `json:"books" doc:"Books that others are reading"`
+}
+
+// GetCurrentlyListeningOutput wraps the currently listening response for Huma.
+type GetCurrentlyListeningOutput struct {
+	Body CurrentlyListeningResponse
+}
+
+// === Discover Books DTOs ===
+
+// GetDiscoverBooksInput contains parameters for getting discovery books.
+type GetDiscoverBooksInput struct {
+	Authorization string `header:"Authorization"`
+	Limit         int    `query:"limit" default:"10" doc:"Max books to return (max 20)"`
+}
+
+// DiscoverBookResponse represents a book for discovery.
+type DiscoverBookResponse struct {
+	ID            string  `json:"id" doc:"Book ID"`
+	Title         string  `json:"title" doc:"Book title"`
+	AuthorName    string  `json:"author_name,omitempty" doc:"Book author(s)"`
+	CoverPath     string  `json:"cover_path,omitempty" doc:"Cover image path"`
+	CoverBlurHash string  `json:"cover_blur_hash,omitempty" doc:"Cover blur hash"`
+	DurationMs    int64   `json:"duration_ms" doc:"Total duration in ms"`
+	SeriesName    *string `json:"series_name,omitempty" doc:"Series name if part of a series"`
+}
+
+// DiscoverBooksResponse contains discovery books.
+type DiscoverBooksResponse struct {
+	Books []DiscoverBookResponse `json:"books" doc:"Random books for discovery"`
+}
+
+// GetDiscoverBooksOutput wraps the discover books response for Huma.
+type GetDiscoverBooksOutput struct {
+	Body DiscoverBooksResponse
+}
+
+// === Currently Listening Handler ===
+
+func (s *Server) handleGetCurrentlyListening(ctx context.Context, input *GetCurrentlyListeningInput) (*GetCurrentlyListeningOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get currently listening books from service
+	books, err := s.services.Social.GetCurrentlyListening(ctx, userID, input.Limit)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to API format
+	responses := make([]CurrentlyListeningBookResponse, len(books))
+	for i, b := range books {
+		// Get author name
+		authorName := s.getAuthorNameFromBook(ctx, b.Book)
+
+		// Get cover info
+		var coverPath, coverBlurHash string
+		if b.Book.CoverImage != nil {
+			coverPath = b.Book.CoverImage.Path
+			coverBlurHash = b.Book.CoverImage.BlurHash
+		}
+
+		// Convert readers
+		readers := make([]CurrentlyListeningReaderResponse, len(b.Readers))
+		for j, r := range b.Readers {
+			readers[j] = CurrentlyListeningReaderResponse{
+				UserID:      r.UserID,
+				DisplayName: r.DisplayName,
+				AvatarColor: r.AvatarColor,
+			}
+		}
+
+		responses[i] = CurrentlyListeningBookResponse{
+			ID:               b.Book.ID,
+			Title:            b.Book.Title,
+			AuthorName:       authorName,
+			CoverPath:        coverPath,
+			CoverBlurHash:    coverBlurHash,
+			DurationMs:       b.Book.TotalDuration,
+			Readers:          readers,
+			TotalReaderCount: b.TotalReaderCount,
+		}
+	}
+
+	return &GetCurrentlyListeningOutput{
+		Body: CurrentlyListeningResponse{
+			Books: responses,
+		},
+	}, nil
+}
+
+// === Discover Books Handler ===
+
+func (s *Server) handleGetDiscoverBooks(ctx context.Context, input *GetDiscoverBooksInput) (*GetDiscoverBooksOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get random books from service
+	books, err := s.services.Social.GetRandomBooks(ctx, userID, input.Limit)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to API format
+	responses := make([]DiscoverBookResponse, len(books))
+	for i, book := range books {
+		// Get author name
+		authorName := s.getAuthorNameFromBook(ctx, book)
+
+		// Get cover info
+		var coverPath, coverBlurHash string
+		if book.CoverImage != nil {
+			coverPath = book.CoverImage.Path
+			coverBlurHash = book.CoverImage.BlurHash
+		}
+
+		// Get series name if applicable
+		var seriesName *string
+		if len(book.Series) > 0 {
+			// Get the first series name
+			series, err := s.store.GetSeries(ctx, book.Series[0].SeriesID)
+			if err == nil && series != nil {
+				seriesName = &series.Name
+			}
+		}
+
+		responses[i] = DiscoverBookResponse{
+			ID:            book.ID,
+			Title:         book.Title,
+			AuthorName:    authorName,
+			CoverPath:     coverPath,
+			CoverBlurHash: coverBlurHash,
+			DurationMs:    book.TotalDuration,
+			SeriesName:    seriesName,
+		}
+	}
+
+	return &GetDiscoverBooksOutput{
+		Body: DiscoverBooksResponse{
+			Books: responses,
+		},
+	}, nil
+}
+
+// getAuthorNameFromBook extracts author name(s) from book contributors.
+func (s *Server) getAuthorNameFromBook(ctx context.Context, book *domain.Book) string {
+	// Collect author contributor IDs
+	var authorIDs []string
+	for _, contrib := range book.Contributors {
+		for _, role := range contrib.Roles {
+			if role == domain.RoleAuthor {
+				authorIDs = append(authorIDs, contrib.ContributorID)
+				break
+			}
+		}
+	}
+
+	if len(authorIDs) == 0 {
+		return ""
+	}
+
+	// Fetch contributor details
+	contributors, err := s.store.GetContributorsByIDs(ctx, authorIDs)
+	if err != nil || len(contributors) == 0 {
+		return ""
+	}
+
+	// Build author string
+	authorName := contributors[0].Name
+	if len(contributors) > 1 {
+		authorName += " et al."
+	}
+
+	return authorName
 }

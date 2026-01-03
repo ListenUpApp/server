@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math/rand/v2"
 	"slices"
 	"time"
 
@@ -279,4 +280,221 @@ func formatDuration(ms int64) string {
 	default:
 		return fmt.Sprintf("%dh %dm", hours, minutes)
 	}
+}
+
+// CurrentlyListeningBook represents a book that others are actively reading.
+type CurrentlyListeningBook struct {
+	Book             *domain.Book
+	Readers          []ReaderInfo // Up to 3 readers for avatar display
+	TotalReaderCount int
+}
+
+// ReaderInfo contains basic user info for avatar display.
+type ReaderInfo struct {
+	UserID      string
+	DisplayName string
+	AvatarColor string
+}
+
+// GetCurrentlyListening returns books that other users are actively reading.
+// Excludes the viewing user's books. Filters by ACL.
+// Results are sorted by reader count descending (most popular first).
+func (s *SocialService) GetCurrentlyListening(ctx context.Context, viewingUserID string, limit int) ([]CurrentlyListeningBook, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 20 {
+		limit = 20
+	}
+
+	// Get all active sessions
+	activeSessions, err := s.store.GetAllActiveSessions(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("getting active sessions: %w", err)
+	}
+
+	s.logger.Info("GetCurrentlyListening",
+		"viewing_user_id", viewingUserID,
+		"total_active_sessions", len(activeSessions))
+
+	// Log each active session for debugging
+	for i, sess := range activeSessions {
+		s.logger.Info("active session",
+			"index", i,
+			"session_id", sess.ID,
+			"user_id", sess.UserID,
+			"book_id", sess.BookID,
+			"is_viewing_user", sess.UserID == viewingUserID)
+	}
+
+	// Get viewing user's accessible books for ACL filtering
+	accessibleBooks, err := s.store.GetBooksForUser(ctx, viewingUserID)
+	if err != nil {
+		return nil, fmt.Errorf("getting accessible books: %w", err)
+	}
+	accessibleBookIDs := make(map[string]bool, len(accessibleBooks))
+	for _, book := range accessibleBooks {
+		accessibleBookIDs[book.ID] = true
+	}
+
+	s.logger.Info("GetCurrentlyListening ACL",
+		"accessible_books_count", len(accessibleBooks))
+
+	// Group sessions by book, excluding viewing user
+	type bookReaders struct {
+		bookID  string
+		readers []ReaderInfo
+	}
+	bookReadersMap := make(map[string]*bookReaders)
+
+	var excludedSelf, excludedACL int
+	for _, session := range activeSessions {
+		// Exclude viewing user's sessions
+		if session.UserID == viewingUserID {
+			excludedSelf++
+			s.logger.Info("excluding self session", "session_id", session.ID, "book_id", session.BookID)
+			continue
+		}
+		// ACL filter
+		if !accessibleBookIDs[session.BookID] {
+			excludedACL++
+			s.logger.Info("excluding ACL session", "session_id", session.ID, "book_id", session.BookID, "user_id", session.UserID)
+			continue
+		}
+		s.logger.Info("including session", "session_id", session.ID, "book_id", session.BookID, "user_id", session.UserID)
+
+		// Get or create entry
+		br, exists := bookReadersMap[session.BookID]
+		if !exists {
+			br = &bookReaders{bookID: session.BookID}
+			bookReadersMap[session.BookID] = br
+		}
+
+		// Get user info for this reader
+		user, err := s.store.GetUser(ctx, session.UserID)
+		if err != nil {
+			s.logger.Debug("failed to get user for session", "user_id", session.UserID, "error", err)
+			continue
+		}
+
+		br.readers = append(br.readers, ReaderInfo{
+			UserID:      user.ID,
+			DisplayName: user.Name(),
+			AvatarColor: avatarColorForUser(user.ID),
+		})
+	}
+
+	// Convert to slice and sort by reader count
+	books := make([]CurrentlyListeningBook, 0, len(bookReadersMap))
+	for bookID, br := range bookReadersMap {
+		book, err := s.store.GetBookNoAccessCheck(ctx, bookID)
+		if err != nil {
+			s.logger.Debug("failed to get book", "book_id", bookID, "error", err)
+			continue
+		}
+
+		// Limit readers to 3 for avatar display
+		displayReaders := br.readers
+		if len(displayReaders) > 3 {
+			displayReaders = displayReaders[:3]
+		}
+
+		books = append(books, CurrentlyListeningBook{
+			Book:             book,
+			Readers:          displayReaders,
+			TotalReaderCount: len(br.readers),
+		})
+	}
+
+	// Sort by reader count descending
+	slices.SortFunc(books, func(a, b CurrentlyListeningBook) int {
+		return b.TotalReaderCount - a.TotalReaderCount
+	})
+
+	// Apply limit
+	if len(books) > limit {
+		books = books[:limit]
+	}
+
+	s.logger.Info("GetCurrentlyListening result",
+		"excluded_self", excludedSelf,
+		"excluded_acl", excludedACL,
+		"result_books", len(books))
+
+	return books, nil
+}
+
+// GetRandomBooks returns a random selection of books for discovery.
+// Series-aware: only shows first book in series (or standalone books).
+// Excludes books the user has already started.
+func (s *SocialService) GetRandomBooks(ctx context.Context, viewingUserID string, limit int) ([]*domain.Book, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 20 {
+		limit = 20
+	}
+
+	// Get all accessible books
+	books, err := s.store.GetBooksForUser(ctx, viewingUserID)
+	if err != nil {
+		return nil, fmt.Errorf("getting accessible books: %w", err)
+	}
+
+	// Get user's progress to exclude books they've started
+	allProgress, err := s.store.GetProgressForUser(ctx, viewingUserID)
+	if err != nil {
+		s.logger.Debug("failed to get user progress", "user_id", viewingUserID, "error", err)
+		// Continue without filtering - better to show something
+		allProgress = nil
+	}
+	startedBooks := make(map[string]bool, len(allProgress))
+	for _, p := range allProgress {
+		startedBooks[p.BookID] = true
+	}
+
+	// Filter: series-aware and not started
+	var candidates []*domain.Book
+	for _, book := range books {
+		// Skip if already started
+		if startedBooks[book.ID] {
+			continue
+		}
+
+		// Series check: include if standalone OR first in series
+		if len(book.Series) > 0 {
+			// Has series - check if any series position is "1"
+			isFirstInAnySeries := false
+			for _, series := range book.Series {
+				if series.Sequence == "1" {
+					isFirstInAnySeries = true
+					break
+				}
+			}
+			// If it's in a series but not first, skip it
+			if !isFirstInAnySeries {
+				continue
+			}
+		}
+		// Standalone books (no series) always included
+
+		candidates = append(candidates, book)
+	}
+
+	// Shuffle randomly
+	shuffleBooks(candidates)
+
+	// Apply limit
+	if len(candidates) > limit {
+		candidates = candidates[:limit]
+	}
+
+	return candidates, nil
+}
+
+// shuffleBooks shuffles a slice of books in place using Fisher-Yates.
+func shuffleBooks(books []*domain.Book) {
+	rand.Shuffle(len(books), func(i, j int) {
+		books[i], books[j] = books[j], books[i]
+	})
 }

@@ -15,7 +15,7 @@ import (
 // Indexes by user_book (for finding active session), book (for book stats), and user (for user history).
 // Index keys include the session ID to ensure uniqueness (multiple sessions can exist for same user+book).
 func (s *Store) initSessions() {
-	s.Sessions = NewEntity[domain.BookReadingSession](s, "session:").
+	s.Sessions = NewEntity[domain.BookReadingSession](s, "rsession:").
 		WithIndex("user_book", func(session *domain.BookReadingSession) []string {
 			return []string{session.UserID + ":" + session.BookID + ":" + session.ID}
 		}).
@@ -237,4 +237,24 @@ func (s *Store) GetUserBookSessions(ctx context.Context, userID, bookID string) 
 	}
 
 	return sessions, nil
+}
+
+// GetAllActiveSessions returns all sessions that are currently active (no FinishedAt).
+// Used for "what others are reading" discovery feature.
+func (s *Store) GetAllActiveSessions(ctx context.Context) ([]*domain.BookReadingSession, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	var activeSessions []*domain.BookReadingSession
+	for session, err := range s.ListAllSessions(ctx) {
+		if err != nil {
+			return nil, fmt.Errorf("listing sessions: %w", err)
+		}
+		if session.IsActive() {
+			activeSessions = append(activeSessions, session)
+		}
+	}
+
+	return activeSessions, nil
 }
