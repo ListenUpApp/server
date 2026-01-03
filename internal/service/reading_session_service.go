@@ -361,7 +361,13 @@ func (s *ReadingSessionService) GetBookReaders(ctx context.Context, bookID, view
 			continue
 		}
 
-		summary := buildReaderSummary(user, sessions)
+		// Get profile for avatar info (optional - defaults to auto if not found)
+		var profile *domain.UserProfile
+		if p, err := s.store.GetUserProfile(ctx, userID); err == nil {
+			profile = p
+		}
+
+		summary := buildReaderSummary(user, profile, sessions)
 		response.OtherReaders = append(response.OtherReaders, summary)
 
 		// Count completions
@@ -461,6 +467,8 @@ type SessionSummary struct {
 type ReaderSummary struct {
 	UserID             string     `json:"user_id"`
 	DisplayName        string     `json:"display_name"`
+	AvatarType         string     `json:"avatar_type"`
+	AvatarValue        string     `json:"avatar_value,omitempty"`
 	AvatarColor        string     `json:"avatar_color"`
 	IsCurrentlyReading bool       `json:"is_currently_reading"`
 	CurrentProgress    float64    `json:"current_progress,omitempty"`
@@ -514,13 +522,23 @@ func buildSessionSummaries(sessions []*domain.BookReadingSession) []SessionSumma
 	return summaries
 }
 
-// buildReaderSummary creates a reader summary from user and their sessions.
-func buildReaderSummary(user *domain.User, sessions []*domain.BookReadingSession) ReaderSummary {
+// buildReaderSummary creates a reader summary from user, profile, and their sessions.
+func buildReaderSummary(user *domain.User, profile *domain.UserProfile, sessions []*domain.BookReadingSession) ReaderSummary {
+	// Extract avatar info from profile (defaults to auto if no profile)
+	avatarType := "auto"
+	avatarValue := ""
+	if profile != nil {
+		avatarType = string(profile.AvatarType)
+		avatarValue = profile.AvatarValue
+	}
+
 	// Guard against empty sessions
 	if len(sessions) == 0 {
 		return ReaderSummary{
 			UserID:      user.ID,
 			DisplayName: user.Name(),
+			AvatarType:  avatarType,
+			AvatarValue: avatarValue,
 			AvatarColor: avatarColorForUser(user.ID),
 		}
 	}
@@ -545,6 +563,8 @@ func buildReaderSummary(user *domain.User, sessions []*domain.BookReadingSession
 	summary := ReaderSummary{
 		UserID:             user.ID,
 		DisplayName:        user.Name(),
+		AvatarType:         avatarType,
+		AvatarValue:        avatarValue,
 		AvatarColor:        avatarColorForUser(user.ID),
 		IsCurrentlyReading: activeSession != nil,
 		StartedAt:          mostRecentSession.StartedAt,

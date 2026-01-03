@@ -144,6 +144,23 @@ func ProvideSocialService(i do.Injector) (*service.SocialService, error) {
 	return service.NewSocialService(storeHandle.Store, log.Logger), nil
 }
 
+// ProvideProfileService provides the user profile service.
+func ProvideProfileService(i do.Injector) (*service.ProfileService, error) {
+	storeHandle := do.MustInvoke[*StoreHandle](i)
+	storages := do.MustInvoke[*ImageStorages](i)
+	sseHandle := do.MustInvoke[*SSEManagerHandle](i)
+	statsService := do.MustInvoke[*service.StatsService](i)
+	log := do.MustInvoke[*logger.Logger](i)
+
+	return service.NewProfileService(
+		storeHandle.Store,
+		storages.Avatars,
+		sseHandle.Manager,
+		statsService,
+		log.Logger,
+	), nil
+}
+
 // ProvideGenreService provides the genre service.
 func ProvideGenreService(i do.Injector) (*service.GenreService, error) {
 	storeHandle := do.MustInvoke[*StoreHandle](i)

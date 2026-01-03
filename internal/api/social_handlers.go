@@ -229,6 +229,8 @@ type SessionSummaryResponse struct {
 type ReaderSummaryResponse struct {
 	UserID             string  `json:"user_id" doc:"User ID"`
 	DisplayName        string  `json:"display_name" doc:"User display name"`
+	AvatarType         string  `json:"avatar_type" doc:"Avatar type (auto or image)"`
+	AvatarValue        string  `json:"avatar_value,omitempty" doc:"Avatar image path for image type"`
 	AvatarColor        string  `json:"avatar_color" doc:"Generated avatar color"`
 	IsCurrentlyReading bool    `json:"is_currently_reading" doc:"Whether user is actively reading"`
 	CurrentProgress    float64 `json:"current_progress,omitempty" doc:"Current progress (0-1)"`
@@ -331,6 +333,8 @@ func (s *Server) handleGetBookReaders(ctx context.Context, input *GetBookReaders
 		otherReaders[i] = ReaderSummaryResponse{
 			UserID:             reader.UserID,
 			DisplayName:        reader.DisplayName,
+			AvatarType:         reader.AvatarType,
+			AvatarValue:        reader.AvatarValue,
 			AvatarColor:        reader.AvatarColor,
 			IsCurrentlyReading: reader.IsCurrentlyReading,
 			CurrentProgress:    reader.CurrentProgress,
@@ -528,6 +532,8 @@ type CurrentlyListeningReaderResponse struct {
 	UserID      string `json:"user_id" doc:"User ID"`
 	DisplayName string `json:"display_name" doc:"User display name"`
 	AvatarColor string `json:"avatar_color" doc:"Generated avatar color (hex)"`
+	AvatarType  string `json:"avatar_type" doc:"Avatar type (auto or image)"`
+	AvatarValue string `json:"avatar_value,omitempty" doc:"Avatar image path (for image type)"`
 }
 
 // CurrentlyListeningBookResponse represents a book that others are reading.
@@ -615,6 +621,8 @@ func (s *Server) handleGetCurrentlyListening(ctx context.Context, input *GetCurr
 				UserID:      r.UserID,
 				DisplayName: r.DisplayName,
 				AvatarColor: r.AvatarColor,
+				AvatarType:  r.AvatarType,
+				AvatarValue: r.AvatarValue,
 			}
 		}
 

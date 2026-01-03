@@ -146,6 +146,7 @@ func (s *Server) registerRoutes() {
 	s.registerSyncRoutes()
 	s.registerListeningRoutes()
 	s.registerSocialRoutes()
+	s.registerProfileRoutes()
 	s.registerPlaybackRoutes()
 	s.registerSettingsRoutes()
 	s.registerGenreRoutes()

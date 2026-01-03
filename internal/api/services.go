@@ -31,6 +31,7 @@ type Services struct {
 	Social         *service.SocialService         // Social features (leaderboards)
 	ReadingSession *service.ReadingSessionService // Reading session tracking
 	Activity       *service.ActivityService       // Activity feed
+	Profile        *service.ProfileService        // User profiles
 }
 
 // StorageServices groups file storage handlers used by the API server.
@@ -38,4 +39,5 @@ type StorageServices struct {
 	Covers            *images.Storage // Book cover images
 	ContributorImages *images.Storage // Contributor profile photos
 	SeriesCovers      *images.Storage // Series cover images
+	Avatars           *images.Storage // User avatar images
 }

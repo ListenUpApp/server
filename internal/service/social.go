@@ -294,6 +294,8 @@ type ReaderInfo struct {
 	UserID      string
 	DisplayName string
 	AvatarColor string
+	AvatarType  string // "auto" or "image"
+	AvatarValue string // Path to image (empty for auto)
 }
 
 // GetCurrentlyListening returns books that other users are actively reading.
@@ -377,10 +379,21 @@ func (s *SocialService) GetCurrentlyListening(ctx context.Context, viewingUserID
 			continue
 		}
 
+		// Get profile for avatar info (optional - may not exist)
+		avatarType := "auto"
+		avatarValue := ""
+		profile, err := s.store.GetUserProfile(ctx, session.UserID)
+		if err == nil && profile != nil {
+			avatarType = string(profile.AvatarType)
+			avatarValue = profile.AvatarValue
+		}
+
 		br.readers = append(br.readers, ReaderInfo{
 			UserID:      user.ID,
 			DisplayName: user.Name(),
 			AvatarColor: avatarColorForUser(user.ID),
+			AvatarType:  avatarType,
+			AvatarValue: avatarValue,
 		})
 	}
 

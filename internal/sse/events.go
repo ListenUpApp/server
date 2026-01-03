@@ -94,6 +94,9 @@ const (
 
 	// Activity feed events (broadcast to all)
 	EventActivityCreated EventType = "activity.created"
+
+	// Profile events (broadcast to all)
+	EventProfileUpdated EventType = "profile.updated"
 )
 
 // Event represents an SSE event to be sent to clients.
@@ -764,6 +767,26 @@ func NewActivityEvent(activity *domain.Activity) Event {
 			LensID:          activity.LensID,
 			LensName:        activity.LensName,
 		},
+		Timestamp: time.Now(),
+	}
+}
+
+// ProfileUpdatedEventData is the payload for profile update events.
+type ProfileUpdatedEventData struct {
+	UserID      string `json:"user_id"`
+	DisplayName string `json:"display_name"`
+	AvatarType  string `json:"avatar_type"`
+	AvatarValue string `json:"avatar_value,omitempty"`
+	AvatarColor string `json:"avatar_color"`
+	Tagline     string `json:"tagline,omitempty"`
+}
+
+// NewProfileUpdatedEvent creates a profile.updated event.
+// Broadcast to all users so avatars can update across the app.
+func NewProfileUpdatedEvent(data ProfileUpdatedEventData) Event {
+	return Event{
+		Type:      EventProfileUpdated,
+		Data:      data,
 		Timestamp: time.Now(),
 	}
 }
