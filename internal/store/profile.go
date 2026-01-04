@@ -45,6 +45,29 @@ func (s *Store) GetUserProfile(ctx context.Context, userID string) (*domain.User
 	return &profile, nil
 }
 
+// GetUserProfilesByIDs retrieves profiles for multiple users.
+// Returns a map of userID -> profile. Missing profiles are not included.
+func (s *Store) GetUserProfilesByIDs(ctx context.Context, userIDs []string) (map[string]*domain.UserProfile, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	profiles := make(map[string]*domain.UserProfile, len(userIDs))
+
+	for _, userID := range userIDs {
+		profile, err := s.GetUserProfile(ctx, userID)
+		if err != nil {
+			if errors.Is(err, ErrProfileNotFound) {
+				continue // Skip missing profiles
+			}
+			return nil, err
+		}
+		profiles[userID] = profile
+	}
+
+	return profiles, nil
+}
+
 // SaveUserProfile creates or updates a user's profile.
 func (s *Store) SaveUserProfile(ctx context.Context, profile *domain.UserProfile) error {
 	if err := ctx.Err(); err != nil {

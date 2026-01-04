@@ -225,6 +225,49 @@ func (s *Store) getBookInternal(_ context.Context, id string) (*domain.Book, err
 	return &book, nil
 }
 
+// getBooksInternalByIDs retrieves multiple books by ID in a single transaction.
+// Skips books that are not found or soft-deleted.
+// For internal store use only.
+func (s *Store) getBooksInternalByIDs(_ context.Context, ids []string) ([]*domain.Book, error) {
+	if len(ids) == 0 {
+		return []*domain.Book{}, nil
+	}
+
+	books := make([]*domain.Book, 0, len(ids))
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		for _, id := range ids {
+			key := []byte(bookPrefix + id)
+			item, err := txn.Get(key)
+			if err != nil {
+				if errors.Is(err, badger.ErrKeyNotFound) {
+					continue // Skip not found
+				}
+				return err
+			}
+
+			var book domain.Book
+			if err := item.Value(func(val []byte) error {
+				return json.Unmarshal(val, &book)
+			}); err != nil {
+				continue // Skip malformed entries
+			}
+
+			if book.IsDeleted() {
+				continue // Skip soft-deleted
+			}
+
+			books = append(books, &book)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get books by ids: %w", err)
+	}
+
+	return books, nil
+}
+
 // GetBookByPath retrieves a book by its filesystem path.
 // This is used during file watching to check if a book already exists.
 // No access control - for internal system use only.

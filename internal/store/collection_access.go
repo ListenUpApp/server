@@ -86,19 +86,19 @@ func (s *Store) GetBooksForUser(ctx context.Context, userID string) ([]*domain.B
 	}
 
 	// Collect bookIDs from user's accessible collections using reverse index
+	// Single transaction for all collection scans
 	accessibleBookIDs := make(map[string]bool)
 
-	for _, coll := range userCollections {
-		// Scan idx:books:collections:{collectionID}:{bookID}
-		prefix := []byte(fmt.Sprintf("%s%s:", bookCollectionsPrefix, coll.ID))
+	err = s.db.View(func(txn *badger.Txn) error {
+		for _, coll := range userCollections {
+			// Scan idx:books:collections:{collectionID}:{bookID}
+			prefix := []byte(fmt.Sprintf("%s%s:", bookCollectionsPrefix, coll.ID))
 
-		err := s.db.View(func(txn *badger.Txn) error {
 			opts := badger.DefaultIteratorOptions
 			opts.PrefetchValues = false // Only need keys
 			opts.Prefix = prefix
 
 			it := txn.NewIterator(opts)
-			defer it.Close()
 
 			for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 				key := it.Item().Key()
@@ -117,11 +117,12 @@ func (s *Store) GetBooksForUser(ctx context.Context, userID string) ([]*domain.B
 					accessibleBookIDs[bookID] = true
 				}
 			}
-			return nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("scan books in collection %s: %w", coll.ID, err)
+			it.Close()
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scan books in collections: %w", err)
 	}
 
 	// Find uncollected books (books with no index entries)
@@ -178,22 +179,20 @@ func (s *Store) GetBooksForUser(ctx context.Context, userID string) ([]*domain.B
 		}
 	}
 
-	// Load only the accessible books (excluding inbox books)
-	accessibleBooks := make([]*domain.Book, 0, len(accessibleBookIDs))
+	// Build list of book IDs to fetch (excluding inbox books)
+	bookIDsToFetch := make([]string, 0, len(accessibleBookIDs))
 	for bookID := range accessibleBookIDs {
 		// Skip books in inbox (staging area)
 		if inboxBookIDs != nil && inboxBookIDs[bookID] {
 			continue
 		}
+		bookIDsToFetch = append(bookIDsToFetch, bookID)
+	}
 
-		book, err := s.getBookInternal(ctx, bookID)
-		if err != nil {
-			if s.logger != nil {
-				s.logger.Warn("failed to load accessible book", "book_id", bookID, "error", err)
-			}
-			continue
-		}
-		accessibleBooks = append(accessibleBooks, book)
+	// Batch fetch all accessible books in a single transaction
+	accessibleBooks, err := s.getBooksInternalByIDs(ctx, bookIDsToFetch)
+	if err != nil {
+		return nil, fmt.Errorf("load accessible books: %w", err)
 	}
 
 	// Sort by ID for deterministic pagination order.

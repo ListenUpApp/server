@@ -411,6 +411,70 @@ func (s *Store) GetTagsForBook(ctx context.Context, bookID string) ([]*domain.Ta
 	return tags, nil
 }
 
+// GetTagsForBookIDs returns tags for multiple books in a batch.
+// Returns a map of bookID -> []*domain.Tag.
+// Missing books or books with no tags will have empty slices.
+func (s *Store) GetTagsForBookIDs(ctx context.Context, bookIDs []string) (map[string][]*domain.Tag, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	// Collect all tag IDs for all books
+	bookTagIDs := make(map[string][]string, len(bookIDs))
+	allTagIDs := make(map[string]bool)
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		for _, bookID := range bookIDs {
+			prefix := fmt.Sprintf("%s%s:", bookTagsPrefix, bookID)
+			opts := badger.DefaultIteratorOptions
+			opts.Prefix = []byte(prefix)
+			opts.PrefetchValues = false
+
+			it := txn.NewIterator(opts)
+			for it.Seek([]byte(prefix)); it.ValidForPrefix([]byte(prefix)); it.Next() {
+				key := string(it.Item().Key())
+				tagID := strings.TrimPrefix(key, prefix)
+				bookTagIDs[bookID] = append(bookTagIDs[bookID], tagID)
+				allTagIDs[tagID] = true
+			}
+			it.Close()
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Batch fetch all unique tags
+	tagMap := make(map[string]*domain.Tag, len(allTagIDs))
+	for tagID := range allTagIDs {
+		t, err := s.GetTagByID(ctx, tagID)
+		if err == nil {
+			tagMap[tagID] = t
+		}
+	}
+
+	// Build result map
+	result := make(map[string][]*domain.Tag, len(bookIDs))
+	for _, bookID := range bookIDs {
+		tagIDs := bookTagIDs[bookID]
+		tags := make([]*domain.Tag, 0, len(tagIDs))
+		for _, tagID := range tagIDs {
+			if t, ok := tagMap[tagID]; ok {
+				tags = append(tags, t)
+			}
+		}
+		// Sort alphabetically by slug
+		sort.Slice(tags, func(i, j int) bool {
+			return tags[i].Slug < tags[j].Slug
+		})
+		result[bookID] = tags
+	}
+
+	return result, nil
+}
+
 // GetTagIDsForBook returns tag IDs for a book (for search indexing).
 func (s *Store) GetTagIDsForBook(ctx context.Context, bookID string) ([]string, error) {
 	if err := ctx.Err(); err != nil {

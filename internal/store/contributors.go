@@ -1231,3 +1231,42 @@ func (s *Store) UnmergeContributor(ctx context.Context, sourceID, aliasName stri
 
 	return newContributor, nil
 }
+
+// CountContributors returns the total number of non-deleted contributors.
+// This is more efficient than ListContributors when only the count is needed.
+func (s *Store) CountContributors(_ context.Context) (int, error) {
+	var count int
+	prefix := []byte(contributorPrefix)
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false // Only need keys for counting
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			// We need to check if the contributor is deleted, so we must fetch the value
+			item := it.Item()
+			err := item.Value(func(val []byte) error {
+				var contributor domain.Contributor
+				if err := json.Unmarshal(val, &contributor); err != nil {
+					return nil // Skip malformed entries
+				}
+				if contributor.DeletedAt == nil {
+					count++
+				}
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, fmt.Errorf("count contributors: %w", err)
+	}
+
+	return count, nil
+}

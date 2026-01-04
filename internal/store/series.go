@@ -112,6 +112,25 @@ func (s *Store) GetSeries(ctx context.Context, id string) (*domain.Series, error
 	return &series, nil
 }
 
+// GetSeriesByIDs retrieves multiple series by their IDs.
+// Missing or deleted series are silently skipped.
+func (s *Store) GetSeriesByIDs(ctx context.Context, ids []string) ([]*domain.Series, error) {
+	result := make([]*domain.Series, 0, len(ids))
+
+	for _, id := range ids {
+		series, err := s.GetSeries(ctx, id)
+		if err != nil {
+			if errors.Is(err, ErrSeriesNotFound) {
+				continue // Skip missing series
+			}
+			return nil, err
+		}
+		result = append(result, series)
+	}
+
+	return result, nil
+}
+
 // GetSeriesByASIN retrieves a series by its Audible ASIN.
 func (s *Store) GetSeriesByASIN(ctx context.Context, asin string) (*domain.Series, error) {
 	if asin == "" {
@@ -800,4 +819,43 @@ func (s *Store) GetSeriesDeletedAfter(_ context.Context, timestamp time.Time) ([
 	}
 
 	return seriesIDs, nil
+}
+
+// CountSeries returns the total number of non-deleted series.
+// This is more efficient than ListSeries when only the count is needed.
+func (s *Store) CountSeries(_ context.Context) (int, error) {
+	var count int
+	prefix := []byte(seriesPrefix)
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false // Only need keys for counting
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			// We need to check if the series is deleted, so we must fetch the value
+			item := it.Item()
+			err := item.Value(func(val []byte) error {
+				var series domain.Series
+				if err := json.Unmarshal(val, &series); err != nil {
+					return nil // Skip malformed entries
+				}
+				if series.DeletedAt == nil {
+					count++
+				}
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, fmt.Errorf("count series: %w", err)
+	}
+
+	return count, nil
 }

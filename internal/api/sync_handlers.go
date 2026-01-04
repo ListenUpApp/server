@@ -396,19 +396,42 @@ func (s *Server) handleGetSyncActiveSessions(ctx context.Context, input *GetSync
 		return nil, err
 	}
 
+	// Collect unique user IDs for batch fetching
+	userIDSet := make(map[string]bool, len(activeSessions))
+	for _, session := range activeSessions {
+		userIDSet[session.UserID] = true
+	}
+	userIDs := make([]string, 0, len(userIDSet))
+	for id := range userIDSet {
+		userIDs = append(userIDs, id)
+	}
+
+	// Batch fetch all users and profiles
+	users, err := s.store.GetUsersByIDs(ctx, userIDs)
+	if err != nil {
+		return nil, err
+	}
+	userMap := make(map[string]*domain.User, len(users))
+	for _, user := range users {
+		userMap[user.ID] = user
+	}
+
+	profiles, err := s.store.GetUserProfilesByIDs(ctx, userIDs)
+	if err != nil {
+		return nil, err
+	}
+
 	resp := make([]SyncActiveSessionResponse, 0, len(activeSessions))
 	for _, session := range activeSessions {
-		// Fetch user and profile for each session
-		user, err := s.store.GetUser(ctx, session.UserID)
-		if err != nil {
+		user, ok := userMap[session.UserID]
+		if !ok {
 			// Skip sessions for users we can't find (deleted, etc.)
 			continue
 		}
 
-		// Get user profile for avatar settings
-		profile, err := s.store.GetUserProfile(ctx, session.UserID)
-		if err != nil {
-			// Use defaults if profile not found
+		// Get user profile for avatar settings, use defaults if not found
+		profile, ok := profiles[session.UserID]
+		if !ok {
 			profile = &domain.UserProfile{
 				AvatarType: domain.AvatarTypeAuto,
 			}

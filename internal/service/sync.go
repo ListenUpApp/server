@@ -63,14 +63,14 @@ func (s *SyncService) GetManifest(ctx context.Context) (*ManifestResponse, error
 		checkpoint = time.Now()
 	}
 
-	// Get contributor count
-	contributors, err := s.store.ListContributors(ctx, store.PaginationParams{Limit: 10000})
+	// Get contributor count (efficient count-only query)
+	contributorCount, err := s.store.CountContributors(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	// Get series count
-	series, err := s.store.ListSeries(ctx, store.PaginationParams{Limit: 10000})
+	// Get series count (efficient count-only query)
+	seriesCount, err := s.store.CountSeries(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -83,13 +83,13 @@ func (s *SyncService) GetManifest(ctx context.Context) (*ManifestResponse, error
 	}
 
 	manifest.Counts.Books = len(bookIDs)
-	manifest.Counts.Contributors = len(contributors.Items)
-	manifest.Counts.Series = len(series.Items)
+	manifest.Counts.Contributors = contributorCount
+	manifest.Counts.Series = seriesCount
 
 	s.logger.Info("manifest generated",
 		"book_count", len(bookIDs),
-		"contributor_count", len(contributors.Items),
-		"series_count", len(series.Items),
+		"contributor_count", contributorCount,
+		"series_count", seriesCount,
 		"checkpoint", checkpoint.Format(time.RFC3339),
 	)
 
