@@ -20,6 +20,16 @@ type ActivityService struct {
 	logger     *slog.Logger
 }
 
+// getUserAvatarInfo retrieves avatar type and value from user profile.
+// Falls back to "auto" type if profile not found.
+func (s *ActivityService) getUserAvatarInfo(ctx context.Context, userID string) (avatarType, avatarValue string) {
+	profile, err := s.store.GetUserProfile(ctx, userID)
+	if err != nil || profile == nil {
+		return "auto", ""
+	}
+	return string(profile.AvatarType), profile.AvatarValue
+}
+
 // NewActivityService creates a new activity service.
 func NewActivityService(store *store.Store, sseManager *sse.Manager, logger *slog.Logger) *ActivityService {
 	return &ActivityService{
@@ -47,6 +57,8 @@ func (s *ActivityService) RecordBookStarted(ctx context.Context, userID, bookID 
 		return fmt.Errorf("generate activity ID: %w", err)
 	}
 
+	avatarType, avatarValue := s.getUserAvatarInfo(ctx, userID)
+
 	activity := &domain.Activity{
 		ID:              activityID,
 		UserID:          userID,
@@ -54,6 +66,8 @@ func (s *ActivityService) RecordBookStarted(ctx context.Context, userID, bookID 
 		CreatedAt:       time.Now(),
 		UserDisplayName: user.Name(),
 		UserAvatarColor: avatarColorForUser(userID),
+		UserAvatarType:  avatarType,
+		UserAvatarValue: avatarValue,
 		BookID:          bookID,
 		BookTitle:       book.Title,
 		BookAuthorName:  getAuthorName(ctx, s.store, book),
@@ -98,6 +112,8 @@ func (s *ActivityService) RecordBookFinished(ctx context.Context, userID, bookID
 		return fmt.Errorf("generate activity ID: %w", err)
 	}
 
+	avatarType, avatarValue := s.getUserAvatarInfo(ctx, userID)
+
 	activity := &domain.Activity{
 		ID:              activityID,
 		UserID:          userID,
@@ -105,6 +121,8 @@ func (s *ActivityService) RecordBookFinished(ctx context.Context, userID, bookID
 		CreatedAt:       time.Now(),
 		UserDisplayName: user.Name(),
 		UserAvatarColor: avatarColorForUser(userID),
+		UserAvatarType:  avatarType,
+		UserAvatarValue: avatarValue,
 		BookID:          bookID,
 		BookTitle:       book.Title,
 		BookAuthorName:  getAuthorName(ctx, s.store, book),
@@ -142,6 +160,8 @@ func (s *ActivityService) RecordStreakMilestone(ctx context.Context, userID stri
 		return fmt.Errorf("generate activity ID: %w", err)
 	}
 
+	avatarType, avatarValue := s.getUserAvatarInfo(ctx, userID)
+
 	activity := &domain.Activity{
 		ID:              activityID,
 		UserID:          userID,
@@ -149,6 +169,8 @@ func (s *ActivityService) RecordStreakMilestone(ctx context.Context, userID stri
 		CreatedAt:       time.Now(),
 		UserDisplayName: user.Name(),
 		UserAvatarColor: avatarColorForUser(userID),
+		UserAvatarType:  avatarType,
+		UserAvatarValue: avatarValue,
 		MilestoneValue:  days,
 		MilestoneUnit:   "days",
 	}
@@ -179,6 +201,8 @@ func (s *ActivityService) RecordListeningMilestone(ctx context.Context, userID s
 		return fmt.Errorf("generate activity ID: %w", err)
 	}
 
+	avatarType, avatarValue := s.getUserAvatarInfo(ctx, userID)
+
 	activity := &domain.Activity{
 		ID:              activityID,
 		UserID:          userID,
@@ -186,6 +210,8 @@ func (s *ActivityService) RecordListeningMilestone(ctx context.Context, userID s
 		CreatedAt:       time.Now(),
 		UserDisplayName: user.Name(),
 		UserAvatarColor: avatarColorForUser(userID),
+		UserAvatarType:  avatarType,
+		UserAvatarValue: avatarValue,
 		MilestoneValue:  hours,
 		MilestoneUnit:   "hours",
 	}
@@ -216,6 +242,8 @@ func (s *ActivityService) RecordLensCreated(ctx context.Context, userID string, 
 		return fmt.Errorf("generate activity ID: %w", err)
 	}
 
+	avatarType, avatarValue := s.getUserAvatarInfo(ctx, userID)
+
 	activity := &domain.Activity{
 		ID:              activityID,
 		UserID:          userID,
@@ -223,6 +251,8 @@ func (s *ActivityService) RecordLensCreated(ctx context.Context, userID string, 
 		CreatedAt:       time.Now(),
 		UserDisplayName: user.Name(),
 		UserAvatarColor: avatarColorForUser(userID),
+		UserAvatarType:  avatarType,
+		UserAvatarValue: avatarValue,
 		LensID:          lens.ID,
 		LensName:        lens.Name,
 	}
@@ -282,6 +312,8 @@ func (s *ActivityService) RecordListeningSession(ctx context.Context, userID, bo
 		return fmt.Errorf("generate activity ID: %w", err)
 	}
 
+	avatarType, avatarValue := s.getUserAvatarInfo(ctx, userID)
+
 	activity := &domain.Activity{
 		ID:              activityID,
 		UserID:          userID,
@@ -289,6 +321,8 @@ func (s *ActivityService) RecordListeningSession(ctx context.Context, userID, bo
 		CreatedAt:       time.Now(),
 		UserDisplayName: user.Name(),
 		UserAvatarColor: avatarColorForUser(userID),
+		UserAvatarType:  avatarType,
+		UserAvatarValue: avatarValue,
 		BookID:          bookID,
 		BookTitle:       book.Title,
 		BookAuthorName:  getAuthorName(ctx, s.store, book),

@@ -135,8 +135,11 @@ func (s *ReadingSessionService) EnsureActiveSession(ctx context.Context, userID,
 		"user_id", userID,
 		"book_id", bookID)
 
-	// Emit SSE event for new session
+	// Emit SSE event for new session (user-specific, for their other devices)
 	s.events.Emit(sse.NewReadingSessionUpdatedEvent(newSession))
+
+	// Emit session.started event broadcast to ALL users for "Currently Listening" feature
+	s.events.Emit(sse.NewSessionStartedEvent(newSession.ID, userID, bookID, newSession.StartedAt))
 
 	// Record activity for new session
 	// Only fire activity if:
@@ -253,8 +256,11 @@ func (s *ReadingSessionService) CompleteSession(ctx context.Context, userID, boo
 		"book_id", bookID,
 		"listen_time_ms", listenTimeMs)
 
-	// Emit SSE event for completed session
+	// Emit SSE event for completed session (user-specific)
 	s.events.Emit(sse.NewReadingSessionUpdatedEvent(session))
+
+	// Emit session.ended event broadcast to ALL users for "Currently Listening" feature
+	s.events.Emit(sse.NewSessionEndedEvent(session.ID))
 
 	// Record finished_book activity
 	// Note: listening_session activity is recorded via EndPlaybackSession when the client pauses/stops
@@ -314,6 +320,9 @@ func (s *ReadingSessionService) abandonSessionInternal(ctx context.Context, sess
 		"user_id", session.UserID,
 		"book_id", session.BookID,
 		"final_progress", finalProgress)
+
+	// Emit session.ended event broadcast to ALL users for "Currently Listening" feature
+	s.events.Emit(sse.NewSessionEndedEvent(session.ID))
 
 	return nil
 }

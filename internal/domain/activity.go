@@ -45,6 +45,8 @@ type Activity struct {
 	// Denormalized user info for immediate rendering
 	UserDisplayName string `json:"user_display_name"`
 	UserAvatarColor string `json:"user_avatar_color"`
+	UserAvatarType  string `json:"user_avatar_type"`            // "auto" or "image"
+	UserAvatarValue string `json:"user_avatar_value,omitempty"` // Image path for "image" type
 
 	// Book activities (started_book, finished_book, listening_session)
 	BookID         string `json:"book_id,omitempty"`

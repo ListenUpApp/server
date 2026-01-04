@@ -52,6 +52,16 @@ func (s *Server) registerSyncRoutes() {
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleGetSyncSeries)
 
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getSyncActiveSessions",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/sync/active-sessions",
+		Summary:     "Get active reading sessions",
+		Description: "Returns all active reading sessions for populating discovery page during sync",
+		Tags:        []string{"Sync"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetSyncActiveSessions)
+
 	// SSE endpoint (handled via chi directly, not huma)
 	s.router.Get("/api/v1/sync/events", s.sseHandler.ServeHTTP)
 }
@@ -342,6 +352,83 @@ func (s *Server) handleGetSyncSeries(ctx context.Context, input *GetSyncSeriesIn
 			Series:           resp,
 			DeletedSeriesIDs: result.DeletedSeriesIDs,
 			HasMore:          result.HasMore,
+		},
+	}, nil
+}
+
+// === Active Sessions ===
+
+// GetSyncActiveSessionsInput contains parameters for getting active sessions.
+type GetSyncActiveSessionsInput struct {
+	Authorization string `header:"Authorization"`
+}
+
+// SyncActiveSessionResponse contains an active session for sync.
+// Includes user profile data for offline-first client display.
+type SyncActiveSessionResponse struct {
+	SessionID   string    `json:"session_id" doc:"Unique session ID"`
+	UserID      string    `json:"user_id" doc:"User ID"`
+	BookID      string    `json:"book_id" doc:"Book ID"`
+	StartedAt   time.Time `json:"started_at" doc:"When session started"`
+	DisplayName string    `json:"display_name" doc:"User's display name"`
+	AvatarType  string    `json:"avatar_type" doc:"Avatar type (auto or image)"`
+	AvatarValue string    `json:"avatar_value,omitempty" doc:"Avatar URL path for image avatars"`
+	AvatarColor string    `json:"avatar_color" doc:"Avatar background color in hex"`
+}
+
+// SyncActiveSessionsResponse contains active sessions for sync.
+type SyncActiveSessionsResponse struct {
+	Sessions []SyncActiveSessionResponse `json:"sessions" doc:"Active reading sessions"`
+}
+
+// SyncActiveSessionsOutput wraps the active sessions response for Huma.
+type SyncActiveSessionsOutput struct {
+	Body SyncActiveSessionsResponse
+}
+
+func (s *Server) handleGetSyncActiveSessions(ctx context.Context, input *GetSyncActiveSessionsInput) (*SyncActiveSessionsOutput, error) {
+	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+		return nil, err
+	}
+
+	activeSessions, err := s.store.GetAllActiveSessions(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := make([]SyncActiveSessionResponse, 0, len(activeSessions))
+	for _, session := range activeSessions {
+		// Fetch user and profile for each session
+		user, err := s.store.GetUser(ctx, session.UserID)
+		if err != nil {
+			// Skip sessions for users we can't find (deleted, etc.)
+			continue
+		}
+
+		// Get user profile for avatar settings
+		profile, err := s.store.GetUserProfile(ctx, session.UserID)
+		if err != nil {
+			// Use defaults if profile not found
+			profile = &domain.UserProfile{
+				AvatarType: domain.AvatarTypeAuto,
+			}
+		}
+
+		resp = append(resp, SyncActiveSessionResponse{
+			SessionID:   session.ID,
+			UserID:      session.UserID,
+			BookID:      session.BookID,
+			StartedAt:   session.StartedAt,
+			DisplayName: user.DisplayName,
+			AvatarType:  string(profile.AvatarType),
+			AvatarValue: profile.AvatarValue,
+			AvatarColor: avatarColorForUser(session.UserID),
+		})
+	}
+
+	return &SyncActiveSessionsOutput{
+		Body: SyncActiveSessionsResponse{
+			Sessions: resp,
 		},
 	}, nil
 }

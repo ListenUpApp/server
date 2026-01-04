@@ -88,9 +88,16 @@ type LeaderboardEntryResponse struct {
 	UserID        string  `json:"user_id" doc:"User ID"`
 	DisplayName   string  `json:"display_name" doc:"User display name"`
 	AvatarURL     *string `json:"avatar_url,omitempty" doc:"Avatar URL if available"`
+	AvatarType    string  `json:"avatar_type" doc:"Avatar type (auto or image)"`
+	AvatarValue   string  `json:"avatar_value,omitempty" doc:"Avatar image path (for image type)"`
+	AvatarColor   string  `json:"avatar_color" doc:"Generated avatar color (hex)"`
 	Value         int64   `json:"value" doc:"Numeric value (time ms, count, or days)"`
 	ValueLabel    string  `json:"value_label" doc:"Human-readable value"`
 	IsCurrentUser bool    `json:"is_current_user" doc:"Whether this is the requesting user"`
+	// All-time totals for caching (only included when period=all)
+	TotalTimeMs    *int64 `json:"total_time_ms,omitempty" doc:"All-time listening time in ms (period=all only)"`
+	TotalBooks     *int   `json:"total_books,omitempty" doc:"All-time books finished (period=all only)"`
+	CurrentStreak  *int   `json:"current_streak,omitempty" doc:"Current streak in days (period=all only)"`
 }
 
 // CommunityStatsResponse contains aggregate community statistics.
@@ -141,18 +148,36 @@ func (s *Server) handleGetLeaderboard(ctx context.Context, input *GetLeaderboard
 		return nil, err
 	}
 
+	// Check if this is an all-time request (for including cache fields)
+	isAllTime := period == domain.StatsPeriodAllTime
+
 	// Convert entries to response format
 	entries := make([]LeaderboardEntryResponse, len(leaderboard.Entries))
 	for i, e := range leaderboard.Entries {
-		entries[i] = LeaderboardEntryResponse{
+		entry := LeaderboardEntryResponse{
 			Rank:          e.Rank,
 			UserID:        e.UserID,
 			DisplayName:   e.DisplayName,
 			AvatarURL:     e.AvatarURL,
+			AvatarType:    e.AvatarType,
+			AvatarValue:   e.AvatarValue,
+			AvatarColor:   e.AvatarColor,
 			Value:         e.Value,
 			ValueLabel:    e.ValueLabel,
 			IsCurrentUser: e.IsCurrentUser,
 		}
+
+		// Include all-time totals for client caching when period=all
+		if isAllTime {
+			totalTimeMs := e.TotalTimeMs
+			totalBooks := e.TotalBooks
+			currentStreak := e.CurrentStreak
+			entry.TotalTimeMs = &totalTimeMs
+			entry.TotalBooks = &totalBooks
+			entry.CurrentStreak = &currentStreak
+		}
+
+		entries[i] = entry
 	}
 
 	// Format community total time (handle negative/invalid values)
@@ -423,6 +448,8 @@ type ActivityResponse struct {
 	UserID          string `json:"user_id" doc:"User who performed the activity"`
 	UserDisplayName string `json:"user_display_name" doc:"User display name"`
 	UserAvatarColor string `json:"user_avatar_color" doc:"Generated avatar color"`
+	UserAvatarType  string `json:"user_avatar_type" doc:"Avatar type (auto or image)"`
+	UserAvatarValue string `json:"user_avatar_value,omitempty" doc:"Avatar image path (for image type)"`
 
 	// Book activities
 	BookID         string `json:"book_id,omitempty" doc:"Book ID (for book activities)"`
@@ -492,6 +519,8 @@ func (s *Server) handleGetActivityFeed(ctx context.Context, input *GetActivityFe
 			UserID:          a.UserID,
 			UserDisplayName: a.UserDisplayName,
 			UserAvatarColor: a.UserAvatarColor,
+			UserAvatarType:  a.UserAvatarType,
+			UserAvatarValue: a.UserAvatarValue,
 			BookID:          a.BookID,
 			BookTitle:       a.BookTitle,
 			BookAuthorName:  a.BookAuthorName,

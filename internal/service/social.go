@@ -47,20 +47,39 @@ func (s *SocialService) GetLeaderboard(
 	now := time.Now()
 	start, end := period.Bounds(now)
 
+	s.logger.Info("GetLeaderboard called",
+		"period", period,
+		"category", category,
+		"start", start.Format(time.RFC3339),
+		"end", end.Format(time.RFC3339),
+	)
+
 	// Get all users
 	users, err := s.store.ListUsers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("listing users: %w", err)
 	}
 
+	s.logger.Debug("Found users for leaderboard", "count", len(users))
+
+	// Check if this is an all-time request (for caching full stats)
+	isAllTime := period == domain.StatsPeriodAllTime
+
 	// Build entries for each user
 	type userStats struct {
 		userID      string
 		displayName string
 		avatarURL   *string
+		avatarType  string
+		avatarValue string
+		avatarColor string
 		timeMs      int64
 		booksCount  int
 		streakDays  int
+		// All-time totals (only calculated for period=all)
+		allTimeMs    int64
+		allBooks     int
+		currentStreak int
 	}
 
 	stats := make([]userStats, 0, len(users))
@@ -76,12 +95,22 @@ func (s *SocialService) GetLeaderboard(
 			continue
 		}
 
-		// Calculate listening time (only count positive durations)
+		// Calculate listening time (only count positive and reasonable durations)
+		// Max reasonable duration per event: 24 hours (longest audiobook listening session)
+		const maxReasonableDurationMs = 24 * 60 * 60 * 1000 // 24 hours
 		var totalTimeMs int64
 		booksSet := make(map[string]bool)
 		for _, e := range events {
-			if e.DurationMs > 0 {
+			if e.DurationMs > 0 && e.DurationMs <= maxReasonableDurationMs {
 				totalTimeMs += e.DurationMs
+			} else if e.DurationMs > maxReasonableDurationMs {
+				// Skip corrupted events (likely client bug with MaxInt64)
+				s.logger.Warn("Skipping event with corrupted duration",
+					"event_id", e.ID,
+					"user_id", user.ID,
+					"duration_ms", e.DurationMs,
+					"end_position_ms", e.EndPositionMs,
+				)
 			}
 			booksSet[e.BookID] = true
 		}
@@ -93,23 +122,65 @@ func (s *SocialService) GetLeaderboard(
 		}
 		booksFinished := len(finishedProgress)
 
-		// Calculate streak
+		// Calculate streak (always calculated as it's the current streak, not period-based)
 		streakDays := s.CalculateUserStreak(ctx, user.ID)
 
-		stats = append(stats, userStats{
-			userID:      user.ID,
-			displayName: user.DisplayName,
-			avatarURL:   nil, // Users don't have avatars yet
-			timeMs:      totalTimeMs,
-			booksCount:  booksFinished,
-			streakDays:  streakDays,
-		})
+		// Get avatar info from user profile
+		// Avatar color is always generated from user ID for consistency
+		avatarType := "auto"
+		avatarValue := ""
+		avatarColor := avatarColorForUser(user.ID)
+		profile, err := s.store.GetUserProfile(ctx, user.ID)
+		if err == nil && profile != nil {
+			avatarType = string(profile.AvatarType)
+			avatarValue = profile.AvatarValue
+		}
+
+		s.logger.Debug("User stats calculated",
+			"user_id", user.ID,
+			"display_name", user.DisplayName,
+			"events_count", len(events),
+			"time_ms", totalTimeMs,
+			"time_hours", float64(totalTimeMs)/3600000,
+			"books_finished", booksFinished,
+			"streak_days", streakDays,
+		)
+
+		stat := userStats{
+			userID:        user.ID,
+			displayName:   user.DisplayName,
+			avatarURL:     nil,
+			avatarType:    avatarType,
+			avatarValue:   avatarValue,
+			avatarColor:   avatarColor,
+			timeMs:        totalTimeMs,
+			booksCount:    booksFinished,
+			streakDays:    streakDays,
+			currentStreak: streakDays, // Current streak is always the same
+		}
+
+		// For all-time requests, the period stats ARE the all-time stats
+		if isAllTime {
+			stat.allTimeMs = totalTimeMs
+			stat.allBooks = booksFinished
+		}
+
+		stats = append(stats, stat)
 
 		// Aggregate for community stats
 		communityTotalTimeMs += totalTimeMs
 		communityTotalBooks += booksFinished
 		communityStreakSum += streakDays
 	}
+
+	s.logger.Info("Community stats calculated",
+		"period", period,
+		"total_users", len(stats),
+		"community_time_ms", communityTotalTimeMs,
+		"community_time_hours", float64(communityTotalTimeMs)/3600000,
+		"community_books", communityTotalBooks,
+		"community_streak_sum", communityStreakSum,
+	)
 
 	// Sort based on category
 	switch category {
@@ -169,15 +240,27 @@ func (s *SocialService) GetLeaderboard(
 			}
 		}
 
-		entries = append(entries, domain.LeaderboardEntry{
+		entry := domain.LeaderboardEntry{
 			Rank:          i + 1,
 			UserID:        stat.userID,
 			DisplayName:   stat.displayName,
 			AvatarURL:     stat.avatarURL,
+			AvatarType:    stat.avatarType,
+			AvatarValue:   stat.avatarValue,
+			AvatarColor:   stat.avatarColor,
 			Value:         value,
 			ValueLabel:    valueLabel,
 			IsCurrentUser: stat.userID == viewingUserID,
-		})
+		}
+
+		// Include all-time totals for caching when period=all
+		if isAllTime {
+			entry.TotalTimeMs = stat.allTimeMs
+			entry.TotalBooks = stat.allBooks
+			entry.CurrentStreak = stat.currentStreak
+		}
+
+		entries = append(entries, entry)
 	}
 
 	// Calculate community average streak
@@ -185,6 +268,15 @@ func (s *SocialService) GetLeaderboard(
 	if len(stats) > 0 {
 		avgStreak = float64(communityStreakSum) / float64(len(stats))
 	}
+
+	s.logger.Info("Returning leaderboard",
+		"period", period,
+		"category", category,
+		"entries_count", len(entries),
+		"community_time_ms", communityTotalTimeMs,
+		"community_books", communityTotalBooks,
+		"avg_streak", avgStreak,
+	)
 
 	return &domain.Leaderboard{
 		Category:               category,

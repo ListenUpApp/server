@@ -88,15 +88,22 @@ const (
 	EventInboxBookReleased EventType = "inbox.book_released"
 
 	// Listening events (user-specific)
-	EventProgressUpdated        EventType = "listening.progress_updated"
-	EventListeningEventCreated  EventType = "listening.event_created"
-	EventReadingSessionUpdated  EventType = "reading_session.updated"
+	EventProgressUpdated       EventType = "listening.progress_updated"
+	EventListeningEventCreated EventType = "listening.event_created"
+	EventReadingSessionUpdated EventType = "reading_session.updated"
+
+	// Active session events (broadcast to all for "Currently Listening" feature)
+	EventSessionStarted EventType = "session.started"
+	EventSessionEnded   EventType = "session.ended"
 
 	// Activity feed events (broadcast to all)
 	EventActivityCreated EventType = "activity.created"
 
 	// Profile events (broadcast to all)
 	EventProfileUpdated EventType = "profile.updated"
+
+	// User stats events (broadcast to all for leaderboard caching)
+	EventUserStatsUpdated EventType = "user_stats.updated"
 )
 
 // Event represents an SSE event to be sent to clients.
@@ -732,6 +739,8 @@ type ActivityEventData struct {
 	CreatedAt       time.Time `json:"created_at"`
 	UserDisplayName string    `json:"user_display_name"`
 	UserAvatarColor string    `json:"user_avatar_color"`
+	UserAvatarType  string    `json:"user_avatar_type"`
+	UserAvatarValue string    `json:"user_avatar_value,omitempty"`
 	BookID          string    `json:"book_id,omitempty"`
 	BookTitle       string    `json:"book_title,omitempty"`
 	BookAuthorName  string    `json:"book_author_name,omitempty"`
@@ -756,6 +765,8 @@ func NewActivityEvent(activity *domain.Activity) Event {
 			CreatedAt:       activity.CreatedAt,
 			UserDisplayName: activity.UserDisplayName,
 			UserAvatarColor: activity.UserAvatarColor,
+			UserAvatarType:  activity.UserAvatarType,
+			UserAvatarValue: activity.UserAvatarValue,
 			BookID:          activity.BookID,
 			BookTitle:       activity.BookTitle,
 			BookAuthorName:  activity.BookAuthorName,
@@ -786,6 +797,71 @@ type ProfileUpdatedEventData struct {
 func NewProfileUpdatedEvent(data ProfileUpdatedEventData) Event {
 	return Event{
 		Type:      EventProfileUpdated,
+		Data:      data,
+		Timestamp: time.Now(),
+	}
+}
+
+// SessionStartedEventData is the payload for session.started events.
+// Broadcast to all users for "What Others Are Listening To" feature.
+type SessionStartedEventData struct {
+	SessionID string    `json:"session_id"`
+	UserID    string    `json:"user_id"`
+	BookID    string    `json:"book_id"`
+	StartedAt time.Time `json:"started_at"`
+}
+
+// SessionEndedEventData is the payload for session.ended events.
+type SessionEndedEventData struct {
+	SessionID string `json:"session_id"`
+}
+
+// NewSessionStartedEvent creates a session.started event.
+// Broadcast to all users so they can see who's currently listening.
+func NewSessionStartedEvent(sessionID, userID, bookID string, startedAt time.Time) Event {
+	return Event{
+		Type: EventSessionStarted,
+		Data: SessionStartedEventData{
+			SessionID: sessionID,
+			UserID:    userID,
+			BookID:    bookID,
+			StartedAt: startedAt,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewSessionEndedEvent creates a session.ended event.
+// Broadcast to all users to remove the session from "Currently Listening".
+func NewSessionEndedEvent(sessionID string) Event {
+	return Event{
+		Type: EventSessionEnded,
+		Data: SessionEndedEventData{
+			SessionID: sessionID,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// UserStatsUpdatedEventData is the payload for user_stats.updated events.
+// Contains updated all-time stats for a user, enabling clients to cache
+// without re-fetching the entire leaderboard.
+type UserStatsUpdatedEventData struct {
+	UserID        string `json:"user_id"`
+	DisplayName   string `json:"display_name"`
+	AvatarType    string `json:"avatar_type"`
+	AvatarValue   string `json:"avatar_value,omitempty"`
+	AvatarColor   string `json:"avatar_color"`
+	TotalTimeMs   int64  `json:"total_time_ms"`
+	TotalBooks    int    `json:"total_books"`
+	CurrentStreak int    `json:"current_streak"`
+}
+
+// NewUserStatsUpdatedEvent creates a user_stats.updated event.
+// Broadcast to all users so they can update their leaderboard cache.
+func NewUserStatsUpdatedEvent(data UserStatsUpdatedEventData) Event {
+	return Event{
+		Type:      EventUserStatsUpdated,
 		Data:      data,
 		Timestamp: time.Now(),
 	}

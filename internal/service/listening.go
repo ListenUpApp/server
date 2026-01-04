@@ -169,6 +169,9 @@ func (s *ListeningService) RecordEvent(ctx context.Context, userID string, req R
 	// Check for milestone crossings (non-blocking)
 	s.checkMilestones(ctx, userID, progress.TotalListenTimeMs)
 
+	// Broadcast updated user stats for leaderboard caching (non-blocking)
+	s.broadcastUserStatsUpdate(ctx, userID)
+
 	// Note: listening_session activities are created when the reading session ends
 	// (CompleteSession or AbandonSession), not per-event, to avoid spamming the feed.
 
@@ -493,4 +496,79 @@ func (s *ListeningService) GetBookStats(ctx context.Context, bookID string) (*Bo
 	stats.CompletedCount = len(finished)
 
 	return stats, nil
+}
+
+// broadcastUserStatsUpdate broadcasts updated all-time stats for a user.
+// Called after listening events to keep leaderboard caches fresh.
+func (s *ListeningService) broadcastUserStatsUpdate(ctx context.Context, userID string) {
+	// Get user info
+	user, err := s.store.GetUser(ctx, userID)
+	if err != nil {
+		s.logger.Warn("failed to get user for stats broadcast", "user_id", userID, "error", err)
+		return
+	}
+
+	// Get user profile for avatar info
+	profile, _ := s.store.GetUserProfile(ctx, userID)
+	avatarType := "auto"
+	avatarValue := ""
+	if profile != nil {
+		avatarType = string(profile.AvatarType)
+		avatarValue = profile.AvatarValue
+	}
+
+	// Calculate total listening time from all events
+	allEvents, err := s.store.GetEventsForUser(ctx, userID)
+	if err != nil {
+		s.logger.Warn("failed to get events for stats broadcast", "user_id", userID, "error", err)
+		return
+	}
+
+	// Only count valid durations (same logic as leaderboard calculation)
+	const maxReasonableDurationMs = 24 * 60 * 60 * 1000 // 24 hours
+	var totalTimeMs int64
+	for _, e := range allEvents {
+		if e.DurationMs > 0 && e.DurationMs <= maxReasonableDurationMs {
+			totalTimeMs += e.DurationMs
+		}
+	}
+
+	// Get finished books count
+	allProgress, err := s.store.GetProgressForUser(ctx, userID)
+	if err != nil {
+		s.logger.Warn("failed to get progress for stats broadcast", "user_id", userID, "error", err)
+		return
+	}
+
+	var totalBooks int
+	for _, p := range allProgress {
+		if p.IsFinished {
+			totalBooks++
+		}
+	}
+
+	// Get current streak
+	var currentStreak int
+	if s.streakCalculator != nil {
+		currentStreak = s.streakCalculator.CalculateUserStreak(ctx, userID)
+	}
+
+	// Broadcast the update
+	s.events.Emit(sse.NewUserStatsUpdatedEvent(sse.UserStatsUpdatedEventData{
+		UserID:        userID,
+		DisplayName:   user.DisplayName,
+		AvatarType:    avatarType,
+		AvatarValue:   avatarValue,
+		AvatarColor:   avatarColorForUser(userID),
+		TotalTimeMs:   totalTimeMs,
+		TotalBooks:    totalBooks,
+		CurrentStreak: currentStreak,
+	}))
+
+	s.logger.Debug("broadcast user stats update",
+		"user_id", userID,
+		"total_time_ms", totalTimeMs,
+		"total_books", totalBooks,
+		"current_streak", currentStreak,
+	)
 }
