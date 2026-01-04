@@ -43,7 +43,7 @@ func (s *Store) CreateGenre(ctx context.Context, g *domain.Genre) error {
 
 	key := []byte(genrePrefix + g.ID)
 
-	return s.db.Update(func(txn *badger.Txn) error {
+	err := s.db.Update(func(txn *badger.Txn) error {
 		// Check if already exists.
 		if _, err := txn.Get(key); err == nil {
 			return ErrGenreExists
@@ -80,14 +80,29 @@ func (s *Store) CreateGenre(ctx context.Context, g *domain.Genre) error {
 
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	s.InvalidateGenreCache()
+	return nil
 }
 
 // GetGenre retrieves a genre by ID.
+// Uses in-memory cache for fast lookups when available.
 func (s *Store) GetGenre(ctx context.Context, id string) (*domain.Genre, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
+	// Check cache first
+	if cached := s.getGenreFromCache(id); cached != nil {
+		if cached.IsDeleted() {
+			return nil, ErrGenreNotFound
+		}
+		return cached, nil
+	}
+
+	// Cache miss - fetch from DB
 	var g domain.Genre
 	key := []byte(genrePrefix + id)
 
@@ -218,11 +233,18 @@ func (s *Store) GetOrCreateGenreBySlug(ctx context.Context, slug, name, parentID
 }
 
 // ListGenres returns all genres.
+// Uses in-memory cache for fast lookups; populates cache on first call.
 func (s *Store) ListGenres(ctx context.Context) ([]*domain.Genre, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
+	// Check cache first
+	if cached := s.getGenreListFromCache(); cached != nil {
+		return cached, nil
+	}
+
+	// Cache miss - load from DB
 	var genres []*domain.Genre
 	prefix := []byte(genrePrefix)
 
@@ -256,6 +278,9 @@ func (s *Store) ListGenres(ctx context.Context) ([]*domain.Genre, error) {
 	slices.SortFunc(genres, func(a, b *domain.Genre) int {
 		return strings.Compare(a.Path, b.Path)
 	})
+
+	// Populate cache for future calls
+	s.populateGenreCache(genres)
 
 	return genres, nil
 }
@@ -325,7 +350,7 @@ func (s *Store) UpdateGenre(ctx context.Context, g *domain.Genre) error {
 		return err
 	}
 
-	return s.db.Update(func(txn *badger.Txn) error {
+	err = s.db.Update(func(txn *badger.Txn) error {
 		// Update main record.
 		data, err := json.Marshal(g)
 		if err != nil {
@@ -373,6 +398,11 @@ func (s *Store) UpdateGenre(ctx context.Context, g *domain.Genre) error {
 
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	s.InvalidateGenreCache()
+	return nil
 }
 
 // DeleteGenre deletes a genre (must have no children and not be system).
@@ -395,7 +425,7 @@ func (s *Store) DeleteGenre(ctx context.Context, id string) error {
 		return ErrGenreHasChildren
 	}
 
-	return s.db.Update(func(txn *badger.Txn) error {
+	err = s.db.Update(func(txn *badger.Txn) error {
 		// Soft delete.
 		g.MarkDeleted()
 		data, err := json.Marshal(g)
@@ -424,6 +454,11 @@ func (s *Store) DeleteGenre(ctx context.Context, id string) error {
 
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	s.InvalidateGenreCache()
+	return nil
 }
 
 // MoveGenre changes a genre's parent (re-parents in tree).

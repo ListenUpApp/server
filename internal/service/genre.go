@@ -201,10 +201,18 @@ func (s *GenreService) MapUnmappedGenre(ctx context.Context, userID string, req 
 		return err
 	}
 
-	// Verify all genre IDs exist.
+	// Verify all genre IDs exist (batch fetch, not N+1).
+	genres, err := s.store.GetGenresByIDs(ctx, req.GenreIDs)
+	if err != nil {
+		return fmt.Errorf("fetch genres: %w", err)
+	}
+	foundIDs := make(map[string]bool, len(genres))
+	for _, g := range genres {
+		foundIDs[g.ID] = true
+	}
 	for _, gid := range req.GenreIDs {
-		if _, err := s.store.GetGenre(ctx, gid); err != nil {
-			return fmt.Errorf("genre %s not found: %w", gid, err)
+		if !foundIDs[gid] {
+			return fmt.Errorf("genre %s not found", gid)
 		}
 	}
 
@@ -223,17 +231,12 @@ func (s *GenreService) GetGenresForBook(ctx context.Context, bookID string) ([]*
 		return nil, err
 	}
 
-	var genres []*domain.Genre
-	for _, gid := range genreIDs {
-		g, err := s.store.GetGenre(ctx, gid)
-		if err != nil {
-			// Genre may have been deleted; skip
-			continue
-		}
-		genres = append(genres, g)
+	if len(genreIDs) == 0 {
+		return nil, nil
 	}
 
-	return genres, nil
+	// Batch fetch all genres (not N+1)
+	return s.store.GetGenresByIDs(ctx, genreIDs)
 }
 
 // SeedDefaultGenres creates the default genre hierarchy if not already seeded.

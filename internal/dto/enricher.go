@@ -106,25 +106,36 @@ func (e *Enricher) EnrichBook(ctx context.Context, book *domain.Book) (*Book, er
 		}
 	}
 
-	// Enrich series info (for all series the book belongs to)
+	// Enrich series info (batch fetch all series, not N+1)
 	if len(book.Series) > 0 {
-		dto.SeriesInfo = make([]BookSeriesInfo, 0, len(book.Series))
-		for _, bs := range book.Series {
-			series, err := e.store.GetSeries(ctx, bs.SeriesID)
-			if err != nil {
-				// Don't fail enrichment if series lookup fails
-				// Skip this series entry
-				continue
-			}
-			dto.SeriesInfo = append(dto.SeriesInfo, BookSeriesInfo{
-				SeriesID: bs.SeriesID,
-				Name:     series.Name,
-				Sequence: bs.Sequence,
-			})
+		seriesIDs := make([]string, len(book.Series))
+		for i, bs := range book.Series {
+			seriesIDs[i] = bs.SeriesID
 		}
-		// Set primary series name for backward compatibility
-		if len(dto.SeriesInfo) > 0 {
-			dto.SeriesName = dto.SeriesInfo[0].Name
+
+		seriesList, err := e.store.GetSeriesByIDs(ctx, seriesIDs)
+		if err == nil {
+			seriesMap := make(map[string]*domain.Series, len(seriesList))
+			for _, series := range seriesList {
+				seriesMap[series.ID] = series
+			}
+
+			dto.SeriesInfo = make([]BookSeriesInfo, 0, len(book.Series))
+			for _, bs := range book.Series {
+				series, ok := seriesMap[bs.SeriesID]
+				if !ok {
+					continue
+				}
+				dto.SeriesInfo = append(dto.SeriesInfo, BookSeriesInfo{
+					SeriesID: bs.SeriesID,
+					Name:     series.Name,
+					Sequence: bs.Sequence,
+				})
+			}
+			// Set primary series name for backward compatibility
+			if len(dto.SeriesInfo) > 0 {
+				dto.SeriesName = dto.SeriesInfo[0].Name
+			}
 		}
 	}
 
