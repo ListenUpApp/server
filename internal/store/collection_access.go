@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
@@ -101,20 +102,11 @@ func (s *Store) GetBooksForUser(ctx context.Context, userID string) ([]*domain.B
 			it := txn.NewIterator(opts)
 
 			for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
-				key := it.Item().Key()
+				key := string(it.Item().Key())
 				// Key format: idx:books:collections:{collectionID}:{bookID}
 				// Extract bookID (everything after last colon)
-				parts := string(key)
-				lastColon := -1
-				for i := len(parts) - 1; i >= 0; i-- {
-					if parts[i] == ':' {
-						lastColon = i
-						break
-					}
-				}
-				if lastColon != -1 && lastColon < len(parts)-1 {
-					bookID := parts[lastColon+1:]
-					accessibleBookIDs[bookID] = true
+				if lastColon := strings.LastIndexByte(key, ':'); lastColon != -1 && lastColon < len(key)-1 {
+					accessibleBookIDs[key[lastColon+1:]] = true
 				}
 			}
 			it.Close()
@@ -233,19 +225,10 @@ func (s *Store) CanUserAccessBook(ctx context.Context, userID, bookID string) (b
 		defer it.Close()
 
 		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
-			key := it.Item().Key()
+			key := string(it.Item().Key())
 			// Extract collectionID from key
-			parts := string(key)
-			lastColon := -1
-			for i := len(parts) - 1; i >= 0; i-- {
-				if parts[i] == ':' {
-					lastColon = i
-					break
-				}
-			}
-			if lastColon != -1 && lastColon < len(parts)-1 {
-				collectionID := parts[lastColon+1:]
-				bookCollectionIDs = append(bookCollectionIDs, collectionID)
+			if lastColon := strings.LastIndexByte(key, ':'); lastColon != -1 && lastColon < len(key)-1 {
+				bookCollectionIDs = append(bookCollectionIDs, key[lastColon+1:])
 			}
 		}
 		return nil
