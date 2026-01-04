@@ -368,10 +368,7 @@ func (s *Server) handleListUsers(ctx context.Context, input *ListUsersInput) (*L
 		return nil, err
 	}
 
-	resp := make([]AdminUserResponse, len(users))
-	for i, u := range users {
-		resp[i] = mapAdminUserResponse(u)
-	}
+	resp := MapSlice(users, mapAdminUserResponse)
 
 	return &ListUsersOutput{
 		Body: ListUsersResponse{Users: resp, Total: len(resp)},
@@ -441,10 +438,7 @@ func (s *Server) handleListPendingUsers(ctx context.Context, input *ListPendingU
 		return nil, err
 	}
 
-	resp := make([]AdminUserResponse, len(users))
-	for i, u := range users {
-		resp[i] = mapAdminUserResponse(u)
-	}
+	resp := MapSlice(users, mapAdminUserResponse)
 
 	return &ListUsersOutput{
 		Body: ListUsersResponse{Users: resp, Total: len(resp)},

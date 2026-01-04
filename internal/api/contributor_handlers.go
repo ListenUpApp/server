@@ -316,10 +316,7 @@ func (s *Server) handleListContributors(ctx context.Context, input *ListContribu
 		return nil, err
 	}
 
-	resp := make([]ContributorResponse, len(result.Items))
-	for i, c := range result.Items {
-		resp[i] = mapContributorResponse(c)
-	}
+	resp := MapSlice(result.Items, mapContributorResponse)
 
 	return &ListContributorsOutput{
 		Body: ListContributorsResponse{

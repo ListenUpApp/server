@@ -214,10 +214,7 @@ func (s *Server) handleListSeries(ctx context.Context, input *ListSeriesInput) (
 		return nil, err
 	}
 
-	resp := make([]SeriesResponse, len(result.Items))
-	for i, series := range result.Items {
-		resp[i] = mapSeriesResponse(series)
-	}
+	resp := MapSlice(result.Items, mapSeriesResponse)
 
 	return &ListSeriesOutput{
 		Body: ListSeriesResponse{

@@ -186,10 +186,7 @@ func (s *Server) handleListCollectionShares(ctx context.Context, input *ListColl
 		return nil, err
 	}
 
-	resp := make([]ShareResponse, len(shares))
-	for i, share := range shares {
-		resp[i] = mapShareResponse(share)
-	}
+	resp := MapSlice(shares, mapShareResponse)
 
 	return &ListSharesOutput{Body: ListSharesResponse{Shares: resp}}, nil
 }
@@ -263,10 +260,7 @@ func (s *Server) handleListSharedWithMe(ctx context.Context, input *ListSharedWi
 		return nil, err
 	}
 
-	resp := make([]ShareResponse, len(shares))
-	for i, share := range shares {
-		resp[i] = mapShareResponse(share)
-	}
+	resp := MapSlice(shares, mapShareResponse)
 
 	return &ListSharesOutput{Body: ListSharesResponse{Shares: resp}}, nil
 }

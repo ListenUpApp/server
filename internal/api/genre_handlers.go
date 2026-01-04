@@ -298,10 +298,7 @@ func (s *Server) handleListGenres(ctx context.Context, input *ListGenresInput) (
 		return nil, err
 	}
 
-	resp := make([]GenreResponse, len(genres))
-	for i, g := range genres {
-		resp[i] = mapGenreResponse(g)
-	}
+	resp := MapSlice(genres, mapGenreResponse)
 
 	return &ListGenresOutput{Body: ListGenresResponse{Genres: resp}}, nil
 }
@@ -377,10 +374,7 @@ func (s *Server) handleGetGenreChildren(ctx context.Context, input *GetGenreChil
 		return nil, err
 	}
 
-	resp := make([]GenreResponse, len(children))
-	for i, g := range children {
-		resp[i] = mapGenreResponse(g)
-	}
+	resp := MapSlice(children, mapGenreResponse)
 
 	return &GenreChildrenOutput{Body: ListGenresResponse{Genres: resp}}, nil
 }
