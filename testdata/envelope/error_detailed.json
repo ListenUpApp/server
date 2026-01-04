@@ -1,0 +1,8 @@
+{
+  "v": 1,
+  "code": "conflict",
+  "message": "Entity already exists",
+  "details": {
+    "existing_id": "abc-123"
+  }
+}
