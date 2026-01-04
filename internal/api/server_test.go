@@ -154,6 +154,7 @@ func setupTestServer(t *testing.T) *testServer {
 
 // testEnvelope wraps API responses for tests.
 type testEnvelope[T any] struct {
+	Version int    `json:"v"`
 	Success bool   `json:"success"`
 	Data    T      `json:"data"`
 	Error   string `json:"error,omitempty"`
