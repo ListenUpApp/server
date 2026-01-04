@@ -65,7 +65,8 @@ func (s *Server) registerProfileRoutes() {
 // ProfileResponse contains basic profile data.
 type ProfileResponse struct {
 	UserID      string `json:"user_id" doc:"User ID"`
-	DisplayName string `json:"display_name" doc:"User's display name"`
+	FirstName   string `json:"first_name" doc:"User's first name"`
+	LastName    string `json:"last_name" doc:"User's last name"`
 	AvatarType  string `json:"avatar_type" doc:"Avatar type (auto or image)"`
 	AvatarValue string `json:"avatar_value,omitempty" doc:"Avatar image path for image type"`
 	AvatarColor string `json:"avatar_color" doc:"Avatar color for auto type"`
@@ -81,8 +82,11 @@ type ProfileOutput struct {
 type UpdateProfileInput struct {
 	Authorization string `header:"Authorization" doc:"Bearer token"`
 	Body          struct {
-		AvatarType *string `json:"avatar_type,omitempty" enum:"auto,image" doc:"Avatar type"`
-		Tagline    *string `json:"tagline,omitempty" maxLength:"60" doc:"User tagline"`
+		AvatarType  *string `json:"avatar_type,omitempty" enum:"auto,image" doc:"Avatar type"`
+		Tagline     *string `json:"tagline,omitempty" maxLength:"60" doc:"User tagline"`
+		FirstName   *string `json:"first_name,omitempty" maxLength:"100" doc:"User's first name"`
+		LastName    *string `json:"last_name,omitempty" maxLength:"100" doc:"User's last name"`
+		NewPassword *string `json:"new_password,omitempty" minLength:"8" doc:"New password (min 8 chars)"`
 	}
 }
 
@@ -158,7 +162,8 @@ func (s *Server) handleGetMyProfile(ctx context.Context, input *AuthenticatedInp
 	return &ProfileOutput{
 		Body: ProfileResponse{
 			UserID:      user.ID,
-			DisplayName: user.Name(),
+			FirstName:   user.FirstName,
+			LastName:    user.LastName,
 			AvatarType:  string(profile.AvatarType),
 			AvatarValue: profile.AvatarValue,
 			AvatarColor: avatarColorForUser(user.ID),
@@ -181,6 +186,15 @@ func (s *Server) handleUpdateMyProfile(ctx context.Context, input *UpdateProfile
 	if input.Body.Tagline != nil {
 		req.Tagline = input.Body.Tagline
 	}
+	if input.Body.FirstName != nil {
+		req.FirstName = input.Body.FirstName
+	}
+	if input.Body.LastName != nil {
+		req.LastName = input.Body.LastName
+	}
+	if input.Body.NewPassword != nil {
+		req.NewPassword = input.Body.NewPassword
+	}
 
 	profile, err := s.services.Profile.UpdateProfile(ctx, userID, req)
 	if err != nil {
@@ -195,7 +209,8 @@ func (s *Server) handleUpdateMyProfile(ctx context.Context, input *UpdateProfile
 	return &ProfileOutput{
 		Body: ProfileResponse{
 			UserID:      user.ID,
-			DisplayName: user.Name(),
+			FirstName:   user.FirstName,
+			LastName:    user.LastName,
 			AvatarType:  string(profile.AvatarType),
 			AvatarValue: profile.AvatarValue,
 			AvatarColor: avatarColorForUser(user.ID),
@@ -241,7 +256,8 @@ func (s *Server) handleUploadAvatar(ctx context.Context, input *UploadAvatarInpu
 	return &ProfileOutput{
 		Body: ProfileResponse{
 			UserID:      user.ID,
-			DisplayName: user.Name(),
+			FirstName:   user.FirstName,
+			LastName:    user.LastName,
 			AvatarType:  string(profile.AvatarType),
 			AvatarValue: profile.AvatarValue,
 			AvatarColor: avatarColorForUser(user.ID),

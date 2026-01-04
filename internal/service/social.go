@@ -77,8 +77,8 @@ func (s *SocialService) GetLeaderboard(
 		booksCount  int
 		streakDays  int
 		// All-time totals (only calculated for period=all)
-		allTimeMs    int64
-		allBooks     int
+		allTimeMs     int64
+		allBooks      int
 		currentStreak int
 	}
 

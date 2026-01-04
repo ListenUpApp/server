@@ -63,6 +63,9 @@ const (
 	// EventUserApproved represents a pending user being approved.
 	// Only sent to admin users.
 	EventUserApproved EventType = "user.approved"
+	// EventUserDeleted represents a user being deleted.
+	// Sent to the deleted user so they can clear auth and show appropriate message.
+	EventUserDeleted EventType = "user.deleted"
 
 	// Collection events (admin-only)
 	EventCollectionCreated     EventType = "collection.created"
@@ -195,6 +198,13 @@ type UserPendingEventData struct {
 // UserApprovedEventData is the data payload for user approved events.
 type UserApprovedEventData struct {
 	User *domain.User `json:"user"`
+}
+
+// UserDeletedEventData is the data payload for user deleted events.
+// Sent to the specific user being deleted so they can clear auth.
+type UserDeletedEventData struct {
+	UserID string `json:"user_id"`
+	Reason string `json:"reason,omitempty"`
 }
 
 // CollectionEventData is the data payload for collection CRUD events.
@@ -403,6 +413,17 @@ func NewUserApprovedEvent(user *domain.User) Event {
 	return Event{
 		Type:      EventUserApproved,
 		Data:      UserApprovedEventData{User: user},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewUserDeletedEvent creates a user.deleted event for a specific user.
+// This event is targeted to the deleted user so they can clear auth.
+func NewUserDeletedEvent(userID, reason string) Event {
+	return Event{
+		Type:      EventUserDeleted,
+		UserID:    userID, // Target this event to the specific user
+		Data:      UserDeletedEventData{UserID: userID, Reason: reason},
 		Timestamp: time.Now(),
 	}
 }
@@ -785,7 +806,8 @@ func NewActivityEvent(activity *domain.Activity) Event {
 // ProfileUpdatedEventData is the payload for profile update events.
 type ProfileUpdatedEventData struct {
 	UserID      string `json:"user_id"`
-	DisplayName string `json:"display_name"`
+	FirstName   string `json:"first_name"`
+	LastName    string `json:"last_name"`
 	AvatarType  string `json:"avatar_type"`
 	AvatarValue string `json:"avatar_value,omitempty"`
 	AvatarColor string `json:"avatar_color"`

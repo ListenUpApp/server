@@ -340,5 +340,5 @@ func createTestUsers(ctx context.Context, s *store.Store) {
 		fmt.Printf("    Shared %d collections with %s\n", len(allCollections), name)
 	}
 
-	fmt.Println("=== Test Users Created ===\n")
+	fmt.Println("=== Test Users Created ===")
 }

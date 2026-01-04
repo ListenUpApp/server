@@ -60,10 +60,10 @@ func TestBookReadingSession_IsStale(t *testing.T) {
 	now := time.Date(2025, 6, 1, 12, 0, 0, 0, time.UTC)
 
 	tests := []struct {
-		name       string
-		session    *BookReadingSession
-		checkTime  time.Time
-		wantStale  bool
+		name      string
+		session   *BookReadingSession
+		checkTime time.Time
+		wantStale bool
 	}{
 		{
 			name: "active session - recently updated",

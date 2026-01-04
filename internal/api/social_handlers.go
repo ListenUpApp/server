@@ -95,9 +95,9 @@ type LeaderboardEntryResponse struct {
 	ValueLabel    string  `json:"value_label" doc:"Human-readable value"`
 	IsCurrentUser bool    `json:"is_current_user" doc:"Whether this is the requesting user"`
 	// All-time totals for caching (only included when period=all)
-	TotalTimeMs    *int64 `json:"total_time_ms,omitempty" doc:"All-time listening time in ms (period=all only)"`
-	TotalBooks     *int   `json:"total_books,omitempty" doc:"All-time books finished (period=all only)"`
-	CurrentStreak  *int   `json:"current_streak,omitempty" doc:"Current streak in days (period=all only)"`
+	TotalTimeMs   *int64 `json:"total_time_ms,omitempty" doc:"All-time listening time in ms (period=all only)"`
+	TotalBooks    *int   `json:"total_books,omitempty" doc:"All-time books finished (period=all only)"`
+	CurrentStreak *int   `json:"current_streak,omitempty" doc:"Current streak in days (period=all only)"`
 }
 
 // CommunityStatsResponse contains aggregate community statistics.

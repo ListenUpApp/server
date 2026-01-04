@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/listenupapp/listenup-server/internal/auth"
 	"github.com/listenupapp/listenup-server/internal/domain"
 	domainerrors "github.com/listenupapp/listenup-server/internal/errors"
 	"github.com/listenupapp/listenup-server/internal/media/images"
@@ -73,8 +74,11 @@ func (s *ProfileService) GetOrCreateProfile(ctx context.Context, userID string) 
 
 // UpdateProfileRequest contains optional fields to update.
 type UpdateProfileRequest struct {
-	AvatarType *domain.AvatarType
-	Tagline    *string
+	AvatarType  *domain.AvatarType
+	Tagline     *string
+	FirstName   *string
+	LastName    *string
+	NewPassword *string
 }
 
 // UpdateProfile updates a user's profile settings.
@@ -110,6 +114,13 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID string, req U
 		profile.Tagline = tagline
 	}
 
+	// Handle firstName, lastName, and password changes
+	if req.FirstName != nil || req.LastName != nil || req.NewPassword != nil {
+		if err := s.updateUserDetails(ctx, userID, req); err != nil {
+			return nil, err
+		}
+	}
+
 	profile.UpdatedAt = time.Now()
 
 	if err := s.store.SaveUserProfile(ctx, profile); err != nil {
@@ -122,6 +133,57 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID string, req U
 	s.broadcastProfileUpdate(ctx, userID, profile)
 
 	return profile, nil
+}
+
+// updateUserDetails handles updating user fields (firstName, lastName, password).
+func (s *ProfileService) updateUserDetails(ctx context.Context, userID string, req UpdateProfileRequest) error {
+	user, err := s.store.GetUser(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("get user: %w", err)
+	}
+
+	userChanged := false
+
+	// Update first name
+	if req.FirstName != nil {
+		user.FirstName = *req.FirstName
+		userChanged = true
+		s.logger.Debug("updating first name", "user_id", userID)
+	}
+
+	// Update last name
+	if req.LastName != nil {
+		user.LastName = *req.LastName
+		userChanged = true
+		s.logger.Debug("updating last name", "user_id", userID)
+	}
+
+	// Handle password change
+	if req.NewPassword != nil {
+		// Validate new password
+		if len(*req.NewPassword) < 8 {
+			return domainerrors.Validation("new password must be at least 8 characters")
+		}
+
+		// Hash new password
+		newHash, err := auth.HashPassword(*req.NewPassword)
+		if err != nil {
+			return fmt.Errorf("hash password: %w", err)
+		}
+
+		user.PasswordHash = newHash
+		userChanged = true
+		s.logger.Info("password changed", "user_id", userID)
+	}
+
+	// Save user if changed
+	if userChanged {
+		if err := s.store.UpdateUser(ctx, user); err != nil {
+			return fmt.Errorf("save user: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // UploadAvatar saves an avatar image and updates the profile.
@@ -347,7 +409,8 @@ func (s *ProfileService) broadcastProfileUpdate(ctx context.Context, userID stri
 
 	s.sseManager.Emit(sse.NewProfileUpdatedEvent(sse.ProfileUpdatedEventData{
 		UserID:      userID,
-		DisplayName: user.Name(),
+		FirstName:   user.FirstName,
+		LastName:    user.LastName,
 		AvatarType:  string(profile.AvatarType),
 		AvatarValue: profile.AvatarValue,
 		AvatarColor: avatarColorForUser(userID),
