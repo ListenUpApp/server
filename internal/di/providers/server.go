@@ -56,6 +56,8 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 	sharingService := do.MustInvoke[*service.SharingService](i)
 	syncService := do.MustInvoke[*service.SyncService](i)
 	listeningService := do.MustInvoke[*service.ListeningService](i)
+	statsService := do.MustInvoke[*service.StatsService](i)
+	socialService := do.MustInvoke[*service.SocialService](i)
 	genreService := do.MustInvoke[*service.GenreService](i)
 	tagService := do.MustInvoke[*service.TagService](i)
 	searchService := do.MustInvoke[*service.SearchService](i)
@@ -68,36 +70,55 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 	lensService := do.MustInvoke[*service.LensService](i)
 	inboxService := do.MustInvoke[*service.InboxService](i)
 	settingsService := do.MustInvoke[*service.SettingsService](i)
+	readingSessionService := do.MustInvoke[*service.ReadingSessionService](i)
+	activityService := do.MustInvoke[*service.ActivityService](i)
+	profileService := do.MustInvoke[*service.ProfileService](i)
+
+	// Wire up activity recording to reading session service
+	readingSessionService.SetActivityRecorder(activityService)
+
+	// Wire up milestone tracking to listening service
+	listeningService.SetMilestoneRecorder(activityService)
+	listeningService.SetStreakCalculator(socialService)
+
+	// Wire up activity recording to lens service
+	lensService.SetActivityRecorder(activityService)
 
 	tokenVerifier := &sseTokenVerifier{authService: authService}
 	sseHandler := sse.NewHandler(sseHandle.Manager, log.Logger, tokenVerifier)
 
 	services := &api.Services{
-		Instance:   instanceService,
-		Auth:       authService,
-		Book:       bookService,
-		Collection: collectionService,
-		Sharing:    sharingService,
-		Sync:       syncService,
-		Listening:  listeningService,
-		Genre:      genreService,
-		Tag:        tagService,
-		Search:     searchService,
-		Invite:     inviteService,
-		Admin:      adminService,
-		Transcode:  transcodeHandle.TranscodeService,
-		Metadata:   metadataHandle.MetadataService,
-		Chapter:    chapterService,
-		Cover:      coverService,
-		Lens:       lensService,
-		Inbox:      inboxService,
-		Settings:   settingsService,
+		Instance:       instanceService,
+		Auth:           authService,
+		Book:           bookService,
+		Collection:     collectionService,
+		Sharing:        sharingService,
+		Sync:           syncService,
+		Listening:      listeningService,
+		Stats:          statsService,
+		Genre:          genreService,
+		Tag:            tagService,
+		Search:         searchService,
+		Invite:         inviteService,
+		Admin:          adminService,
+		Transcode:      transcodeHandle.TranscodeService,
+		Metadata:       metadataHandle.MetadataService,
+		Chapter:        chapterService,
+		Cover:          coverService,
+		Lens:           lensService,
+		Inbox:          inboxService,
+		Settings:       settingsService,
+		Social:         socialService,
+		ReadingSession: readingSessionService,
+		Activity:       activityService,
+		Profile:        profileService,
 	}
 
 	storage := &api.StorageServices{
 		Covers:            storages.Covers,
 		ContributorImages: storages.ContributorImages,
 		SeriesCovers:      storages.SeriesCovers,
+		Avatars:           storages.Avatars,
 	}
 
 	handler := api.NewServer(storeHandle.Store, services, storage, sseHandler, sseHandle.Manager, registrationBroadcaster, log.Logger)

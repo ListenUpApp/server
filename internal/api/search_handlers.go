@@ -30,7 +30,8 @@ type SearchInput struct {
 	Types         string `query:"types" validate:"omitempty,max=100" doc:"Comma-separated types to search (book,contributor,series). Omit for all."`
 	Limit         int    `query:"limit" validate:"omitempty,gte=1,lte=100" doc:"Max results per type (default 10)"`
 	Offset        int    `query:"offset" validate:"omitempty,gte=0" doc:"Pagination offset (default 0)"`
-	GenreSlug     string `query:"genre" validate:"omitempty,max=100" doc:"Filter by genre slug"`
+	GenreSlugs    string `query:"genres" validate:"omitempty,max=200" doc:"Comma-separated genre slugs to filter by"`
+	GenrePath     string `query:"genre_path" validate:"omitempty,max=100" doc:"Genre path prefix for hierarchical filtering (e.g. /fiction/fantasy)"`
 	Facets        bool   `query:"facets" doc:"Include facets in response"`
 }
 
@@ -112,9 +113,19 @@ func (s *Server) handleSearch(ctx context.Context, input *SearchInput) (*SearchO
 		}
 	}
 
-	// Genre filter
-	if input.GenreSlug != "" {
-		params.GenreSlugs = []string{input.GenreSlug}
+	// Genre filter - parse comma-separated slugs
+	if input.GenreSlugs != "" {
+		for _, g := range strings.Split(input.GenreSlugs, ",") {
+			g = strings.TrimSpace(g)
+			if g != "" {
+				params.GenreSlugs = append(params.GenreSlugs, g)
+			}
+		}
+	}
+
+	// Genre path filter for hierarchical genre matching
+	if input.GenrePath != "" {
+		params.GenrePath = input.GenrePath
 	}
 
 	result, err := s.services.Search.Search(ctx, params)

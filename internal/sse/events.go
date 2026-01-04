@@ -63,6 +63,9 @@ const (
 	// EventUserApproved represents a pending user being approved.
 	// Only sent to admin users.
 	EventUserApproved EventType = "user.approved"
+	// EventUserDeleted represents a user being deleted.
+	// Sent to the deleted user so they can clear auth and show appropriate message.
+	EventUserDeleted EventType = "user.deleted"
 
 	// Collection events (admin-only)
 	EventCollectionCreated     EventType = "collection.created"
@@ -86,6 +89,24 @@ const (
 	// Inbox events (admin-only)
 	EventInboxBookAdded    EventType = "inbox.book_added"
 	EventInboxBookReleased EventType = "inbox.book_released"
+
+	// Listening events (user-specific)
+	EventProgressUpdated       EventType = "listening.progress_updated"
+	EventListeningEventCreated EventType = "listening.event_created"
+	EventReadingSessionUpdated EventType = "reading_session.updated"
+
+	// Active session events (broadcast to all for "Currently Listening" feature)
+	EventSessionStarted EventType = "session.started"
+	EventSessionEnded   EventType = "session.ended"
+
+	// Activity feed events (broadcast to all)
+	EventActivityCreated EventType = "activity.created"
+
+	// Profile events (broadcast to all)
+	EventProfileUpdated EventType = "profile.updated"
+
+	// User stats events (broadcast to all for leaderboard caching)
+	EventUserStatsUpdated EventType = "user_stats.updated"
 )
 
 // Event represents an SSE event to be sent to clients.
@@ -177,6 +198,13 @@ type UserPendingEventData struct {
 // UserApprovedEventData is the data payload for user approved events.
 type UserApprovedEventData struct {
 	User *domain.User `json:"user"`
+}
+
+// UserDeletedEventData is the data payload for user deleted events.
+// Sent to the specific user being deleted so they can clear auth.
+type UserDeletedEventData struct {
+	UserID string `json:"user_id"`
+	Reason string `json:"reason,omitempty"`
 }
 
 // CollectionEventData is the data payload for collection CRUD events.
@@ -385,6 +413,17 @@ func NewUserApprovedEvent(user *domain.User) Event {
 	return Event{
 		Type:      EventUserApproved,
 		Data:      UserApprovedEventData{User: user},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewUserDeletedEvent creates a user.deleted event for a specific user.
+// This event is targeted to the deleted user so they can clear auth.
+func NewUserDeletedEvent(userID, reason string) Event {
+	return Event{
+		Type:      EventUserDeleted,
+		UserID:    userID, // Target this event to the specific user
+		Data:      UserDeletedEventData{UserID: userID, Reason: reason},
 		Timestamp: time.Now(),
 	}
 }
@@ -620,6 +659,232 @@ func NewInboxBookReleasedEvent(bookID string) Event {
 	return Event{
 		Type:      EventInboxBookReleased,
 		Data:      InboxBookReleasedEventData{BookID: bookID},
+		Timestamp: time.Now(),
+	}
+}
+
+// ProgressUpdatedEventData is the data payload for listening.progress_updated events.
+type ProgressUpdatedEventData struct {
+	BookID            string    `json:"book_id"`
+	CurrentPositionMs int64     `json:"current_position_ms"`
+	Progress          float64   `json:"progress"`
+	TotalListenTimeMs int64     `json:"total_listen_time_ms"`
+	IsFinished        bool      `json:"is_finished"`
+	LastPlayedAt      time.Time `json:"last_played_at"`
+}
+
+// NewProgressUpdatedEvent creates a listening.progress_updated event for a specific user.
+func NewProgressUpdatedEvent(userID string, progress *domain.PlaybackProgress) Event {
+	return Event{
+		Type: EventProgressUpdated,
+		Data: ProgressUpdatedEventData{
+			BookID:            progress.BookID,
+			CurrentPositionMs: progress.CurrentPositionMs,
+			Progress:          progress.Progress,
+			TotalListenTimeMs: progress.TotalListenTimeMs,
+			IsFinished:        progress.IsFinished,
+			LastPlayedAt:      progress.LastPlayedAt,
+		},
+		UserID:    userID, // Only send to this user
+		Timestamp: time.Now(),
+	}
+}
+
+// ListeningEventCreatedEventData is the data payload for listening.event_created events.
+// Sent to other devices when a listening event is recorded, enabling offline-first stats.
+type ListeningEventCreatedEventData struct {
+	ID              string    `json:"id"`
+	BookID          string    `json:"book_id"`
+	StartPositionMs int64     `json:"start_position_ms"`
+	EndPositionMs   int64     `json:"end_position_ms"`
+	StartedAt       time.Time `json:"started_at"`
+	EndedAt         time.Time `json:"ended_at"`
+	PlaybackSpeed   float32   `json:"playback_speed"`
+	DeviceID        string    `json:"device_id"`
+	CreatedAt       time.Time `json:"created_at"`
+}
+
+// NewListeningEventCreatedEvent creates a listening.event_created event for a specific user.
+// Used to sync listening events to other devices for offline stats computation.
+func NewListeningEventCreatedEvent(userID string, event *domain.ListeningEvent) Event {
+	return Event{
+		Type: EventListeningEventCreated,
+		Data: ListeningEventCreatedEventData{
+			ID:              event.ID,
+			BookID:          event.BookID,
+			StartPositionMs: event.StartPositionMs,
+			EndPositionMs:   event.EndPositionMs,
+			StartedAt:       event.StartedAt,
+			EndedAt:         event.EndedAt,
+			PlaybackSpeed:   event.PlaybackSpeed,
+			DeviceID:        event.DeviceID,
+			CreatedAt:       event.CreatedAt,
+		},
+		UserID:    userID, // Only send to this user's other devices
+		Timestamp: time.Now(),
+	}
+}
+
+// ReadingSessionUpdatedEventData is the data payload for reading_session.updated events.
+type ReadingSessionUpdatedEventData struct {
+	SessionID    string     `json:"session_id"`
+	BookID       string     `json:"book_id"`
+	IsCompleted  bool       `json:"is_completed"`
+	ListenTimeMs int64      `json:"listen_time_ms"`
+	FinishedAt   *time.Time `json:"finished_at,omitempty"`
+}
+
+// NewReadingSessionUpdatedEvent creates a reading_session.updated event.
+// Broadcast to all users so book readers lists can update.
+func NewReadingSessionUpdatedEvent(session *domain.BookReadingSession) Event {
+	return Event{
+		Type: EventReadingSessionUpdated,
+		Data: ReadingSessionUpdatedEventData{
+			SessionID:    session.ID,
+			BookID:       session.BookID,
+			IsCompleted:  session.IsCompleted,
+			ListenTimeMs: session.ListenTimeMs,
+			FinishedAt:   session.FinishedAt,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// ActivityEventData is the data payload for activity.created events.
+// Contains activity fields directly for immediate rendering in the feed.
+// Fields are at top level (not wrapped) for consistency with client expectations.
+type ActivityEventData struct {
+	ID              string    `json:"id"`
+	UserID          string    `json:"user_id"`
+	Type            string    `json:"type"`
+	CreatedAt       time.Time `json:"created_at"`
+	UserDisplayName string    `json:"user_display_name"`
+	UserAvatarColor string    `json:"user_avatar_color"`
+	UserAvatarType  string    `json:"user_avatar_type"`
+	UserAvatarValue string    `json:"user_avatar_value,omitempty"`
+	BookID          string    `json:"book_id,omitempty"`
+	BookTitle       string    `json:"book_title,omitempty"`
+	BookAuthorName  string    `json:"book_author_name,omitempty"`
+	BookCoverPath   string    `json:"book_cover_path,omitempty"`
+	IsReread        bool      `json:"is_reread,omitempty"`
+	DurationMs      int64     `json:"duration_ms,omitempty"` // For listening_session activities
+	MilestoneValue  int       `json:"milestone_value,omitempty"`
+	MilestoneUnit   string    `json:"milestone_unit,omitempty"`
+	LensID          string    `json:"lens_id,omitempty"`
+	LensName        string    `json:"lens_name,omitempty"`
+}
+
+// NewActivityEvent creates an activity.created event.
+// Broadcast to all users for real-time activity feed updates.
+func NewActivityEvent(activity *domain.Activity) Event {
+	return Event{
+		Type: EventActivityCreated,
+		Data: ActivityEventData{
+			ID:              activity.ID,
+			UserID:          activity.UserID,
+			Type:            string(activity.Type),
+			CreatedAt:       activity.CreatedAt,
+			UserDisplayName: activity.UserDisplayName,
+			UserAvatarColor: activity.UserAvatarColor,
+			UserAvatarType:  activity.UserAvatarType,
+			UserAvatarValue: activity.UserAvatarValue,
+			BookID:          activity.BookID,
+			BookTitle:       activity.BookTitle,
+			BookAuthorName:  activity.BookAuthorName,
+			BookCoverPath:   activity.BookCoverPath,
+			IsReread:        activity.IsReread,
+			DurationMs:      activity.DurationMs,
+			MilestoneValue:  activity.MilestoneValue,
+			MilestoneUnit:   activity.MilestoneUnit,
+			LensID:          activity.LensID,
+			LensName:        activity.LensName,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// ProfileUpdatedEventData is the payload for profile update events.
+type ProfileUpdatedEventData struct {
+	UserID      string `json:"user_id"`
+	FirstName   string `json:"first_name"`
+	LastName    string `json:"last_name"`
+	AvatarType  string `json:"avatar_type"`
+	AvatarValue string `json:"avatar_value,omitempty"`
+	AvatarColor string `json:"avatar_color"`
+	Tagline     string `json:"tagline,omitempty"`
+}
+
+// NewProfileUpdatedEvent creates a profile.updated event.
+// Broadcast to all users so avatars can update across the app.
+func NewProfileUpdatedEvent(data ProfileUpdatedEventData) Event {
+	return Event{
+		Type:      EventProfileUpdated,
+		Data:      data,
+		Timestamp: time.Now(),
+	}
+}
+
+// SessionStartedEventData is the payload for session.started events.
+// Broadcast to all users for "What Others Are Listening To" feature.
+type SessionStartedEventData struct {
+	SessionID string    `json:"session_id"`
+	UserID    string    `json:"user_id"`
+	BookID    string    `json:"book_id"`
+	StartedAt time.Time `json:"started_at"`
+}
+
+// SessionEndedEventData is the payload for session.ended events.
+type SessionEndedEventData struct {
+	SessionID string `json:"session_id"`
+}
+
+// NewSessionStartedEvent creates a session.started event.
+// Broadcast to all users so they can see who's currently listening.
+func NewSessionStartedEvent(sessionID, userID, bookID string, startedAt time.Time) Event {
+	return Event{
+		Type: EventSessionStarted,
+		Data: SessionStartedEventData{
+			SessionID: sessionID,
+			UserID:    userID,
+			BookID:    bookID,
+			StartedAt: startedAt,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewSessionEndedEvent creates a session.ended event.
+// Broadcast to all users to remove the session from "Currently Listening".
+func NewSessionEndedEvent(sessionID string) Event {
+	return Event{
+		Type: EventSessionEnded,
+		Data: SessionEndedEventData{
+			SessionID: sessionID,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// UserStatsUpdatedEventData is the payload for user_stats.updated events.
+// Contains updated all-time stats for a user, enabling clients to cache
+// without re-fetching the entire leaderboard.
+type UserStatsUpdatedEventData struct {
+	UserID        string `json:"user_id"`
+	DisplayName   string `json:"display_name"`
+	AvatarType    string `json:"avatar_type"`
+	AvatarValue   string `json:"avatar_value,omitempty"`
+	AvatarColor   string `json:"avatar_color"`
+	TotalTimeMs   int64  `json:"total_time_ms"`
+	TotalBooks    int    `json:"total_books"`
+	CurrentStreak int    `json:"current_streak"`
+}
+
+// NewUserStatsUpdatedEvent creates a user_stats.updated event.
+// Broadcast to all users so they can update their leaderboard cache.
+func NewUserStatsUpdatedEvent(data UserStatsUpdatedEventData) Event {
+	return Event{
+		Type:      EventUserStatsUpdated,
+		Data:      data,
 		Timestamp: time.Now(),
 	}
 }

@@ -40,6 +40,15 @@ func (s *Server) handleGetCurrentUser(ctx context.Context, input *AuthenticatedI
 		return nil, err
 	}
 
+	// Get avatar info from profile (optional - may not exist)
+	avatarType := "auto"
+	avatarValue := ""
+	profile, err := s.store.GetUserProfile(ctx, userID)
+	if err == nil && profile != nil {
+		avatarType = string(profile.AvatarType)
+		avatarValue = profile.AvatarValue
+	}
+
 	return &UserOutput{
 		Body: UserResponse{
 			ID:          user.ID,
@@ -51,6 +60,9 @@ func (s *Server) handleGetCurrentUser(ctx context.Context, input *AuthenticatedI
 			CreatedAt:   user.CreatedAt,
 			UpdatedAt:   user.UpdatedAt,
 			LastLoginAt: user.LastLoginAt,
+			AvatarType:  avatarType,
+			AvatarValue: avatarValue,
+			AvatarColor: avatarColorForUser(userID),
 		},
 	}, nil
 }

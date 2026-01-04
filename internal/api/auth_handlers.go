@@ -191,6 +191,9 @@ type UserResponse struct {
 	CreatedAt   time.Time `json:"created_at" doc:"Creation timestamp"`
 	UpdatedAt   time.Time `json:"updated_at" doc:"Last update timestamp"`
 	LastLoginAt time.Time `json:"last_login_at" doc:"Last login timestamp"`
+	AvatarType  string    `json:"avatar_type" doc:"Avatar type (auto or image)"`
+	AvatarValue string    `json:"avatar_value,omitempty" doc:"Avatar image path (for image type)"`
+	AvatarColor string    `json:"avatar_color" doc:"Generated avatar color (hex)"`
 }
 
 // AuthResponse contains authentication tokens and user info.
@@ -244,7 +247,7 @@ func (s *Server) handleSetup(ctx context.Context, input *SetupInput) (*AuthOutpu
 		}
 	}
 
-	return &AuthOutput{Body: mapAuthResponse(resp)}, nil
+	return &AuthOutput{Body: s.mapAuthResponse(ctx, resp)}, nil
 }
 
 func (s *Server) handleRegister(ctx context.Context, input *RegisterInput) (*RegisterOutput, error) {
@@ -290,7 +293,7 @@ func (s *Server) handleLogin(ctx context.Context, input *LoginInput) (*AuthOutpu
 		return nil, err
 	}
 
-	return &AuthOutput{Body: mapAuthResponse(resp)}, nil
+	return &AuthOutput{Body: s.mapAuthResponse(ctx, resp)}, nil
 }
 
 func (s *Server) handleRefresh(ctx context.Context, input *RefreshInput) (*AuthOutput, error) {
@@ -314,7 +317,7 @@ func (s *Server) handleRefresh(ctx context.Context, input *RefreshInput) (*AuthO
 		return nil, err
 	}
 
-	return &AuthOutput{Body: mapAuthResponse(resp)}, nil
+	return &AuthOutput{Body: s.mapAuthResponse(ctx, resp)}, nil
 }
 
 func (s *Server) handleLogout(ctx context.Context, input *LogoutInput) (*MessageOutput, error) {
@@ -356,7 +359,16 @@ func (s *Server) handleCheckRegistrationStatus(ctx context.Context, input *Check
 
 // === Helpers ===
 
-func mapAuthResponse(resp *service.AuthResponse) AuthResponse {
+func (s *Server) mapAuthResponse(ctx context.Context, resp *service.AuthResponse) AuthResponse {
+	// Get avatar info from profile (optional - may not exist)
+	avatarType := "auto"
+	avatarValue := ""
+	profile, err := s.store.GetUserProfile(ctx, resp.User.ID)
+	if err == nil && profile != nil {
+		avatarType = string(profile.AvatarType)
+		avatarValue = profile.AvatarValue
+	}
+
 	return AuthResponse{
 		AccessToken:  resp.AccessToken,
 		RefreshToken: resp.RefreshToken,
@@ -373,6 +385,9 @@ func mapAuthResponse(resp *service.AuthResponse) AuthResponse {
 			CreatedAt:   resp.User.CreatedAt,
 			UpdatedAt:   resp.User.UpdatedAt,
 			LastLoginAt: resp.User.LastLoginAt,
+			AvatarType:  avatarType,
+			AvatarValue: avatarValue,
+			AvatarColor: avatarColorForUser(resp.User.ID),
 		},
 	}
 }

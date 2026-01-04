@@ -26,7 +26,8 @@ func setupTestListening(t *testing.T) (*ListeningService, *store.Store, func()) 
 	require.NoError(t, err)
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	svc := NewListeningService(testStore, store.NewNoopEmitter(), logger)
+	readingSessionSvc := NewReadingSessionService(testStore, store.NewNoopEmitter(), logger)
+	svc := NewListeningService(testStore, store.NewNoopEmitter(), readingSessionSvc, logger)
 
 	cleanup := func() {
 		testStore.Close()

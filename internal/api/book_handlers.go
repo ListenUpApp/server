@@ -175,14 +175,15 @@ type BookOutput struct {
 
 // UpdateBookRequest is the request body for updating a book.
 type UpdateBookRequest struct {
-	Title       *string `json:"title,omitempty" validate:"omitempty,min=1,max=500" doc:"Book title"`
-	Subtitle    *string `json:"subtitle,omitempty" validate:"omitempty,max=500" doc:"Book subtitle"`
-	Description *string `json:"description,omitempty" validate:"omitempty,max=10000" doc:"Book description"`
-	Publisher   *string `json:"publisher,omitempty" validate:"omitempty,max=200" doc:"Publisher name"`
-	PublishYear *string `json:"publish_year,omitempty" validate:"omitempty,max=10" doc:"Publication year"`
-	Language    *string `json:"language,omitempty" validate:"omitempty,max=10" doc:"Language code"`
-	ASIN        *string `json:"asin,omitempty" validate:"omitempty,len=10" doc:"Amazon ASIN"`
-	ISBN        *string `json:"isbn,omitempty" validate:"omitempty,max=17" doc:"ISBN"`
+	Title       *string    `json:"title,omitempty" validate:"omitempty,min=1,max=500" doc:"Book title"`
+	Subtitle    *string    `json:"subtitle,omitempty" validate:"omitempty,max=500" doc:"Book subtitle"`
+	Description *string    `json:"description,omitempty" validate:"omitempty,max=10000" doc:"Book description"`
+	Publisher   *string    `json:"publisher,omitempty" validate:"omitempty,max=200" doc:"Publisher name"`
+	PublishYear *string    `json:"publish_year,omitempty" validate:"omitempty,max=10" doc:"Publication year"`
+	Language    *string    `json:"language,omitempty" validate:"omitempty,max=10" doc:"Language code"`
+	ASIN        *string    `json:"asin,omitempty" validate:"omitempty,len=10" doc:"Amazon ASIN"`
+	ISBN        *string    `json:"isbn,omitempty" validate:"omitempty,max=17" doc:"ISBN"`
+	CreatedAt   *time.Time `json:"created_at,omitempty" doc:"When the book was added to the library"`
 }
 
 // UpdateBookInput wraps the update book request for Huma.
@@ -409,6 +410,9 @@ func (s *Server) handleUpdateBook(ctx context.Context, input *UpdateBookInput) (
 	}
 	if input.Body.ISBN != nil {
 		book.ISBN = *input.Body.ISBN
+	}
+	if input.Body.CreatedAt != nil {
+		book.CreatedAt = *input.Body.CreatedAt
 	}
 
 	if err := s.store.UpdateBook(ctx, book); err != nil {

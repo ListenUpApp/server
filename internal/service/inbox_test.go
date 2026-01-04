@@ -113,7 +113,7 @@ func createTestCollectionInbox(t *testing.T, ctx context.Context, testStore *sto
 func createInboxBook(t *testing.T, ctx context.Context, testStore *store.Store, id, inboxID string) *domain.Book {
 	t.Helper()
 
-	book := createTestBook(id, time.Now())
+	book := createSyncTestBook(id, time.Now())
 	err := testStore.CreateBook(ctx, book)
 	require.NoError(t, err)
 
@@ -261,7 +261,7 @@ func TestInboxService_StageCollection_BookNotInInbox(t *testing.T) {
 	collection := createTestCollectionInbox(t, ctx, testStore, "coll-001", "Sci-Fi", library.ID)
 
 	// Create a book NOT in inbox.
-	book := createTestBook("book-001", time.Now())
+	book := createSyncTestBook("book-001", time.Now())
 	err := testStore.CreateBook(ctx, book)
 	require.NoError(t, err)
 

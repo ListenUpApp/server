@@ -100,13 +100,65 @@ func ProvideSyncService(i do.Injector) (*service.SyncService, error) {
 	return service.NewSyncService(storeHandle.Store, log.Logger), nil
 }
 
-// ProvideListeningService provides the listening progress service.
-func ProvideListeningService(i do.Injector) (*service.ListeningService, error) {
+// ProvideReadingSessionService provides the reading session management service.
+func ProvideReadingSessionService(i do.Injector) (*service.ReadingSessionService, error) {
 	storeHandle := do.MustInvoke[*StoreHandle](i)
 	sseHandle := do.MustInvoke[*SSEManagerHandle](i)
 	log := do.MustInvoke[*logger.Logger](i)
 
-	return service.NewListeningService(storeHandle.Store, sseHandle.Manager, log.Logger), nil
+	return service.NewReadingSessionService(storeHandle.Store, sseHandle.Manager, log.Logger), nil
+}
+
+// ProvideActivityService provides the activity feed service.
+func ProvideActivityService(i do.Injector) (*service.ActivityService, error) {
+	storeHandle := do.MustInvoke[*StoreHandle](i)
+	sseHandle := do.MustInvoke[*SSEManagerHandle](i)
+	log := do.MustInvoke[*logger.Logger](i)
+
+	return service.NewActivityService(storeHandle.Store, sseHandle.Manager, log.Logger), nil
+}
+
+// ProvideListeningService provides the listening progress service.
+func ProvideListeningService(i do.Injector) (*service.ListeningService, error) {
+	storeHandle := do.MustInvoke[*StoreHandle](i)
+	sseHandle := do.MustInvoke[*SSEManagerHandle](i)
+	readingSessionService := do.MustInvoke[*service.ReadingSessionService](i)
+	log := do.MustInvoke[*logger.Logger](i)
+
+	return service.NewListeningService(storeHandle.Store, sseHandle.Manager, readingSessionService, log.Logger), nil
+}
+
+// ProvideStatsService provides the listening statistics service.
+func ProvideStatsService(i do.Injector) (*service.StatsService, error) {
+	storeHandle := do.MustInvoke[*StoreHandle](i)
+	log := do.MustInvoke[*logger.Logger](i)
+
+	return service.NewStatsService(storeHandle.Store, log.Logger), nil
+}
+
+// ProvideSocialService provides the social features service.
+func ProvideSocialService(i do.Injector) (*service.SocialService, error) {
+	storeHandle := do.MustInvoke[*StoreHandle](i)
+	log := do.MustInvoke[*logger.Logger](i)
+
+	return service.NewSocialService(storeHandle.Store, log.Logger), nil
+}
+
+// ProvideProfileService provides the user profile service.
+func ProvideProfileService(i do.Injector) (*service.ProfileService, error) {
+	storeHandle := do.MustInvoke[*StoreHandle](i)
+	storages := do.MustInvoke[*ImageStorages](i)
+	sseHandle := do.MustInvoke[*SSEManagerHandle](i)
+	statsService := do.MustInvoke[*service.StatsService](i)
+	log := do.MustInvoke[*logger.Logger](i)
+
+	return service.NewProfileService(
+		storeHandle.Store,
+		storages.Avatars,
+		sseHandle.Manager,
+		statsService,
+		log.Logger,
+	), nil
 }
 
 // ProvideGenreService provides the genre service.

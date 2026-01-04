@@ -60,6 +60,10 @@ func StructuredLogger(logger *slog.Logger) func(next http.Handler) http.Handler 
 				}
 				logger.LogAttrs(r.Context(), slog.LevelError, "request completed", attrs...)
 			case status >= 400:
+				// For 4xx errors, also log the response body to help debug validation issues
+				if len(ww.body) > 0 && len(ww.body) < 2000 {
+					attrs = append(attrs, slog.String("response_body", string(ww.body)))
+				}
 				logger.LogAttrs(r.Context(), slog.LevelWarn, "request completed", attrs...)
 			default:
 				logger.LogAttrs(r.Context(), slog.LevelInfo, "request completed", attrs...)

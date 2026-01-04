@@ -52,8 +52,6 @@ func (a *Analyzer) Analyze(ctx context.Context, files []AudioFileData, opts Anal
 		workers = runtime.NumCPU()
 	}
 
-	a.logger.Debug("starting analysis", "files", len(files), "workers", workers)
-
 	// Create job and result channels.
 	type job struct {
 		file  AudioFileData

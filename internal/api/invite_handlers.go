@@ -98,5 +98,5 @@ func (s *Server) handleClaimInvite(ctx context.Context, input *ClaimInviteInput)
 		return nil, err
 	}
 
-	return &AuthOutput{Body: mapAuthResponse(resp)}, nil
+	return &AuthOutput{Body: s.mapAuthResponse(ctx, resp)}, nil
 }

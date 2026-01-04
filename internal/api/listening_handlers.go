@@ -2,10 +2,12 @@ package api
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/service"
 )
 
@@ -19,6 +21,16 @@ func (s *Server) registerListeningRoutes() {
 		Tags:        []string{"Listening"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleRecordListeningEvent)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getListeningEvents",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/listening/events",
+		Summary:     "Get listening events",
+		Description: "Returns listening events for the current user, with optional since timestamp for delta sync",
+		Tags:        []string{"Listening"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetListeningEvents)
 
 	huma.Register(s.api, huma.Operation{
 		OperationID: "getProgress",
@@ -69,26 +81,56 @@ func (s *Server) registerListeningRoutes() {
 		Tags:        []string{"Listening"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleGetBookStats)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "endPlaybackSession",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/listening/session/end",
+		Summary:     "End playback session",
+		Description: "Records activity when user pauses/stops playback. Called by client when playback ends.",
+		Tags:        []string{"Listening"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleEndPlaybackSession)
 }
 
 // === DTOs ===
 
-// RecordListeningEventRequest is the request body for recording a listening event.
-type RecordListeningEventRequest struct {
-	BookID          string   `json:"book_id" validate:"required" doc:"Book ID"`
-	StartPositionMs int64    `json:"start_position_ms" validate:"gte=0" doc:"Start position in ms"`
-	EndPositionMs   int64    `json:"end_position_ms" validate:"gte=0,gtefield=StartPositionMs" doc:"End position in ms"`
-	StartedAt       FlexTime `json:"started_at" validate:"required" doc:"When playback started (RFC3339 or epoch ms)"`
-	EndedAt         FlexTime `json:"ended_at" validate:"required" doc:"When playback ended (RFC3339 or epoch ms)"`
-	PlaybackSpeed   float32  `json:"playback_speed" validate:"gt=0,lte=4" doc:"Playback speed"`
-	DeviceID        string   `json:"device_id" validate:"required,max=100" doc:"Device ID"`
-	DeviceName      string   `json:"device_name" validate:"omitempty,max=100" doc:"Device name"`
+// BatchListeningEventItem is a single event in a batch submission.
+// Matches the client's ListeningEventRequest format.
+// Uses int64 for timestamps because Huma/json/v2 doesn't handle custom UnmarshalJSON correctly.
+type BatchListeningEventItem struct {
+	ID              string  `json:"id" validate:"required" doc:"Client-generated event ID"`
+	BookID          string  `json:"book_id" validate:"required" doc:"Book ID"`
+	StartPositionMs int64   `json:"start_position_ms" validate:"gte=0" doc:"Start position in ms"`
+	EndPositionMs   int64   `json:"end_position_ms" validate:"gte=0" doc:"End position in ms"`
+	StartedAtMs     int64   `json:"started_at" validate:"required" doc:"When playback started (epoch ms)"`
+	EndedAtMs       int64   `json:"ended_at" validate:"required" doc:"When playback ended (epoch ms)"`
+	PlaybackSpeed   float32 `json:"playback_speed" validate:"gt=0,lte=4" doc:"Playback speed"`
+	DeviceID        string  `json:"device_id" validate:"required,max=100" doc:"Device ID"`
 }
 
-// RecordListeningEventInput wraps the record listening event request for Huma.
+// BatchListeningEventsRequest is the request body for submitting multiple listening events.
+// Matches the client's ListeningEventsRequest format: {"events": [...]}
+type BatchListeningEventsRequest struct {
+	Events []BatchListeningEventItem `json:"events" validate:"required,min=1,dive" doc:"List of listening events"`
+}
+
+// RecordListeningEventInput wraps the batch listening events request for Huma.
 type RecordListeningEventInput struct {
 	Authorization string `header:"Authorization"`
-	Body          RecordListeningEventRequest
+	Body          BatchListeningEventsRequest
+}
+
+// BatchListeningEventsResponse contains the result of batch event submission.
+// Matches the client's ListeningEventsResponse format.
+type BatchListeningEventsResponse struct {
+	Acknowledged []string `json:"acknowledged" doc:"IDs of successfully processed events"`
+	Failed       []string `json:"failed" doc:"IDs of events that failed to process"`
+}
+
+// RecordListeningEventOutput wraps the batch response for Huma.
+type RecordListeningEventOutput struct {
+	Body BatchListeningEventsResponse
 }
 
 // ListeningEventResponse contains listening event data in API responses.
@@ -116,17 +158,6 @@ type ProgressResponse struct {
 	LastPlayedAt      time.Time `json:"last_played_at" doc:"Last played time"`
 	UpdatedAt         time.Time `json:"updated_at" doc:"Last update time"`
 	IsFinished        bool      `json:"is_finished" doc:"Whether finished"`
-}
-
-// RecordListeningEventResponse contains the event and updated progress.
-type RecordListeningEventResponse struct {
-	Event    ListeningEventResponse `json:"event" doc:"Created event"`
-	Progress ProgressResponse       `json:"progress" doc:"Updated progress"`
-}
-
-// RecordListeningEventOutput wraps the record listening event response for Huma.
-type RecordListeningEventOutput struct {
-	Body RecordListeningEventResponse
 }
 
 // GetProgressInput contains parameters for getting book progress.
@@ -178,13 +209,46 @@ type ContinueListeningOutput struct {
 // GetUserStatsInput contains parameters for getting user stats.
 type GetUserStatsInput struct {
 	Authorization string `header:"Authorization"`
+	Period        string `query:"period" enum:"day,week,month,year,all" default:"week" doc:"Time period for stats"`
 }
 
-// UserStatsResponse contains user listening statistics.
+// DailyListeningResponse represents a day's listening for API response.
+type DailyListeningResponse struct {
+	Date          string `json:"date" doc:"Date in YYYY-MM-DD format"`
+	ListenTimeMs  int64  `json:"listen_time_ms" doc:"Total listen time"`
+	BooksListened int    `json:"books_listened" doc:"Distinct books"`
+}
+
+// GenreListeningResponse represents genre breakdown for API response.
+type GenreListeningResponse struct {
+	GenreSlug    string  `json:"genre_slug" doc:"Genre slug"`
+	GenreName    string  `json:"genre_name" doc:"Display name"`
+	ListenTimeMs int64   `json:"listen_time_ms" doc:"Time spent"`
+	Percentage   float64 `json:"percentage" doc:"Percentage of total"`
+}
+
+// StreakDayResponse represents a day in the streak calendar.
+type StreakDayResponse struct {
+	Date         string `json:"date" doc:"Date in YYYY-MM-DD format"`
+	HasListened  bool   `json:"has_listened" doc:"Met minimum threshold"`
+	ListenTimeMs int64  `json:"listen_time_ms" doc:"Total time"`
+	Intensity    int    `json:"intensity" doc:"0-4 for visual gradient"`
+}
+
+// UserStatsResponse contains comprehensive user listening statistics.
 type UserStatsResponse struct {
-	TotalListenTimeMs int64 `json:"total_listen_time_ms" doc:"Total listen time"`
-	BooksStarted      int   `json:"books_started" doc:"Books started"`
-	BooksFinished     int   `json:"books_finished" doc:"Books finished"`
+	Period            string `json:"period" doc:"Query period"`
+	StartDate         string `json:"start_date" doc:"Period start (RFC3339)"`
+	EndDate           string `json:"end_date" doc:"Period end (RFC3339)"`
+	TotalListenTimeMs int64  `json:"total_listen_time_ms" doc:"Total listen time"`
+	BooksStarted      int    `json:"books_started" doc:"Books started in period"`
+	BooksFinished     int    `json:"books_finished" doc:"Books finished in period"`
+	CurrentStreakDays int    `json:"current_streak_days" doc:"Current streak"`
+	LongestStreakDays int    `json:"longest_streak_days" doc:"Longest ever streak"`
+
+	DailyListening []DailyListeningResponse `json:"daily_listening" doc:"Daily breakdown"`
+	GenreBreakdown []GenreListeningResponse `json:"genre_breakdown" doc:"Top genres"`
+	StreakCalendar []StreakDayResponse      `json:"streak_calendar,omitempty" doc:"Past 12 weeks"`
 }
 
 // UserStatsOutput wraps the user stats response for Huma.
@@ -196,6 +260,22 @@ type UserStatsOutput struct {
 type GetBookStatsInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Book ID"`
+}
+
+// GetListeningEventsInput contains parameters for fetching listening events.
+type GetListeningEventsInput struct {
+	Authorization string `header:"Authorization"`
+	Since         int64  `query:"since" doc:"Only return events created after this timestamp (epoch ms). Use 0 for all events."`
+}
+
+// GetListeningEventsResponse contains the list of listening events.
+type GetListeningEventsResponse struct {
+	Events []ListeningEventResponse `json:"events" doc:"List of listening events"`
+}
+
+// GetListeningEventsOutput wraps the listening events response for Huma.
+type GetListeningEventsOutput struct {
+	Body GetListeningEventsResponse
 }
 
 // BookStatsResponse contains book listening statistics.
@@ -218,51 +298,51 @@ func (s *Server) handleRecordListeningEvent(ctx context.Context, input *RecordLi
 		return nil, err
 	}
 
-	result, err := s.services.Listening.RecordEvent(ctx, userID, service.RecordEventRequest{
-		BookID:          input.Body.BookID,
-		StartPositionMs: input.Body.StartPositionMs,
-		EndPositionMs:   input.Body.EndPositionMs,
-		StartedAt:       input.Body.StartedAt.ToTime(),
-		EndedAt:         input.Body.EndedAt.ToTime(),
-		PlaybackSpeed:   input.Body.PlaybackSpeed,
-		DeviceID:        input.Body.DeviceID,
-		DeviceName:      input.Body.DeviceName,
-	})
-	if err != nil {
-		return nil, err
-	}
+	slog.Info("listening events received",
+		"user_id", userID,
+		"event_count", len(input.Body.Events),
+	)
 
-	// Get book for total duration
-	book, err := s.store.GetBook(ctx, input.Body.BookID, userID)
-	if err != nil {
-		return nil, err
+	var acknowledged []string
+	var failed []string
+
+	// Process each event in the batch
+	for _, event := range input.Body.Events {
+		// Log timestamps to debug stats calculation
+		startedAt := time.UnixMilli(event.StartedAtMs)
+		endedAt := time.UnixMilli(event.EndedAtMs)
+		slog.Info("processing listening event",
+			"event_id", event.ID,
+			"book_id", event.BookID,
+			"start_position_ms", event.StartPositionMs,
+			"end_position_ms", event.EndPositionMs,
+			"started_at_ms", event.StartedAtMs,
+			"ended_at_ms", event.EndedAtMs,
+			"started_at", startedAt.Format(time.RFC3339),
+			"ended_at", endedAt.Format(time.RFC3339),
+			"device_id", event.DeviceID,
+		)
+		_, err := s.services.Listening.RecordEvent(ctx, userID, service.RecordEventRequest{
+			BookID:          event.BookID,
+			StartPositionMs: event.StartPositionMs,
+			EndPositionMs:   event.EndPositionMs,
+			StartedAt:       time.UnixMilli(event.StartedAtMs),
+			EndedAt:         time.UnixMilli(event.EndedAtMs),
+			PlaybackSpeed:   event.PlaybackSpeed,
+			DeviceID:        event.DeviceID,
+		})
+		if err != nil {
+			// Log but don't fail the whole batch
+			failed = append(failed, event.ID)
+		} else {
+			acknowledged = append(acknowledged, event.ID)
+		}
 	}
 
 	return &RecordListeningEventOutput{
-		Body: RecordListeningEventResponse{
-			Event: ListeningEventResponse{
-				ID:              result.Event.ID,
-				BookID:          result.Event.BookID,
-				StartPositionMs: result.Event.StartPositionMs,
-				EndPositionMs:   result.Event.EndPositionMs,
-				DurationMs:      result.Event.DurationMs,
-				StartedAt:       result.Event.StartedAt,
-				EndedAt:         result.Event.EndedAt,
-				PlaybackSpeed:   result.Event.PlaybackSpeed,
-				DeviceID:        result.Event.DeviceID,
-			},
-			Progress: ProgressResponse{
-				UserID:            result.Progress.UserID,
-				BookID:            result.Progress.BookID,
-				CurrentPositionMs: result.Progress.CurrentPositionMs,
-				TotalDurationMs:   book.TotalDuration,
-				Progress:          result.Progress.Progress,
-				TotalListenTimeMs: result.Progress.TotalListenTimeMs,
-				StartedAt:         result.Progress.StartedAt,
-				LastPlayedAt:      result.Progress.LastPlayedAt,
-				UpdatedAt:         result.Progress.UpdatedAt,
-				IsFinished:        result.Progress.IsFinished,
-			},
+		Body: BatchListeningEventsResponse{
+			Acknowledged: acknowledged,
+			Failed:       failed,
 		},
 	}, nil
 }
@@ -278,8 +358,8 @@ func (s *Server) handleGetProgress(ctx context.Context, input *GetProgressInput)
 		return nil, err
 	}
 
-	// Get book for total duration
-	book, err := s.store.GetBook(ctx, input.ID, userID)
+	// Get book for total duration (no access check - if user has progress, they had access)
+	book, err := s.store.GetBookNoAccessCheck(ctx, input.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -324,10 +404,21 @@ func (s *Server) handleGetContinueListening(ctx context.Context, input *GetConti
 		limit = 10
 	}
 
+	slog.Info("fetching continue listening",
+		"user_id", userID,
+		"limit", limit,
+	)
+
 	items, err := s.services.Listening.GetContinueListening(ctx, userID, limit)
 	if err != nil {
+		slog.Error("continue listening failed", "error", err)
 		return nil, err
 	}
+
+	slog.Info("continue listening result",
+		"user_id", userID,
+		"item_count", len(items),
+	)
 
 	resp := make([]ContinueListeningItemResponse, len(items))
 	for i, item := range items {
@@ -353,18 +444,63 @@ func (s *Server) handleGetUserStats(ctx context.Context, input *GetUserStatsInpu
 		return nil, err
 	}
 
-	stats, err := s.services.Listening.GetUserStats(ctx, userID)
+	period := domain.StatsPeriod(input.Period)
+	if !period.Valid() {
+		period = domain.StatsPeriodWeek
+	}
+
+	stats, err := s.services.Stats.GetUserStats(ctx, userID, period)
 	if err != nil {
 		return nil, err
 	}
 
-	return &UserStatsOutput{
-		Body: UserStatsResponse{
-			TotalListenTimeMs: stats.TotalListenTimeMs,
-			BooksStarted:      stats.BooksStarted,
-			BooksFinished:     stats.BooksFinished,
-		},
-	}, nil
+	// Convert to response format
+	resp := UserStatsResponse{
+		Period:            string(stats.Period),
+		StartDate:         stats.StartDate.Format(time.RFC3339),
+		EndDate:           stats.EndDate.Format(time.RFC3339),
+		TotalListenTimeMs: stats.TotalListenTimeMs,
+		BooksStarted:      stats.BooksStarted,
+		BooksFinished:     stats.BooksFinished,
+		CurrentStreakDays: stats.CurrentStreakDays,
+		LongestStreakDays: stats.LongestStreakDays,
+	}
+
+	// Convert daily listening
+	resp.DailyListening = make([]DailyListeningResponse, len(stats.DailyListening))
+	for i, d := range stats.DailyListening {
+		resp.DailyListening[i] = DailyListeningResponse{
+			Date:          d.Date.Format("2006-01-02"),
+			ListenTimeMs:  d.ListenTimeMs,
+			BooksListened: d.BooksListened,
+		}
+	}
+
+	// Convert genre breakdown
+	resp.GenreBreakdown = make([]GenreListeningResponse, len(stats.GenreBreakdown))
+	for i, g := range stats.GenreBreakdown {
+		resp.GenreBreakdown[i] = GenreListeningResponse{
+			GenreSlug:    g.GenreSlug,
+			GenreName:    g.GenreName,
+			ListenTimeMs: g.ListenTimeMs,
+			Percentage:   g.Percentage,
+		}
+	}
+
+	// Convert streak calendar
+	if stats.StreakCalendar != nil {
+		resp.StreakCalendar = make([]StreakDayResponse, len(stats.StreakCalendar))
+		for i, day := range stats.StreakCalendar {
+			resp.StreakCalendar[i] = StreakDayResponse{
+				Date:         day.Date.Format("2006-01-02"),
+				HasListened:  day.HasListened,
+				ListenTimeMs: day.ListenTimeMs,
+				Intensity:    day.Intensity,
+			}
+		}
+	}
+
+	return &UserStatsOutput{Body: resp}, nil
 }
 
 func (s *Server) handleGetBookStats(ctx context.Context, input *GetBookStatsInput) (*BookStatsOutput, error) {
@@ -384,4 +520,80 @@ func (s *Server) handleGetBookStats(ctx context.Context, input *GetBookStatsInpu
 			CompletedCount:    stats.CompletedCount,
 		},
 	}, nil
+}
+
+func (s *Server) handleGetListeningEvents(ctx context.Context, input *GetListeningEventsInput) (*GetListeningEventsOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get events for user, optionally filtered by since timestamp
+	var events []*domain.ListeningEvent
+	if input.Since > 0 {
+		since := time.UnixMilli(input.Since)
+		events, err = s.store.GetEventsForUserInRange(ctx, userID, since, time.Now().Add(time.Hour))
+	} else {
+		events, err = s.store.GetEventsForUser(ctx, userID)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to response format
+	resp := make([]ListeningEventResponse, len(events))
+	for i, e := range events {
+		resp[i] = ListeningEventResponse{
+			ID:              e.ID,
+			BookID:          e.BookID,
+			StartPositionMs: e.StartPositionMs,
+			EndPositionMs:   e.EndPositionMs,
+			DurationMs:      e.DurationMs,
+			StartedAt:       e.StartedAt,
+			EndedAt:         e.EndedAt,
+			PlaybackSpeed:   e.PlaybackSpeed,
+			DeviceID:        e.DeviceID,
+		}
+	}
+
+	slog.Info("fetched listening events",
+		"user_id", userID,
+		"since", input.Since,
+		"count", len(resp),
+	)
+
+	return &GetListeningEventsOutput{
+		Body: GetListeningEventsResponse{Events: resp},
+	}, nil
+}
+
+// EndPlaybackSessionRequest is the request body for ending a playback session.
+type EndPlaybackSessionRequest struct {
+	BookID     string `json:"book_id" validate:"required" doc:"Book that was being played"`
+	DurationMs int64  `json:"duration_ms" validate:"gte=0" doc:"Duration listened in this session (ms)"`
+}
+
+// EndPlaybackSessionInput wraps the end playback session request for Huma.
+type EndPlaybackSessionInput struct {
+	Authorization string `header:"Authorization"`
+	Body          EndPlaybackSessionRequest
+}
+
+func (s *Server) handleEndPlaybackSession(ctx context.Context, input *EndPlaybackSessionInput) (*MessageOutput, error) {
+	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	slog.Info("ending playback session",
+		"user_id", userID,
+		"book_id", input.Body.BookID,
+		"duration_ms", input.Body.DurationMs,
+	)
+
+	if err := s.services.ReadingSession.EndPlaybackSession(ctx, userID, input.Body.BookID, input.Body.DurationMs); err != nil {
+		return nil, err
+	}
+
+	return &MessageOutput{Body: MessageResponse{Message: "Playback session ended"}}, nil
 }

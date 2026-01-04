@@ -291,3 +291,12 @@ func (s *Store) BroadcastUserApproved(user *domain.User) {
 		s.eventEmitter.Emit(sse.NewUserApprovedEvent(user))
 	}
 }
+
+// BroadcastUserDeleted broadcasts a user.deleted SSE event to the deleted user.
+// Called when a user is deleted by an admin.
+// The event is targeted to the specific user so they can clear auth.
+func (s *Store) BroadcastUserDeleted(userID, reason string) {
+	if s.eventEmitter != nil {
+		s.eventEmitter.Emit(sse.NewUserDeletedEvent(userID, reason))
+	}
+}

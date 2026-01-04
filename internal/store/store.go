@@ -107,6 +107,7 @@ type Store struct {
 	// Generic entities
 	Users            *Entity[domain.User]
 	CollectionShares *Entity[domain.CollectionShare]
+	Sessions         *Entity[domain.BookReadingSession]
 }
 
 // New creates a new Store instance with the given database path and event emitter.
@@ -135,6 +136,7 @@ func New(path string, logger *slog.Logger, emitter EventEmitter) (*Store, error)
 	// Initialize generic entities
 	store.initUsers()
 	store.initCollectionShares()
+	store.initSessions()
 
 	if logger != nil {
 		logger.Info("Badger database opened successfully", "path", path)

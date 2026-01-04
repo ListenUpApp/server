@@ -15,6 +15,7 @@ type ImageStorages struct {
 	Covers            *images.Storage
 	ContributorImages *images.Storage
 	SeriesCovers      *images.Storage
+	Avatars           *images.Storage
 }
 
 // ProvideImageStorages provides all image storage services.
@@ -37,12 +38,18 @@ func ProvideImageStorages(i do.Injector) (*ImageStorages, error) {
 		return nil, fmt.Errorf("series storage: %w", err)
 	}
 
+	avatars, err := images.NewStorageWithSubdir(cfg.Metadata.BasePath, "avatars")
+	if err != nil {
+		return nil, fmt.Errorf("avatar storage: %w", err)
+	}
+
 	log.Info("Image storages initialized")
 
 	return &ImageStorages{
 		Covers:            covers,
 		ContributorImages: contributors,
 		SeriesCovers:      series,
+		Avatars:           avatars,
 	}, nil
 }
 

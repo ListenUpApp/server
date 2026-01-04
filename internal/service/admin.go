@@ -143,10 +143,26 @@ func (s *AdminService) DeleteUser(ctx context.Context, adminUserID, targetUserID
 		}
 	}
 
+	// Broadcast user.deleted SSE event BEFORE the soft delete
+	// so the user can receive it while still authenticated.
+	// This allows their client to clear auth state and show appropriate message.
+	s.store.BroadcastUserDeleted(targetUserID, "Account deleted by administrator")
+
 	// Soft delete the user
 	user.MarkDeleted()
 	if err := s.store.UpdateUser(ctx, user); err != nil {
 		return fmt.Errorf("delete user: %w", err)
+	}
+
+	// Clean up user's lenses
+	if err := s.store.DeleteLensesForUser(ctx, targetUserID); err != nil {
+		// Log but don't fail - user is already deleted
+		if s.logger != nil {
+			s.logger.Warn("Failed to delete lenses for deleted user",
+				"user_id", targetUserID,
+				"error", err,
+			)
+		}
 	}
 
 	// TODO: Invalidate all user sessions

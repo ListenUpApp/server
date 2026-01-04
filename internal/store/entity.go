@@ -34,6 +34,11 @@ func NewEntity[T any](s *Store, prefix string) *Entity[T] {
 	}
 }
 
+// Prefix returns the entity's key prefix.
+func (e *Entity[T]) Prefix() string {
+	return e.prefix
+}
+
 // WithIndex adds a secondary index to the entity.
 // This will be used in Task 5 for index-based queries.
 func (e *Entity[T]) WithIndex(name string, keyGen func(*T) []string) *Entity[T] {
