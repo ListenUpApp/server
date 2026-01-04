@@ -836,6 +836,43 @@ func (s *Store) CountBooksForContributor(_ context.Context, contributorID string
 	return count, nil
 }
 
+// CountBooksForAllContributors returns book counts for all contributors in a single scan.
+// Much more efficient than calling CountBooksForContributor N times during reindexing.
+// Returns map[contributorID]bookCount.
+func (s *Store) CountBooksForAllContributors(_ context.Context) (map[string]int, error) {
+	counts := make(map[string]int)
+
+	prefix := []byte(bookByContributorPrefix)
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false // Only need keys
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		// Key format: idx:books:contributor:{contributorID}:{bookID}
+		prefixLen := len(bookByContributorPrefix)
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			key := string(it.Item().Key())
+			// Extract contributorID from key
+			rest := key[prefixLen:] // {contributorID}:{bookID}
+			colonIdx := strings.Index(rest, ":")
+			if colonIdx > 0 {
+				contributorID := rest[:colonIdx]
+				counts[contributorID]++
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("count books for all contributors: %w", err)
+	}
+
+	return counts, nil
+}
+
 // SearchContributorsByName performs a case-insensitive search for contributors by name.
 // Returns contributors whose names contain the query string, limited to `limit` results.
 // This is used for autocomplete in the contributor editing UI.

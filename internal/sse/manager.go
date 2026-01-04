@@ -80,14 +80,12 @@ func (m *Manager) Start(ctx context.Context) {
 func (m *Manager) Shutdown(ctx context.Context) error {
 	m.logger.Info("SSE manager shutdown initiated")
 
-	// Mark as shutdown to prevent new events from being accepted.
-	// This must happen BEFORE closing the channel to prevent race.
+	// Mark as shutdown AND close channel atomically while holding lock.
+	// This prevents race with Emit() which holds read lock during send.
 	m.shutdownMu.Lock()
 	m.shutdown = true
-	m.shutdownMu.Unlock()
-
-	// Close events channel to stop accepting new events.
 	close(m.events)
+	m.shutdownMu.Unlock()
 
 	// Drain remaining events with context timeout.
 	done := make(chan struct{})
@@ -232,21 +230,21 @@ func (m *Manager) Disconnect(clientID string) {
 // This implements the store.EventEmitter interface.
 // Events are filtered by UserID/CollectionID in broadcast().
 func (m *Manager) Emit(event any) {
-	// Check shutdown state first to prevent panic on closed channel
-	m.shutdownMu.RLock()
-	isShutdown := m.shutdown
-	m.shutdownMu.RUnlock()
-
-	if isShutdown {
-		// Silently drop events after shutdown - this is expected during shutdown
-		return
-	}
-
-	// Type assert to Event - this is safe because store only emits Event types.
+	// Type assert to Event first (before acquiring lock).
 	evt, ok := event.(Event)
 	if !ok {
 		m.logger.Error("invalid event type emitted",
 			slog.String("type", "unknown"))
+		return
+	}
+
+	// Hold read lock through the entire send operation.
+	// This prevents race with Shutdown() which holds write lock when closing channel.
+	m.shutdownMu.RLock()
+	defer m.shutdownMu.RUnlock()
+
+	if m.shutdown {
+		// Silently drop events after shutdown - this is expected during shutdown
 		return
 	}
 

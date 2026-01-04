@@ -109,14 +109,16 @@ func (s *Store) GetEventsForUserBook(ctx context.Context, userID, bookID string)
 }
 
 // getEventsByPrefix retrieves events matching an index prefix.
+// Uses a single transaction to collect IDs and fetch all events (no N+1).
 func (s *Store) getEventsByPrefix(ctx context.Context, prefix string) ([]*domain.ListeningEvent, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
-	var eventIDs []string
+	var events []*domain.ListeningEvent
 
 	err := s.db.View(func(txn *badger.Txn) error {
+		// First pass: collect event IDs from index
 		opts := badger.DefaultIteratorOptions
 		opts.Prefix = []byte(prefix)
 		opts.PrefetchValues = true
@@ -124,6 +126,7 @@ func (s *Store) getEventsByPrefix(ctx context.Context, prefix string) ([]*domain
 		it := txn.NewIterator(opts)
 		defer it.Close()
 
+		var eventIDs []string
 		for it.Seek([]byte(prefix)); it.ValidForPrefix([]byte(prefix)); it.Next() {
 			err := it.Item().Value(func(val []byte) error {
 				eventIDs = append(eventIDs, string(val))
@@ -133,21 +136,29 @@ func (s *Store) getEventsByPrefix(ctx context.Context, prefix string) ([]*domain
 				return err
 			}
 		}
+
+		// Second pass: batch fetch all events in same transaction
+		events = make([]*domain.ListeningEvent, 0, len(eventIDs))
+		for _, id := range eventIDs {
+			item, err := txn.Get([]byte(listeningEventPrefix + id))
+			if err != nil {
+				continue // Skip missing events
+			}
+
+			var event domain.ListeningEvent
+			if err := item.Value(func(val []byte) error {
+				return json.Unmarshal(val, &event)
+			}); err != nil {
+				continue // Skip corrupt events
+			}
+			events = append(events, &event)
+		}
+
 		return nil
 	})
 
 	if err != nil {
 		return nil, err
-	}
-
-	// Fetch actual events
-	events := make([]*domain.ListeningEvent, 0, len(eventIDs))
-	for _, id := range eventIDs {
-		event, err := s.GetListeningEvent(ctx, id)
-		if err != nil {
-			continue // Skip missing events
-		}
-		events = append(events, event)
 	}
 
 	return events, nil

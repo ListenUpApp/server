@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -117,16 +118,8 @@ func SecurityHeaders(next http.Handler) http.Handler {
 
 // isSensitivePath returns true if the path might contain sensitive data in query params.
 func isSensitivePath(path string) bool {
-	sensitivePaths := []string{
-		"/api/v1/auth/",
-		"/api/v1/invites/",
-	}
-	for _, sp := range sensitivePaths {
-		if len(path) >= len(sp) && path[:len(sp)] == sp {
-			return true
-		}
-	}
-	return false
+	return strings.HasPrefix(path, "/api/v1/auth/") ||
+		strings.HasPrefix(path, "/api/v1/invites/")
 }
 
 // EnvelopeVersion is the current API envelope version.
