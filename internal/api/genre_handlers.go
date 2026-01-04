@@ -289,7 +289,7 @@ type MapUnmappedGenreInput struct {
 // === Handlers ===
 
 func (s *Server) handleListGenres(ctx context.Context, input *ListGenresInput) (*ListGenresOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -307,7 +307,7 @@ func (s *Server) handleListGenres(ctx context.Context, input *ListGenresInput) (
 }
 
 func (s *Server) handleCreateGenre(ctx context.Context, input *CreateGenreInput) (*GenreOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -325,7 +325,7 @@ func (s *Server) handleCreateGenre(ctx context.Context, input *CreateGenreInput)
 }
 
 func (s *Server) handleGetGenre(ctx context.Context, input *GetGenreInput) (*GenreOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -338,7 +338,7 @@ func (s *Server) handleGetGenre(ctx context.Context, input *GetGenreInput) (*Gen
 }
 
 func (s *Server) handleUpdateGenre(ctx context.Context, input *UpdateGenreInput) (*GenreOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -356,7 +356,7 @@ func (s *Server) handleUpdateGenre(ctx context.Context, input *UpdateGenreInput)
 }
 
 func (s *Server) handleDeleteGenre(ctx context.Context, input *DeleteGenreInput) (*MessageOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -368,7 +368,7 @@ func (s *Server) handleDeleteGenre(ctx context.Context, input *DeleteGenreInput)
 }
 
 func (s *Server) handleGetGenreChildren(ctx context.Context, input *GetGenreChildrenInput) (*GenreChildrenOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -386,7 +386,7 @@ func (s *Server) handleGetGenreChildren(ctx context.Context, input *GetGenreChil
 }
 
 func (s *Server) handleGetGenreBooks(ctx context.Context, input *GetGenreBooksInput) (*GenreBooksOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -399,7 +399,7 @@ func (s *Server) handleGetGenreBooks(ctx context.Context, input *GetGenreBooksIn
 }
 
 func (s *Server) handleMoveGenre(ctx context.Context, input *MoveGenreInput) (*GenreOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -412,7 +412,7 @@ func (s *Server) handleMoveGenre(ctx context.Context, input *MoveGenreInput) (*G
 }
 
 func (s *Server) handleMergeGenres(ctx context.Context, input *MergeGenresInput) (*MessageOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -427,7 +427,7 @@ func (s *Server) handleMergeGenres(ctx context.Context, input *MergeGenresInput)
 }
 
 func (s *Server) handleListUnmappedGenres(ctx context.Context, input *ListUnmappedGenresInput) (*ListUnmappedGenresOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -449,7 +449,7 @@ func (s *Server) handleListUnmappedGenres(ctx context.Context, input *ListUnmapp
 }
 
 func (s *Server) handleMapUnmappedGenre(ctx context.Context, input *MapUnmappedGenreInput) (*MessageOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}

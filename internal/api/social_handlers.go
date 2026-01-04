@@ -125,7 +125,7 @@ type LeaderboardOutput struct {
 // === Handlers ===
 
 func (s *Server) handleGetLeaderboard(ctx context.Context, input *GetLeaderboardInput) (*LeaderboardOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -313,7 +313,7 @@ type GetUserReadingHistoryOutput struct {
 // === Book Readers Handler ===
 
 func (s *Server) handleGetBookReaders(ctx context.Context, input *GetBookReadersInput) (*GetBookReadersOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -385,7 +385,7 @@ func (s *Server) handleGetBookReaders(ctx context.Context, input *GetBookReaders
 // === User Reading History Handler ===
 
 func (s *Server) handleGetUserReadingHistory(ctx context.Context, input *GetUserReadingHistoryInput) (*GetUserReadingHistoryOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -481,7 +481,7 @@ type GetActivityFeedOutput struct {
 // === Activity Feed Handler ===
 
 func (s *Server) handleGetActivityFeed(ctx context.Context, input *GetActivityFeedInput) (*GetActivityFeedOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -619,7 +619,7 @@ type GetDiscoverBooksOutput struct {
 // === Currently Listening Handler ===
 
 func (s *Server) handleGetCurrentlyListening(ctx context.Context, input *GetCurrentlyListeningInput) (*GetCurrentlyListeningOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -677,7 +677,7 @@ func (s *Server) handleGetCurrentlyListening(ctx context.Context, input *GetCurr
 // === Discover Books Handler ===
 
 func (s *Server) handleGetDiscoverBooks(ctx context.Context, input *GetDiscoverBooksInput) (*GetDiscoverBooksOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}

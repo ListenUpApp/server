@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/listenupapp/listenup-server/internal/color"
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/id"
 	"github.com/listenupapp/listenup-server/internal/sse"
@@ -548,7 +549,7 @@ func buildReaderSummary(user *domain.User, profile *domain.UserProfile, sessions
 			DisplayName: user.Name(),
 			AvatarType:  avatarType,
 			AvatarValue: avatarValue,
-			AvatarColor: avatarColorForUser(user.ID),
+			AvatarColor: color.ForUser(user.ID),
 		}
 	}
 
@@ -574,7 +575,7 @@ func buildReaderSummary(user *domain.User, profile *domain.UserProfile, sessions
 		DisplayName:        user.Name(),
 		AvatarType:         avatarType,
 		AvatarValue:        avatarValue,
-		AvatarColor:        avatarColorForUser(user.ID),
+		AvatarColor:        color.ForUser(user.ID),
 		IsCurrentlyReading: activeSession != nil,
 		StartedAt:          mostRecentSession.StartedAt,
 		FinishedAt:         mostRecentSession.FinishedAt,
@@ -587,76 +588,6 @@ func buildReaderSummary(user *domain.User, profile *domain.UserProfile, sessions
 	}
 
 	return summary
-}
-
-// avatarColorForUser generates a consistent color for a user based on their ID.
-func avatarColorForUser(userID string) string {
-	h := 0
-	for _, c := range userID {
-		h = 31*h + int(c)
-	}
-	if h < 0 {
-		h = -h
-	}
-	hue := float64(h % 360)
-
-	// Convert HSL to RGB (S=0.4, L=0.65)
-	r, g, b := hslToRGB(hue, 0.4, 0.65)
-
-	return fmt.Sprintf("#%02X%02X%02X", r, g, b)
-}
-
-// hslToRGB converts HSL color space to RGB.
-// h: hue (0-360), s: saturation (0-1), l: lightness (0-1)
-// Returns RGB values (0-255).
-func hslToRGB(h, s, l float64) (r, g, b uint8) {
-	// Normalize hue to 0-1
-	h = h / 360.0
-
-	var r1, g1, b1 float64
-
-	if s == 0 {
-		// Achromatic (gray)
-		r1, g1, b1 = l, l, l
-	} else {
-		var q float64
-		if l < 0.5 {
-			q = l * (1 + s)
-		} else {
-			q = l + s - l*s
-		}
-		p := 2*l - q
-
-		r1 = hueToRGB(p, q, h+1.0/3.0)
-		g1 = hueToRGB(p, q, h)
-		b1 = hueToRGB(p, q, h-1.0/3.0)
-	}
-
-	// Convert to 0-255 range
-	r = uint8(r1 * 255)
-	g = uint8(g1 * 255)
-	b = uint8(b1 * 255)
-	return
-}
-
-// hueToRGB is a helper for HSL to RGB conversion.
-func hueToRGB(p, q, t float64) float64 {
-	if t < 0 {
-		t += 1
-	}
-	if t > 1 {
-		t -= 1
-	}
-	if t < 1.0/6.0 {
-		return p + (q-p)*6*t
-	}
-	if t < 1.0/2.0 {
-		return q
-	}
-	if t < 2.0/3.0 {
-		return p + (q-p)*(2.0/3.0-t)*6
-	}
-	return p
 }
 
 // getAuthorName extracts author name(s) from book contributors.

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/listenupapp/listenup-server/internal/color"
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
@@ -318,12 +319,12 @@ func TestGetUserReadingHistory(t *testing.T) {
 
 func TestAvatarColorForUser(t *testing.T) {
 	// Test that avatar color is consistent for same user
-	color1 := avatarColorForUser("user-123")
-	color2 := avatarColorForUser("user-123")
+	color1 := color.ForUser("user-123")
+	color2 := color.ForUser("user-123")
 	assert.Equal(t, color1, color2)
 
 	// Test that different users get different colors
-	color3 := avatarColorForUser("user-456")
+	color3 := color.ForUser("user-456")
 	assert.NotEqual(t, color1, color3)
 
 	// Test that color is valid hex

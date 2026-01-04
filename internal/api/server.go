@@ -42,8 +42,9 @@ func NewServer(
 ) *Server {
 	router := chi.NewRouter()
 
-	// Set up middleware BEFORE huma (which registers OpenAPI routes)
-	setupMiddleware(router, logger)
+	// Set up base middleware BEFORE huma (which registers OpenAPI routes).
+	// Auth middleware needs access to services, so we pass it here.
+	setupMiddleware(router, logger, services)
 
 	// Configure huma API
 	config := huma.DefaultConfig("ListenUp API", "1.0.0")
@@ -94,7 +95,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // setupMiddleware configures the middleware stack.
 // Must be called before any routes are registered (including huma).
-func setupMiddleware(router chi.Router, logger *slog.Logger) {
+func setupMiddleware(router chi.Router, logger *slog.Logger, services *Services) {
 	// CORS - allow cross-origin requests (required for web clients)
 	router.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
@@ -122,6 +123,10 @@ func setupMiddleware(router chi.Router, logger *slog.Logger) {
 
 	// Response compression - gzip responses at compression level 5
 	router.Use(middleware.Compress(5))
+
+	// Auth middleware - validates Bearer tokens and stores userID in context.
+	// Must be added before routes so handlers can use GetUserID(ctx).
+	router.Use(authMiddleware(services.Auth))
 }
 
 // registerRoutes configures all HTTP routes.

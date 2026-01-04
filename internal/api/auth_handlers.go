@@ -7,7 +7,9 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/go-chi/chi/v5"
+
 	"github.com/listenupapp/listenup-server/internal/auth"
+	"github.com/listenupapp/listenup-server/internal/color"
 	"github.com/listenupapp/listenup-server/internal/service"
 )
 
@@ -406,7 +408,7 @@ func (s *Server) mapAuthResponse(ctx context.Context, resp *service.AuthResponse
 			LastLoginAt: resp.User.LastLoginAt,
 			AvatarType:  avatarType,
 			AvatarValue: avatarValue,
-			AvatarColor: avatarColorForUser(resp.User.ID),
+			AvatarColor: color.ForUser(resp.User.ID),
 		},
 	}
 }

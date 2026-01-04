@@ -89,10 +89,3 @@ func (s *Store) checkEntityTimestamp(txn *badger.Txn, prefix []byte, latest *tim
 
 	return nil
 }
-
-// SetLibraryCheckppint sets the library checkpoint timestamp.
-func (s *Store) SetLibraryCheckppint(_ context.Context, _ time.Time) error {
-	// for now, this is a no op since we computer checkpoint dynamically.
-
-	return nil
-}

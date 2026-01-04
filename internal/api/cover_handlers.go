@@ -135,7 +135,7 @@ type DeleteBookCoverInput struct {
 // === Handlers ===
 
 func (s *Server) handleSearchCovers(ctx context.Context, input *SearchCoversInput) (*SearchCoversOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -161,7 +161,7 @@ func (s *Server) handleSearchCovers(ctx context.Context, input *SearchCoversInpu
 }
 
 func (s *Server) handleGetBookCover(ctx context.Context, input *GetBookCoverInput) (*CoverRedirectOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +182,7 @@ func (s *Server) handleGetBookCover(ctx context.Context, input *GetBookCoverInpu
 }
 
 func (s *Server) handleUploadBookCoverHuma(ctx context.Context, input *UploadBookCoverInput) (*CoverOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -191,7 +191,7 @@ func (s *Server) handleUploadBookCoverHuma(ctx context.Context, input *UploadBoo
 }
 
 func (s *Server) handleDeleteBookCover(ctx context.Context, input *DeleteBookCoverInput) (*MessageOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}

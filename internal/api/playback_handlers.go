@@ -139,7 +139,7 @@ type UpdateBookPreferencesInput struct {
 // === Handlers ===
 
 func (s *Server) handleGetUserSettings(ctx context.Context, input *GetUserSettingsInput) (*UserSettingsOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +162,7 @@ func (s *Server) handleGetUserSettings(ctx context.Context, input *GetUserSettin
 }
 
 func (s *Server) handleUpdateUserSettings(ctx context.Context, input *UpdateUserSettingsInput) (*UserSettingsOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +191,7 @@ func (s *Server) handleUpdateUserSettings(ctx context.Context, input *UpdateUser
 }
 
 func (s *Server) handleGetBookPreferences(ctx context.Context, input *GetBookPreferencesInput) (*BookPreferencesOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +213,7 @@ func (s *Server) handleGetBookPreferences(ctx context.Context, input *GetBookPre
 }
 
 func (s *Server) handleUpdateBookPreferences(ctx context.Context, input *UpdateBookPreferencesInput) (*BookPreferencesOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +270,7 @@ type PreparePlaybackOutput struct {
 }
 
 func (s *Server) handlePreparePlayback(ctx context.Context, input *PreparePlaybackInput) (*PreparePlaybackOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}

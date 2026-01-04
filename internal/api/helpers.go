@@ -1,47 +1,19 @@
 package api
 
-import (
-	"context"
-	"strings"
-
-	"github.com/danielgtaylor/huma/v2"
-	domainerrors "github.com/listenupapp/listenup-server/internal/errors"
-)
-
-// authenticateRequest validates the Authorization header and returns the user ID.
-func (s *Server) authenticateRequest(ctx context.Context, authHeader string) (string, error) {
-	if authHeader == "" {
-		return "", huma.Error401Unauthorized("Missing authorization header")
+// MapSlice transforms a slice using the provided mapper function.
+// Useful for converting domain objects to response types.
+func MapSlice[T, R any](items []T, mapper func(T) R) []R {
+	result := make([]R, len(items))
+	for i, item := range items {
+		result[i] = mapper(item)
 	}
-
-	parts := strings.SplitN(authHeader, " ", 2)
-	if len(parts) != 2 || parts[0] != "Bearer" {
-		return "", huma.Error401Unauthorized("Invalid authorization header format")
-	}
-
-	user, _, err := s.services.Auth.VerifyAccessToken(ctx, parts[1])
-	if err != nil {
-		return "", huma.Error401Unauthorized("Invalid or expired token")
-	}
-
-	return user.ID, nil
+	return result
 }
 
-// authenticateAndRequireAdmin validates the token and requires admin role.
-func (s *Server) authenticateAndRequireAdmin(ctx context.Context, authHeader string) (string, error) {
-	userID, err := s.authenticateRequest(ctx, authHeader)
-	if err != nil {
-		return "", err
+// DefaultLimit returns the provided limit or a default if <= 0.
+func DefaultLimit(limit, defaultVal int) int {
+	if limit <= 0 {
+		return defaultVal
 	}
-
-	user, err := s.store.GetUser(ctx, userID)
-	if err != nil {
-		return "", huma.Error401Unauthorized("User not found")
-	}
-
-	if !user.IsAdmin() {
-		return "", domainerrors.Forbidden("Admin access required")
-	}
-
-	return userID, nil
+	return limit
 }

@@ -67,7 +67,7 @@ type UpdateServerSettingsOutput struct {
 // === Handlers ===
 
 func (s *Server) handleGetServerSettings(ctx context.Context, input *GetServerSettingsInput) (*GetServerSettingsOutput, error) {
-	_, err := s.authenticateAndRequireAdmin(ctx, input.Authorization)
+	_, err := s.RequireAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +92,7 @@ func (s *Server) handleGetServerSettings(ctx context.Context, input *GetServerSe
 }
 
 func (s *Server) handleUpdateServerSettings(ctx context.Context, input *UpdateServerSettingsInput) (*UpdateServerSettingsOutput, error) {
-	_, err := s.authenticateAndRequireAdmin(ctx, input.Authorization)
+	_, err := s.RequireAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}

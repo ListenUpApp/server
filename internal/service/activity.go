@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/listenupapp/listenup-server/internal/color"
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/id"
 	"github.com/listenupapp/listenup-server/internal/sse"
@@ -65,7 +66,7 @@ func (s *ActivityService) RecordBookStarted(ctx context.Context, userID, bookID 
 		Type:            domain.ActivityStartedBook,
 		CreatedAt:       time.Now(),
 		UserDisplayName: user.Name(),
-		UserAvatarColor: avatarColorForUser(userID),
+		UserAvatarColor: color.ForUser(userID),
 		UserAvatarType:  avatarType,
 		UserAvatarValue: avatarValue,
 		BookID:          bookID,
@@ -120,7 +121,7 @@ func (s *ActivityService) RecordBookFinished(ctx context.Context, userID, bookID
 		Type:            domain.ActivityFinishedBook,
 		CreatedAt:       time.Now(),
 		UserDisplayName: user.Name(),
-		UserAvatarColor: avatarColorForUser(userID),
+		UserAvatarColor: color.ForUser(userID),
 		UserAvatarType:  avatarType,
 		UserAvatarValue: avatarValue,
 		BookID:          bookID,
@@ -168,7 +169,7 @@ func (s *ActivityService) RecordStreakMilestone(ctx context.Context, userID stri
 		Type:            domain.ActivityStreakMilestone,
 		CreatedAt:       time.Now(),
 		UserDisplayName: user.Name(),
-		UserAvatarColor: avatarColorForUser(userID),
+		UserAvatarColor: color.ForUser(userID),
 		UserAvatarType:  avatarType,
 		UserAvatarValue: avatarValue,
 		MilestoneValue:  days,
@@ -209,7 +210,7 @@ func (s *ActivityService) RecordListeningMilestone(ctx context.Context, userID s
 		Type:            domain.ActivityListeningMilestone,
 		CreatedAt:       time.Now(),
 		UserDisplayName: user.Name(),
-		UserAvatarColor: avatarColorForUser(userID),
+		UserAvatarColor: color.ForUser(userID),
 		UserAvatarType:  avatarType,
 		UserAvatarValue: avatarValue,
 		MilestoneValue:  hours,
@@ -250,7 +251,7 @@ func (s *ActivityService) RecordLensCreated(ctx context.Context, userID string, 
 		Type:            domain.ActivityLensCreated,
 		CreatedAt:       time.Now(),
 		UserDisplayName: user.Name(),
-		UserAvatarColor: avatarColorForUser(userID),
+		UserAvatarColor: color.ForUser(userID),
 		UserAvatarType:  avatarType,
 		UserAvatarValue: avatarValue,
 		LensID:          lens.ID,
@@ -320,7 +321,7 @@ func (s *ActivityService) RecordListeningSession(ctx context.Context, userID, bo
 		Type:            domain.ActivityListeningSession,
 		CreatedAt:       time.Now(),
 		UserDisplayName: user.Name(),
-		UserAvatarColor: avatarColorForUser(userID),
+		UserAvatarColor: color.ForUser(userID),
 		UserAvatarType:  avatarType,
 		UserAvatarValue: avatarValue,
 		BookID:          bookID,

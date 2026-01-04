@@ -151,7 +151,7 @@ type ListSharedWithMeInput struct {
 // === Handlers ===
 
 func (s *Server) handleShareCollection(ctx context.Context, input *ShareCollectionInput) (*ShareOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +176,7 @@ func (s *Server) handleShareCollection(ctx context.Context, input *ShareCollecti
 }
 
 func (s *Server) handleListCollectionShares(ctx context.Context, input *ListCollectionSharesInput) (*ListSharesOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +195,7 @@ func (s *Server) handleListCollectionShares(ctx context.Context, input *ListColl
 }
 
 func (s *Server) handleGetShare(ctx context.Context, input *GetShareInput) (*ShareOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +209,7 @@ func (s *Server) handleGetShare(ctx context.Context, input *GetShareInput) (*Sha
 }
 
 func (s *Server) handleUpdateShare(ctx context.Context, input *UpdateShareInput) (*ShareOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +231,7 @@ func (s *Server) handleUpdateShare(ctx context.Context, input *UpdateShareInput)
 }
 
 func (s *Server) handleDeleteShare(ctx context.Context, input *DeleteShareInput) (*MessageOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -253,7 +253,7 @@ func (s *Server) handleDeleteShare(ctx context.Context, input *DeleteShareInput)
 }
 
 func (s *Server) handleListSharedWithMe(ctx context.Context, input *ListSharedWithMeInput) (*ListSharesOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}

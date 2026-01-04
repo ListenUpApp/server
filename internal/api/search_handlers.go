@@ -83,7 +83,7 @@ type SearchOutput struct {
 // === Handlers ===
 
 func (s *Server) handleSearch(ctx context.Context, input *SearchInput) (*SearchOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 

@@ -278,7 +278,7 @@ type SetOpenRegistrationInput struct {
 // === Handlers ===
 
 func (s *Server) handleCreateInvite(ctx context.Context, input *CreateInviteInput) (*InviteOutput, error) {
-	userID, err := s.authenticateAndRequireAdmin(ctx, input.Authorization)
+	userID, err := s.RequireAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -317,7 +317,7 @@ func (s *Server) handleCreateInvite(ctx context.Context, input *CreateInviteInpu
 }
 
 func (s *Server) handleListInvites(ctx context.Context, input *ListInvitesInput) (*ListInvitesOutput, error) {
-	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -347,7 +347,7 @@ func (s *Server) handleListInvites(ctx context.Context, input *ListInvitesInput)
 }
 
 func (s *Server) handleDeleteInvite(ctx context.Context, input *DeleteInviteInput) (*MessageOutput, error) {
-	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -359,7 +359,7 @@ func (s *Server) handleDeleteInvite(ctx context.Context, input *DeleteInviteInpu
 }
 
 func (s *Server) handleListUsers(ctx context.Context, input *ListUsersInput) (*ListUsersOutput, error) {
-	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -379,7 +379,7 @@ func (s *Server) handleListUsers(ctx context.Context, input *ListUsersInput) (*L
 }
 
 func (s *Server) handleGetAdminUser(ctx context.Context, input *GetAdminUserInput) (*AdminUserOutput, error) {
-	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -392,7 +392,7 @@ func (s *Server) handleGetAdminUser(ctx context.Context, input *GetAdminUserInpu
 }
 
 func (s *Server) handleUpdateAdminUser(ctx context.Context, input *UpdateAdminUserInput) (*AdminUserOutput, error) {
-	adminUserID, err := s.authenticateAndRequireAdmin(ctx, input.Authorization)
+	adminUserID, err := s.RequireAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -419,7 +419,7 @@ func (s *Server) handleUpdateAdminUser(ctx context.Context, input *UpdateAdminUs
 }
 
 func (s *Server) handleDeleteAdminUser(ctx context.Context, input *DeleteAdminUserInput) (*MessageOutput, error) {
-	adminUserID, err := s.authenticateAndRequireAdmin(ctx, input.Authorization)
+	adminUserID, err := s.RequireAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -432,7 +432,7 @@ func (s *Server) handleDeleteAdminUser(ctx context.Context, input *DeleteAdminUs
 }
 
 func (s *Server) handleListPendingUsers(ctx context.Context, input *ListPendingUsersInput) (*ListUsersOutput, error) {
-	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -452,7 +452,7 @@ func (s *Server) handleListPendingUsers(ctx context.Context, input *ListPendingU
 }
 
 func (s *Server) handleApproveUser(ctx context.Context, input *ApproveUserInput) (*AdminUserOutput, error) {
-	adminUserID, err := s.authenticateAndRequireAdmin(ctx, input.Authorization)
+	adminUserID, err := s.RequireAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -466,7 +466,7 @@ func (s *Server) handleApproveUser(ctx context.Context, input *ApproveUserInput)
 }
 
 func (s *Server) handleDenyUser(ctx context.Context, input *DenyUserInput) (*MessageOutput, error) {
-	adminUserID, err := s.authenticateAndRequireAdmin(ctx, input.Authorization)
+	adminUserID, err := s.RequireAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -479,7 +479,7 @@ func (s *Server) handleDenyUser(ctx context.Context, input *DenyUserInput) (*Mes
 }
 
 func (s *Server) handleSetOpenRegistration(ctx context.Context, input *SetOpenRegistrationInput) (*MessageOutput, error) {
-	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 

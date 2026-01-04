@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/auth"
+	"github.com/listenupapp/listenup-server/internal/color"
 	"github.com/listenupapp/listenup-server/internal/domain"
 	domainerrors "github.com/listenupapp/listenup-server/internal/errors"
 	"github.com/listenupapp/listenup-server/internal/media/images"
@@ -311,7 +312,7 @@ func (s *ProfileService) GetFullProfile(ctx context.Context, profileUserID, view
 		DisplayName:       user.Name(),
 		AvatarType:        profile.AvatarType,
 		AvatarValue:       profile.AvatarValue,
-		AvatarColor:       avatarColorForUser(user.ID),
+		AvatarColor:       color.ForUser(user.ID),
 		Tagline:           profile.Tagline,
 		TotalListenTimeMs: stats.TotalListenTimeMs,
 		BooksFinished:     stats.BooksFinished,
@@ -413,7 +414,7 @@ func (s *ProfileService) broadcastProfileUpdate(ctx context.Context, userID stri
 		LastName:    user.LastName,
 		AvatarType:  string(profile.AvatarType),
 		AvatarValue: profile.AvatarValue,
-		AvatarColor: avatarColorForUser(userID),
+		AvatarColor: color.ForUser(userID),
 		Tagline:     profile.Tagline,
 	}))
 }

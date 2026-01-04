@@ -275,11 +275,19 @@ func (s *TranscodeService) GetTranscodePath(ctx context.Context, audioFileID str
 	return job.OutputPath, true
 }
 
-// GetHLSPathIfReady returns the HLS directory path as soon as first segment is available.
-// This allows progressive playback while transcoding continues.
-// Playlists are generated dynamically from available segments, not read from disk.
-func (s *TranscodeService) GetHLSPathIfReady(ctx context.Context, audioFileID string) (string, bool) {
-	job, err := s.store.GetTranscodeJobByAudioFile(ctx, audioFileID)
+// GetHLSPath returns the HLS directory path if transcoding has started and at least
+// one segment is available. This allows progressive playback while transcoding continues.
+// If variant is nil, returns the path for any available transcode job for this audio file.
+func (s *TranscodeService) GetHLSPath(ctx context.Context, audioFileID string, variant *domain.TranscodeVariant) (string, bool) {
+	var job *domain.TranscodeJob
+	var err error
+
+	if variant != nil {
+		job, err = s.store.GetTranscodeJobByAudioFileAndVariant(ctx, audioFileID, *variant)
+	} else {
+		job, err = s.store.GetTranscodeJobByAudioFile(ctx, audioFileID)
+	}
+
 	if err != nil {
 		return "", false
 	}
@@ -291,32 +299,6 @@ func (s *TranscodeService) GetHLSPathIfReady(ctx context.Context, audioFileID st
 
 	// Construct the HLS directory path from job metadata.
 	// OutputPath is only set on completion, so we build it from BookID/AudioFileID/Variant.
-	hlsDir := filepath.Join(s.config.CachePath, job.BookID, job.AudioFileID, string(job.Variant))
-
-	// Check if at least one segment exists
-	segmentPath := filepath.Join(hlsDir, "seg_0000.ts")
-	if _, err := os.Stat(segmentPath); err != nil {
-		return "", false
-	}
-
-	return hlsDir, true
-}
-
-// GetHLSPathIfReadyForVariant returns the HLS directory path for a specific variant
-// as soon as first segment is available. This allows progressive playback while
-// transcoding continues.
-func (s *TranscodeService) GetHLSPathIfReadyForVariant(ctx context.Context, audioFileID string, variant domain.TranscodeVariant) (string, bool) {
-	job, err := s.store.GetTranscodeJobByAudioFileAndVariant(ctx, audioFileID, variant)
-	if err != nil {
-		return "", false
-	}
-
-	// Job must be running or completed
-	if job.Status != domain.TranscodeStatusRunning && job.Status != domain.TranscodeStatusCompleted {
-		return "", false
-	}
-
-	// Construct the HLS directory path from job metadata.
 	hlsDir := filepath.Join(s.config.CachePath, job.BookID, job.AudioFileID, string(job.Variant))
 
 	// Check if at least one segment exists

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/listenupapp/listenup-server/internal/color"
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/id"
 	"github.com/listenupapp/listenup-server/internal/sse"
@@ -585,7 +586,7 @@ func (s *ListeningService) broadcastUserStatsUpdate(ctx context.Context, userID 
 		DisplayName:   user.DisplayName,
 		AvatarType:    avatarType,
 		AvatarValue:   avatarValue,
-		AvatarColor:   avatarColorForUser(userID),
+		AvatarColor:   color.ForUser(userID),
 		TotalTimeMs:   totalTimeMs,
 		TotalBooks:    totalBooks,
 		CurrentStreak: currentStreak,

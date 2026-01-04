@@ -201,7 +201,7 @@ type RemoveBookFromCollectionInput struct {
 // === Handlers ===
 
 func (s *Server) handleListCollections(ctx context.Context, input *ListCollectionsInput) (*ListCollectionsOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +229,7 @@ func (s *Server) handleListCollections(ctx context.Context, input *ListCollectio
 }
 
 func (s *Server) handleCreateCollection(ctx context.Context, input *CreateCollectionInput) (*CollectionOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +254,7 @@ func (s *Server) handleCreateCollection(ctx context.Context, input *CreateCollec
 }
 
 func (s *Server) handleGetCollection(ctx context.Context, input *GetCollectionInput) (*CollectionOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +279,7 @@ func (s *Server) handleGetCollection(ctx context.Context, input *GetCollectionIn
 }
 
 func (s *Server) handleUpdateCollection(ctx context.Context, input *UpdateCollectionInput) (*CollectionOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -304,7 +304,7 @@ func (s *Server) handleUpdateCollection(ctx context.Context, input *UpdateCollec
 }
 
 func (s *Server) handleDeleteCollection(ctx context.Context, input *DeleteCollectionInput) (*MessageOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -317,7 +317,7 @@ func (s *Server) handleDeleteCollection(ctx context.Context, input *DeleteCollec
 }
 
 func (s *Server) handleGetCollectionBooks(ctx context.Context, input *GetCollectionBooksInput) (*CollectionBooksOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +343,7 @@ func (s *Server) handleGetCollectionBooks(ctx context.Context, input *GetCollect
 }
 
 func (s *Server) handleAddBookToCollection(ctx context.Context, input *AddBookToCollectionInput) (*MessageOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -356,7 +356,7 @@ func (s *Server) handleAddBookToCollection(ctx context.Context, input *AddBookTo
 }
 
 func (s *Server) handleRemoveBookFromCollection(ctx context.Context, input *RemoveBookFromCollectionInput) (*MessageOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}

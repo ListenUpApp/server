@@ -174,7 +174,7 @@ type RemoveBookInput struct {
 // === Handlers ===
 
 func (s *Server) handleListAdminCollections(ctx context.Context, input *ListAdminCollectionsInput) (*ListAdminCollectionsOutput, error) {
-	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -200,7 +200,7 @@ func (s *Server) handleListAdminCollections(ctx context.Context, input *ListAdmi
 }
 
 func (s *Server) handleCreateAdminCollection(ctx context.Context, input *CreateAdminCollectionInput) (*AdminCollectionOutput, error) {
-	userID, err := s.authenticateAndRequireAdmin(ctx, input.Authorization)
+	userID, err := s.RequireAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +255,7 @@ func (s *Server) handleCreateAdminCollection(ctx context.Context, input *CreateA
 }
 
 func (s *Server) handleGetAdminCollection(ctx context.Context, input *GetAdminCollectionInput) (*AdminCollectionOutput, error) {
-	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -279,7 +279,7 @@ func (s *Server) handleGetAdminCollection(ctx context.Context, input *GetAdminCo
 }
 
 func (s *Server) handleUpdateAdminCollection(ctx context.Context, input *UpdateAdminCollectionInput) (*AdminCollectionOutput, error) {
-	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -316,7 +316,7 @@ func (s *Server) handleUpdateAdminCollection(ctx context.Context, input *UpdateA
 }
 
 func (s *Server) handleDeleteAdminCollection(ctx context.Context, input *DeleteAdminCollectionInput) (*MessageOutput, error) {
-	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -384,7 +384,7 @@ func (s *Server) handleDeleteAdminCollection(ctx context.Context, input *DeleteA
 }
 
 func (s *Server) handleAddBooksToCollection(ctx context.Context, input *AddBooksInput) (*MessageOutput, error) {
-	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -446,7 +446,7 @@ func (s *Server) handleAddBooksToCollection(ctx context.Context, input *AddBooks
 }
 
 func (s *Server) handleRemoveBookFromAdminCollection(ctx context.Context, input *RemoveBookInput) (*MessageOutput, error) {
-	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 

@@ -9,6 +9,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/go-chi/chi/v5"
 
+	"github.com/listenupapp/listenup-server/internal/color"
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/service"
 )
@@ -144,7 +145,7 @@ type FullProfileOutput struct {
 // === Handlers ===
 
 func (s *Server) handleGetMyProfile(ctx context.Context, input *AuthenticatedInput) (*ProfileOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -166,14 +167,14 @@ func (s *Server) handleGetMyProfile(ctx context.Context, input *AuthenticatedInp
 			LastName:    user.LastName,
 			AvatarType:  string(profile.AvatarType),
 			AvatarValue: profile.AvatarValue,
-			AvatarColor: avatarColorForUser(user.ID),
+			AvatarColor: color.ForUser(user.ID),
 			Tagline:     profile.Tagline,
 		},
 	}, nil
 }
 
 func (s *Server) handleUpdateMyProfile(ctx context.Context, input *UpdateProfileInput) (*ProfileOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -213,14 +214,14 @@ func (s *Server) handleUpdateMyProfile(ctx context.Context, input *UpdateProfile
 			LastName:    user.LastName,
 			AvatarType:  string(profile.AvatarType),
 			AvatarValue: profile.AvatarValue,
-			AvatarColor: avatarColorForUser(user.ID),
+			AvatarColor: color.ForUser(user.ID),
 			Tagline:     profile.Tagline,
 		},
 	}, nil
 }
 
 func (s *Server) handleUploadAvatar(ctx context.Context, input *UploadAvatarInput) (*ProfileOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -260,14 +261,14 @@ func (s *Server) handleUploadAvatar(ctx context.Context, input *UploadAvatarInpu
 			LastName:    user.LastName,
 			AvatarType:  string(profile.AvatarType),
 			AvatarValue: profile.AvatarValue,
-			AvatarColor: avatarColorForUser(user.ID),
+			AvatarColor: color.ForUser(user.ID),
 			Tagline:     profile.Tagline,
 		},
 	}, nil
 }
 
 func (s *Server) handleGetUserProfile(ctx context.Context, input *GetUserProfileInput) (*FullProfileOutput, error) {
-	viewingUserID, err := s.authenticateRequest(ctx, input.Authorization)
+	viewingUserID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -341,62 +342,6 @@ func (s *Server) handleServeAvatar(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
 	w.Write(data)
-}
-
-// avatarColorForUser generates a consistent color for a user based on their ID.
-// This is a local copy to avoid circular dependencies with service package.
-func avatarColorForUser(userID string) string {
-	h := 0
-	for _, c := range userID {
-		h = 31*h + int(c)
-	}
-	if h < 0 {
-		h = -h
-	}
-	hue := float64(h % 360)
-
-	// Convert HSL to RGB (S=0.4, L=0.65)
-	r, g, b := hslToRGB(hue, 0.4, 0.65)
-
-	return fmt.Sprintf("#%02X%02X%02X", r, g, b)
-}
-
-// hslToRGB converts HSL color space to RGB.
-func hslToRGB(h, s, l float64) (r, g, b uint8) {
-	h = h / 360.0
-
-	var q float64
-	if l < 0.5 {
-		q = l * (1 + s)
-	} else {
-		q = l + s - l*s
-	}
-	p := 2*l - q
-
-	r = uint8(hueToRGB(p, q, h+1.0/3.0) * 255)
-	g = uint8(hueToRGB(p, q, h) * 255)
-	b = uint8(hueToRGB(p, q, h-1.0/3.0) * 255)
-
-	return
-}
-
-func hueToRGB(p, q, t float64) float64 {
-	if t < 0 {
-		t += 1
-	}
-	if t > 1 {
-		t -= 1
-	}
-	if t < 1.0/6.0 {
-		return p + (q-p)*6*t
-	}
-	if t < 1.0/2.0 {
-		return q
-	}
-	if t < 2.0/3.0 {
-		return p + (q-p)*(2.0/3.0-t)*6
-	}
-	return p
 }
 
 // isValidImageType checks if the content type is a valid image type.

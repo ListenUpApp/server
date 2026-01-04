@@ -399,7 +399,7 @@ func Test_TranscodeVariants(t *testing.T) {
 		assert.Equal(t, domain.TranscodeVariantSpatial, retrievedSpatial.Variant)
 	})
 
-	t.Run("GetHLSPathIfReadyForVariant returns correct variant path", func(t *testing.T) {
+	t.Run("GetHLSPath returns correct variant path", func(t *testing.T) {
 		service, _, cleanup := setupTranscodeTest(t)
 		defer cleanup()
 
@@ -420,13 +420,15 @@ func Test_TranscodeVariants(t *testing.T) {
 		require.NoError(t, os.MkdirAll(stereoDir, 0755))
 		require.NoError(t, os.WriteFile(filepath.Join(stereoDir, "seg_0000.ts"), []byte("test"), 0644))
 
-		// GetHLSPathIfReadyForVariant should return the stereo path
-		path, ready := service.GetHLSPathIfReadyForVariant(ctx, audioFileID, domain.TranscodeVariantStereo)
+		// GetHLSPath with variant should return the stereo path
+		stereoVariant := domain.TranscodeVariantStereo
+		path, ready := service.GetHLSPath(ctx, audioFileID, &stereoVariant)
 		assert.True(t, ready)
 		assert.Equal(t, stereoDir, path)
 
 		// Spatial variant should not be ready (no segments)
-		_, ready = service.GetHLSPathIfReadyForVariant(ctx, audioFileID, domain.TranscodeVariantSpatial)
+		spatialVariant := domain.TranscodeVariantSpatial
+		_, ready = service.GetHLSPath(ctx, audioFileID, &spatialVariant)
 		assert.False(t, ready)
 	})
 }

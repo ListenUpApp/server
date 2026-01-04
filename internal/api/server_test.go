@@ -99,6 +99,9 @@ func setupTestServer(t *testing.T) *testServer {
 	// Create chi router
 	router := chi.NewRouter()
 
+	// Add auth middleware before routes
+	router.Use(authMiddleware(services.Auth))
+
 	// Configure huma API
 	humaConfig := huma.DefaultConfig("ListenUp API Test", "1.0.0")
 	humaConfig.Components.SecuritySchemes = map[string]*huma.SecurityScheme{

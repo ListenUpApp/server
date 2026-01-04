@@ -317,7 +317,7 @@ type ApplyMatchOutput struct {
 // === Handlers ===
 
 func (s *Server) handleListBooks(ctx context.Context, input *ListBooksInput) (*ListBooksOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -356,7 +356,7 @@ func (s *Server) handleListBooks(ctx context.Context, input *ListBooksInput) (*L
 }
 
 func (s *Server) handleGetBook(ctx context.Context, input *GetBookInput) (*BookOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -375,7 +375,7 @@ func (s *Server) handleGetBook(ctx context.Context, input *GetBookInput) (*BookO
 }
 
 func (s *Server) handleUpdateBook(ctx context.Context, input *UpdateBookInput) (*BookOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -428,7 +428,7 @@ func (s *Server) handleUpdateBook(ctx context.Context, input *UpdateBookInput) (
 }
 
 func (s *Server) handleSetBookContributors(ctx context.Context, input *SetContributorsInput) (*BookOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -465,7 +465,7 @@ func (s *Server) handleSetBookContributors(ctx context.Context, input *SetContri
 }
 
 func (s *Server) handleSetBookSeries(ctx context.Context, input *SetSeriesInput) (*BookOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -498,7 +498,7 @@ func (s *Server) handleSetBookSeries(ctx context.Context, input *SetSeriesInput)
 }
 
 func (s *Server) handleGetBookGenres(ctx context.Context, input *GetBookGenresInput) (*GenresOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -517,7 +517,7 @@ func (s *Server) handleGetBookGenres(ctx context.Context, input *GetBookGenresIn
 }
 
 func (s *Server) handleSetBookGenres(ctx context.Context, input *SetGenresInput) (*GenresOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -595,7 +595,7 @@ func (s *Server) handleApplyBookMatch(ctx context.Context, input *ApplyMatchInpu
 		return nil, huma.Error400BadRequest("ASIN is required")
 	}
 
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}

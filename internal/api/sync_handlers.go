@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+
+	"github.com/listenupapp/listenup-server/internal/color"
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/dto"
 	"github.com/listenupapp/listenup-server/internal/store"
@@ -187,7 +189,7 @@ type SyncSeriesOutput struct {
 // === Handlers ===
 
 func (s *Server) handleGetSyncManifest(ctx context.Context, input *GetSyncManifestInput) (*SyncManifestOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -211,7 +213,7 @@ func (s *Server) handleGetSyncManifest(ctx context.Context, input *GetSyncManife
 }
 
 func (s *Server) handleGetSyncBooks(ctx context.Context, input *GetSyncBooksInput) (*SyncBooksOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +251,7 @@ func (s *Server) handleGetSyncBooks(ctx context.Context, input *GetSyncBooksInpu
 }
 
 func (s *Server) handleGetSyncContributors(ctx context.Context, input *GetSyncContributorsInput) (*SyncContributorsOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -306,7 +308,7 @@ func (s *Server) handleGetSyncContributors(ctx context.Context, input *GetSyncCo
 }
 
 func (s *Server) handleGetSyncSeries(ctx context.Context, input *GetSyncSeriesInput) (*SyncSeriesOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -387,7 +389,7 @@ type SyncActiveSessionsOutput struct {
 }
 
 func (s *Server) handleGetSyncActiveSessions(ctx context.Context, input *GetSyncActiveSessionsInput) (*SyncActiveSessionsOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -445,7 +447,7 @@ func (s *Server) handleGetSyncActiveSessions(ctx context.Context, input *GetSync
 			DisplayName: user.DisplayName,
 			AvatarType:  string(profile.AvatarType),
 			AvatarValue: profile.AvatarValue,
-			AvatarColor: avatarColorForUser(session.UserID),
+			AvatarColor: color.ForUser(session.UserID),
 		})
 	}
 

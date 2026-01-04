@@ -239,7 +239,7 @@ type DiscoverLensesOutput struct {
 // === Handlers ===
 
 func (s *Server) handleListMyLenses(ctx context.Context, input *ListMyLensesInput) (*ListLensesOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -264,7 +264,7 @@ func (s *Server) handleListMyLenses(ctx context.Context, input *ListMyLensesInpu
 }
 
 func (s *Server) handleListDiscoverLenses(ctx context.Context, input *DiscoverLensesInput) (*DiscoverLensesOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -302,7 +302,7 @@ func (s *Server) handleListDiscoverLenses(ctx context.Context, input *DiscoverLe
 }
 
 func (s *Server) handleCreateLens(ctx context.Context, input *CreateLensInput) (*LensOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -321,7 +321,7 @@ func (s *Server) handleCreateLens(ctx context.Context, input *CreateLensInput) (
 }
 
 func (s *Server) handleGetLens(ctx context.Context, input *GetLensInput) (*LensDetailOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -434,7 +434,7 @@ func (s *Server) handleGetLens(ctx context.Context, input *GetLensInput) (*LensD
 }
 
 func (s *Server) handleUpdateLens(ctx context.Context, input *UpdateLensInput) (*LensOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -453,7 +453,7 @@ func (s *Server) handleUpdateLens(ctx context.Context, input *UpdateLensInput) (
 }
 
 func (s *Server) handleDeleteLens(ctx context.Context, input *DeleteLensInput) (*MessageOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -466,7 +466,7 @@ func (s *Server) handleDeleteLens(ctx context.Context, input *DeleteLensInput) (
 }
 
 func (s *Server) handleAddBooksToLens(ctx context.Context, input *AddBooksToLensInput) (*MessageOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -482,7 +482,7 @@ func (s *Server) handleAddBooksToLens(ctx context.Context, input *AddBooksToLens
 }
 
 func (s *Server) handleRemoveBookFromLens(ctx context.Context, input *RemoveBookFromLensInput) (*MessageOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}

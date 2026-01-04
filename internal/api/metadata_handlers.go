@@ -230,7 +230,7 @@ type MetadataContributorProfileOutput struct {
 // === Handlers ===
 
 func (s *Server) handleSearchMetadata(ctx context.Context, input *SearchMetadataInput) (*SearchMetadataOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -255,7 +255,7 @@ func (s *Server) handleSearchMetadata(ctx context.Context, input *SearchMetadata
 }
 
 func (s *Server) handleGetMetadataBook(ctx context.Context, input *GetMetadataBookInput) (*MetadataBookOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -274,7 +274,7 @@ func (s *Server) handleGetMetadataBook(ctx context.Context, input *GetMetadataBo
 }
 
 func (s *Server) handleGetMetadataChapters(ctx context.Context, input *GetMetadataChaptersInput) (*MetadataChaptersOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -302,7 +302,7 @@ func (s *Server) handleGetMetadataChapters(ctx context.Context, input *GetMetada
 }
 
 func (s *Server) handleRefreshMetadataBook(ctx context.Context, input *RefreshMetadataBookInput) (*MetadataBookOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -374,7 +374,7 @@ func mapMetadataBook(b *audible.Book) MetadataBookResponse {
 // === Contributor Metadata Handlers ===
 
 func (s *Server) handleSearchMetadataContributors(ctx context.Context, input *SearchMetadataContributorsInput) (*SearchMetadataContributorsOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -408,7 +408,7 @@ func (s *Server) handleSearchMetadataContributors(ctx context.Context, input *Se
 }
 
 func (s *Server) handleGetMetadataContributor(ctx context.Context, input *GetMetadataContributorInput) (*MetadataContributorProfileOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 

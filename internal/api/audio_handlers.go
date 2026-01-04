@@ -207,7 +207,7 @@ func (s *Server) handleTranscodedAudio(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get HLS path from transcode service
-	hlsPath, ok := s.services.Transcode.GetHLSPathIfReady(r.Context(), fileID)
+	hlsPath, ok := s.services.Transcode.GetHLSPath(r.Context(), fileID, nil)
 	if !ok {
 		http.Error(w, "transcoded file not ready", http.StatusNotFound)
 		return
