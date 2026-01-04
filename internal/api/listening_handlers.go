@@ -323,6 +323,7 @@ func (s *Server) handleRecordListeningEvent(ctx context.Context, input *RecordLi
 			"device_id", event.DeviceID,
 		)
 		_, err := s.services.Listening.RecordEvent(ctx, userID, service.RecordEventRequest{
+			EventID:         event.ID, // Client-provided ID for idempotency
 			BookID:          event.BookID,
 			StartPositionMs: event.StartPositionMs,
 			EndPositionMs:   event.EndPositionMs,

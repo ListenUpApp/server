@@ -268,6 +268,53 @@ func TestBookPreferences_CRUD(t *testing.T) {
 	assert.True(t, prefs.HideFromContinueListening)
 }
 
+func TestRecordEvent_Idempotency(t *testing.T) {
+	svc, testStore, cleanup := setupTestListening(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a test book
+	createTestBookForListening(t, testStore, "book-123", 3600000) // 1 hour
+
+	// Record event with client-provided ID
+	clientEventID := "client-evt-12345"
+	req := RecordEventRequest{
+		EventID:         clientEventID,
+		BookID:          "book-123",
+		StartPositionMs: 0,
+		EndPositionMs:   1800000, // 30 min
+		StartedAt:       time.Now().Add(-30 * time.Minute),
+		EndedAt:         time.Now(),
+		PlaybackSpeed:   1.0,
+		DeviceID:        "device-1",
+		DeviceName:      "Test Device",
+	}
+
+	// First submission
+	resp1, err := svc.RecordEvent(ctx, "user-456", req)
+	require.NoError(t, err)
+	require.NotNil(t, resp1)
+	assert.Equal(t, clientEventID, resp1.Event.ID)
+
+	// Second submission with same ID (should be idempotent)
+	resp2, err := svc.RecordEvent(ctx, "user-456", req)
+	require.NoError(t, err)
+	require.NotNil(t, resp2)
+	assert.Equal(t, clientEventID, resp2.Event.ID)
+
+	// Verify same event was returned (not duplicated)
+	assert.Equal(t, resp1.Event.ID, resp2.Event.ID)
+	assert.Equal(t, resp1.Event.BookID, resp2.Event.BookID)
+	assert.Equal(t, resp1.Event.StartPositionMs, resp2.Event.StartPositionMs)
+
+	// Verify only one event exists in the store
+	events, err := testStore.GetEventsForUser(ctx, "user-456")
+	require.NoError(t, err)
+	assert.Len(t, events, 1, "Expected exactly 1 event, not duplicates")
+	assert.Equal(t, clientEventID, events[0].ID)
+}
+
 func TestGetUserStats(t *testing.T) {
 	svc, testStore, cleanup := setupTestListening(t)
 	defer cleanup()
