@@ -303,8 +303,10 @@ func (s *Server) handleRecordListeningEvent(ctx context.Context, input *RecordLi
 		"event_count", len(input.Body.Events),
 	)
 
-	var acknowledged []string
-	var failed []string
+	// Initialize as empty slices (not nil) so JSON marshals to [] instead of null.
+	// Nil slices serialize to null which causes client parsing errors.
+	acknowledged := []string{}
+	failed := []string{}
 
 	// Process each event in the batch
 	for _, event := range input.Body.Events {
