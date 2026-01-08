@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // Collection represents a logical grouping of books within a library.
 // In our access model, collections are privacy boundaries - not organizational tools.
@@ -27,10 +30,8 @@ func (c *Collection) IsSystemCollection() bool {
 
 // AddBook adds a book ID to the collection if not already present.
 func (c *Collection) AddBook(bookID string) bool {
-	for _, id := range c.BookIDs {
-		if id == bookID {
-			return false // Already present
-		}
+	if slices.Contains(c.BookIDs, bookID) {
+		return false // Already present
 	}
 	c.BookIDs = append(c.BookIDs, bookID)
 	return true
@@ -49,10 +50,5 @@ func (c *Collection) RemoveBook(bookID string) bool {
 
 // ContainsBook checks if a book ID is in this collection.
 func (c *Collection) ContainsBook(bookID string) bool {
-	for _, id := range c.BookIDs {
-		if id == bookID {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(c.BookIDs, bookID)
 }

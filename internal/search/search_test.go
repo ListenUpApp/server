@@ -397,7 +397,7 @@ func TestSearchIndex_LargeBatch(t *testing.T) {
 
 	// Create 1000 documents to test chunking (batch size is 500)
 	docs := make([]*SearchDocument, 1000)
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		docs[i] = &SearchDocument{
 			ID:   "book-" + string(rune('0'+i%10)) + string(rune('0'+i/10%10)) + string(rune('0'+i/100%10)),
 			Type: DocTypeBook,
@@ -419,7 +419,7 @@ func TestSearchParams_Defaults(t *testing.T) {
 	params := SearchParams{}
 
 	// Empty params should have sensible behavior when used
-	assert.Equal(t, "", params.Query)
+	assert.Empty(t, params.Query)
 	assert.Nil(t, params.Types)
 	assert.Equal(t, 0, params.Limit) // Caller should set default
 }
@@ -479,7 +479,7 @@ func TestSearchIndex_SearchContributors(t *testing.T) {
 	t.Run("limit respected", func(t *testing.T) {
 		// Index more contributors to test limit
 		moreContribs := make([]*SearchDocument, 20)
-		for i := 0; i < 20; i++ {
+		for i := range 20 {
 			moreContribs[i] = &SearchDocument{
 				ID:        fmt.Sprintf("contrib-extra-%d", i),
 				Type:      DocTypeContributor,

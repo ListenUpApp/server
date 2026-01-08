@@ -18,7 +18,7 @@ type SearchIndexHandle struct {
 
 // Shutdown implements do.Shutdownable.
 func (h *SearchIndexHandle) Shutdown() error {
-	return h.SearchIndex.Close()
+	return h.Close()
 }
 
 // ProvideSearchIndex provides the Bleve search index.

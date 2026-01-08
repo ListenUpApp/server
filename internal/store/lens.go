@@ -42,14 +42,14 @@ func (s *Store) CreateLens(_ context.Context, lens *domain.Lens) error {
 		}
 
 		// Create owner index: idx:lenses:owner:{ownerID}:{lensID}
-		ownerIndexKey := []byte(fmt.Sprintf("%s%s:%s", lensByOwnerPrefix, lens.OwnerID, lens.ID))
+		ownerIndexKey := fmt.Appendf(nil, "%s%s:%s", lensByOwnerPrefix, lens.OwnerID, lens.ID)
 		if err := txn.Set(ownerIndexKey, []byte{}); err != nil {
 			return fmt.Errorf("set owner index: %w", err)
 		}
 
 		// Create book indexes for initial BookIDs: idx:books:lenses:{bookID}:{lensID}
 		for _, bookID := range lens.BookIDs {
-			bookLensKey := []byte(fmt.Sprintf("%s%s:%s", bookLensPrefix, bookID, lens.ID))
+			bookLensKey := fmt.Appendf(nil, "%s%s:%s", bookLensPrefix, bookID, lens.ID)
 			if err := txn.Set(bookLensKey, []byte{}); err != nil {
 				return fmt.Errorf("set book-lens index: %w", err)
 			}
@@ -124,7 +124,7 @@ func (s *Store) UpdateLens(ctx context.Context, lens *domain.Lens) error {
 		for bookID := range newBooks {
 			if !oldBooks[bookID] {
 				// Book was added to lens.
-				bookLensKey := []byte(fmt.Sprintf("%s%s:%s", bookLensPrefix, bookID, lens.ID))
+				bookLensKey := fmt.Appendf(nil, "%s%s:%s", bookLensPrefix, bookID, lens.ID)
 				if err := txn.Set(bookLensKey, []byte{}); err != nil {
 					return fmt.Errorf("set book-lens index: %w", err)
 				}
@@ -135,7 +135,7 @@ func (s *Store) UpdateLens(ctx context.Context, lens *domain.Lens) error {
 		for bookID := range oldBooks {
 			if !newBooks[bookID] {
 				// Book was removed from lens.
-				bookLensKey := []byte(fmt.Sprintf("%s%s:%s", bookLensPrefix, bookID, lens.ID))
+				bookLensKey := fmt.Appendf(nil, "%s%s:%s", bookLensPrefix, bookID, lens.ID)
 				if err := txn.Delete(bookLensKey); err != nil {
 					return fmt.Errorf("delete book-lens index: %w", err)
 				}
@@ -173,7 +173,7 @@ func (s *Store) DeleteLens(ctx context.Context, id string) error {
 		}
 
 		// Delete owner index.
-		ownerIndexKey := []byte(fmt.Sprintf("%s%s:%s", lensByOwnerPrefix, lens.OwnerID, id))
+		ownerIndexKey := fmt.Appendf(nil, "%s%s:%s", lensByOwnerPrefix, lens.OwnerID, id)
 		if err := txn.Delete(ownerIndexKey); err != nil {
 			// Ignore if key doesn't exist.
 			if !errors.Is(err, badger.ErrKeyNotFound) {
@@ -183,7 +183,7 @@ func (s *Store) DeleteLens(ctx context.Context, id string) error {
 
 		// Delete all book-lens indexes.
 		for _, bookID := range lens.BookIDs {
-			bookLensKey := []byte(fmt.Sprintf("%s%s:%s", bookLensPrefix, bookID, id))
+			bookLensKey := fmt.Appendf(nil, "%s%s:%s", bookLensPrefix, bookID, id)
 			if err := txn.Delete(bookLensKey); err != nil {
 				// Ignore if key doesn't exist.
 				if !errors.Is(err, badger.ErrKeyNotFound) {
@@ -213,7 +213,7 @@ func (s *Store) ListLensesByOwner(ctx context.Context, ownerID string) ([]*domai
 	var lensIDs []string
 
 	// Scan owner index: idx:lenses:owner:{ownerID}:{lensID}
-	prefix := []byte(fmt.Sprintf("%s%s:", lensByOwnerPrefix, ownerID))
+	prefix := fmt.Appendf(nil, "%s%s:", lensByOwnerPrefix, ownerID)
 
 	err := s.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
@@ -314,7 +314,7 @@ func (s *Store) GetLensesContainingBook(ctx context.Context, bookID string) ([]*
 	var lensIDs []string
 
 	// Scan book-lens index: idx:books:lenses:{bookID}:{lensID}
-	prefix := []byte(fmt.Sprintf("%s%s:", bookLensPrefix, bookID))
+	prefix := fmt.Appendf(nil, "%s%s:", bookLensPrefix, bookID)
 
 	err := s.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions

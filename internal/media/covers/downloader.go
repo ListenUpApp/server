@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -57,7 +58,7 @@ func (d *Downloader) Download(ctx context.Context, bookID, url, source string) *
 	result := &DownloadResult{Source: source}
 
 	if url == "" {
-		result.Error = fmt.Errorf("empty cover URL")
+		result.Error = errors.New("empty cover URL")
 		return result
 	}
 
@@ -130,7 +131,7 @@ func (d *Downloader) Download(ctx context.Context, bookID, url, source string) *
 // Supports JPEG and PNG formats.
 func parseImageDimensions(data []byte) (width, height int, err error) {
 	if len(data) < 24 {
-		return 0, 0, fmt.Errorf("data too small")
+		return 0, 0, errors.New("data too small")
 	}
 
 	// Try JPEG first
@@ -143,7 +144,7 @@ func parseImageDimensions(data []byte) (width, height int, err error) {
 		return w, h, nil
 	}
 
-	return 0, 0, fmt.Errorf("unsupported format")
+	return 0, 0, errors.New("unsupported format")
 }
 
 // parseJPEGDimensions extracts dimensions from JPEG data.

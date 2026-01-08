@@ -10,6 +10,13 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
+// Health status constants.
+const (
+	statusHealthy   = "healthy"
+	statusDegraded  = "degraded"
+	statusUnhealthy = "unhealthy"
+)
+
 func (s *Server) registerHealthRoutes() {
 	huma.Register(s.api, huma.Operation{
 		OperationID: "healthCheck",
@@ -41,31 +48,31 @@ type HealthOutput struct {
 
 func (s *Server) handleHealthCheck(ctx context.Context, _ *struct{}) (*HealthOutput, error) {
 	components := make(map[string]ComponentHealth)
-	overall := "healthy"
+	overall := statusHealthy
 
 	// Check database (BadgerDB)
 	dbHealth := s.checkDatabase(ctx)
 	components["database"] = dbHealth
-	if dbHealth.Status != "healthy" {
-		overall = "unhealthy"
+	if dbHealth.Status != statusHealthy {
+		overall = statusUnhealthy
 	}
 
 	// Check search index
 	searchHealth := s.checkSearchIndex()
 	components["search"] = searchHealth
-	if searchHealth.Status == "unhealthy" {
-		overall = "unhealthy"
-	} else if searchHealth.Status == "degraded" && overall == "healthy" {
-		overall = "degraded"
+	if searchHealth.Status == statusUnhealthy {
+		overall = statusUnhealthy
+	} else if searchHealth.Status == statusDegraded && overall == statusHealthy {
+		overall = statusDegraded
 	}
 
 	// Check SSE manager
 	sseHealth := s.checkSSEManager()
 	components["sse"] = sseHealth
-	if sseHealth.Status == "unhealthy" {
-		overall = "unhealthy"
-	} else if sseHealth.Status == "degraded" && overall == "healthy" {
-		overall = "degraded"
+	if sseHealth.Status == statusUnhealthy {
+		overall = statusUnhealthy
+	} else if sseHealth.Status == statusDegraded && overall == statusHealthy {
+		overall = statusDegraded
 	}
 
 	return &HealthOutput{
@@ -81,7 +88,7 @@ func (s *Server) checkDatabase(ctx context.Context) ComponentHealth {
 	// Handle nil store (e.g., in tests)
 	if s.store == nil {
 		return ComponentHealth{
-			Status:  "degraded",
+			Status:  statusDegraded,
 			Message: "database not configured",
 		}
 	}
@@ -95,14 +102,14 @@ func (s *Server) checkDatabase(ctx context.Context) ComponentHealth {
 
 	if err != nil && !errors.Is(err, store.ErrServerNotFound) {
 		return ComponentHealth{
-			Status:  "unhealthy",
+			Status:  statusUnhealthy,
 			Latency: latency.String(),
 			Message: "database read failed",
 		}
 	}
 
 	return ComponentHealth{
-		Status:  "healthy",
+		Status:  statusHealthy,
 		Latency: latency.String(),
 	}
 }
@@ -112,7 +119,7 @@ func (s *Server) checkSearchIndex() ComponentHealth {
 	// Handle nil search service (e.g., in tests)
 	if s.services == nil || s.services.Search == nil {
 		return ComponentHealth{
-			Status:  "degraded",
+			Status:  statusDegraded,
 			Message: "search service not configured",
 		}
 	}
@@ -124,7 +131,7 @@ func (s *Server) checkSearchIndex() ComponentHealth {
 
 	if err != nil {
 		return ComponentHealth{
-			Status:  "unhealthy",
+			Status:  statusUnhealthy,
 			Latency: latency.String(),
 			Message: "search index unreachable",
 		}
@@ -133,14 +140,14 @@ func (s *Server) checkSearchIndex() ComponentHealth {
 	// Index is accessible but might be empty (degraded during reindex)
 	if docCount == 0 {
 		return ComponentHealth{
-			Status:  "degraded",
+			Status:  statusDegraded,
 			Latency: latency.String(),
 			Message: "search index empty",
 		}
 	}
 
 	return ComponentHealth{
-		Status:  "healthy",
+		Status:  statusHealthy,
 		Latency: latency.String(),
 	}
 }
@@ -150,7 +157,7 @@ func (s *Server) checkSSEManager() ComponentHealth {
 	// Handle nil SSE manager (e.g., in tests)
 	if s.sseManager == nil {
 		return ComponentHealth{
-			Status:  "degraded",
+			Status:  statusDegraded,
 			Message: "SSE manager not configured",
 		}
 	}
@@ -161,7 +168,7 @@ func (s *Server) checkSSEManager() ComponentHealth {
 	// We could track if Start() has been called but that's complex.
 	// Instead, just report current state.
 	return ComponentHealth{
-		Status:  "healthy",
+		Status:  statusHealthy,
 		Message: formatSSEStatus(clientCount),
 	}
 }

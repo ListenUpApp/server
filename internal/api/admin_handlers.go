@@ -316,7 +316,7 @@ func (s *Server) handleCreateInvite(ctx context.Context, input *CreateInviteInpu
 	}, nil
 }
 
-func (s *Server) handleListInvites(ctx context.Context, input *ListInvitesInput) (*ListInvitesOutput, error) {
+func (s *Server) handleListInvites(ctx context.Context, _ *ListInvitesInput) (*ListInvitesOutput, error) {
 	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -358,7 +358,7 @@ func (s *Server) handleDeleteInvite(ctx context.Context, input *DeleteInviteInpu
 	return &MessageOutput{Body: MessageResponse{Message: "Invite deleted"}}, nil
 }
 
-func (s *Server) handleListUsers(ctx context.Context, input *ListUsersInput) (*ListUsersOutput, error) {
+func (s *Server) handleListUsers(ctx context.Context, _ *ListUsersInput) (*ListUsersOutput, error) {
 	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -428,7 +428,7 @@ func (s *Server) handleDeleteAdminUser(ctx context.Context, input *DeleteAdminUs
 	return &MessageOutput{Body: MessageResponse{Message: "User deleted"}}, nil
 }
 
-func (s *Server) handleListPendingUsers(ctx context.Context, input *ListPendingUsersInput) (*ListUsersOutput, error) {
+func (s *Server) handleListPendingUsers(ctx context.Context, _ *ListPendingUsersInput) (*ListUsersOutput, error) {
 	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -493,7 +493,7 @@ func (s *Server) handleSetOpenRegistration(ctx context.Context, input *SetOpenRe
 func mapAdminUserResponse(u *domain.User) AdminUserResponse {
 	status := string(u.Status)
 	if status == "" {
-		status = "active" // Backward compatibility
+		status = string(domain.UserStatusActive) // Backward compatibility
 	}
 	return AdminUserResponse{
 		ID:          u.ID,

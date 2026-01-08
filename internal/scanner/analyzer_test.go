@@ -387,8 +387,7 @@ func BenchmarkAnalyzer_Analyze(b *testing.B) {
 		Workers: 2,
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := analyzer.Analyze(ctx, files, opts)
 		if err != nil {
 			b.Fatal(err)

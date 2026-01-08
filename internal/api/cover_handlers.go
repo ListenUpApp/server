@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/go-chi/chi/v5"
@@ -181,7 +182,7 @@ func (s *Server) handleGetBookCover(ctx context.Context, input *GetBookCoverInpu
 	}, nil
 }
 
-func (s *Server) handleUploadBookCoverHuma(ctx context.Context, input *UploadBookCoverInput) (*CoverOutput, error) {
+func (s *Server) handleUploadBookCoverHuma(ctx context.Context, _ *UploadBookCoverInput) (*CoverOutput, error) {
 	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
@@ -239,7 +240,7 @@ func (s *Server) handleServeCover(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "image/jpeg")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
 	w.Write(data)
 }
 
@@ -260,7 +261,7 @@ func (s *Server) handleServeCoverByBookID(w http.ResponseWriter, r *http.Request
 
 	w.Header().Set("Content-Type", "image/jpeg")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
 	w.Write(data)
 }
 
@@ -341,7 +342,7 @@ func splitIDs(s string) []string {
 func splitString(s string, sep byte) []string {
 	var result []string
 	start := 0
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] == sep {
 			result = append(result, s[start:i])
 			start = i + 1

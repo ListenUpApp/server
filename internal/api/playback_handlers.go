@@ -11,6 +11,9 @@ import (
 	"github.com/listenupapp/listenup-server/internal/service"
 )
 
+// Codec constants.
+const codecAAC = "aac"
+
 func (s *Server) registerPlaybackRoutes() {
 	huma.Register(s.api, huma.Operation{
 		OperationID: "preparePlayback",
@@ -138,7 +141,7 @@ type UpdateBookPreferencesInput struct {
 
 // === Handlers ===
 
-func (s *Server) handleGetUserSettings(ctx context.Context, input *GetUserSettingsInput) (*UserSettingsOutput, error) {
+func (s *Server) handleGetUserSettings(ctx context.Context, _ *GetUserSettingsInput) (*UserSettingsOutput, error) {
 	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
@@ -327,8 +330,8 @@ func (s *Server) handlePreparePlayback(ctx context.Context, input *PreparePlayba
 	}
 
 	// Build response based on job status
-	switch job.Status { //nolint:exhaustive // Only handling the relevant status values
-	case "completed":
+	switch job.Status {
+	case domain.TranscodeStatusCompleted:
 		// Transcode ready - return HLS stream URL
 		streamURL := baseURL + "/api/v1/audio/" + input.Body.BookID + "/" + input.Body.AudioFileID + "/transcode/playlist.m3u8"
 		return &PreparePlaybackOutput{
@@ -336,28 +339,31 @@ func (s *Server) handlePreparePlayback(ctx context.Context, input *PreparePlayba
 				Ready:     true,
 				StreamURL: streamURL,
 				Variant:   "transcoded",
-				Codec:     "aac",
+				Codec:     codecAAC,
 				Progress:  100,
 			},
 		}, nil
 
-	case "failed":
+	case domain.TranscodeStatusFailed:
 		// Transcode failed - return error details
 		return nil, huma.Error500InternalServerError("transcoding failed: " + job.Error)
 
-	default:
+	case domain.TranscodeStatusPending, domain.TranscodeStatusRunning:
 		// Pending or running - return progress
 		return &PreparePlaybackOutput{
 			Body: PreparePlaybackResponse{
 				Ready:          false,
 				StreamURL:      "",
 				Variant:        "transcoded",
-				Codec:          "aac",
+				Codec:          codecAAC,
 				TranscodeJobID: job.ID,
 				Progress:       job.Progress,
 			},
 		}, nil
 	}
+
+	// Unreachable: all TranscodeStatus values are handled above
+	return nil, huma.Error500InternalServerError("unknown transcode status")
 }
 
 // canClientPlayCodec checks if the client's capabilities include the given codec.
@@ -378,10 +384,8 @@ func normalizeCodec(codec string) string {
 	codec = strings.ToLower(codec)
 	// Handle common aliases
 	switch codec {
-	case "m4a", "m4b", "mp4a":
-		return "aac"
-	case "mp4":
-		return "aac"
+	case "m4a", "m4b", "mp4a", "mp4":
+		return codecAAC
 	default:
 		return codec
 	}

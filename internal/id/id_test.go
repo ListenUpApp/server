@@ -51,7 +51,7 @@ func TestGenerate_Format(t *testing.T) {
 			// NanoID default is 21 characters.
 			// Total should be len(prefix) + 1 (hyphen) + 21.
 			expectedLen := len(tt.prefix) + 1 + 21
-			assert.Equal(t, expectedLen, len(id), "ID: %s", id)
+			assert.Len(t, id, expectedLen, "ID: %s", id)
 
 			// Extract the NanoID part (everything after the prefix and hyphen).
 			nanoidPart := strings.TrimPrefix(id, tt.prefix+"-")
@@ -74,7 +74,7 @@ func TestMustGenerate_Format(t *testing.T) {
 	id := MustGenerate("test")
 
 	assert.True(t, strings.HasPrefix(id, "test-"))
-	assert.Equal(t, len("test")+1+21, len(id))
+	assert.Len(t, id, len("test")+1+21)
 }
 
 func TestMustGenerate_Uniqueness(t *testing.T) {
@@ -91,13 +91,13 @@ func TestMustGenerate_Uniqueness(t *testing.T) {
 }
 
 func BenchmarkGenerate(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = Generate("bench") //nolint:errcheck // Benchmark, errors not relevant
 	}
 }
 
 func BenchmarkMustGenerate(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		MustGenerate("bench")
 	}
 }

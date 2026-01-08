@@ -21,7 +21,7 @@ type TranscodeServiceHandle struct {
 
 // Shutdown implements do.Shutdownable.
 func (h *TranscodeServiceHandle) Shutdown() error {
-	h.TranscodeService.Stop()
+	h.Stop()
 	return nil
 }
 
@@ -59,7 +59,7 @@ type FileWatcherHandle struct {
 // Shutdown implements do.Shutdownable.
 func (h *FileWatcherHandle) Shutdown() error {
 	h.cancel()
-	return h.Watcher.Stop()
+	return h.Stop()
 }
 
 // ProvideFileWatcher provides the file system watcher.

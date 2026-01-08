@@ -8,6 +8,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
+	"strconv"
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
@@ -117,10 +119,7 @@ func (s *BookService) ListBooks(ctx context.Context, userID string, params store
 	}
 
 	// Calculate end index
-	endIdx := startIdx + params.Limit
-	if endIdx > total {
-		endIdx = total
-	}
+	endIdx := min(startIdx+params.Limit, total)
 
 	// Slice the results
 	items := accessibleBooks[startIdx:endIdx]
@@ -134,7 +133,7 @@ func (s *BookService) ListBooks(ctx context.Context, userID string, params store
 
 	// Set next cursor if there are more results
 	if hasMore {
-		result.NextCursor = store.EncodeCursor(fmt.Sprintf("%d", endIdx))
+		result.NextCursor = store.EncodeCursor(strconv.Itoa(endIdx))
 	}
 
 	return result, nil
@@ -156,7 +155,7 @@ func (s *BookService) TriggerScan(ctx context.Context, libraryID string, opts sc
 	}
 
 	if len(library.ScanPaths) == 0 {
-		return nil, fmt.Errorf("library has no scan paths configured")
+		return nil, errors.New("library has no scan paths configured")
 	}
 
 	s.logger.Info("triggering library scan",
@@ -458,7 +457,7 @@ func (s *BookService) ApplyMatchWithCoverResult(
 			if coverResult.Applied {
 				// Update book's CoverImage metadata
 				book.CoverImage = &domain.ImageFileInfo{
-					Path:     fmt.Sprintf("%s.jpg", book.ID),
+					Path:     book.ID + ".jpg",
 					Filename: "cover.jpg",
 					Format:   "image/jpeg",
 				}
@@ -506,13 +505,7 @@ func (s *BookService) mergeContributors(
 	addContributor := func(contributorID string, role domain.ContributorRole) {
 		if idx, exists := seen[contributorID]; exists {
 			// Contributor already in result, merge roles if not already present
-			hasRole := false
-			for _, r := range result[idx].Roles {
-				if r == role {
-					hasRole = true
-					break
-				}
-			}
+			hasRole := slices.Contains(result[idx].Roles, role)
 			if !hasRole {
 				result[idx].Roles = append(result[idx].Roles, role)
 			}
@@ -546,11 +539,8 @@ func (s *BookService) mergeContributors(
 	} else {
 		// Preserve: keep existing authors
 		for _, bc := range existing {
-			for _, role := range bc.Roles {
-				if role == domain.RoleAuthor {
-					addContributor(bc.ContributorID, domain.RoleAuthor)
-					break
-				}
+			if slices.Contains(bc.Roles, domain.RoleAuthor) {
+				addContributor(bc.ContributorID, domain.RoleAuthor)
 			}
 		}
 	}
@@ -575,11 +565,8 @@ func (s *BookService) mergeContributors(
 	} else {
 		// Preserve: keep existing narrators
 		for _, bc := range existing {
-			for _, role := range bc.Roles {
-				if role == domain.RoleNarrator {
-					addContributor(bc.ContributorID, domain.RoleNarrator)
-					break
-				}
+			if slices.Contains(bc.Roles, domain.RoleNarrator) {
+				addContributor(bc.ContributorID, domain.RoleNarrator)
 			}
 		}
 	}
@@ -765,7 +752,7 @@ func (s *BookService) applyCover(ctx context.Context, book *domain.Book, coverUR
 
 	// Update book's CoverImage metadata so it can be served
 	book.CoverImage = &domain.ImageFileInfo{
-		Path:     fmt.Sprintf("%s.jpg", book.ID),
+		Path:     book.ID + ".jpg",
 		Filename: "cover.jpg",
 		Format:   "image/jpeg",
 		Size:     int64(len(data)),

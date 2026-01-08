@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -144,7 +145,7 @@ type FullProfileOutput struct {
 
 // === Handlers ===
 
-func (s *Server) handleGetMyProfile(ctx context.Context, input *AuthenticatedInput) (*ProfileOutput, error) {
+func (s *Server) handleGetMyProfile(ctx context.Context, _ *AuthenticatedInput) (*ProfileOutput, error) {
 	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
@@ -340,7 +341,7 @@ func (s *Server) handleServeAvatar(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "image/jpeg")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
 	w.Write(data)
 }
 
@@ -349,8 +350,8 @@ func (s *Server) handleServeAvatar(w http.ResponseWriter, r *http.Request) {
 func isValidImageType(contentType string) bool {
 	// Extract base media type (before any semicolon)
 	mediaType := contentType
-	if idx := strings.Index(contentType, ";"); idx != -1 {
-		mediaType = strings.TrimSpace(contentType[:idx])
+	if before, _, ok := strings.Cut(contentType, ";"); ok {
+		mediaType = strings.TrimSpace(before)
 	}
 
 	switch mediaType {

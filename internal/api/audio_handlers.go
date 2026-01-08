@@ -127,10 +127,7 @@ func (s *Server) handleRangeRequest(w http.ResponseWriter, r *http.Request, read
 			http.Error(w, "invalid range", http.StatusBadRequest)
 			return
 		}
-		start = fileSize - suffixLen
-		if start < 0 {
-			start = 0
-		}
+		start = max(fileSize-suffixLen, 0)
 	} else {
 		start, err = strconv.ParseInt(parts[0], 10, 64)
 		if err != nil {
@@ -255,7 +252,7 @@ func getMimeType(format string) string {
 	switch strings.ToLower(format) {
 	case "mp3":
 		return "audio/mpeg"
-	case "m4a", "m4b", "mp4", "aac": //nolint:goconst // Case list is clearer than constants
+	case "m4a", "m4b", "mp4", "aac":
 		return "audio/mp4"
 	case "opus":
 		return "audio/opus"

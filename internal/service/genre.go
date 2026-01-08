@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -165,7 +166,7 @@ func (s *GenreService) MergeGenres(ctx context.Context, req MergeGenresRequest) 
 	}
 
 	if req.SourceID == req.TargetID {
-		return fmt.Errorf("cannot merge genre into itself")
+		return errors.New("cannot merge genre into itself")
 	}
 
 	return s.store.MergeGenres(ctx, req.SourceID, req.TargetID)

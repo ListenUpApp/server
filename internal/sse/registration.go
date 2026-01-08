@@ -33,7 +33,7 @@ type RegistrationSubscriber struct {
 // This is separate from the main SSE Manager because:
 // 1. These connections are unauthenticated
 // 2. They only need status change events
-// 3. They're keyed by pending user ID, not session
+// 3. They're keyed by pending user ID, not session.
 type RegistrationBroadcaster struct {
 	subscribers map[string][]*RegistrationSubscriber // userId -> subscribers
 	logger      *slog.Logger

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -640,7 +641,7 @@ func (s *Server) handleServeContributorImage(w http.ResponseWriter, r *http.Requ
 
 	w.Header().Set("Content-Type", "image/jpeg")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
 	w.Write(data)
 }
 

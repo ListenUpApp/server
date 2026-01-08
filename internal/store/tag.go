@@ -185,7 +185,7 @@ func (s *Store) DeleteTag(ctx context.Context, tagID string) error {
 		}
 
 		// Remove all book associations.
-		prefix := []byte(fmt.Sprintf("%s%s:", tagBooksPrefix, tagID))
+		prefix := fmt.Appendf(nil, "%s%s:", tagBooksPrefix, tagID)
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchValues = false
 		opts.Prefix = prefix
@@ -204,7 +204,7 @@ func (s *Store) DeleteTag(ctx context.Context, tagID string) error {
 			lastColon := strings.LastIndex(parts, ":")
 			if lastColon != -1 {
 				bookID := parts[lastColon+1:]
-				reverseKey := []byte(fmt.Sprintf("%s%s:%s", bookTagsPrefix, bookID, tagID))
+				reverseKey := fmt.Appendf(nil, "%s%s:%s", bookTagsPrefix, bookID, tagID)
 				keysToDelete = append(keysToDelete, reverseKey)
 			}
 		}
@@ -274,7 +274,7 @@ func (s *Store) AddTagToBook(ctx context.Context, bookID, tagID string) error {
 
 	return s.db.Update(func(txn *badger.Txn) error {
 		// Check if relationship already exists.
-		btKey := []byte(fmt.Sprintf("%s%s:%s", tagBooksPrefix, tagID, bookID))
+		btKey := fmt.Appendf(nil, "%s%s:%s", tagBooksPrefix, tagID, bookID)
 		_, err := txn.Get(btKey)
 		if err == nil {
 			// Already exists, idempotent success.
@@ -290,7 +290,7 @@ func (s *Store) AddTagToBook(ctx context.Context, bookID, tagID string) error {
 		}
 
 		// Create reverse index: book -> tag.
-		tbKey := []byte(fmt.Sprintf("%s%s:%s", bookTagsPrefix, bookID, tagID))
+		tbKey := fmt.Appendf(nil, "%s%s:%s", bookTagsPrefix, bookID, tagID)
 		if err := txn.Set(tbKey, []byte{}); err != nil {
 			return err
 		}
@@ -309,7 +309,7 @@ func (s *Store) RemoveTagFromBook(ctx context.Context, bookID, tagID string) err
 
 	return s.db.Update(func(txn *badger.Txn) error {
 		// Check if relationship exists.
-		btKey := []byte(fmt.Sprintf("%s%s:%s", tagBooksPrefix, tagID, bookID))
+		btKey := fmt.Appendf(nil, "%s%s:%s", tagBooksPrefix, tagID, bookID)
 		_, err := txn.Get(btKey)
 		if errors.Is(err, badger.ErrKeyNotFound) {
 			// Doesn't exist, idempotent success.
@@ -325,7 +325,7 @@ func (s *Store) RemoveTagFromBook(ctx context.Context, bookID, tagID string) err
 		}
 
 		// Delete reverse index: book -> tag.
-		tbKey := []byte(fmt.Sprintf("%s%s:%s", bookTagsPrefix, bookID, tagID))
+		tbKey := fmt.Appendf(nil, "%s%s:%s", bookTagsPrefix, bookID, tagID)
 		if err := txn.Delete(tbKey); err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
 			return err
 		}

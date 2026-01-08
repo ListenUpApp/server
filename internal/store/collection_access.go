@@ -93,7 +93,7 @@ func (s *Store) GetBooksForUser(ctx context.Context, userID string) ([]*domain.B
 	err = s.db.View(func(txn *badger.Txn) error {
 		for _, coll := range userCollections {
 			// Scan idx:books:collections:{collectionID}:{bookID}
-			prefix := []byte(fmt.Sprintf("%s%s:", bookCollectionsPrefix, coll.ID))
+			prefix := fmt.Appendf(nil, "%s%s:", bookCollectionsPrefix, coll.ID)
 
 			opts := badger.DefaultIteratorOptions
 			opts.PrefetchValues = false // Only need keys
@@ -135,7 +135,7 @@ func (s *Store) GetBooksForUser(ctx context.Context, userID string) ([]*domain.B
 
 			// Check if this book has any collection index entries
 			// If not, it's uncollected and public
-			checkPrefix := []byte(fmt.Sprintf("%s%s:", collectionBooksPrefix, bookID))
+			checkPrefix := fmt.Appendf(nil, "%s%s:", collectionBooksPrefix, bookID)
 
 			checkOpts := badger.DefaultIteratorOptions
 			checkOpts.PrefetchValues = false
@@ -213,7 +213,7 @@ func (s *Store) CanUserAccessBook(ctx context.Context, userID, bookID string) (b
 
 	// Check reverse index to see if book is in any collections
 	// idx:collections:books:{bookID}:{collectionID}
-	prefix := []byte(fmt.Sprintf("%s%s:", collectionBooksPrefix, bookID))
+	prefix := fmt.Appendf(nil, "%s%s:", collectionBooksPrefix, bookID)
 
 	var bookCollectionIDs []string
 	err = s.db.View(func(txn *badger.Txn) error {

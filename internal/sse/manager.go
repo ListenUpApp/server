@@ -111,7 +111,9 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 }
 
 // isAdminOnlyEvent returns true if the event should only be sent to admin users.
+// Only admin events are listed explicitly; all other events return false.
 func isAdminOnlyEvent(eventType EventType) bool {
+	//nolint:exhaustive // Intentionally handles only admin events, default covers the rest.
 	switch eventType {
 	case EventCollectionCreated,
 		EventCollectionUpdated,

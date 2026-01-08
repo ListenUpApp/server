@@ -47,7 +47,7 @@ func TestKeyedRateLimiter_Allow(t *testing.T) {
 			defer rl.Stop()
 
 			passed := 0
-			for i := 0; i < tt.calls; i++ {
+			for range tt.calls {
 				if rl.Allow(tt.key) {
 					passed++
 				}

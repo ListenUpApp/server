@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
@@ -174,10 +175,7 @@ func (s *SyncService) GetBooksForSync(ctx context.Context, userID string, params
 	}
 
 	// Calculate end index
-	endIdx := startIdx + params.Limit
-	if endIdx > total {
-		endIdx = total
-	}
+	endIdx := min(startIdx+params.Limit, total)
 
 	// Slice the results
 	pageBooks := books[startIdx:endIdx]
@@ -202,7 +200,7 @@ func (s *SyncService) GetBooksForSync(ctx context.Context, userID string, params
 
 	// Set next cursor if there are more results
 	if hasMore {
-		response.NextCursor = store.EncodeCursor(fmt.Sprintf("%d", endIdx))
+		response.NextCursor = store.EncodeCursor(strconv.Itoa(endIdx))
 	}
 
 	s.logger.Info("books fetched for sync",
@@ -285,10 +283,7 @@ func (s *SyncService) GetContributorsForSync(ctx context.Context, userID string,
 		}, nil
 	}
 
-	endIdx := startIdx + params.Limit
-	if endIdx > total {
-		endIdx = total
-	}
+	endIdx := min(startIdx+params.Limit, total)
 
 	pageItems := contributors[startIdx:endIdx]
 	hasMore := endIdx < total
@@ -305,7 +300,7 @@ func (s *SyncService) GetContributorsForSync(ctx context.Context, userID string,
 	}
 
 	if hasMore {
-		response.NextCursor = store.EncodeCursor(fmt.Sprintf("%d", endIdx))
+		response.NextCursor = store.EncodeCursor(strconv.Itoa(endIdx))
 	}
 
 	s.logger.Info("contributors fetched for sync",
@@ -387,10 +382,7 @@ func (s *SyncService) GetSeriesForSync(ctx context.Context, userID string, param
 		}, nil
 	}
 
-	endIdx := startIdx + params.Limit
-	if endIdx > total {
-		endIdx = total
-	}
+	endIdx := min(startIdx+params.Limit, total)
 
 	pageItems := seriesList[startIdx:endIdx]
 	hasMore := endIdx < total
@@ -407,7 +399,7 @@ func (s *SyncService) GetSeriesForSync(ctx context.Context, userID string, param
 	}
 
 	if hasMore {
-		response.NextCursor = store.EncodeCursor(fmt.Sprintf("%d", endIdx))
+		response.NextCursor = store.EncodeCursor(strconv.Itoa(endIdx))
 	}
 
 	s.logger.Info("series fetched for sync",

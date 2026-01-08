@@ -1,254 +1,269 @@
-# golangci-lint configuration
-# https://golangci-lint.run/usage/configuration/
-
+version: "2"
 run:
-  timeout: 5m
-  tests: true
-  build-tags: []
   modules-download-mode: readonly
+  tests: true
   allow-parallel-runners: true
-
+output:
+  formats:
+    text:
+      path: stdout
+      print-linter-name: true
+      print-issued-lines: true
 linters:
   enable:
-    - errcheck      # Check for unchecked errors
-    - gosimple      # Simplify code
-    - govet         # Go vet
-    - ineffassign   # Detect ineffectual assignments
-    - staticcheck   # Staticcheck (SA*)
-    - unused        # Detect unused code
-    - gofmt         # Check formatting
-    - goimports     # Check import ordering
-    - misspell      # Check for misspelled words
-    - revive        # Fast, configurable linter
-    - gosec         # Security-focused linter
-    - unconvert     # Remove unnecessary type conversions
-    - gocritic      # Comprehensive linter with many checks
-    - nolintlint    # Report ill-formed or insufficient nolint directives
-    - stylecheck    # Replacement for golint
-    - gocyclo       # Cyclomatic complexity
-    - bodyclose     # Check HTTP response body is closed
-    - errorlint     # Error wrapping issues
-    - exhaustive    # Check exhaustiveness of enum switch statements
-    - goconst       # Repeated strings that could be constants
-    - godot         # Check comments end in period
-    - goprintffuncname # Printf-like function naming
-    - noctx         # HTTP requests without context
-    - predeclared   # Shadowing of predeclared identifiers
-    - rowserrcheck  # Check SQL rows.Err
-    - sqlclosecheck # Check SQL rows/statements are closed
-    - whitespace    # Whitespace issues
-    - errname       # Enforce Err prefix for sentinel errors
-    - nilerr        # Catches return nil when error is not nil
-    - makezero      # Finds make([]T, nonzero) followed by append
-    - thelper       # Ensures test helpers call t.Helper()
-    - bidichk       # Security: detects dangerous unicode
-    - forcetypeassert # Finds type assertions without error checking
-    - durationcheck # Catches multiplying durations
-    - containedctx  # Detects context.Context in structs
-    - nakedret      # Warns about naked returns in long functions
-    - nestif        # Flags deeply nested if statements
-    - usestdlibvars # Suggests using stdlib constants
-
+    - bidichk
+    - bodyclose
+    - containedctx
+    - copyloopvar
+    - durationcheck
+    - errname
+    - errorlint
+    - exhaustive
+    - fatcontext
+    - forcetypeassert
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+    - goprintffuncname
+    - gosec
+    - intrange
+    - makezero
+    - misspell
+    - modernize
+    - nakedret
+    - nestif
+    - nilerr
+    - noctx
+    - nolintlint
+    - perfsprint
+    - predeclared
+    - recvcheck
+    - revive
+    - rowserrcheck
+    - sloglint
+    - sqlclosecheck
+    - staticcheck
+    - testifylint
+    - thelper
+    - unconvert
+    - usestdlibvars
+    - whitespace
   disable:
-    - exhaustruct   # Too strict - requires all struct fields
-    - nlreturn      # Too opinionated about newlines
-    - wsl           # Too opinionated about whitespace
-    - funlen        # Function length checks - we'll handle this ourselves
-    - cyclop        # Duplicate of gocyclo
-    - lll           # Line length - we'll handle this ourselves
-    - wrapcheck     # Too strict about error wrapping
-    - varnamelen    # Too strict about variable naming
-    - tagliatelle   # Struct tag formatting - too opinionated
-    - testpackage   # Requires _test package - not always desired
-    - paralleltest  # Parallel test requirements - too strict
-    - dupl          # Flags intentional CRUD patterns across domain entities
-    - prealloc      # Slice preallocation - optimize when needed
-    - unparam       # Function signatures sometimes for API consistency
-    - contextcheck  # Goroutines often need background context
-    - nilnil        # Returning nil, nil is valid "not found" pattern
-
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: false # Blank identifier (_) means intentionally ignored
-    exclude-functions:
-      - (io.Closer).Close
-      - (*os.File).Close
-      - (*github.com/simonhull/audiometa.AudioFile).Close
-      - (net/http.ResponseWriter).Write
-
-  govet:
-    enable-all: true
-    disable:
-      - shadow # Too many false positives
-      - fieldalignment # Optimization suggestion, not a bug
-
-  gocyclo:
-    min-complexity: 15
-
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - performance
-    disabled-checks:
-      - hugeParam # We'll optimize when needed
-
-  misspell:
-    locale: US
-
-  stylecheck:
-    checks: ["all", "-ST1003"] # ST1003 is about underscores in names
-
-  gosec:
-    excludes:
-      - G104 # Duplicate of errcheck
-      - G307 # Deferred file close errors - often false positives
-
-  nakedret:
-    max-func-lines: 30 # Warn if naked return in function > 30 lines
-
-  nestif:
-    min-complexity: 5 # Warn if nesting > 5 levels
-
-  revive:
-    enable-all-rules: false
+    - contextcheck
+    - cyclop
+    - dupl
+    - exhaustruct
+    - funlen
+    - lll
+    - nilnil
+    - nlreturn
+    - paralleltest
+    - prealloc
+    - tagliatelle
+    - testpackage
+    - unparam
+    - varnamelen
+    - wrapcheck
+    - wsl
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: false
+      exclude-functions:
+        - (io.Closer).Close
+        - (*os.File).Close
+        - (*github.com/simonhull/audiometa.AudioFile).Close
+        - (net/http.ResponseWriter).Write
+    gocritic:
+      disabled-checks:
+        - hugeParam
+      enabled-tags:
+        - diagnostic
+        - performance
+    gocyclo:
+      min-complexity: 15
+    gosec:
+      excludes:
+        - G104
+        - G307
+    govet:
+      disable:
+        - shadow
+        - fieldalignment
+      enable-all: true
+    misspell:
+      locale: US
+    nakedret:
+      max-func-lines: 30
+    nestif:
+      min-complexity: 5
+    modernize:
+      # Disable omitzero since it conflicts with omitempty for struct fields
+      disabled-checks:
+        - omitzero
+    revive:
+      enable-all-rules: false
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+        - name: increment-decrement
+        - name: var-naming
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: indent-error-flow
+        - name: superfluous-else
+        - name: unreachable-code
+        - name: unused-parameter
+        - name: confusing-naming
+    staticcheck:
+      checks:
+        - all
+        - -ST1003
+  exclusions:
+    generated: lax
     rules:
-      - name: blank-imports
-      - name: context-as-argument
-      - name: dot-imports
-      - name: error-return
-      - name: error-strings
-      - name: error-naming
-      - name: exported
-      - name: increment-decrement
-      - name: var-naming
-      - name: package-comments
-      - name: range
-      - name: receiver-naming
-      - name: indent-error-flow
-      - name: superfluous-else
-      - name: unreachable-code
-      - name: unused-parameter
-      - name: confusing-naming
-
+      - linters:
+          - contextcheck
+          - errcheck
+          - goconst
+          - gocritic
+          - gocyclo
+          - gosec
+          - govet
+          - nestif
+          - nilnil
+          - nolintlint
+          - revive
+          - testifylint
+          - thelper
+          - unparam
+        path: _test\.go
+      # Exclude staticcheck QF (quickfix suggestions) from tests
+      - linters:
+          - staticcheck
+        path: _test\.go
+        text: "QF"
+      - path: _test\.go
+        text: 'shadow: declaration of "err"'
+      - linters:
+          - errcheck
+          - gocritic
+          - gocyclo
+          - gosec
+          - nestif
+          - revive
+        path: cmd/(chaptest|dbinspect|seed)/
+      # Exclude modernize omitzero check - omitempty is intentional for JSON API compatibility
+      - linters:
+          - modernize
+        text: "omitzero"
+      # Exclude internal/errors package naming - it's intentionally named that way
+      - linters:
+          - revive
+        path: internal/errors/
+        text: "var-naming"
+      # Exclude SSE events comment style - they use grouped comments which is clearer
+      - linters:
+          - revive
+        path: internal/sse/events\.go
+        text: "exported"
+      # Exclude SSE registration comment style
+      - linters:
+          - revive
+        path: internal/sse/registration\.go
+        text: "exported"
+      # Exclude "api" package name warning - it's intentional
+      - linters:
+          - revive
+        path: internal/api/
+        text: "var-naming.*meaningless package"
+      # Exclude recvcheck for time_types - mixed receivers are intentional for json marshal/unmarshal
+      - linters:
+          - recvcheck
+        path: internal/api/time_types\.go
+      # Exclude nilerr for store iterators - nil return with error is intentional skip behavior
+      - linters:
+          - nilerr
+        path: internal/store/(contributors|series)\.go
+      # Exclude modernize for audible contributor - complex function with conflicting auto-fixes
+      - linters:
+          - modernize
+        path: internal/metadata/audible/contributor\.go
+      - linters:
+          - gocyclo
+          - nestif
+        path: internal/api/.*_handlers\.go
+      - linters:
+          - contextcheck
+          - gocritic
+          - gocyclo
+          - nestif
+        path: internal/store/
+      - linters:
+          - gocritic
+          - gocyclo
+          - nestif
+        path: internal/(dto|media|processor|scanner|search|service)/
+      - linters:
+          - gosec
+        text: G101
+      - linters:
+          - gosec
+        text: G304
+      - linters:
+          - gosec
+        text: G301|G306
+      - linters:
+          - revive
+        path: internal/store/
+        text: unused-parameter.*ctx
+      - linters:
+          - revive
+        path: internal/search/
+        text: stutters
+      - linters:
+          - revive
+        path: internal/service/
+        text: unused-parameter.*ctx
+      - linters:
+          - staticcheck
+        text: SA9003
+      - linters:
+          - staticcheck
+        text: SA6002
+      - linters:
+          - revive
+        path: internal/genre/
+        text: stutters
+      - linters:
+          - goconst
+        path: internal/store/
+      - linters:
+          - nestif
+        path: cmd/api/main.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  exclude-use-default: false
   max-issues-per-linter: 0
   max-same-issues: 0
   uniq-by-line: true
-
-  exclude-rules:
-    # Exclude some linters from running on tests
-    - path: _test\.go
-      linters:
-        - gosec
-        - goconst
-        - errcheck
-        - gocritic
-        - gocyclo
-        - nestif
-        - contextcheck
-        - nolintlint # nolint directives may be for linters excluded above
-        - govet # Unused writes are common in test setup
-        - revive # Style issues in tests are less critical
-        - nilnil # Returning nil, nil is common in test mocks
-        - unparam # Unused params common in test helpers
-
-    # Allow shadowing 'err' in tests
-    - path: _test\.go
-      text: "shadow: declaration of \"err\""
-
-    # Exclude cmd tools from strict linting (utilities, not production code)
-    - path: cmd/(chaptest|dbinspect)/
-      linters:
-        - errcheck
-        - gocritic
-        - gocyclo
-        - nestif
-        - revive
-
-    # Exclude complexity checks for handlers (naturally complex due to HTTP handling)
-    - path: internal/api/.*_handlers\.go
-      linters:
-        - gocyclo
-        - nestif
-
-    # Exclude complexity for store layer (naturally complex due to DB operations)
-    - path: internal/store/
-      linters:
-        - gocyclo
-        - contextcheck
-        - gocritic
-        - nestif
-
-    # Exclude complexity for other complex domains
-    - path: internal/(dto|media|processor|scanner|search|service)/
-      linters:
-        - gocyclo
-        - nestif
-        - gocritic
-
-    # Gosec false positives
-    - linters:
-        - gosec
-      text: "G101" # Hardcoded credentials - often false positives for constants
-    - linters:
-        - gosec
-      text: "G304" # File path from variable - necessary for file operations
-    - linters:
-        - gosec
-      text: "G301|G306" # Permissions - our defaults are intentional
-
-    # Unused context params in store - API contracts may need context later
-    - path: internal/store/
-      linters:
-        - revive
-      text: "unused-parameter.*ctx"
-
-    # Stuttering names in search package - these names are intentional
-    - path: internal/search/
-      linters:
-        - revive
-      text: "stutters"
-
-    # Unused context in service layer
-    - path: internal/service/
-      linters:
-        - revive
-      text: "unused-parameter.*ctx"
-
-    # SA9003 empty branch - intentional for error handling patterns
-    - linters:
-        - staticcheck
-      text: "SA9003"
-
-    # SA6002 sync.Pool recommendations - our pattern is valid
-    - linters:
-        - staticcheck
-      text: "SA6002"
-
-    # Stuttering in genre package is intentional
-    - path: internal/genre/
-      linters:
-        - revive
-      text: "stutters"
-
-    # Exclude goconst for store layer (repeated strings are intentional keys)
-    - path: internal/store/
-      linters:
-        - goconst
-
-    # nestif in main.go is acceptable for startup logic
-    - path: cmd/api/main.go
-      linters:
-        - nestif
-
-  # Don't hide new issues in existing code
   new: false
-
-output:
-  formats:
-    - format: colored-line-number
-  print-issued-lines: true
-  print-linter-name: true
-  sort-results: true
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

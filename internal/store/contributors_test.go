@@ -217,7 +217,7 @@ func TestListContributors_Pagination(t *testing.T) {
 	ctx := context.Background()
 
 	// Create 5 contributors
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		name := string('A' + rune(i))
 		_, err := store.GetOrCreateContributorByName(ctx, name)
 		require.NoError(t, err)
@@ -853,10 +853,11 @@ func TestUnmergeContributor_OnlyRelinksMatchingCreditedAs(t *testing.T) {
 
 	// Find each book and verify linkage
 	for _, book := range kingBooks {
-		if book.Title == "Rage" {
+		switch book.Title {
+		case "Rage":
 			assert.Equal(t, kingID, book.Contributors[0].ContributorID)
 			assert.Equal(t, "John Swithen", book.Contributors[0].CreditedAs)
-		} else if book.Title == "The Shining" {
+		case "The Shining":
 			assert.Equal(t, kingID, book.Contributors[0].ContributorID)
 			assert.Empty(t, book.Contributors[0].CreditedAs)
 		}

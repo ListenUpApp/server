@@ -2,7 +2,7 @@
 package metadata
 
 import (
-	"fmt"
+	"strconv"
 
 	"github.com/simonhull/audiometa"
 )
@@ -21,7 +21,7 @@ func InferSeriesPosition(file *audiometa.File) string {
 	// Application-specific heuristic: If it's in the audiobook library
 	// and has a small track total, we can infer it's likely a series position
 	if file.Tags.Series != "" && isLikelySeriesTrackNumber(file.Tags.TrackNumber, file.Tags.TrackTotal) {
-		return fmt.Sprintf("%d", file.Tags.TrackNumber)
+		return strconv.Itoa(file.Tags.TrackNumber)
 	}
 
 	return ""

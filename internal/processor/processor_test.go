@@ -683,7 +683,7 @@ func TestEventProcessor_GetFolderLock_Concurrent(t *testing.T) {
 	locks := make([]*sync.Mutex, numGoroutines)
 	var wg sync.WaitGroup
 
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()

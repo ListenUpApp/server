@@ -3,6 +3,7 @@ package domain
 // LeaderboardCategory defines the ranking metric.
 type LeaderboardCategory string
 
+// LeaderboardCategory constants for ranking metrics.
 const (
 	LeaderboardCategoryTime   LeaderboardCategory = "time"
 	LeaderboardCategoryBooks  LeaderboardCategory = "books"

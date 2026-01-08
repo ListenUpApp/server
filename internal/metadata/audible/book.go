@@ -30,7 +30,7 @@ func (c *Client) GetBook(ctx context.Context, region Region, asin string) (*Book
 	query.Set("response_groups", responseGroups())
 	query.Set("image_sizes", imageSizes())
 
-	path := fmt.Sprintf("/1.0/catalog/products/%s", asin)
+	path := "/1.0/catalog/products/" + asin
 	body, err := c.doRequest(ctx, region, path, query)
 	if err != nil {
 		return nil, wrapError("getBook", region, asin, err)

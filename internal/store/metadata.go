@@ -53,7 +53,7 @@ func (s *Store) GetCachedBook(ctx context.Context, region audible.Region, asin s
 		return nil, err
 	}
 
-	key := []byte(fmt.Sprintf("%s%s:%s", metadataBookPrefix, region, asin))
+	key := fmt.Appendf(nil, "%s%s:%s", metadataBookPrefix, region, asin)
 
 	var cached CachedBook
 	err := s.db.View(func(txn *badger.Txn) error {
@@ -99,7 +99,7 @@ func (s *Store) SetCachedBook(ctx context.Context, region audible.Region, asin s
 		return fmt.Errorf("marshal cached book: %w", err)
 	}
 
-	key := []byte(fmt.Sprintf("%s%s:%s", metadataBookPrefix, region, asin))
+	key := fmt.Appendf(nil, "%s%s:%s", metadataBookPrefix, region, asin)
 
 	return s.db.Update(func(txn *badger.Txn) error {
 		return txn.Set(key, data)
@@ -112,7 +112,7 @@ func (s *Store) DeleteCachedBook(ctx context.Context, region audible.Region, asi
 		return err
 	}
 
-	key := []byte(fmt.Sprintf("%s%s:%s", metadataBookPrefix, region, asin))
+	key := fmt.Appendf(nil, "%s%s:%s", metadataBookPrefix, region, asin)
 
 	return s.db.Update(func(txn *badger.Txn) error {
 		err := txn.Delete(key)
@@ -130,7 +130,7 @@ func (s *Store) GetCachedChapters(ctx context.Context, region audible.Region, as
 		return nil, err
 	}
 
-	key := []byte(fmt.Sprintf("%s%s:%s", metadataChaptersPrefix, region, asin))
+	key := fmt.Appendf(nil, "%s%s:%s", metadataChaptersPrefix, region, asin)
 
 	var cached CachedChapters
 	err := s.db.View(func(txn *badger.Txn) error {
@@ -176,7 +176,7 @@ func (s *Store) SetCachedChapters(ctx context.Context, region audible.Region, as
 		return fmt.Errorf("marshal cached chapters: %w", err)
 	}
 
-	key := []byte(fmt.Sprintf("%s%s:%s", metadataChaptersPrefix, region, asin))
+	key := fmt.Appendf(nil, "%s%s:%s", metadataChaptersPrefix, region, asin)
 
 	return s.db.Update(func(txn *badger.Txn) error {
 		return txn.Set(key, data)
@@ -189,7 +189,7 @@ func (s *Store) DeleteCachedChapters(ctx context.Context, region audible.Region,
 		return err
 	}
 
-	key := []byte(fmt.Sprintf("%s%s:%s", metadataChaptersPrefix, region, asin))
+	key := fmt.Appendf(nil, "%s%s:%s", metadataChaptersPrefix, region, asin)
 
 	return s.db.Update(func(txn *badger.Txn) error {
 		err := txn.Delete(key)
@@ -205,7 +205,7 @@ func (s *Store) DeleteCachedChapters(ctx context.Context, region audible.Region,
 func searchCacheKey(region audible.Region, query string) []byte {
 	hash := sha256.Sum256([]byte(query))
 	hashStr := hex.EncodeToString(hash[:8]) // First 8 bytes = 16 hex chars
-	return []byte(fmt.Sprintf("%s%s:%s", metadataSearchPrefix, region, hashStr))
+	return fmt.Appendf(nil, "%s%s:%s", metadataSearchPrefix, region, hashStr)
 }
 
 // GetCachedSearch retrieves cached search results.

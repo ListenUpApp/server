@@ -17,7 +17,7 @@ type AudibleClientHandle struct {
 
 // Shutdown implements do.Shutdownable.
 func (h *AudibleClientHandle) Shutdown() error {
-	h.Client.Close()
+	h.Close()
 	return nil
 }
 
@@ -38,7 +38,7 @@ type MetadataServiceHandle struct {
 
 // Shutdown implements do.Shutdownable.
 func (h *MetadataServiceHandle) Shutdown() error {
-	h.MetadataService.Close()
+	h.Close()
 	return nil
 }
 
@@ -78,7 +78,7 @@ type ITunesClientHandle struct {
 
 // Shutdown implements do.Shutdownable.
 func (h *ITunesClientHandle) Shutdown() error {
-	h.Client.Close()
+	h.Close()
 	return nil
 }
 

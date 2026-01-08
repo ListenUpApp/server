@@ -288,7 +288,7 @@ type MapUnmappedGenreInput struct {
 
 // === Handlers ===
 
-func (s *Server) handleListGenres(ctx context.Context, input *ListGenresInput) (*ListGenresOutput, error) {
+func (s *Server) handleListGenres(ctx context.Context, _ *ListGenresInput) (*ListGenresOutput, error) {
 	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
@@ -420,7 +420,7 @@ func (s *Server) handleMergeGenres(ctx context.Context, input *MergeGenresInput)
 	return &MessageOutput{Body: MessageResponse{Message: "Genres merged"}}, nil
 }
 
-func (s *Server) handleListUnmappedGenres(ctx context.Context, input *ListUnmappedGenresInput) (*ListUnmappedGenresOutput, error) {
+func (s *Server) handleListUnmappedGenres(ctx context.Context, _ *ListUnmappedGenresInput) (*ListUnmappedGenresOutput, error) {
 	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}

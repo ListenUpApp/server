@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -163,7 +164,7 @@ func (h *PrettyHandler) Handle(_ context.Context, r slog.Record) error {
 		buf = append(buf, colorDim...)
 		buf = append(buf, filepath.Base(f.File)...)
 		buf = append(buf, ':')
-		buf = append(buf, fmt.Sprintf("%d", f.Line)...)
+		buf = append(buf, strconv.Itoa(f.Line)...)
 		buf = append(buf, colorReset...)
 		buf = append(buf, ' ')
 	}

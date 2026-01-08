@@ -81,7 +81,7 @@ func TestNew_FormatAutoDetection(t *testing.T) {
 				// Pretty format should contain ANSI codes.
 				assert.Contains(t, output, "test")
 				// Should have some color codes (though exact format may vary).
-				assert.True(t, len(output) > len("test\n"))
+				assert.Greater(t, len(output), len("test\n"))
 			}
 		})
 	}
@@ -499,7 +499,7 @@ func TestPrettyHandler_TimeFormatting(t *testing.T) {
 	// Should contain time in HH:MM:SS format.
 	timePattern := strings.Split(output, " ")[0]
 	// Basic check that time format is there (e.g., "15:04:05").
-	assert.True(t, len(timePattern) >= 8, "Should contain time prefix")
+	assert.GreaterOrEqual(t, len(timePattern), 8, "Should contain time prefix")
 }
 
 func TestLogger_ChainedWithMethods(t *testing.T) {
@@ -545,7 +545,7 @@ func TestPrettyHandler_EmptyMessage(t *testing.T) {
 	output := buf.String()
 	// Should still produce output with time and level.
 	assert.Contains(t, output, "INF")
-	assert.True(t, output != "")
+	assert.NotEqual(t, output, "")
 }
 
 func TestPrettyHandler_NoAttributes(t *testing.T) {

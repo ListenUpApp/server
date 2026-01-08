@@ -71,7 +71,7 @@ type LibraryOutput struct {
 
 // === Handlers ===
 
-func (s *Server) handleListLibraries(ctx context.Context, input *ListLibrariesInput) (*ListLibrariesOutput, error) {
+func (s *Server) handleListLibraries(ctx context.Context, _ *ListLibrariesInput) (*ListLibrariesOutput, error) {
 	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}

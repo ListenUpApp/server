@@ -466,7 +466,7 @@ func TestInboxService_ContextCancellation(t *testing.T) {
 	inboxService, testStore, cleanup := setupTestInbox(t)
 	defer cleanup()
 
-	// Create a cancelled context.
+	// Create a canceled context.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 

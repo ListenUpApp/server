@@ -4,11 +4,11 @@ package scanner
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -119,7 +119,7 @@ func (a *Analyzer) Analyze(ctx context.Context, files []AudioFileData, opts Anal
 	// Collect results.
 	parsedFiles := make([]AudioFileData, len(files))
 
-	for range len(files) {
+	for range files {
 		select {
 		case r := <-results:
 			parsedFiles[r.index] = r.file
@@ -303,8 +303,8 @@ func convertMetadata(src *audio.Metadata) *AudioMetadata {
 // Handles patterns like "Homer; Emily Wilson - translator".
 func splitContributors(input string) []string {
 	var result []string
-	parts := strings.Split(input, ";")
-	for _, part := range parts {
+	parts := strings.SplitSeq(input, ";")
+	for part := range parts {
 		if trimmed := strings.TrimSpace(part); trimmed != "" {
 			result = append(result, trimmed)
 		}
@@ -417,7 +417,7 @@ func buildBookMetadata(audioMeta *AudioMetadata) *BookMetadata {
 
 	// Convert year to string.
 	if audioMeta.Year > 0 {
-		bookMeta.PublishYear = fmt.Sprintf("%d", audioMeta.Year)
+		bookMeta.PublishYear = strconv.Itoa(audioMeta.Year)
 	}
 
 	// Convert Artist to Authors array (split by semicolon for multiple).
@@ -436,8 +436,8 @@ func buildBookMetadata(audioMeta *AudioMetadata) *BookMetadata {
 		genreStr := sanitizeString(audioMeta.Genre)
 		// Normalize separators: replace semicolons with commas, then split by comma
 		genreStr = strings.ReplaceAll(genreStr, ";", ",")
-		genres := strings.Split(genreStr, ",")
-		for _, genre := range genres {
+		genres := strings.SplitSeq(genreStr, ",")
+		for genre := range genres {
 			if trimmed := strings.TrimSpace(genre); trimmed != "" {
 				bookMeta.Genres = append(bookMeta.Genres, trimmed)
 			}

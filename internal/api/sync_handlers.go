@@ -188,7 +188,7 @@ type SyncSeriesOutput struct {
 
 // === Handlers ===
 
-func (s *Server) handleGetSyncManifest(ctx context.Context, input *GetSyncManifestInput) (*SyncManifestOutput, error) {
+func (s *Server) handleGetSyncManifest(ctx context.Context, _ *GetSyncManifestInput) (*SyncManifestOutput, error) {
 	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
@@ -388,7 +388,7 @@ type SyncActiveSessionsOutput struct {
 	Body SyncActiveSessionsResponse
 }
 
-func (s *Server) handleGetSyncActiveSessions(ctx context.Context, input *GetSyncActiveSessionsInput) (*SyncActiveSessionsOutput, error) {
+func (s *Server) handleGetSyncActiveSessions(ctx context.Context, _ *GetSyncActiveSessionsInput) (*SyncActiveSessionsOutput, error) {
 	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}

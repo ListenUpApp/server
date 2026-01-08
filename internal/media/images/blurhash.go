@@ -62,16 +62,10 @@ func resizeForBlurHash(img image.Image) image.Image {
 	var dstWidth, dstHeight int
 	if srcWidth > srcHeight {
 		dstWidth = blurHashSize
-		dstHeight = (srcHeight * blurHashSize) / srcWidth
-		if dstHeight < 1 {
-			dstHeight = 1
-		}
+		dstHeight = max((srcHeight*blurHashSize)/srcWidth, 1)
 	} else {
 		dstHeight = blurHashSize
-		dstWidth = (srcWidth * blurHashSize) / srcHeight
-		if dstWidth < 1 {
-			dstWidth = 1
-		}
+		dstWidth = max((srcWidth*blurHashSize)/srcHeight, 1)
 	}
 
 	// Create destination image
@@ -81,8 +75,8 @@ func resizeForBlurHash(img image.Image) image.Image {
 	xRatio := float64(srcWidth) / float64(dstWidth)
 	yRatio := float64(srcHeight) / float64(dstHeight)
 
-	for y := 0; y < dstHeight; y++ {
-		for x := 0; x < dstWidth; x++ {
+	for y := range dstHeight {
+		for x := range dstWidth {
 			srcX := int(float64(x) * xRatio)
 			srcY := int(float64(y) * yRatio)
 			dst.Set(x, y, img.At(bounds.Min.X+srcX, bounds.Min.Y+srcY))

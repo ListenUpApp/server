@@ -2,7 +2,6 @@ package providers
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/samber/do/v2"
 
@@ -198,7 +197,7 @@ func ProvideInviteService(i do.Injector) (*service.InviteService, error) {
 	cfg := do.MustInvoke[*config.Config](i)
 
 	// TODO: Get from config or auto-detect
-	serverURL := fmt.Sprintf("http://localhost:%s", cfg.Server.Port)
+	serverURL := "http://localhost:" + cfg.Server.Port
 
 	return service.NewInviteService(storeHandle.Store, sessionService, log.Logger, serverURL), nil
 }

@@ -1,7 +1,7 @@
 package providers
 
 import (
-	"fmt"
+	"encoding/hex"
 
 	"github.com/samber/do/v2"
 
@@ -39,6 +39,6 @@ func ProvideTokenService(i do.Injector) (*auth.TokenService, error) {
 	cfg := do.MustInvoke[*config.Config](i)
 	authKey := do.MustInvoke[AuthKey](i)
 
-	keyHex := fmt.Sprintf("%x", []byte(authKey))
+	keyHex := hex.EncodeToString([]byte(authKey))
 	return auth.NewTokenService(keyHex, cfg.Auth.AccessTokenDuration, cfg.Auth.RefreshTokenDuration)
 }

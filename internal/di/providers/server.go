@@ -153,7 +153,7 @@ type MDNSServiceHandle struct {
 // Shutdown implements do.Shutdownable.
 func (h *MDNSServiceHandle) Shutdown() error {
 	if h.started && h.Service != nil {
-		h.Service.Stop()
+		h.Stop()
 	}
 	return nil
 }

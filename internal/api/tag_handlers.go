@@ -171,7 +171,7 @@ type RemoveTagFromBookInput struct {
 
 // === Handlers ===
 
-func (s *Server) handleListTags(ctx context.Context, input *ListTagsInput) (*ListTagsOutput, error) {
+func (s *Server) handleListTags(ctx context.Context, _ *ListTagsInput) (*ListTagsOutput, error) {
 	_, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err

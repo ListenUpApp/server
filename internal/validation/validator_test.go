@@ -1,7 +1,6 @@
 package validation_test
 
 import (
-	"errors"
 	"net/http"
 	"testing"
 
@@ -87,7 +86,7 @@ func TestValidator_ValidateErrors(t *testing.T) {
 			assert.Error(t, err)
 
 			var domainErr *domainerrors.Error
-			if assert.True(t, errors.As(err, &domainErr)) {
+			if assert.ErrorAs(t, err, &domainErr) {
 				assert.Equal(t, tt.wantErrCode, domainErr.Code.HTTPStatus())
 				// Field errors are in the Details map
 				details, ok := domainErr.Details.(map[string]string)
@@ -113,7 +112,7 @@ func TestValidator_JSONFieldNames(t *testing.T) {
 
 	// Should use JSON tag name "email", not struct field name "Email"
 	var domainErr *domainerrors.Error
-	if assert.True(t, errors.As(err, &domainErr)) {
+	if assert.ErrorAs(t, err, &domainErr) {
 		details, ok := domainErr.Details.(map[string]string)
 		assert.True(t, ok, "Details should be map[string]string")
 		_, hasEmail := details["email"]
@@ -157,7 +156,7 @@ func TestValidator_OptionalFields(t *testing.T) {
 	assert.Error(t, err, "Invalid URL should fail")
 
 	var domainErr *domainerrors.Error
-	if assert.True(t, errors.As(err, &domainErr)) {
+	if assert.ErrorAs(t, err, &domainErr) {
 		details, ok := domainErr.Details.(map[string]string)
 		assert.True(t, ok)
 		_, hasURL := details["url"]
@@ -324,7 +323,7 @@ func TestValidator_OneOfValidation(t *testing.T) {
 	assert.Error(t, err, "Invalid oneof value should fail")
 
 	var domainErr *domainerrors.Error
-	if assert.True(t, errors.As(err, &domainErr)) {
+	if assert.ErrorAs(t, err, &domainErr) {
 		details, ok := domainErr.Details.(map[string]string)
 		assert.True(t, ok)
 		msg := details["role"]

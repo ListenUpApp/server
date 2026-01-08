@@ -59,7 +59,7 @@ func (ft *FlexTime) UnmarshalJSON(data []byte) error {
 
 // MarshalJSON outputs time in RFC3339 format.
 func (ft FlexTime) MarshalJSON() ([]byte, error) {
-	return json.Marshal(ft.Time.Format(time.RFC3339))
+	return json.Marshal(ft.Format(time.RFC3339))
 }
 
 // ToTime returns the underlying time.Time value.

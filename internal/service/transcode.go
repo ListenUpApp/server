@@ -346,7 +346,7 @@ func (s *TranscodeService) GenerateDynamicPlaylist(ctx context.Context, audioFil
 	}
 
 	if len(segments) == 0 {
-		return "", fmt.Errorf("no segments available yet")
+		return "", errors.New("no segments available yet")
 	}
 
 	// Build playlist
@@ -540,12 +540,13 @@ func (s *TranscodeService) executeTranscode(ctx context.Context, job *domain.Tra
 // HLS allows progressive playback - client can start as soon as first segment is ready.
 func (s *TranscodeService) buildFFmpegArgs(input, outputDir string, bitrate, channels int, variant domain.TranscodeVariant) []string {
 	// Override channels and bitrate based on variant
-	if variant == domain.TranscodeVariantStereo {
+	switch variant {
+	case domain.TranscodeVariantStereo:
 		channels = 2
 		if bitrate > 128000 {
 			bitrate = 128000
 		}
-	} else if variant == domain.TranscodeVariantSpatial {
+	case domain.TranscodeVariantSpatial:
 		channels = 6
 		if bitrate < 384000 {
 			bitrate = 384000
@@ -560,8 +561,8 @@ func (s *TranscodeService) buildFFmpegArgs(input, outputDir string, bitrate, cha
 		"-i", input, // Input file
 		"-vn",         // No video
 		"-c:a", "aac", // AAC codec
-		"-b:a", fmt.Sprintf("%d", bitrate), // Bitrate based on variant
-		"-ac", fmt.Sprintf("%d", channels), // Channels based on variant
+		"-b:a", strconv.Itoa(bitrate), // Bitrate based on variant
+		"-ac", strconv.Itoa(channels), // Channels based on variant
 		"-ar", "48000", // Standard sample rate
 		"-f", "hls", // HLS format
 		"-hls_time", "10", // 10 second segments

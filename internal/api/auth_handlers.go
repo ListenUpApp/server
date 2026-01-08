@@ -10,6 +10,7 @@ import (
 
 	"github.com/listenupapp/listenup-server/internal/auth"
 	"github.com/listenupapp/listenup-server/internal/color"
+	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/service"
 )
 
@@ -352,7 +353,9 @@ func (s *Server) handleLogout(ctx context.Context, input *LogoutInput) (*Message
 func (s *Server) handleCheckRegistrationStatus(ctx context.Context, input *CheckRegistrationStatusInput) (*RegistrationStatusOutput, error) {
 	user, err := s.store.GetUser(ctx, input.UserID)
 	if err != nil {
-		// Return "denied" for not found (could be deleted/denied)
+		// Return "denied" for not found (could be deleted/denied).
+		// This is intentional - we return a valid API response, not an error.
+		//nolint:nilerr // Returning "denied" status is valid business logic, not an error.
 		return &RegistrationStatusOutput{
 			Body: RegistrationStatusResponse{
 				UserID:   input.UserID,
@@ -364,10 +367,10 @@ func (s *Server) handleCheckRegistrationStatus(ctx context.Context, input *Check
 
 	status := string(user.Status)
 	if status == "" {
-		status = "active" // Backward compatibility for users without status
+		status = string(domain.UserStatusActive) // Backward compatibility for users without status
 	}
 
-	approved := status == "active"
+	approved := status == string(domain.UserStatusActive)
 
 	return &RegistrationStatusOutput{
 		Body: RegistrationStatusResponse{
@@ -415,7 +418,7 @@ func (s *Server) mapAuthResponse(ctx context.Context, resp *service.AuthResponse
 
 func extractIP(xForwardedFor, xRealIP string) string {
 	if xForwardedFor != "" {
-		for i := 0; i < len(xForwardedFor); i++ {
+		for i := range len(xForwardedFor) {
 			if xForwardedFor[i] == ',' {
 				return xForwardedFor[:i]
 			}

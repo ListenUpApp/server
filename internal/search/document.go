@@ -70,8 +70,8 @@ type SearchDocument struct {
 // This ensures field names match the Bleve index mapping.
 // Bleve by default uses Go struct field names (capitalized), but our
 // mapping uses lowercase names, so we convert explicitly.
-func (d *SearchDocument) ToMap() map[string]interface{} {
-	m := map[string]interface{}{
+func (d *SearchDocument) ToMap() map[string]any {
+	m := map[string]any{
 		"id":         d.ID,
 		"type":       string(d.Type),
 		"name":       d.Name,

@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // ActivityType represents the type of social activity.
 type ActivityType string
@@ -78,12 +81,7 @@ var (
 
 // IsStreakMilestone returns true if the given day count is a milestone.
 func IsStreakMilestone(days int) bool {
-	for _, m := range StreakMilestones {
-		if days == m {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(StreakMilestones, days)
 }
 
 // CrossedListeningMilestone returns true if going from prevHours to newHours

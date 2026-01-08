@@ -537,7 +537,7 @@ func (s *ListeningService) broadcastUserStatsUpdate(ctx context.Context, userID 
 
 	// Get user profile for avatar info
 	profile, _ := s.store.GetUserProfile(ctx, userID)
-	avatarType := "auto"
+	avatarType := string(domain.AvatarTypeAuto)
 	avatarValue := ""
 	if profile != nil {
 		avatarType = string(profile.AvatarType)

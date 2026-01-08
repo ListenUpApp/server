@@ -15,7 +15,7 @@ import (
 // Security is maintained by:
 // - User IDs are opaque UUIDs (can't enumerate)
 // - Only binary status information is exposed (approved/denied)
-// - No sensitive data flows through this channel
+// - No sensitive data flows through this channel.
 type RegistrationStatusHandler struct {
 	broadcaster *RegistrationBroadcaster
 	logger      *slog.Logger

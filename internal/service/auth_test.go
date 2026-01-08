@@ -108,7 +108,7 @@ func TestAuthService_Setup_Success(t *testing.T) {
 	assert.NotEmpty(t, resp.RefreshToken)
 	assert.Equal(t, "Bearer", resp.TokenType)
 	assert.NotEmpty(t, resp.SessionID)
-	assert.Greater(t, resp.ExpiresIn, 0)
+	assert.Positive(t, resp.ExpiresIn)
 
 	// Verify instance is configured
 	setupRequired, err := instanceService.IsSetupRequired(ctx)

@@ -80,5 +80,5 @@ func TestSeries_EmptyDescription(t *testing.T) {
 	err = json.Unmarshal(data, &decoded)
 	require.NoError(t, err)
 
-	assert.Equal(t, "", decoded.Description)
+	assert.Empty(t, decoded.Description)
 }

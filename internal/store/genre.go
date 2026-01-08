@@ -577,13 +577,13 @@ func (s *Store) AddBookGenre(ctx context.Context, bookID, genreID string) error 
 
 	return s.db.Update(func(txn *badger.Txn) error {
 		// book -> genre index.
-		bgKey := []byte(fmt.Sprintf("%s%s:%s", bookGenrePrefix, bookID, genreID))
+		bgKey := fmt.Appendf(nil, "%s%s:%s", bookGenrePrefix, bookID, genreID)
 		if err := txn.Set(bgKey, []byte{}); err != nil {
 			return err
 		}
 
 		// genre -> book index (for listing books by genre).
-		gbKey := []byte(fmt.Sprintf("%s%s:%s", genreBookPrefix, genreID, bookID))
+		gbKey := fmt.Appendf(nil, "%s%s:%s", genreBookPrefix, genreID, bookID)
 		return txn.Set(gbKey, []byte{})
 	})
 }
@@ -595,12 +595,12 @@ func (s *Store) RemoveBookGenre(ctx context.Context, bookID, genreID string) err
 	}
 
 	return s.db.Update(func(txn *badger.Txn) error {
-		bgKey := []byte(fmt.Sprintf("%s%s:%s", bookGenrePrefix, bookID, genreID))
+		bgKey := fmt.Appendf(nil, "%s%s:%s", bookGenrePrefix, bookID, genreID)
 		if err := txn.Delete(bgKey); err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
 			return err
 		}
 
-		gbKey := []byte(fmt.Sprintf("%s%s:%s", genreBookPrefix, genreID, bookID))
+		gbKey := fmt.Appendf(nil, "%s%s:%s", genreBookPrefix, genreID, bookID)
 		if err := txn.Delete(gbKey); err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
 			return err
 		}

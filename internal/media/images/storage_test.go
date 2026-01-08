@@ -283,7 +283,7 @@ func TestStorage_Concurrent(t *testing.T) {
 		const goroutines = 10
 		done := make(chan bool, goroutines)
 
-		for i := 0; i < goroutines; i++ {
+		for i := range goroutines {
 			go func(n int) {
 				data := []byte{byte(n)}
 				err := storage.Save(bookID, data)
@@ -293,7 +293,7 @@ func TestStorage_Concurrent(t *testing.T) {
 		}
 
 		// Wait for all goroutines.
-		for i := 0; i < goroutines; i++ {
+		for range goroutines {
 			<-done
 		}
 
@@ -316,7 +316,7 @@ func TestStorage_Concurrent(t *testing.T) {
 		const goroutines = 10
 		done := make(chan bool, goroutines)
 
-		for i := 0; i < goroutines; i++ {
+		for range goroutines {
 			go func() {
 				data, err := storage.Get(bookID)
 				assert.NoError(t, err)
@@ -326,7 +326,7 @@ func TestStorage_Concurrent(t *testing.T) {
 		}
 
 		// Wait for all goroutines.
-		for i := 0; i < goroutines; i++ {
+		for range goroutines {
 			<-done
 		}
 	})

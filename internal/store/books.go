@@ -122,7 +122,7 @@ func (s *Store) CreateBook(ctx context.Context, book *domain.Book) error {
 		// Create inode indices for eac haudio file (for fast file watching lookups).
 		for _, audioFile := range book.AudioFiles {
 			if audioFile.Inode > 0 {
-				inodeKey := []byte(fmt.Sprintf("%s%d", bookByInodePrefix, audioFile.Inode))
+				inodeKey := fmt.Appendf(nil, "%s%d", bookByInodePrefix, audioFile.Inode)
 				if err := txn.Set(inodeKey, []byte(book.ID)); err != nil {
 					return err
 				}
@@ -131,7 +131,7 @@ func (s *Store) CreateBook(ctx context.Context, book *domain.Book) error {
 
 		// Create contributor reverse indexes for efficient contributor -> books lookups.
 		for _, bc := range book.Contributors {
-			contributorBookKey := []byte(fmt.Sprintf("%s%s:%s", bookByContributorPrefix, bc.ContributorID, book.ID))
+			contributorBookKey := fmt.Appendf(nil, "%s%s:%s", bookByContributorPrefix, bc.ContributorID, book.ID)
 			if err := txn.Set(contributorBookKey, []byte{}); err != nil {
 				return err
 			}
@@ -139,7 +139,7 @@ func (s *Store) CreateBook(ctx context.Context, book *domain.Book) error {
 
 		// Create series reverse indexes for all series the book belongs to.
 		for _, bs := range book.Series {
-			seriesBookKey := []byte(fmt.Sprintf("%s%s:%s", bookBySeriesPrefix, bs.SeriesID, book.ID))
+			seriesBookKey := fmt.Appendf(nil, "%s%s:%s", bookBySeriesPrefix, bs.SeriesID, book.ID)
 			if err := txn.Set(seriesBookKey, []byte{}); err != nil {
 				return err
 			}
@@ -353,7 +353,7 @@ func (s *Store) GetBookByPath(ctx context.Context, path string) (*domain.Book, e
 // This is used during file watching for fast lookups when a file changes.
 // No access control - for internal system use only.
 func (s *Store) GetBookByInode(ctx context.Context, inode int64) (*domain.Book, error) {
-	inodeKey := []byte(fmt.Sprintf("%s%d", bookByInodePrefix, inode))
+	inodeKey := fmt.Appendf(nil, "%s%d", bookByInodePrefix, inode)
 
 	var bookID string
 	err := s.db.View(func(txn *badger.Txn) error {
@@ -432,13 +432,13 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 		addedInodes, removedInodes := uint64SetDiff(oldInodes, newInodes)
 
 		for _, inode := range removedInodes {
-			inodeKey := []byte(fmt.Sprintf("%s%d", bookByInodePrefix, inode))
+			inodeKey := fmt.Appendf(nil, "%s%d", bookByInodePrefix, inode)
 			if err := txn.Delete(inodeKey); err != nil {
 				return err
 			}
 		}
 		for _, inode := range addedInodes {
-			inodeKey := []byte(fmt.Sprintf("%s%d", bookByInodePrefix, inode))
+			inodeKey := fmt.Appendf(nil, "%s%d", bookByInodePrefix, inode)
 			if err := txn.Set(inodeKey, []byte(book.ID)); err != nil {
 				return err
 			}
@@ -457,13 +457,13 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 		addedContributors, removedContributors := stringSetDiff(oldContributorIDs, newContributorIDs)
 
 		for _, contributorID := range removedContributors {
-			contributorBookKey := []byte(fmt.Sprintf("%s%s:%s", bookByContributorPrefix, contributorID, book.ID))
+			contributorBookKey := fmt.Appendf(nil, "%s%s:%s", bookByContributorPrefix, contributorID, book.ID)
 			if err := txn.Delete(contributorBookKey); err != nil {
 				return err
 			}
 		}
 		for _, contributorID := range addedContributors {
-			contributorBookKey := []byte(fmt.Sprintf("%s%s:%s", bookByContributorPrefix, contributorID, book.ID))
+			contributorBookKey := fmt.Appendf(nil, "%s%s:%s", bookByContributorPrefix, contributorID, book.ID)
 			if err := txn.Set(contributorBookKey, []byte{}); err != nil {
 				return err
 			}
@@ -482,13 +482,13 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 		addedSeries, removedSeries := stringSetDiff(oldSeriesIDs, newSeriesIDs)
 
 		for _, seriesID := range removedSeries {
-			seriesBookKey := []byte(fmt.Sprintf("%s%s:%s", bookBySeriesPrefix, seriesID, book.ID))
+			seriesBookKey := fmt.Appendf(nil, "%s%s:%s", bookBySeriesPrefix, seriesID, book.ID)
 			if err := txn.Delete(seriesBookKey); err != nil {
 				return err
 			}
 		}
 		for _, seriesID := range addedSeries {
-			seriesBookKey := []byte(fmt.Sprintf("%s%s:%s", bookBySeriesPrefix, seriesID, book.ID))
+			seriesBookKey := fmt.Appendf(nil, "%s%s:%s", bookBySeriesPrefix, seriesID, book.ID)
 			if err := txn.Set(seriesBookKey, []byte{}); err != nil {
 				return err
 			}
@@ -591,7 +591,7 @@ func (s *Store) DeleteBook(ctx context.Context, id string) error {
 
 		for _, audioFile := range book.AudioFiles {
 			if audioFile.Inode > 0 {
-				inodeKey := []byte(fmt.Sprintf("%s%d", bookByInodePrefix, audioFile.Inode))
+				inodeKey := fmt.Appendf(nil, "%s%d", bookByInodePrefix, audioFile.Inode)
 				if err := txn.Delete(inodeKey); err != nil {
 					return err
 				}
@@ -600,7 +600,7 @@ func (s *Store) DeleteBook(ctx context.Context, id string) error {
 
 		// Delete contributor reverse indexes.
 		for _, bc := range book.Contributors {
-			contributorBookKey := []byte(fmt.Sprintf("%s%s:%s", bookByContributorPrefix, bc.ContributorID, book.ID))
+			contributorBookKey := fmt.Appendf(nil, "%s%s:%s", bookByContributorPrefix, bc.ContributorID, book.ID)
 			if err := txn.Delete(contributorBookKey); err != nil {
 				return err
 			}
@@ -608,7 +608,7 @@ func (s *Store) DeleteBook(ctx context.Context, id string) error {
 
 		// Delete series reverse indexes for all series the book was in.
 		for _, bs := range book.Series {
-			seriesBookKey := []byte(fmt.Sprintf("%s%s:%s", bookBySeriesPrefix, bs.SeriesID, book.ID))
+			seriesBookKey := fmt.Appendf(nil, "%s%s:%s", bookBySeriesPrefix, bs.SeriesID, book.ID)
 			if err := txn.Delete(seriesBookKey); err != nil {
 				return err
 			}
@@ -963,10 +963,7 @@ func (s *Store) GetBooksByCollectionPaginated(ctx context.Context, userID, colle
 	}
 
 	// Calculate end index.
-	endIdx := startIdx + params.Limit
-	if endIdx > len(coll.BookIDs) {
-		endIdx = len(coll.BookIDs)
-	}
+	endIdx := min(startIdx+params.Limit, len(coll.BookIDs))
 
 	// Get slice of book IDs for this page.
 	pageBookIDs := coll.BookIDs[startIdx:endIdx]
@@ -993,7 +990,7 @@ func (s *Store) GetBooksByCollectionPaginated(ctx context.Context, userID, colle
 	}
 
 	if hasMore {
-		result.NextCursor = EncodeCursor(fmt.Sprintf("%d", endIdx))
+		result.NextCursor = EncodeCursor(strconv.Itoa(endIdx))
 	}
 
 	return result, nil

@@ -3,7 +3,6 @@ package scanner
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -257,8 +256,8 @@ func isDiscDirLocal(name string) bool {
 	}
 
 	for _, pattern := range patterns {
-		if strings.HasPrefix(name, pattern) {
-			rest := strings.TrimPrefix(name, pattern)
+		if after, ok := strings.CutPrefix(name, pattern); ok {
+			rest := after
 			rest = strings.TrimSpace(rest)
 			if rest != "" && (rest[0] >= '0' && rest[0] <= '9') {
 				return true
@@ -273,7 +272,7 @@ func isDiscDirLocal(name string) bool {
 func getInode(info fs.FileInfo) (uint64, error) {
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {
-		return 0, fmt.Errorf("failed to get stat")
+		return 0, errors.New("failed to get stat")
 	}
 	return stat.Ino, nil
 }

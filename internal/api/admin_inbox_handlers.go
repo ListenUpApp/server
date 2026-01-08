@@ -140,7 +140,7 @@ type UnstageInboxCollectionOutput struct {
 
 // === Handlers ===
 
-func (s *Server) handleListInboxBooks(ctx context.Context, input *ListInboxBooksInput) (*ListInboxBooksOutput, error) {
+func (s *Server) handleListInboxBooks(ctx context.Context, _ *ListInboxBooksInput) (*ListInboxBooksOutput, error) {
 	_, err := s.RequireAdmin(ctx)
 	if err != nil {
 		return nil, err

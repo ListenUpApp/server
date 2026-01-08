@@ -130,13 +130,7 @@ func (s *Store) EnsureLibrary(ctx context.Context, scanPath string, userID strin
 		// Library exists - ensure scan path is included.
 		result.IsNewLibrary = false
 
-		hasPath := false
-		for _, p := range library.ScanPaths {
-			if p == scanPath {
-				hasPath = true
-				break
-			}
-		}
+		hasPath := slices.Contains(library.ScanPaths, scanPath)
 
 		if !hasPath {
 			if s.logger != nil {
@@ -377,13 +371,13 @@ func (s *Store) CreateCollection(_ context.Context, coll *domain.Collection) err
 		// Create reverse indexes for initial BookIDs
 		for _, bookID := range coll.BookIDs {
 			// idx:books:collections:{collectionID}:{bookID}
-			bookCollKey := []byte(fmt.Sprintf("%s%s:%s", bookCollectionsPrefix, coll.ID, bookID))
+			bookCollKey := fmt.Appendf(nil, "%s%s:%s", bookCollectionsPrefix, coll.ID, bookID)
 			if err := txn.Set(bookCollKey, []byte{}); err != nil {
 				return fmt.Errorf("set book-collection index: %w", err)
 			}
 
 			// idx:collections:books:{bookID}:{collectionID}
-			collBookKey := []byte(fmt.Sprintf("%s%s:%s", collectionBooksPrefix, bookID, coll.ID))
+			collBookKey := fmt.Appendf(nil, "%s%s:%s", collectionBooksPrefix, bookID, coll.ID)
 			if err := txn.Set(collBookKey, []byte{}); err != nil {
 				return fmt.Errorf("set collection-book index: %w", err)
 			}
@@ -530,13 +524,13 @@ func (s *Store) updateCollectionInternal(ctx context.Context, coll *domain.Colle
 			if !oldBooks[bookID] {
 				// Book was added to collection
 				// idx:books:collections:{collectionID}:{bookID}
-				bookCollKey := []byte(fmt.Sprintf("%s%s:%s", bookCollectionsPrefix, coll.ID, bookID))
+				bookCollKey := fmt.Appendf(nil, "%s%s:%s", bookCollectionsPrefix, coll.ID, bookID)
 				if err := txn.Set(bookCollKey, []byte{}); err != nil {
 					return fmt.Errorf("set book-collection index: %w", err)
 				}
 
 				// idx:collections:books:{bookID}:{collectionID}
-				collBookKey := []byte(fmt.Sprintf("%s%s:%s", collectionBooksPrefix, bookID, coll.ID))
+				collBookKey := fmt.Appendf(nil, "%s%s:%s", collectionBooksPrefix, bookID, coll.ID)
 				if err := txn.Set(collBookKey, []byte{}); err != nil {
 					return fmt.Errorf("set collection-book index: %w", err)
 				}
@@ -548,13 +542,13 @@ func (s *Store) updateCollectionInternal(ctx context.Context, coll *domain.Colle
 			if !newBooks[bookID] {
 				// Book was removed from collection
 				// idx:books:collections:{collectionID}:{bookID}
-				bookCollKey := []byte(fmt.Sprintf("%s%s:%s", bookCollectionsPrefix, coll.ID, bookID))
+				bookCollKey := fmt.Appendf(nil, "%s%s:%s", bookCollectionsPrefix, coll.ID, bookID)
 				if err := txn.Delete(bookCollKey); err != nil {
 					return fmt.Errorf("delete book-collection index: %w", err)
 				}
 
 				// idx:collections:books:{bookID}:{collectionID}
-				collBookKey := []byte(fmt.Sprintf("%s%s:%s", collectionBooksPrefix, bookID, coll.ID))
+				collBookKey := fmt.Appendf(nil, "%s%s:%s", collectionBooksPrefix, bookID, coll.ID)
 				if err := txn.Delete(collBookKey); err != nil {
 					return fmt.Errorf("delete collection-book index: %w", err)
 				}
@@ -656,7 +650,7 @@ func (s *Store) deleteCollectionInternal(ctx context.Context, id string) error {
 		// Delete all book-collection reverse indexes
 		for _, bookID := range coll.BookIDs {
 			// idx:books:collections:{collectionID}:{bookID}
-			bookCollKey := []byte(fmt.Sprintf("%s%s:%s", bookCollectionsPrefix, coll.ID, bookID))
+			bookCollKey := fmt.Appendf(nil, "%s%s:%s", bookCollectionsPrefix, coll.ID, bookID)
 			if err := txn.Delete(bookCollKey); err != nil {
 				// Ignore if key doesn't exist
 				if !errors.Is(err, badger.ErrKeyNotFound) {
@@ -665,7 +659,7 @@ func (s *Store) deleteCollectionInternal(ctx context.Context, id string) error {
 			}
 
 			// idx:collections:books:{bookID}:{collectionID}
-			collBookKey := []byte(fmt.Sprintf("%s%s:%s", collectionBooksPrefix, bookID, coll.ID))
+			collBookKey := fmt.Appendf(nil, "%s%s:%s", collectionBooksPrefix, bookID, coll.ID)
 			if err := txn.Delete(collBookKey); err != nil {
 				// Ignore if key doesn't exist
 				if !errors.Is(err, badger.ErrKeyNotFound) {
@@ -882,7 +876,7 @@ func (s *Store) GetCollectionsForBook(ctx context.Context, bookID string) ([]*do
 	var collectionIDs []string
 
 	// Use reverse index: idx:collections:books:{bookID}:{collectionID}
-	prefix := []byte(fmt.Sprintf("%s%s:", collectionBooksPrefix, bookID))
+	prefix := fmt.Appendf(nil, "%s%s:", collectionBooksPrefix, bookID)
 
 	err := s.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions

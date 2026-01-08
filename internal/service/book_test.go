@@ -1,6 +1,7 @@
 package service
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
@@ -29,7 +30,7 @@ func TestMergeContributors_PreservesAuthorsWhenOnlyNarratorsSelected(t *testing.
 	assert.Equal(t, "author-1", result.preservedAuthors[0])
 
 	// Should NOT preserve existing narrator (being replaced)
-	assert.Len(t, result.preservedNarrators, 0)
+	assert.Empty(t, result.preservedNarrators)
 }
 
 // TestMergeContributors_PreservesNarratorsWhenOnlyAuthorsSelected tests that
@@ -48,7 +49,7 @@ func TestMergeContributors_PreservesNarratorsWhenOnlyAuthorsSelected(t *testing.
 	result := mergeContributorsLogic(existing, authorASINs, narratorASINs)
 
 	// Should NOT preserve existing author (being replaced)
-	assert.Len(t, result.preservedAuthors, 0)
+	assert.Empty(t, result.preservedAuthors)
 
 	// Should preserve the existing narrator
 	assert.Len(t, result.preservedNarrators, 1)
@@ -124,11 +125,8 @@ func mergeContributorsLogic(
 	// Authors: preserve if authorASINs is empty
 	if len(authorASINs) == 0 {
 		for _, bc := range existing {
-			for _, role := range bc.Roles {
-				if role == domain.RoleAuthor {
-					result.preservedAuthors = append(result.preservedAuthors, bc.ContributorID)
-					break
-				}
+			if slices.Contains(bc.Roles, domain.RoleAuthor) {
+				result.preservedAuthors = append(result.preservedAuthors, bc.ContributorID)
 			}
 		}
 	}
@@ -136,11 +134,8 @@ func mergeContributorsLogic(
 	// Narrators: preserve if narratorASINs is empty
 	if len(narratorASINs) == 0 {
 		for _, bc := range existing {
-			for _, role := range bc.Roles {
-				if role == domain.RoleNarrator {
-					result.preservedNarrators = append(result.preservedNarrators, bc.ContributorID)
-					break
-				}
+			if slices.Contains(bc.Roles, domain.RoleNarrator) {
+				result.preservedNarrators = append(result.preservedNarrators, bc.ContributorID)
 			}
 		}
 	}

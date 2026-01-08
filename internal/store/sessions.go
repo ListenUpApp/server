@@ -20,7 +20,7 @@ func (s *Store) CreateSession(_ context.Context, session *domain.Session) error 
 		return fmt.Errorf("check session exists: %w", err)
 	}
 	if exists {
-		return fmt.Errorf("session already exists")
+		return errors.New("session already exists")
 	}
 
 	tokenKey := []byte(sessionByTokenPrefix + session.RefreshTokenHash)

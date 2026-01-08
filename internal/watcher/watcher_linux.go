@@ -4,6 +4,7 @@ package watcher
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -359,7 +360,7 @@ func (b *linuxBackend) Stop() error {
 
 // clen returns the length of a null-terminated byte slice.
 func clen(n []byte) int {
-	for i := 0; i < len(n); i++ {
+	for i := range n {
 		if n[i] == 0 {
 			return i
 		}
@@ -370,5 +371,5 @@ func clen(n []byte) int {
 // newFallbackBackend is a stub that should never be called on Linux.
 // It exists only to satisfy the compiler when watcher.go references it.
 func newFallbackBackend(_ *slog.Logger, _ Options) (Backend, error) {
-	return nil, fmt.Errorf("fallback backend not available on Linux")
+	return nil, errors.New("fallback backend not available on Linux")
 }

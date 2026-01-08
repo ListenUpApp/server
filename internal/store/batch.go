@@ -54,7 +54,7 @@ func (b *BatchWriter) CreateBook(ctx context.Context, book *domain.Book) error {
 	// Add inode indices for each audio file.
 	for _, audioFile := range book.AudioFiles {
 		if audioFile.Inode > 0 {
-			inodeKey := []byte(fmt.Sprintf("%s%d", bookByInodePrefix, audioFile.Inode))
+			inodeKey := fmt.Appendf(nil, "%s%d", bookByInodePrefix, audioFile.Inode)
 			if err := b.batch.Set(inodeKey, []byte(book.ID)); err != nil {
 				return fmt.Errorf("batch set inode index: %w", err)
 			}
@@ -63,7 +63,7 @@ func (b *BatchWriter) CreateBook(ctx context.Context, book *domain.Book) error {
 
 	// Add contributor indexes for book-contributor associations.
 	for _, bc := range book.Contributors {
-		contributorBookKey := []byte(fmt.Sprintf("%s%s:%s", bookByContributorPrefix, bc.ContributorID, book.ID))
+		contributorBookKey := fmt.Appendf(nil, "%s%s:%s", bookByContributorPrefix, bc.ContributorID, book.ID)
 		if err := b.batch.Set(contributorBookKey, []byte{}); err != nil {
 			return fmt.Errorf("batch set contributor index: %w", err)
 		}
@@ -71,7 +71,7 @@ func (b *BatchWriter) CreateBook(ctx context.Context, book *domain.Book) error {
 
 	// Add series indexes for all series the book belongs to.
 	for _, bs := range book.Series {
-		seriesBookKey := []byte(fmt.Sprintf("%s%s:%s", bookBySeriesPrefix, bs.SeriesID, book.ID))
+		seriesBookKey := fmt.Appendf(nil, "%s%s:%s", bookBySeriesPrefix, bs.SeriesID, book.ID)
 		if err := b.batch.Set(seriesBookKey, []byte{}); err != nil {
 			return fmt.Errorf("batch set series index: %w", err)
 		}

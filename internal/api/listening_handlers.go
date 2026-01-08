@@ -110,7 +110,7 @@ type BatchListeningEventItem struct {
 }
 
 // BatchListeningEventsRequest is the request body for submitting multiple listening events.
-// Matches the client's ListeningEventsRequest format: {"events": [...]}
+// Matches the client's ListeningEventsRequest format: {"events": [...]}.
 type BatchListeningEventsRequest struct {
 	Events []BatchListeningEventItem `json:"events" validate:"required,min=1,dive" doc:"List of listening events"`
 }

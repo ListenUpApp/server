@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -249,7 +250,7 @@ func (s *Server) handleDeleteShare(ctx context.Context, input *DeleteShareInput)
 	return &MessageOutput{Body: MessageResponse{Message: "Share removed"}}, nil
 }
 
-func (s *Server) handleListSharedWithMe(ctx context.Context, input *ListSharedWithMeInput) (*ListSharesOutput, error) {
+func (s *Server) handleListSharedWithMe(ctx context.Context, _ *ListSharedWithMeInput) (*ListSharesOutput, error) {
 	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
@@ -285,7 +286,7 @@ func (s *Server) emitBooksForShare(ctx context.Context, collectionID, userID str
 	// Get the collection to find the owner and book IDs
 	coll, err := s.store.AdminGetCollection(ctx, collectionID)
 	if err != nil {
-		if err != store.ErrCollectionNotFound {
+		if !errors.Is(err, store.ErrCollectionNotFound) {
 			s.logger.Error("failed to get collection for share notification", "collection_id", collectionID, "error", err)
 		}
 		return

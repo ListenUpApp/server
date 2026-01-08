@@ -433,8 +433,7 @@ func BenchmarkDetermineBookFolder(b *testing.B) {
 		"/audiobooks/Stephen King/The Stand/CD2/Track01.mp3",
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		determineBookFolder(paths[i%len(paths)])
 	}
 }
@@ -447,8 +446,7 @@ func BenchmarkIsDiscDir(b *testing.B) {
 		"cd 01",
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		isDiscDir(dirNames[i%len(dirNames)])
 	}
 }

@@ -1,3 +1,4 @@
+// Package color provides color generation utilities for user avatars.
 package color
 
 import "fmt"
@@ -25,7 +26,7 @@ func ForUser(userID string) string {
 // h: hue (0-360), s: saturation (0-1), l: lightness (0-1)
 // Returns RGB values (0-255).
 func hslToRGB(h, s, l float64) (r, g, b uint8) {
-	h = h / 360.0
+	h /= 360.0
 
 	var r1, g1, b1 float64
 
@@ -54,10 +55,10 @@ func hslToRGB(h, s, l float64) (r, g, b uint8) {
 
 func hueToRGB(p, q, t float64) float64 {
 	if t < 0 {
-		t += 1
+		t++
 	}
 	if t > 1 {
-		t -= 1
+		t--
 	}
 	if t < 1.0/6.0 {
 		return p + (q-p)*6*t

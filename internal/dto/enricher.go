@@ -3,6 +3,7 @@ package dto
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
 )
@@ -366,10 +367,5 @@ func (e *Enricher) EnrichBooks(ctx context.Context, books []*domain.Book) ([]*Bo
 
 // hasRole checks if a BookContributor has the specified role.
 func hasRole(bc domain.BookContributor, role domain.ContributorRole) bool {
-	for _, r := range bc.Roles {
-		if r == role {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(bc.Roles, role)
 }

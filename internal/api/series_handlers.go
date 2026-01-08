@@ -341,7 +341,7 @@ func (s *Server) handleGetSeriesBooks(ctx context.Context, input *GetSeriesBooks
 	return &SeriesBooksOutput{Body: SeriesBooksResponse{Books: resp}}, nil
 }
 
-func (s *Server) handleMergeSeries(ctx context.Context, input *MergeSeriesInput) (*SeriesOutput, error) {
+func (s *Server) handleMergeSeries(ctx context.Context, _ *MergeSeriesInput) (*SeriesOutput, error) {
 	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}

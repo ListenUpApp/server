@@ -3,6 +3,8 @@ package images
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -31,10 +33,10 @@ func NewStorage(basePath string) (*Storage, error) {
 // Example: NewStorageWithSubdir("/data", "contributors") -> /data/contributors/.
 func NewStorageWithSubdir(basePath, subdir string) (*Storage, error) {
 	if basePath == "" {
-		return nil, fmt.Errorf("base path cannot be empty")
+		return nil, errors.New("base path cannot be empty")
 	}
 	if subdir == "" {
-		return nil, fmt.Errorf("subdirectory cannot be empty")
+		return nil, errors.New("subdirectory cannot be empty")
 	}
 
 	storagePath := filepath.Join(basePath, subdir)
@@ -53,11 +55,11 @@ func NewStorageWithSubdir(basePath, subdir string) (*Storage, error) {
 // Filename format: {id}.jpg.
 func (s *Storage) Save(id string, imgData []byte) error {
 	if id == "" {
-		return fmt.Errorf("ID cannot be empty")
+		return errors.New("ID cannot be empty")
 	}
 
 	if len(imgData) == 0 {
-		return fmt.Errorf("image data cannot be empty")
+		return errors.New("image data cannot be empty")
 	}
 
 	s.mu.Lock()
@@ -76,7 +78,7 @@ func (s *Storage) Save(id string, imgData []byte) error {
 // Get retrieves image data for an entity.
 func (s *Storage) Get(id string) ([]byte, error) {
 	if id == "" {
-		return nil, fmt.Errorf("ID cannot be empty")
+		return nil, errors.New("ID cannot be empty")
 	}
 
 	s.mu.RLock()
@@ -112,7 +114,7 @@ func (s *Storage) Exists(id string) bool {
 // Delete removes an image for an entity.
 func (s *Storage) Delete(id string) error {
 	if id == "" {
-		return fmt.Errorf("ID cannot be empty")
+		return errors.New("ID cannot be empty")
 	}
 
 	s.mu.Lock()
@@ -135,7 +137,7 @@ func (s *Storage) Delete(id string) error {
 // Returns hex-encoded string for ETag/cache validation.
 func (s *Storage) Hash(id string) (string, error) {
 	if id == "" {
-		return "", fmt.Errorf("ID cannot be empty")
+		return "", errors.New("ID cannot be empty")
 	}
 
 	data, err := s.Get(id)
@@ -144,10 +146,10 @@ func (s *Storage) Hash(id string) (string, error) {
 	}
 
 	hash := sha256.Sum256(data)
-	return fmt.Sprintf("%x", hash), nil
+	return hex.EncodeToString(hash[:]), nil
 }
 
 // Path returns the full filesystem path for an entity's image.
 func (s *Storage) Path(id string) string {
-	return filepath.Join(s.basePath, fmt.Sprintf("%s.jpg", id))
+	return filepath.Join(s.basePath, id+".jpg")
 }

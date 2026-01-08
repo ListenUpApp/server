@@ -205,7 +205,7 @@ func TestWalker_Walk_ContextCancellation(t *testing.T) {
 	// Setup: Create directory with files.
 	tmpDir := t.TempDir()
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		filename := filepath.Join(tmpDir, filepath.FromSlash("file"+string(rune('0'+i))+".txt"))
 		if err := os.WriteFile(filename, []byte("data"), 0o644); err != nil {
 			t.Fatal(err)

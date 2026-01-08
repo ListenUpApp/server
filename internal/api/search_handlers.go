@@ -100,7 +100,7 @@ func (s *Server) handleSearch(ctx context.Context, input *SearchInput) (*SearchO
 
 	// Parse types - comma-separated string to slice
 	if input.Types != "" {
-		for _, t := range strings.Split(input.Types, ",") {
+		for t := range strings.SplitSeq(input.Types, ",") {
 			t = strings.TrimSpace(t)
 			switch t {
 			case "book":
@@ -115,7 +115,7 @@ func (s *Server) handleSearch(ctx context.Context, input *SearchInput) (*SearchO
 
 	// Genre filter - parse comma-separated slugs
 	if input.GenreSlugs != "" {
-		for _, g := range strings.Split(input.GenreSlugs, ",") {
+		for g := range strings.SplitSeq(input.GenreSlugs, ",") {
 			g = strings.TrimSpace(g)
 			if g != "" {
 				params.GenreSlugs = append(params.GenreSlugs, g)

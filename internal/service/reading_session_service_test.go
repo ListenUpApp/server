@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -27,7 +26,7 @@ func setupTestReadingSession(t *testing.T) (*ReadingSessionService, *store.Store
 	testStore, err := store.New(dbPath, nil, store.NewNoopEmitter())
 	require.NoError(t, err)
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	svc := NewReadingSessionService(testStore, store.NewNoopEmitter(), logger)
 
 	cleanup := func() {

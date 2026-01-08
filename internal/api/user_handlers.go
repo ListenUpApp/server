@@ -31,7 +31,7 @@ type UserOutput struct {
 	Body UserResponse
 }
 
-func (s *Server) handleGetCurrentUser(ctx context.Context, input *AuthenticatedInput) (*UserOutput, error) {
+func (s *Server) handleGetCurrentUser(ctx context.Context, _ *AuthenticatedInput) (*UserOutput, error) {
 	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err

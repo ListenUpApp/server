@@ -66,7 +66,7 @@ type UpdateServerSettingsOutput struct {
 
 // === Handlers ===
 
-func (s *Server) handleGetServerSettings(ctx context.Context, input *GetServerSettingsInput) (*GetServerSettingsOutput, error) {
+func (s *Server) handleGetServerSettings(ctx context.Context, _ *GetServerSettingsInput) (*GetServerSettingsOutput, error) {
 	_, err := s.RequireAdmin(ctx)
 	if err != nil {
 		return nil, err

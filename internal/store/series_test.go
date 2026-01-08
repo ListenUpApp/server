@@ -217,7 +217,7 @@ func TestListSeries_Pagination(t *testing.T) {
 	ctx := context.Background()
 
 	// Create 5 series
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		name := string('A' + rune(i))
 		_, err := store.GetOrCreateSeriesByName(ctx, name)
 		require.NoError(t, err)

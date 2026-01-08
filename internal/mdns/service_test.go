@@ -177,7 +177,7 @@ func TestServiceConcurrency(t *testing.T) {
 
 		// Concurrent stops should be safe
 		done := make(chan struct{})
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			go func() {
 				service.Stop()
 				done <- struct{}{}
@@ -185,7 +185,7 @@ func TestServiceConcurrency(t *testing.T) {
 		}
 
 		// Wait for all goroutines
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			<-done
 		}
 

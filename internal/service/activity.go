@@ -26,7 +26,7 @@ type ActivityService struct {
 func (s *ActivityService) getUserAvatarInfo(ctx context.Context, userID string) (avatarType, avatarValue string) {
 	profile, err := s.store.GetUserProfile(ctx, userID)
 	if err != nil || profile == nil {
-		return "auto", ""
+		return string(domain.AvatarTypeAuto), ""
 	}
 	return string(profile.AvatarType), profile.AvatarValue
 }
@@ -350,10 +350,7 @@ func (s *ActivityService) RecordListeningSession(ctx context.Context, userID, bo
 // Only returns activities for books the viewing user can access.
 func (s *ActivityService) GetFeed(ctx context.Context, viewingUserID string, limit int, before *time.Time) ([]*domain.Activity, error) {
 	// Overfetch to account for ACL filtering
-	overfetchLimit := limit * 3
-	if overfetchLimit < 30 {
-		overfetchLimit = 30
-	}
+	overfetchLimit := max(limit*3, 30)
 
 	activities, err := s.store.GetActivitiesFeed(ctx, overfetchLimit, before)
 	if err != nil {

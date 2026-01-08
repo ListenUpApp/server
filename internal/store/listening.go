@@ -13,12 +13,12 @@ import (
 )
 
 const (
-	listeningEventPrefix      = "evt:"
-	eventByUserPrefix         = "evt:idx:user:"
-	eventByUserTimePrefix     = "evt:idx:user:time:" // Format: evt:idx:user:time:{userID}:{endedAtMs}:{eventID}
-	eventByBookPrefix         = "evt:idx:book:"
-	eventByUserBookPrefix     = "evt:idx:userbook:"
-	progressPrefix            = "progress:"
+	listeningEventPrefix  = "evt:"
+	eventByUserPrefix     = "evt:idx:user:"
+	eventByUserTimePrefix = "evt:idx:user:time:" // Format: evt:idx:user:time:{userID}:{endedAtMs}:{eventID}
+	eventByBookPrefix     = "evt:idx:book:"
+	eventByUserBookPrefix = "evt:idx:userbook:"
+	progressPrefix        = "progress:"
 )
 
 // Sentinel errors for listening operations.

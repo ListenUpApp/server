@@ -535,7 +535,7 @@ func buildSessionSummaries(sessions []*domain.BookReadingSession) []SessionSumma
 // buildReaderSummary creates a reader summary from user, profile, and their sessions.
 func buildReaderSummary(user *domain.User, profile *domain.UserProfile, sessions []*domain.BookReadingSession) ReaderSummary {
 	// Extract avatar info from profile (defaults to auto if no profile)
-	avatarType := "auto"
+	avatarType := string(domain.AvatarTypeAuto)
 	avatarValue := ""
 	if profile != nil {
 		avatarType = string(profile.AvatarType)
@@ -595,11 +595,8 @@ func getAuthorName(ctx context.Context, store *store.Store, book *domain.Book) s
 	// Collect author contributor IDs
 	var authorIDs []string
 	for _, contrib := range book.Contributors {
-		for _, role := range contrib.Roles {
-			if role == domain.RoleAuthor {
-				authorIDs = append(authorIDs, contrib.ContributorID)
-				break
-			}
+		if slices.Contains(contrib.Roles, domain.RoleAuthor) {
+			authorIDs = append(authorIDs, contrib.ContributorID)
 		}
 	}
 

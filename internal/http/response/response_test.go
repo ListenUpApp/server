@@ -3,7 +3,6 @@ package response
 import (
 	"encoding/json/v2"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -36,7 +35,7 @@ func TestEnvelope_Marshal(t *testing.T) {
 
 func TestJSON_Success(t *testing.T) {
 	w := httptest.NewRecorder()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	data := map[string]string{"message": "test"}
 	JSON(w, http.StatusOK, data, logger)
@@ -55,7 +54,7 @@ func TestJSON_Success(t *testing.T) {
 
 func TestJSON_Error(t *testing.T) {
 	w := httptest.NewRecorder()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	data := map[string]string{"message": "test"}
 	JSON(w, http.StatusNotFound, data, logger)
@@ -87,7 +86,7 @@ func TestJSON_NilLogger(t *testing.T) {
 
 func TestSuccess(t *testing.T) {
 	w := httptest.NewRecorder()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	data := map[string]any{
 		"id":   "123",
@@ -114,7 +113,7 @@ func TestSuccess(t *testing.T) {
 
 func TestCreated(t *testing.T) {
 	w := httptest.NewRecorder()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	data := map[string]string{"id": "new-id"}
 	Created(w, data, logger)
@@ -141,7 +140,7 @@ func TestNoContent(t *testing.T) {
 
 func TestError_Generic(t *testing.T) {
 	w := httptest.NewRecorder()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	Error(w, http.StatusInternalServerError, "something went wrong", logger)
 
@@ -174,7 +173,7 @@ func TestError_NilLogger(t *testing.T) {
 
 func TestBadRequest(t *testing.T) {
 	w := httptest.NewRecorder()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	BadRequest(w, "invalid input", logger)
 
@@ -190,7 +189,7 @@ func TestBadRequest(t *testing.T) {
 
 func TestUnauthorized(t *testing.T) {
 	w := httptest.NewRecorder()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	Unauthorized(w, "authentication required", logger)
 
@@ -206,7 +205,7 @@ func TestUnauthorized(t *testing.T) {
 
 func TestForbidden(t *testing.T) {
 	w := httptest.NewRecorder()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	Forbidden(w, "access denied", logger)
 
@@ -222,7 +221,7 @@ func TestForbidden(t *testing.T) {
 
 func TestNotFound(t *testing.T) {
 	w := httptest.NewRecorder()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	NotFound(w, "resource not found", logger)
 
@@ -238,7 +237,7 @@ func TestNotFound(t *testing.T) {
 
 func TestInternalError(t *testing.T) {
 	w := httptest.NewRecorder()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	InternalError(w, "internal server error", logger)
 
@@ -273,7 +272,7 @@ func TestStatusCodeBoundary(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+			logger := slog.New(slog.DiscardHandler)
 
 			JSON(w, tt.status, nil, logger)
 

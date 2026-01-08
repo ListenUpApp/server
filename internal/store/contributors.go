@@ -8,6 +8,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -610,11 +611,8 @@ func (s *Store) GetBooksByContributorRole(ctx context.Context, contributorID str
 	for _, book := range allBooks {
 		for _, bc := range book.Contributors {
 			if bc.ContributorID == contributorID {
-				for _, r := range bc.Roles {
-					if r == role {
-						books = append(books, book)
-						break
-					}
+				if slices.Contains(bc.Roles, role) {
+					books = append(books, book)
 				}
 			}
 		}
@@ -1005,7 +1003,7 @@ func (s *Store) GetContributorsDeletedAfter(_ context.Context, timestamp time.Ti
 func (s *Store) MergeContributors(ctx context.Context, sourceID, targetID string) (*domain.Contributor, error) {
 	// Validate: can't merge contributor into itself
 	if sourceID == targetID {
-		return nil, fmt.Errorf("cannot merge contributor into itself")
+		return nil, errors.New("cannot merge contributor into itself")
 	}
 
 	// Get both contributors
@@ -1036,7 +1034,8 @@ func (s *Store) MergeContributors(ctx context.Context, sourceID, targetID string
 		var sourceCreditedAs string
 
 		for _, bc := range book.Contributors {
-			if bc.ContributorID == sourceID {
+			switch bc.ContributorID {
+			case sourceID:
 				// Remember source's roles and creditedAs for merging
 				sourceRoles = bc.Roles
 				if bc.CreditedAs != "" {
@@ -1045,11 +1044,11 @@ func (s *Store) MergeContributors(ctx context.Context, sourceID, targetID string
 					sourceCreditedAs = source.Name
 				}
 				updated = true
-			} else if bc.ContributorID == targetID {
+			case targetID:
 				// Target already exists in this book
 				existingTargetIdx = len(newContributors)
 				newContributors = append(newContributors, bc)
-			} else {
+			default:
 				// Other contributors pass through unchanged
 				newContributors = append(newContributors, bc)
 			}

@@ -1,7 +1,6 @@
 package watcher
 
 import (
-	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -49,8 +48,7 @@ func TestWatcher_FileCreation(t *testing.T) {
 	err = w.Watch(tmpDir)
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	go w.Start(ctx) //nolint:errcheck // Test goroutine
 
@@ -88,8 +86,7 @@ func TestWatcher_FileDeletion(t *testing.T) {
 	err = w.Watch(tmpDir)
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	go w.Start(ctx) //nolint:errcheck // Test goroutine
 
@@ -123,8 +120,7 @@ func TestWatcher_IgnoreHidden(t *testing.T) {
 	err = w.Watch(tmpDir)
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	go w.Start(ctx) //nolint:errcheck // Test goroutine
 
