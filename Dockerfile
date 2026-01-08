@@ -14,9 +14,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Clone and build librempeg
+# Clone and build librempeg at a pinned commit for reproducible builds
 WORKDIR /build
-RUN git clone --depth 1 https://github.com/librempeg/librempeg.git
+ARG LIBREMPEG_COMMIT=1b41a5da3b110d015a93cfeac3fff820927bb92d
+RUN git clone https://github.com/librempeg/librempeg.git && \
+    cd librempeg && \
+    git checkout ${LIBREMPEG_COMMIT}
 
 WORKDIR /build/librempeg
 RUN ./configure \
@@ -36,29 +39,35 @@ RUN ./configure \
     && make install
 
 # Build stage 2: Build Go application
-FROM golang:1.23-bookworm AS go-builder
+FROM golang:1.25-bookworm AS go-builder
 
 WORKDIR /app
 
 # Copy go mod files first for better caching
 COPY go.mod go.sum ./
-RUN go mod download
+
+# Download dependencies with cache mount for faster rebuilds
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
 # Copy source code
 COPY . .
 
-# Build with static linking
+# Build with static linking and cache mount
 ENV CGO_ENABLED=0
 ENV GOEXPERIMENT=jsonv2
-RUN go build -ldflags="-s -w" -o /app/listenup-server ./cmd/api
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go build -ldflags="-s -w" -o /app/listenup-server ./cmd/api
 
 # Final stage: Runtime image
 FROM debian:bookworm-slim
 
-# Install runtime dependencies
+# Install runtime dependencies (wget for health checks, ca-certificates for HTTPS)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libssl3 \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy librempeg binaries
@@ -88,8 +97,8 @@ ENV FFMPEG_PATH=/usr/local/bin/ffmpeg
 
 EXPOSE 8080
 
-# Health check
+# Health check using wget (lighter than curl)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/api/v1/health || exit 1
+    CMD wget -q --spider http://localhost:8080/health || exit 1
 
 ENTRYPOINT ["listenup-server"]
