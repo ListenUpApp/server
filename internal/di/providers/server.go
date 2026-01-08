@@ -73,6 +73,7 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 	readingSessionService := do.MustInvoke[*service.ReadingSessionService](i)
 	activityService := do.MustInvoke[*service.ActivityService](i)
 	profileService := do.MustInvoke[*service.ProfileService](i)
+	libraryService := do.MustInvoke[*service.LibraryService](i)
 
 	// Wire up activity recording to reading session service
 	readingSessionService.SetActivityRecorder(activityService)
@@ -112,6 +113,7 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 		ReadingSession: readingSessionService,
 		Activity:       activityService,
 		Profile:        profileService,
+		Library:        libraryService,
 	}
 
 	storage := &api.StorageServices{

@@ -1024,3 +1024,54 @@ func (s *Store) AdminRemoveBookFromCollection(ctx context.Context, bookID, colle
 
 	return s.updateCollectionInternal(ctx, coll)
 }
+
+// EnsureGlobalAccessCollection ensures a global access collection exists for the library.
+// Creates one if it doesn't exist, owned by the library owner.
+func (s *Store) EnsureGlobalAccessCollection(ctx context.Context, libraryID, ownerID string) (*domain.Collection, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	// Check if one already exists
+	collections, err := s.ListAllCollectionsByLibrary(ctx, libraryID)
+	if err != nil {
+		return nil, fmt.Errorf("list collections: %w", err)
+	}
+
+	for _, coll := range collections {
+		if coll.IsGlobalAccess {
+			return coll, nil
+		}
+	}
+
+	// Create one
+	collID, err := id.Generate("coll")
+	if err != nil {
+		return nil, fmt.Errorf("generate collection ID: %w", err)
+	}
+
+	coll := &domain.Collection{
+		ID:             collID,
+		LibraryID:      libraryID,
+		OwnerID:        ownerID,
+		Name:           "Full Library Access",
+		BookIDs:        []string{},
+		IsInbox:        false,
+		IsGlobalAccess: true,
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+	}
+
+	if err := s.CreateCollection(ctx, coll); err != nil {
+		return nil, fmt.Errorf("create global access collection: %w", err)
+	}
+
+	if s.logger != nil {
+		s.logger.Info("created global access collection",
+			"collection_id", coll.ID,
+			"library_id", libraryID,
+		)
+	}
+
+	return coll, nil
+}

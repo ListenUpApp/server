@@ -12,20 +12,27 @@ import (
 // If a user wants to organize books (but not restrict access) they would
 // use a lens (once we get around to writing that logic).
 type Collection struct {
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	ID        string    `json:"id"`
-	LibraryID string    `json:"library_id"`
-	OwnerID   string    `json:"owner_id"` // User who owns this collection
-	Name      string    `json:"name"`
-	BookIDs   []string  `json:"book_ids"`
-	IsInbox   bool      `json:"is_inbox"` // System inbox for staging new books
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+	ID             string    `json:"id"`
+	LibraryID      string    `json:"library_id"`
+	OwnerID        string    `json:"owner_id"` // User who owns this collection
+	Name           string    `json:"name"`
+	BookIDs        []string  `json:"book_ids"`
+	IsInbox        bool      `json:"is_inbox"`         // System inbox for staging new books
+	IsGlobalAccess bool      `json:"is_global_access"` // When shared, grants access to ALL books
 }
 
 // IsSystemCollection returns true if this is the Inbox collection.
 // System collections cannot be deleted by users.
 func (c *Collection) IsSystemCollection() bool {
 	return c.IsInbox
+}
+
+// GrantsGlobalAccess returns true if this collection grants access to all books
+// in the library when shared with a user.
+func (c *Collection) GrantsGlobalAccess() bool {
+	return c.IsGlobalAccess
 }
 
 // AddBook adds a book ID to the collection if not already present.

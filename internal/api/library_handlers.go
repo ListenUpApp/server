@@ -28,6 +28,16 @@ func (s *Server) registerLibraryRoutes() {
 		Tags:        []string{"Libraries"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleGetLibrary)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "updateLibrary",
+		Method:      http.MethodPatch,
+		Path:        "/api/v1/libraries/{id}",
+		Summary:     "Update library",
+		Description: "Updates a library (admin only)",
+		Tags:        []string{"Libraries"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleUpdateLibrary)
 }
 
 // === DTOs ===
@@ -39,13 +49,14 @@ type ListLibrariesInput struct {
 
 // LibraryResponse contains library data in API responses.
 type LibraryResponse struct {
-	ID        string    `json:"id" doc:"Library ID"`
-	Name      string    `json:"name" doc:"Library name"`
-	OwnerID   string    `json:"owner_id" doc:"Owner user ID"`
-	ScanPaths []string  `json:"scan_paths" doc:"Paths to scan for audiobooks"`
-	SkipInbox bool      `json:"skip_inbox" doc:"Whether to skip inbox for new books"`
-	CreatedAt time.Time `json:"created_at" doc:"Creation time"`
-	UpdatedAt time.Time `json:"updated_at" doc:"Last update time"`
+	ID         string    `json:"id" doc:"Library ID"`
+	Name       string    `json:"name" doc:"Library name"`
+	OwnerID    string    `json:"owner_id" doc:"Owner user ID"`
+	ScanPaths  []string  `json:"scan_paths" doc:"Paths to scan for audiobooks"`
+	SkipInbox  bool      `json:"skip_inbox" doc:"Whether to skip inbox for new books"`
+	AccessMode string    `json:"access_mode" doc:"Access mode: open or restricted"`
+	CreatedAt  time.Time `json:"created_at" doc:"Creation time"`
+	UpdatedAt  time.Time `json:"updated_at" doc:"Last update time"`
 }
 
 // ListLibrariesResponse contains a list of libraries.
@@ -69,6 +80,19 @@ type LibraryOutput struct {
 	Body LibraryResponse
 }
 
+// UpdateLibraryRequest is the request body for updating a library.
+type UpdateLibraryRequest struct {
+	Name       *string `json:"name,omitempty" validate:"omitempty,min=1,max=100" doc:"Library name"`
+	AccessMode *string `json:"access_mode,omitempty" validate:"omitempty,oneof=open restricted" doc:"Access mode: open or restricted"`
+}
+
+// UpdateLibraryInput wraps the update library request for Huma.
+type UpdateLibraryInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Library ID"`
+	Body          UpdateLibraryRequest
+}
+
 // === Handlers ===
 
 func (s *Server) handleListLibraries(ctx context.Context, _ *ListLibrariesInput) (*ListLibrariesOutput, error) {
@@ -84,13 +108,14 @@ func (s *Server) handleListLibraries(ctx context.Context, _ *ListLibrariesInput)
 	resp := make([]LibraryResponse, len(libraries))
 	for i, lib := range libraries {
 		resp[i] = LibraryResponse{
-			ID:        lib.ID,
-			Name:      lib.Name,
-			OwnerID:   lib.OwnerID,
-			ScanPaths: lib.ScanPaths,
-			SkipInbox: lib.SkipInbox,
-			CreatedAt: lib.CreatedAt,
-			UpdatedAt: lib.UpdatedAt,
+			ID:         lib.ID,
+			Name:       lib.Name,
+			OwnerID:    lib.OwnerID,
+			ScanPaths:  lib.ScanPaths,
+			SkipInbox:  lib.SkipInbox,
+			AccessMode: string(lib.GetAccessMode()),
+			CreatedAt:  lib.CreatedAt,
+			UpdatedAt:  lib.UpdatedAt,
 		}
 	}
 
@@ -109,13 +134,38 @@ func (s *Server) handleGetLibrary(ctx context.Context, input *GetLibraryInput) (
 
 	return &LibraryOutput{
 		Body: LibraryResponse{
-			ID:        lib.ID,
-			Name:      lib.Name,
-			OwnerID:   lib.OwnerID,
-			ScanPaths: lib.ScanPaths,
-			SkipInbox: lib.SkipInbox,
-			CreatedAt: lib.CreatedAt,
-			UpdatedAt: lib.UpdatedAt,
+			ID:         lib.ID,
+			Name:       lib.Name,
+			OwnerID:    lib.OwnerID,
+			ScanPaths:  lib.ScanPaths,
+			SkipInbox:  lib.SkipInbox,
+			AccessMode: string(lib.GetAccessMode()),
+			CreatedAt:  lib.CreatedAt,
+			UpdatedAt:  lib.UpdatedAt,
+		},
+	}, nil
+}
+
+func (s *Server) handleUpdateLibrary(ctx context.Context, input *UpdateLibraryInput) (*LibraryOutput, error) {
+	if _, err := s.RequireAdmin(ctx); err != nil {
+		return nil, err
+	}
+
+	lib, err := s.services.Library.UpdateLibrary(ctx, input.ID, input.Body.Name, input.Body.AccessMode)
+	if err != nil {
+		return nil, err
+	}
+
+	return &LibraryOutput{
+		Body: LibraryResponse{
+			ID:         lib.ID,
+			Name:       lib.Name,
+			OwnerID:    lib.OwnerID,
+			ScanPaths:  lib.ScanPaths,
+			SkipInbox:  lib.SkipInbox,
+			AccessMode: string(lib.GetAccessMode()),
+			CreatedAt:  lib.CreatedAt,
+			UpdatedAt:  lib.UpdatedAt,
 		},
 	}, nil
 }

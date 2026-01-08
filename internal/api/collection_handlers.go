@@ -100,14 +100,15 @@ type ListCollectionsInput struct {
 
 // CollectionResponse contains collection data in API responses.
 type CollectionResponse struct {
-	ID        string    `json:"id" doc:"Collection ID"`
-	LibraryID string    `json:"library_id" doc:"Library ID"`
-	OwnerID   string    `json:"owner_id" doc:"Owner user ID"`
-	Name      string    `json:"name" doc:"Collection name"`
-	BookCount int       `json:"book_count" doc:"Number of books"`
-	IsInbox   bool      `json:"is_inbox" doc:"Whether this is the inbox collection"`
-	CreatedAt time.Time `json:"created_at" doc:"Creation time"`
-	UpdatedAt time.Time `json:"updated_at" doc:"Last update time"`
+	ID             string    `json:"id" doc:"Collection ID"`
+	LibraryID      string    `json:"library_id" doc:"Library ID"`
+	OwnerID        string    `json:"owner_id" doc:"Owner user ID"`
+	Name           string    `json:"name" doc:"Collection name"`
+	BookCount      int       `json:"book_count" doc:"Number of books"`
+	IsInbox        bool      `json:"is_inbox" doc:"Whether this is the inbox collection"`
+	IsGlobalAccess bool      `json:"is_global_access" doc:"Whether sharing this collection grants access to ALL books"`
+	CreatedAt      time.Time `json:"created_at" doc:"Creation time"`
+	UpdatedAt      time.Time `json:"updated_at" doc:"Last update time"`
 }
 
 // ListCollectionsResponse contains a list of collections.
@@ -214,14 +215,15 @@ func (s *Server) handleListCollections(ctx context.Context, input *ListCollectio
 	resp := make([]CollectionResponse, len(collections))
 	for i, c := range collections {
 		resp[i] = CollectionResponse{
-			ID:        c.ID,
-			LibraryID: c.LibraryID,
-			OwnerID:   c.OwnerID,
-			Name:      c.Name,
-			BookCount: len(c.BookIDs),
-			IsInbox:   c.IsInbox,
-			CreatedAt: c.CreatedAt,
-			UpdatedAt: c.UpdatedAt,
+			ID:             c.ID,
+			LibraryID:      c.LibraryID,
+			OwnerID:        c.OwnerID,
+			Name:           c.Name,
+			BookCount:      len(c.BookIDs),
+			IsInbox:        c.IsInbox,
+			IsGlobalAccess: c.IsGlobalAccess,
+			CreatedAt:      c.CreatedAt,
+			UpdatedAt:      c.UpdatedAt,
 		}
 	}
 
@@ -241,14 +243,15 @@ func (s *Server) handleCreateCollection(ctx context.Context, input *CreateCollec
 
 	return &CollectionOutput{
 		Body: CollectionResponse{
-			ID:        c.ID,
-			LibraryID: c.LibraryID,
-			OwnerID:   c.OwnerID,
-			Name:      c.Name,
-			BookCount: len(c.BookIDs),
-			IsInbox:   c.IsInbox,
-			CreatedAt: c.CreatedAt,
-			UpdatedAt: c.UpdatedAt,
+			ID:             c.ID,
+			LibraryID:      c.LibraryID,
+			OwnerID:        c.OwnerID,
+			Name:           c.Name,
+			BookCount:      len(c.BookIDs),
+			IsInbox:        c.IsInbox,
+			IsGlobalAccess: c.IsGlobalAccess,
+			CreatedAt:      c.CreatedAt,
+			UpdatedAt:      c.UpdatedAt,
 		},
 	}, nil
 }
@@ -266,14 +269,15 @@ func (s *Server) handleGetCollection(ctx context.Context, input *GetCollectionIn
 
 	return &CollectionOutput{
 		Body: CollectionResponse{
-			ID:        c.ID,
-			LibraryID: c.LibraryID,
-			OwnerID:   c.OwnerID,
-			Name:      c.Name,
-			BookCount: len(c.BookIDs),
-			IsInbox:   c.IsInbox,
-			CreatedAt: c.CreatedAt,
-			UpdatedAt: c.UpdatedAt,
+			ID:             c.ID,
+			LibraryID:      c.LibraryID,
+			OwnerID:        c.OwnerID,
+			Name:           c.Name,
+			BookCount:      len(c.BookIDs),
+			IsInbox:        c.IsInbox,
+			IsGlobalAccess: c.IsGlobalAccess,
+			CreatedAt:      c.CreatedAt,
+			UpdatedAt:      c.UpdatedAt,
 		},
 	}, nil
 }
@@ -291,14 +295,15 @@ func (s *Server) handleUpdateCollection(ctx context.Context, input *UpdateCollec
 
 	return &CollectionOutput{
 		Body: CollectionResponse{
-			ID:        c.ID,
-			LibraryID: c.LibraryID,
-			OwnerID:   c.OwnerID,
-			Name:      c.Name,
-			BookCount: len(c.BookIDs),
-			IsInbox:   c.IsInbox,
-			CreatedAt: c.CreatedAt,
-			UpdatedAt: c.UpdatedAt,
+			ID:             c.ID,
+			LibraryID:      c.LibraryID,
+			OwnerID:        c.OwnerID,
+			Name:           c.Name,
+			BookCount:      len(c.BookIDs),
+			IsInbox:        c.IsInbox,
+			IsGlobalAccess: c.IsGlobalAccess,
+			CreatedAt:      c.CreatedAt,
+			UpdatedAt:      c.UpdatedAt,
 		},
 	}, nil
 }

@@ -189,20 +189,27 @@ type ListUsersInput struct {
 	Authorization string `header:"Authorization"`
 }
 
+// UserPermissionsResponse contains user permission flags in API responses.
+type UserPermissionsResponse struct {
+	CanDownload bool `json:"can_download" doc:"Whether user can download content"`
+	CanShare    bool `json:"can_share" doc:"Whether user can share collections"`
+}
+
 // AdminUserResponse is the API response for a user in admin context.
 type AdminUserResponse struct {
-	ID          string    `json:"id" doc:"User ID"`
-	Email       string    `json:"email" doc:"Email address"`
-	DisplayName string    `json:"display_name" doc:"Display name"`
-	FirstName   string    `json:"first_name" doc:"First name"`
-	LastName    string    `json:"last_name" doc:"Last name"`
-	Role        string    `json:"role" doc:"User role"`
-	Status      string    `json:"status" doc:"User status (active, pending)"`
-	IsRoot      bool      `json:"is_root" doc:"Is root user"`
-	InvitedBy   string    `json:"invited_by,omitempty" doc:"User ID who invited this user"`
-	LastLoginAt time.Time `json:"last_login_at,omitempty" doc:"Last login timestamp"`
-	CreatedAt   time.Time `json:"created_at" doc:"Creation time"`
-	UpdatedAt   time.Time `json:"updated_at" doc:"Last update time"`
+	ID          string                  `json:"id" doc:"User ID"`
+	Email       string                  `json:"email" doc:"Email address"`
+	DisplayName string                  `json:"display_name" doc:"Display name"`
+	FirstName   string                  `json:"first_name" doc:"First name"`
+	LastName    string                  `json:"last_name" doc:"Last name"`
+	Role        string                  `json:"role" doc:"User role"`
+	Status      string                  `json:"status" doc:"User status (active, pending)"`
+	IsRoot      bool                    `json:"is_root" doc:"Is root user"`
+	Permissions UserPermissionsResponse `json:"permissions" doc:"User permissions"`
+	InvitedBy   string                  `json:"invited_by,omitempty" doc:"User ID who invited this user"`
+	LastLoginAt time.Time               `json:"last_login_at,omitempty" doc:"Last login timestamp"`
+	CreatedAt   time.Time               `json:"created_at" doc:"Creation time"`
+	UpdatedAt   time.Time               `json:"updated_at" doc:"Last update time"`
 }
 
 // ListUsersResponse is the API response for listing users.
@@ -227,11 +234,18 @@ type AdminUserOutput struct {
 	Body AdminUserResponse
 }
 
+// UpdatePermissionsRequest contains optional permission updates in requests.
+type UpdatePermissionsRequest struct {
+	CanDownload *bool `json:"can_download,omitempty" doc:"Whether user can download content"`
+	CanShare    *bool `json:"can_share,omitempty" doc:"Whether user can share collections"`
+}
+
 // UpdateAdminUserRequest is the request body for updating a user.
 type UpdateAdminUserRequest struct {
-	FirstName *string `json:"first_name,omitempty" validate:"omitempty,min=1,max=100" doc:"First name"`
-	LastName  *string `json:"last_name,omitempty" validate:"omitempty,min=1,max=100" doc:"Last name"`
-	Role      *string `json:"role,omitempty" validate:"omitempty,oneof=admin member" doc:"User role"`
+	FirstName   *string                   `json:"first_name,omitempty" validate:"omitempty,min=1,max=100" doc:"First name"`
+	LastName    *string                   `json:"last_name,omitempty" validate:"omitempty,min=1,max=100" doc:"Last name"`
+	Role        *string                   `json:"role,omitempty" validate:"omitempty,oneof=admin member" doc:"User role"`
+	Permissions *UpdatePermissionsRequest `json:"permissions,omitempty" doc:"User permissions"`
 }
 
 // UpdateAdminUserInput is the Huma input for updating a user.
@@ -401,10 +415,20 @@ func (s *Server) handleUpdateAdminUser(ctx context.Context, input *UpdateAdminUs
 		role = &r
 	}
 
+	// Convert permissions update
+	var perms *service.PermissionsUpdate
+	if input.Body.Permissions != nil {
+		perms = &service.PermissionsUpdate{
+			CanDownload: input.Body.Permissions.CanDownload,
+			CanShare:    input.Body.Permissions.CanShare,
+		}
+	}
+
 	req := service.UpdateUserRequest{
-		FirstName: input.Body.FirstName,
-		LastName:  input.Body.LastName,
-		Role:      role,
+		FirstName:   input.Body.FirstName,
+		LastName:    input.Body.LastName,
+		Role:        role,
+		Permissions: perms,
 	}
 
 	user, err := s.services.Admin.UpdateUser(ctx, adminUserID, input.ID, req)
@@ -504,6 +528,10 @@ func mapAdminUserResponse(u *domain.User) AdminUserResponse {
 		Role:        string(u.Role),
 		Status:      status,
 		IsRoot:      u.IsRoot,
+		Permissions: UserPermissionsResponse{
+			CanDownload: u.CanDownload(),
+			CanShare:    u.CanShare(),
+		},
 		InvitedBy:   u.InvitedBy,
 		LastLoginAt: u.LastLoginAt,
 		CreatedAt:   u.CreatedAt,

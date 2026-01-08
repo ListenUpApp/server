@@ -22,21 +22,47 @@ const (
 	UserStatusPending UserStatus = "pending"
 )
 
+// UserPermissions defines action-level permissions for a user.
+// These control what actions a user can perform, not what content they can see.
+// Content visibility is controlled by Library.AccessMode and Collections.
+type UserPermissions struct {
+	// CanDownload allows downloading audio files for offline use.
+	// When false, user can only stream (useful for bandwidth/storage control).
+	// Default: true for all roles.
+	CanDownload bool `json:"can_download"`
+
+	// CanShare allows creating collection shares with other users.
+	// When false, user can receive shares but cannot grant them.
+	// Useful for child accounts who shouldn't redistribute content.
+	// Default: true for all roles.
+	CanShare bool `json:"can_share"`
+}
+
+// DefaultPermissions returns the default permissions for new users.
+// All permissions default to true - restrictions are opt-in.
+func DefaultPermissions() UserPermissions {
+	return UserPermissions{
+		CanDownload: true,
+		CanShare:    true,
+	}
+}
+
 // User represents an authenticated user account in the system.
 type User struct {
 	Syncable
-	Email        string     `json:"email"`
-	PasswordHash string     `json:"password_hash,omitempty"` // Stored hashed, filter from API responses
-	IsRoot       bool       `json:"is_root"`
-	Role         Role       `json:"role"`                 // admin or member
-	Status       UserStatus `json:"status,omitempty"`     // active or pending (empty = active for backward compat)
-	InvitedBy    string     `json:"invited_by,omitempty"` // User ID who invited this user
-	ApprovedBy   string     `json:"approved_by,omitempty"`
-	ApprovedAt   time.Time  `json:"approved_at,omitempty"`
-	DisplayName  string     `json:"display_name"`
-	FirstName    string     `json:"first_name"`
-	LastName     string     `json:"last_name"`
-	LastLoginAt  time.Time  `json:"last_login_at"`
+	Email        string          `json:"email"`
+	PasswordHash string          `json:"password_hash,omitempty"` // Stored hashed, filter from API responses
+	IsRoot       bool            `json:"is_root"`
+	Role         Role            `json:"role"`                 // admin or member
+	Status       UserStatus      `json:"status,omitempty"`     // active or pending (empty = active for backward compat)
+	InvitedBy    string          `json:"invited_by,omitempty"` // User ID who invited this user
+	ApprovedBy   string          `json:"approved_by,omitempty"`
+	ApprovedAt   time.Time       `json:"approved_at,omitempty"`
+	DisplayName  string          `json:"display_name"`
+	FirstName    string          `json:"first_name"`
+	LastName     string          `json:"last_name"`
+	LastLoginAt  time.Time       `json:"last_login_at"`
+	Permissions  UserPermissions `json:"permissions"` // Action-level permissions
 }
 
 // IsAdmin returns true if the user has administrative privileges.
@@ -54,6 +80,16 @@ func (u *User) IsActive() bool {
 // IsPending returns true if the user is awaiting admin approval.
 func (u *User) IsPending() bool {
 	return u.Status == UserStatusPending
+}
+
+// CanDownload returns true if the user is allowed to download content.
+func (u *User) CanDownload() bool {
+	return u.Permissions.CanDownload
+}
+
+// CanShare returns true if the user is allowed to share collections.
+func (u *User) CanShare() bool {
+	return u.Permissions.CanShare
 }
 
 // FullName returns the user's full name, composed from first and last names.

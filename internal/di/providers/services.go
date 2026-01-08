@@ -239,3 +239,12 @@ func ProvideSettingsService(i do.Injector) (*service.SettingsService, error) {
 
 	return service.NewSettingsService(storeHandle.Store, inboxService, log.Logger), nil
 }
+
+// ProvideLibraryService provides the library management service.
+func ProvideLibraryService(i do.Injector) (*service.LibraryService, error) {
+	storeHandle := do.MustInvoke[*StoreHandle](i)
+	sseHandle := do.MustInvoke[*SSEManagerHandle](i)
+	log := do.MustInvoke[*logger.Logger](i)
+
+	return service.NewLibraryService(storeHandle.Store, sseHandle.Manager, log.Logger), nil
+}

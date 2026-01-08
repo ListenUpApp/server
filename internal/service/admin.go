@@ -33,10 +33,17 @@ func NewAdminService(store *store.Store, logger *slog.Logger, registrationBroadc
 
 // UpdateUserRequest contains the fields that can be updated on a user.
 type UpdateUserRequest struct {
-	DisplayName *string      `json:"display_name,omitempty"`
-	FirstName   *string      `json:"first_name,omitempty"`
-	LastName    *string      `json:"last_name,omitempty"`
-	Role        *domain.Role `json:"role,omitempty"`
+	DisplayName *string             `json:"display_name,omitempty"`
+	FirstName   *string             `json:"first_name,omitempty"`
+	LastName    *string             `json:"last_name,omitempty"`
+	Role        *domain.Role        `json:"role,omitempty"`
+	Permissions *PermissionsUpdate  `json:"permissions,omitempty"`
+}
+
+// PermissionsUpdate contains optional permission updates.
+type PermissionsUpdate struct {
+	CanDownload *bool `json:"can_download,omitempty"`
+	CanShare    *bool `json:"can_share,omitempty"`
 }
 
 // ListUsers returns all non-deleted users.
@@ -98,6 +105,16 @@ func (s *AdminService) UpdateUser(ctx context.Context, adminUserID, targetUserID
 	}
 	if req.LastName != nil {
 		user.LastName = *req.LastName
+	}
+
+	// Update permissions if provided
+	if req.Permissions != nil {
+		if req.Permissions.CanDownload != nil {
+			user.Permissions.CanDownload = *req.Permissions.CanDownload
+		}
+		if req.Permissions.CanShare != nil {
+			user.Permissions.CanShare = *req.Permissions.CanShare
+		}
 	}
 
 	if err := s.store.UpdateUser(ctx, user); err != nil {

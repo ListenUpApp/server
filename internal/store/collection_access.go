@@ -69,15 +69,29 @@ func (s *Store) GetCollectionsContainingBook(ctx context.Context, bookID string)
 	return s.GetCollectionsForBook(ctx, bookID)
 }
 
-// GetBooksForUser returns all books the user can access (permissive model).
-// A user can see a book if:
-//  1. The book is not in any collection (uncollected = public), OR
-//  2. The book is in at least one collection the user has access to
+// GetBooksForUser returns all books the user can access based on library access mode.
+//
+// In OPEN mode (default):
+//   - Uncollected books are visible to everyone
+//   - Books in collections are only visible to collection members
+//   - This is the existing "permissive" behavior
+//
+// In RESTRICTED mode:
+//   - No books are visible by default
+//   - Users only see books in collections they have access to
+//   - Users with access to a GlobalAccess collection see everything
 //
 // Uses reverse indexes for O(Collections + BookIDs) instead of O(Books × Collections).
 func (s *Store) GetBooksForUser(ctx context.Context, userID string) ([]*domain.Book, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+
+	// Get library to check access mode (defaults to open mode if no library exists)
+	library, err := s.GetDefaultLibrary(ctx)
+	if err != nil {
+		// No library exists - use a default "open" library for access checks
+		library = &domain.Library{AccessMode: domain.AccessModeOpen}
 	}
 
 	// Get collections user has access to
@@ -86,96 +100,60 @@ func (s *Store) GetBooksForUser(ctx context.Context, userID string) ([]*domain.B
 		return nil, fmt.Errorf("get user collections: %w", err)
 	}
 
-	// Collect bookIDs from user's accessible collections using reverse index
-	// Single transaction for all collection scans
-	accessibleBookIDs := make(map[string]bool)
-
-	err = s.db.View(func(txn *badger.Txn) error {
-		for _, coll := range userCollections {
-			// Scan idx:books:collections:{collectionID}:{bookID}
-			prefix := fmt.Appendf(nil, "%s%s:", bookCollectionsPrefix, coll.ID)
-
-			opts := badger.DefaultIteratorOptions
-			opts.PrefetchValues = false // Only need keys
-			opts.Prefix = prefix
-
-			it := txn.NewIterator(opts)
-
-			for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
-				key := string(it.Item().Key())
-				// Key format: idx:books:collections:{collectionID}:{bookID}
-				// Extract bookID (everything after last colon)
-				if lastColon := strings.LastIndexByte(key, ':'); lastColon != -1 && lastColon < len(key)-1 {
-					accessibleBookIDs[key[lastColon+1:]] = true
-				}
-			}
-			it.Close()
+	// Check if user has global access (via GlobalAccess collection)
+	hasGlobalAccess := false
+	for _, coll := range userCollections {
+		if coll.IsGlobalAccess {
+			hasGlobalAccess = true
+			break
 		}
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("scan books in collections: %w", err)
 	}
 
-	// Find uncollected books (books with no index entries)
-	// These are public to all users
-	bookPrefix := []byte("book:")
-	err = s.db.View(func(txn *badger.Txn) error {
-		opts := badger.DefaultIteratorOptions
-		opts.PrefetchValues = false // Only need keys to get IDs
-		opts.Prefix = bookPrefix
+	// Determine effective access based on library mode
+	var accessibleBookIDs map[string]bool
 
-		it := txn.NewIterator(opts)
-		defer it.Close()
-
-		for it.Seek(bookPrefix); it.ValidForPrefix(bookPrefix); it.Next() {
-			key := it.Item().Key()
-			// Extract book ID from key: "book:{id}"
-			bookID := string(key[len(bookPrefix):])
-
-			// Check if this book has any collection index entries
-			// If not, it's uncollected and public
-			checkPrefix := fmt.Appendf(nil, "%s%s:", collectionBooksPrefix, bookID)
-
-			checkOpts := badger.DefaultIteratorOptions
-			checkOpts.PrefetchValues = false
-			checkOpts.Prefix = checkPrefix
-
-			checkIt := txn.NewIterator(checkOpts)
-			checkIt.Seek(checkPrefix)
-			hasIndex := checkIt.ValidForPrefix(checkPrefix)
-			checkIt.Close()
-
-			if !hasIndex {
-				// Book is uncollected -> public
-				accessibleBookIDs[bookID] = true
+	switch library.GetAccessMode() {
+	case domain.AccessModeRestricted:
+		if hasGlobalAccess {
+			// User has global access - return all books
+			accessibleBookIDs, err = s.getAllBookIDs(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("get all book IDs: %w", err)
+			}
+		} else {
+			// User only sees books from their collections
+			accessibleBookIDs, err = s.getBookIDsFromCollections(ctx, userCollections)
+			if err != nil {
+				return nil, fmt.Errorf("get books from collections: %w", err)
 			}
 		}
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("scan for uncollected books: %w", err)
+
+	default: // AccessModeOpen
+		if hasGlobalAccess {
+			// Global access in open mode - see everything
+			accessibleBookIDs, err = s.getAllBookIDs(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("get all book IDs: %w", err)
+			}
+		} else {
+			// Existing permissive logic: uncollected + collection-accessible books
+			accessibleBookIDs, err = s.getAccessibleBookIDsOpenMode(ctx, userCollections)
+			if err != nil {
+				return nil, fmt.Errorf("get accessible books (open mode): %w", err)
+			}
+		}
 	}
 
-	// Get inbox collection to filter out staging books
-	// Books in Inbox are hidden from all users until released
-	library, _ := s.GetDefaultLibrary(ctx)
-	var inboxBookIDs map[string]bool
-	if library != nil {
-		inbox, err := s.GetInboxForLibrary(ctx, library.ID)
-		if err == nil && inbox != nil {
-			inboxBookIDs = make(map[string]bool, len(inbox.BookIDs))
-			for _, bookID := range inbox.BookIDs {
-				inboxBookIDs[bookID] = true
-			}
-		}
+	// Filter out inbox books
+	inboxBookIDs, err := s.getInboxBookIDs(ctx, library.ID)
+	if err != nil {
+		return nil, fmt.Errorf("get inbox book IDs: %w", err)
 	}
 
 	// Build list of book IDs to fetch (excluding inbox books)
 	bookIDsToFetch := make([]string, 0, len(accessibleBookIDs))
 	for bookID := range accessibleBookIDs {
-		// Skip books in inbox (staging area)
-		if inboxBookIDs != nil && inboxBookIDs[bookID] {
+		if inboxBookIDs[bookID] {
 			continue
 		}
 		bookIDsToFetch = append(bookIDsToFetch, bookID)
@@ -197,9 +175,154 @@ func (s *Store) GetBooksForUser(ctx context.Context, userID string) ([]*domain.B
 	return accessibleBooks, nil
 }
 
+// getAllBookIDs returns all book IDs in the database.
+func (s *Store) getAllBookIDs(ctx context.Context) (map[string]bool, error) {
+	bookIDs := make(map[string]bool)
+	bookPrefix := []byte("book:")
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+		opts.Prefix = bookPrefix
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(bookPrefix); it.ValidForPrefix(bookPrefix); it.Next() {
+			key := it.Item().Key()
+			bookID := string(key[len(bookPrefix):])
+			bookIDs[bookID] = true
+		}
+		return nil
+	})
+
+	return bookIDs, err
+}
+
+// getBookIDsFromCollections returns book IDs from the given collections.
+func (s *Store) getBookIDsFromCollections(ctx context.Context, collections []*domain.Collection) (map[string]bool, error) {
+	bookIDs := make(map[string]bool)
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		for _, coll := range collections {
+			// Skip inbox and global access collections (they don't contain actual books)
+			if coll.IsInbox || coll.IsGlobalAccess {
+				continue
+			}
+
+			prefix := fmt.Appendf(nil, "%s%s:", bookCollectionsPrefix, coll.ID)
+
+			opts := badger.DefaultIteratorOptions
+			opts.PrefetchValues = false
+			opts.Prefix = prefix
+
+			it := txn.NewIterator(opts)
+
+			for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+				key := string(it.Item().Key())
+				if lastColon := strings.LastIndexByte(key, ':'); lastColon != -1 && lastColon < len(key)-1 {
+					bookIDs[key[lastColon+1:]] = true
+				}
+			}
+			it.Close()
+		}
+		return nil
+	})
+
+	return bookIDs, err
+}
+
+// getAccessibleBookIDsOpenMode implements the existing permissive access logic.
+// A book is accessible if: (1) uncollected, OR (2) in a user-accessible collection.
+func (s *Store) getAccessibleBookIDsOpenMode(ctx context.Context, userCollections []*domain.Collection) (map[string]bool, error) {
+	accessibleBookIDs := make(map[string]bool)
+
+	// Get books from user's collections
+	err := s.db.View(func(txn *badger.Txn) error {
+		for _, coll := range userCollections {
+			if coll.IsInbox || coll.IsGlobalAccess {
+				continue
+			}
+
+			prefix := fmt.Appendf(nil, "%s%s:", bookCollectionsPrefix, coll.ID)
+
+			opts := badger.DefaultIteratorOptions
+			opts.PrefetchValues = false
+			opts.Prefix = prefix
+
+			it := txn.NewIterator(opts)
+
+			for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+				key := string(it.Item().Key())
+				if lastColon := strings.LastIndexByte(key, ':'); lastColon != -1 && lastColon < len(key)-1 {
+					accessibleBookIDs[key[lastColon+1:]] = true
+				}
+			}
+			it.Close()
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Add uncollected books (books with no collection index entries)
+	bookPrefix := []byte("book:")
+	err = s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+		opts.Prefix = bookPrefix
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(bookPrefix); it.ValidForPrefix(bookPrefix); it.Next() {
+			key := it.Item().Key()
+			bookID := string(key[len(bookPrefix):])
+
+			// Check if book is in any collection
+			checkPrefix := fmt.Appendf(nil, "%s%s:", collectionBooksPrefix, bookID)
+
+			checkOpts := badger.DefaultIteratorOptions
+			checkOpts.PrefetchValues = false
+			checkOpts.Prefix = checkPrefix
+
+			checkIt := txn.NewIterator(checkOpts)
+			checkIt.Seek(checkPrefix)
+			hasIndex := checkIt.ValidForPrefix(checkPrefix)
+			checkIt.Close()
+
+			if !hasIndex {
+				// Book is uncollected -> public in open mode
+				accessibleBookIDs[bookID] = true
+			}
+		}
+		return nil
+	})
+
+	return accessibleBookIDs, err
+}
+
+// getInboxBookIDs returns all book IDs in the inbox collection.
+func (s *Store) getInboxBookIDs(ctx context.Context, libraryID string) (map[string]bool, error) {
+	inboxBookIDs := make(map[string]bool)
+
+	inbox, err := s.GetInboxForLibrary(ctx, libraryID)
+	if err != nil {
+		return inboxBookIDs, nil // No inbox, no filtering needed
+	}
+
+	for _, bookID := range inbox.BookIDs {
+		inboxBookIDs[bookID] = true
+	}
+
+	return inboxBookIDs, nil
+}
+
 // CanUserAccessBook checks if a user can see a specific book.
-// Returns true if book is uncollected OR user has access to at least one collection containing it.
-// Uses reverse index for O(1) lookup.
+// Logic depends on library access mode:
+//   - OPEN: book is uncollected OR user has access to a containing collection
+//   - RESTRICTED: user has global access OR access to a containing collection
 func (s *Store) CanUserAccessBook(ctx context.Context, userID, bookID string) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
@@ -211,14 +334,74 @@ func (s *Store) CanUserAccessBook(ctx context.Context, userID, bookID string) (b
 		return false, err
 	}
 
-	// Check reverse index to see if book is in any collections
-	// idx:collections:books:{bookID}:{collectionID}
+	// Get library access mode (defaults to open mode if no library exists)
+	library, err := s.GetDefaultLibrary(ctx)
+	if err != nil {
+		// No library exists - use default open mode
+		library = &domain.Library{AccessMode: domain.AccessModeOpen}
+	}
+
+	// Get user's collections
+	userCollections, err := s.GetCollectionsForUser(ctx, userID)
+	if err != nil {
+		return false, fmt.Errorf("get user collections: %w", err)
+	}
+
+	// Build lookup map and check for global access
+	userCollectionIDs := make(map[string]bool)
+	hasGlobalAccess := false
+	for _, coll := range userCollections {
+		userCollectionIDs[coll.ID] = true
+		if coll.IsGlobalAccess {
+			hasGlobalAccess = true
+		}
+	}
+
+	// Global access grants access to everything
+	if hasGlobalAccess {
+		return true, nil
+	}
+
+	// Get collections containing this book
+	bookCollectionIDs, err := s.getCollectionIDsForBook(ctx, bookID)
+	if err != nil {
+		return false, fmt.Errorf("get book collections: %w", err)
+	}
+
+	// Check access based on mode
+	switch library.GetAccessMode() {
+	case domain.AccessModeRestricted:
+		// Must have access to at least one containing collection
+		for _, collID := range bookCollectionIDs {
+			if userCollectionIDs[collID] {
+				return true, nil
+			}
+		}
+		return false, nil
+
+	default: // AccessModeOpen
+		// Uncollected books are public
+		if len(bookCollectionIDs) == 0 {
+			return true, nil
+		}
+		// Otherwise, must have access to at least one containing collection
+		for _, collID := range bookCollectionIDs {
+			if userCollectionIDs[collID] {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
+}
+
+// getCollectionIDsForBook returns all collection IDs containing a book.
+func (s *Store) getCollectionIDsForBook(ctx context.Context, bookID string) ([]string, error) {
+	var collectionIDs []string
 	prefix := fmt.Appendf(nil, "%s%s:", collectionBooksPrefix, bookID)
 
-	var bookCollectionIDs []string
-	err = s.db.View(func(txn *badger.Txn) error {
+	err := s.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
-		opts.PrefetchValues = false // Only need keys
+		opts.PrefetchValues = false
 		opts.Prefix = prefix
 
 		it := txn.NewIterator(opts)
@@ -226,42 +409,14 @@ func (s *Store) CanUserAccessBook(ctx context.Context, userID, bookID string) (b
 
 		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 			key := string(it.Item().Key())
-			// Extract collectionID from key
 			if lastColon := strings.LastIndexByte(key, ':'); lastColon != -1 && lastColon < len(key)-1 {
-				bookCollectionIDs = append(bookCollectionIDs, key[lastColon+1:])
+				collectionIDs = append(collectionIDs, key[lastColon+1:])
 			}
 		}
 		return nil
 	})
-	if err != nil {
-		return false, fmt.Errorf("check book collections: %w", err)
-	}
 
-	// If book is in no collections, it's public
-	if len(bookCollectionIDs) == 0 {
-		return true, nil
-	}
-
-	// Get user's accessible collection IDs
-	userCollections, err := s.GetCollectionsForUser(ctx, userID)
-	if err != nil {
-		return false, fmt.Errorf("get user collections: %w", err)
-	}
-
-	// Create set of user's collection IDs for fast lookup
-	userCollectionIDs := make(map[string]bool)
-	for _, coll := range userCollections {
-		userCollectionIDs[coll.ID] = true
-	}
-
-	// Check if any collection containing the book is accessible to user
-	for _, collID := range bookCollectionIDs {
-		if userCollectionIDs[collID] {
-			return true, nil // User has access via at least one collection
-		}
-	}
-
-	return false, nil
+	return collectionIDs, err
 }
 
 // CanUserAccessCollection checks if a user can access a collection.
