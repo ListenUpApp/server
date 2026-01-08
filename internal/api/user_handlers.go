@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
+
+	"github.com/listenupapp/listenup-server/internal/color"
 )
 
 func (s *Server) registerUserRoutes() {
@@ -29,8 +31,8 @@ type UserOutput struct {
 	Body UserResponse
 }
 
-func (s *Server) handleGetCurrentUser(ctx context.Context, input *AuthenticatedInput) (*UserOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+func (s *Server) handleGetCurrentUser(ctx context.Context, _ *AuthenticatedInput) (*UserOutput, error) {
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +64,7 @@ func (s *Server) handleGetCurrentUser(ctx context.Context, input *AuthenticatedI
 			LastLoginAt: user.LastLoginAt,
 			AvatarType:  avatarType,
 			AvatarValue: avatarValue,
-			AvatarColor: avatarColorForUser(userID),
+			AvatarColor: color.ForUser(userID),
 		},
 	}, nil
 }

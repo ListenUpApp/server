@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
@@ -86,42 +87,34 @@ func (s *Store) GetBooksForUser(ctx context.Context, userID string) ([]*domain.B
 	}
 
 	// Collect bookIDs from user's accessible collections using reverse index
+	// Single transaction for all collection scans
 	accessibleBookIDs := make(map[string]bool)
 
-	for _, coll := range userCollections {
-		// Scan idx:books:collections:{collectionID}:{bookID}
-		prefix := []byte(fmt.Sprintf("%s%s:", bookCollectionsPrefix, coll.ID))
+	err = s.db.View(func(txn *badger.Txn) error {
+		for _, coll := range userCollections {
+			// Scan idx:books:collections:{collectionID}:{bookID}
+			prefix := fmt.Appendf(nil, "%s%s:", bookCollectionsPrefix, coll.ID)
 
-		err := s.db.View(func(txn *badger.Txn) error {
 			opts := badger.DefaultIteratorOptions
 			opts.PrefetchValues = false // Only need keys
 			opts.Prefix = prefix
 
 			it := txn.NewIterator(opts)
-			defer it.Close()
 
 			for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
-				key := it.Item().Key()
+				key := string(it.Item().Key())
 				// Key format: idx:books:collections:{collectionID}:{bookID}
 				// Extract bookID (everything after last colon)
-				parts := string(key)
-				lastColon := -1
-				for i := len(parts) - 1; i >= 0; i-- {
-					if parts[i] == ':' {
-						lastColon = i
-						break
-					}
-				}
-				if lastColon != -1 && lastColon < len(parts)-1 {
-					bookID := parts[lastColon+1:]
-					accessibleBookIDs[bookID] = true
+				if lastColon := strings.LastIndexByte(key, ':'); lastColon != -1 && lastColon < len(key)-1 {
+					accessibleBookIDs[key[lastColon+1:]] = true
 				}
 			}
-			return nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("scan books in collection %s: %w", coll.ID, err)
+			it.Close()
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scan books in collections: %w", err)
 	}
 
 	// Find uncollected books (books with no index entries)
@@ -142,7 +135,7 @@ func (s *Store) GetBooksForUser(ctx context.Context, userID string) ([]*domain.B
 
 			// Check if this book has any collection index entries
 			// If not, it's uncollected and public
-			checkPrefix := []byte(fmt.Sprintf("%s%s:", collectionBooksPrefix, bookID))
+			checkPrefix := fmt.Appendf(nil, "%s%s:", collectionBooksPrefix, bookID)
 
 			checkOpts := badger.DefaultIteratorOptions
 			checkOpts.PrefetchValues = false
@@ -178,22 +171,20 @@ func (s *Store) GetBooksForUser(ctx context.Context, userID string) ([]*domain.B
 		}
 	}
 
-	// Load only the accessible books (excluding inbox books)
-	accessibleBooks := make([]*domain.Book, 0, len(accessibleBookIDs))
+	// Build list of book IDs to fetch (excluding inbox books)
+	bookIDsToFetch := make([]string, 0, len(accessibleBookIDs))
 	for bookID := range accessibleBookIDs {
 		// Skip books in inbox (staging area)
 		if inboxBookIDs != nil && inboxBookIDs[bookID] {
 			continue
 		}
+		bookIDsToFetch = append(bookIDsToFetch, bookID)
+	}
 
-		book, err := s.getBookInternal(ctx, bookID)
-		if err != nil {
-			if s.logger != nil {
-				s.logger.Warn("failed to load accessible book", "book_id", bookID, "error", err)
-			}
-			continue
-		}
-		accessibleBooks = append(accessibleBooks, book)
+	// Batch fetch all accessible books in a single transaction
+	accessibleBooks, err := s.getBooksInternalByIDs(ctx, bookIDsToFetch)
+	if err != nil {
+		return nil, fmt.Errorf("load accessible books: %w", err)
 	}
 
 	// Sort by ID for deterministic pagination order.
@@ -222,7 +213,7 @@ func (s *Store) CanUserAccessBook(ctx context.Context, userID, bookID string) (b
 
 	// Check reverse index to see if book is in any collections
 	// idx:collections:books:{bookID}:{collectionID}
-	prefix := []byte(fmt.Sprintf("%s%s:", collectionBooksPrefix, bookID))
+	prefix := fmt.Appendf(nil, "%s%s:", collectionBooksPrefix, bookID)
 
 	var bookCollectionIDs []string
 	err = s.db.View(func(txn *badger.Txn) error {
@@ -234,19 +225,10 @@ func (s *Store) CanUserAccessBook(ctx context.Context, userID, bookID string) (b
 		defer it.Close()
 
 		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
-			key := it.Item().Key()
+			key := string(it.Item().Key())
 			// Extract collectionID from key
-			parts := string(key)
-			lastColon := -1
-			for i := len(parts) - 1; i >= 0; i-- {
-				if parts[i] == ':' {
-					lastColon = i
-					break
-				}
-			}
-			if lastColon != -1 && lastColon < len(parts)-1 {
-				collectionID := parts[lastColon+1:]
-				bookCollectionIDs = append(bookCollectionIDs, collectionID)
+			if lastColon := strings.LastIndexByte(key, ':'); lastColon != -1 && lastColon < len(key)-1 {
+				bookCollectionIDs = append(bookCollectionIDs, key[lastColon+1:])
 			}
 		}
 		return nil

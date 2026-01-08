@@ -238,7 +238,7 @@ func TestStore_GetUserReadingSessions_WithLimit(t *testing.T) {
 	now := time.Now()
 
 	// Create 5 sessions
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		session := domain.NewBookReadingSession(
 			"session-"+string(rune('0'+i)),
 			"user-1",

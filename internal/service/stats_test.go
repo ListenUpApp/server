@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -25,7 +24,7 @@ func setupTestStats(t *testing.T) (*StatsService, *store.Store, func()) {
 	testStore, err := store.New(dbPath, nil, store.NewNoopEmitter())
 	require.NoError(t, err)
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	svc := NewStatsService(testStore, logger)
 
 	cleanup := func() {
@@ -217,7 +216,7 @@ func TestGetUserStats_Streaks(t *testing.T) {
 	today := time.Date(now.Year(), now.Month(), now.Day(), 12, 0, 0, 0, now.Location())
 
 	// Create 5-day streak ending today
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		day := today.AddDate(0, 0, -i)
 		// 1 minute each day (above 30s threshold)
 		createTestEvent(t, testStore, userID, "book-1", 60000, day)

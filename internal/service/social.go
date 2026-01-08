@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/listenupapp/listenup-server/internal/color"
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
@@ -127,9 +128,9 @@ func (s *SocialService) GetLeaderboard(
 
 		// Get avatar info from user profile
 		// Avatar color is always generated from user ID for consistency
-		avatarType := "auto"
+		avatarType := string(domain.AvatarTypeAuto)
 		avatarValue := ""
-		avatarColor := avatarColorForUser(user.ID)
+		avatarColor := color.ForUser(user.ID)
 		profile, err := s.store.GetUserProfile(ctx, user.ID)
 		if err == nil && profile != nil {
 			avatarType = string(profile.AvatarType)
@@ -472,7 +473,7 @@ func (s *SocialService) GetCurrentlyListening(ctx context.Context, viewingUserID
 		}
 
 		// Get profile for avatar info (optional - may not exist)
-		avatarType := "auto"
+		avatarType := string(domain.AvatarTypeAuto)
 		avatarValue := ""
 		profile, err := s.store.GetUserProfile(ctx, session.UserID)
 		if err == nil && profile != nil {
@@ -483,7 +484,7 @@ func (s *SocialService) GetCurrentlyListening(ctx context.Context, viewingUserID
 		br.readers = append(br.readers, ReaderInfo{
 			UserID:      user.ID,
 			DisplayName: user.Name(),
-			AvatarColor: avatarColorForUser(user.ID),
+			AvatarColor: color.ForUser(user.ID),
 			AvatarType:  avatarType,
 			AvatarValue: avatarValue,
 		})

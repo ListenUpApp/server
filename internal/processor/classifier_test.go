@@ -260,8 +260,7 @@ func BenchmarkClassifyFile(b *testing.B) {
 		"/library/track.cue",
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		classifyFile(paths[i%len(paths)])
 	}
 }

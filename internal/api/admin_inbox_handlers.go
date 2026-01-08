@@ -140,8 +140,8 @@ type UnstageInboxCollectionOutput struct {
 
 // === Handlers ===
 
-func (s *Server) handleListInboxBooks(ctx context.Context, input *ListInboxBooksInput) (*ListInboxBooksOutput, error) {
-	_, err := s.authenticateAndRequireAdmin(ctx, input.Authorization)
+func (s *Server) handleListInboxBooks(ctx context.Context, _ *ListInboxBooksInput) (*ListInboxBooksOutput, error) {
+	_, err := s.RequireAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +240,7 @@ func (s *Server) handleListInboxBooks(ctx context.Context, input *ListInboxBooks
 }
 
 func (s *Server) handleReleaseInboxBooks(ctx context.Context, input *ReleaseInboxBooksInput) (*ReleaseInboxBooksOutput, error) {
-	_, err := s.authenticateAndRequireAdmin(ctx, input.Authorization)
+	_, err := s.RequireAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -260,7 +260,7 @@ func (s *Server) handleReleaseInboxBooks(ctx context.Context, input *ReleaseInbo
 }
 
 func (s *Server) handleStageInboxCollection(ctx context.Context, input *StageInboxCollectionInput) (*StageInboxCollectionOutput, error) {
-	_, err := s.authenticateAndRequireAdmin(ctx, input.Authorization)
+	_, err := s.RequireAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +273,7 @@ func (s *Server) handleStageInboxCollection(ctx context.Context, input *StageInb
 }
 
 func (s *Server) handleUnstageInboxCollection(ctx context.Context, input *UnstageInboxCollectionInput) (*UnstageInboxCollectionOutput, error) {
-	_, err := s.authenticateAndRequireAdmin(ctx, input.Authorization)
+	_, err := s.RequireAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}

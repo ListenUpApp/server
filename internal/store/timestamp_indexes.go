@@ -14,7 +14,7 @@ func formatTimestampIndexKey(prefix string, timestamp time.Time, entityType, ent
 	// Use custom format with fixed-width nanoseconds (always 9 digits).
 	// This ensures proper lexicographic sorting of timestamps.
 	timestampStr := timestamp.UTC().Format("2006-01-02T15:04:05") + fmt.Sprintf(".%09d", timestamp.Nanosecond()) + "Z"
-	return []byte(fmt.Sprintf("%s%s:%s:%s", prefix, timestampStr, entityType, entityID))
+	return fmt.Appendf(nil, "%s%s:%s:%s", prefix, timestampStr, entityType, entityID)
 }
 
 // parseTimestampIndexKey extracts entity type and ID from a timestamp index key.

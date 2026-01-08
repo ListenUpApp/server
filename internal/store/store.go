@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/listenupapp/listenup-server/internal/domain"
@@ -104,6 +105,12 @@ type Store struct {
 	// Used to populate display fields (author names, series names) in SSE events.
 	enricher *dto.Enricher
 
+	// Genre cache for fast lookups without hitting BadgerDB.
+	// Invalidated on any genre mutation (create, update, delete, move, merge).
+	genreCacheMu sync.RWMutex
+	genreCache   map[string]*domain.Genre // ID -> Genre
+	genreList    []*domain.Genre          // Cached list for ListGenres
+
 	// Generic entities
 	Users            *Entity[domain.User]
 	CollectionShares *Entity[domain.CollectionShare]
@@ -158,6 +165,47 @@ func (s *Store) Close() error {
 // (store needs to exist before search service can be created).
 func (s *Store) SetSearchIndexer(indexer SearchIndexer) {
 	s.searchIndexer = indexer
+}
+
+// InvalidateGenreCache clears the genre cache, forcing next access to reload from DB.
+// Called after any genre mutation (create, update, delete, move, merge).
+func (s *Store) InvalidateGenreCache() {
+	s.genreCacheMu.Lock()
+	s.genreCache = nil
+	s.genreList = nil
+	s.genreCacheMu.Unlock()
+}
+
+// getGenreFromCache returns a genre from cache if available.
+// Returns nil if cache miss or cache not populated.
+func (s *Store) getGenreFromCache(id string) *domain.Genre {
+	s.genreCacheMu.RLock()
+	defer s.genreCacheMu.RUnlock()
+	if s.genreCache == nil {
+		return nil
+	}
+	return s.genreCache[id]
+}
+
+// getGenreListFromCache returns the cached genre list if available.
+// Returns nil if cache not populated.
+func (s *Store) getGenreListFromCache() []*domain.Genre {
+	s.genreCacheMu.RLock()
+	defer s.genreCacheMu.RUnlock()
+	return s.genreList
+}
+
+// populateGenreCache fills the cache with all genres from the database.
+// Call this after loading genres from DB.
+func (s *Store) populateGenreCache(genres []*domain.Genre) {
+	s.genreCacheMu.Lock()
+	defer s.genreCacheMu.Unlock()
+
+	s.genreList = genres
+	s.genreCache = make(map[string]*domain.Genre, len(genres))
+	for _, g := range genres {
+		s.genreCache[g.ID] = g
+	}
 }
 
 // SetTranscodeDeleter sets the transcode deleter for cleaning up transcoded files.

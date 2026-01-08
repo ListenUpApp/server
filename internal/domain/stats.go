@@ -5,6 +5,7 @@ import "time"
 // StatsPeriod represents a time window for statistics queries.
 type StatsPeriod string
 
+// StatsPeriod constants for time window queries.
 const (
 	StatsPeriodDay     StatsPeriod = "day"
 	StatsPeriodWeek    StatsPeriod = "week"

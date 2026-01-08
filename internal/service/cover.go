@@ -67,10 +67,7 @@ func (s *CoverService) SearchCovers(ctx context.Context, title, author string) (
 	var wg sync.WaitGroup
 
 	// Search iTunes
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
+	wg.Go(func() {
 		results, err := s.itunesClient.SearchByTitleAndAuthor(ctx, title, author)
 		if err != nil {
 			s.logger.Warn("iTunes cover search failed",
@@ -95,13 +92,10 @@ func (s *CoverService) SearchCovers(ctx context.Context, title, author string) (
 			})
 		}
 		mu.Unlock()
-	}()
+	})
 
 	// Search Audible using cached results if available
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
+	wg.Go(func() {
 		params := audible.SearchParams{Keywords: title + " " + author}
 		results, _, err := s.metadataService.SearchWithFallback(ctx, params)
 		if err != nil {
@@ -128,7 +122,7 @@ func (s *CoverService) SearchCovers(ctx context.Context, title, author string) (
 			})
 		}
 		mu.Unlock()
-	}()
+	})
 
 	wg.Wait()
 

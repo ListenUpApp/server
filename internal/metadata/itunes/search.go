@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -26,7 +27,7 @@ func (c *Client) SearchAudiobooks(ctx context.Context, query string) ([]Audioboo
 	params.Set("term", query)
 	params.Set("media", "audiobook")
 	params.Set("entity", "audiobook")
-	params.Set("limit", fmt.Sprintf("%d", defaultLimit))
+	params.Set("limit", strconv.Itoa(defaultLimit))
 
 	searchURL := searchBaseURL + "?" + params.Encode()
 

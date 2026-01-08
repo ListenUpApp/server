@@ -171,8 +171,8 @@ type RemoveTagFromBookInput struct {
 
 // === Handlers ===
 
-func (s *Server) handleListTags(ctx context.Context, input *ListTagsInput) (*ListTagsOutput, error) {
-	_, err := s.authenticateRequest(ctx, input.Authorization)
+func (s *Server) handleListTags(ctx context.Context, _ *ListTagsInput) (*ListTagsOutput, error) {
+	_, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +196,7 @@ func (s *Server) handleListTags(ctx context.Context, input *ListTagsInput) (*Lis
 }
 
 func (s *Server) handleGetTagBySlug(ctx context.Context, input *GetTagInput) (*GetTagOutput, error) {
-	_, err := s.authenticateRequest(ctx, input.Authorization)
+	_, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +220,7 @@ func (s *Server) handleGetTagBySlug(ctx context.Context, input *GetTagInput) (*G
 }
 
 func (s *Server) handleGetTagBooks(ctx context.Context, input *GetTagBooksInput) (*GetTagBooksOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -265,7 +265,7 @@ func (s *Server) handleGetTagBooks(ctx context.Context, input *GetTagBooksInput)
 }
 
 func (s *Server) handleGetBookTags(ctx context.Context, input *GetBookTagsInput) (*GetBookTagsOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -301,7 +301,7 @@ func (s *Server) handleGetBookTags(ctx context.Context, input *GetBookTagsInput)
 }
 
 func (s *Server) handleAddTagToBook(ctx context.Context, input *AddTagToBookInput) (*AddTagToBookOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -331,7 +331,7 @@ func (s *Server) handleAddTagToBook(ctx context.Context, input *AddTagToBookInpu
 }
 
 func (s *Server) handleRemoveTagFromBook(ctx context.Context, input *RemoveTagFromBookInput) (*MessageOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}

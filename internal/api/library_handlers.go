@@ -71,8 +71,8 @@ type LibraryOutput struct {
 
 // === Handlers ===
 
-func (s *Server) handleListLibraries(ctx context.Context, input *ListLibrariesInput) (*ListLibrariesOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+func (s *Server) handleListLibraries(ctx context.Context, _ *ListLibrariesInput) (*ListLibrariesOutput, error) {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -98,7 +98,7 @@ func (s *Server) handleListLibraries(ctx context.Context, input *ListLibrariesIn
 }
 
 func (s *Server) handleGetLibrary(ctx context.Context, input *GetLibraryInput) (*LibraryOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 

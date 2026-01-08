@@ -3,6 +3,7 @@ package dto
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
 )
@@ -13,7 +14,9 @@ type Store interface {
 	GetContributorsByIDs(ctx context.Context, ids []string) ([]*domain.Contributor, error)
 	GetGenresByIDs(ctx context.Context, ids []string) ([]*domain.Genre, error)
 	GetSeries(ctx context.Context, id string) (*domain.Series, error)
+	GetSeriesByIDs(ctx context.Context, ids []string) ([]*domain.Series, error)
 	GetTagsForBook(ctx context.Context, bookID string) ([]*domain.Tag, error)
+	GetTagsForBookIDs(ctx context.Context, bookIDs []string) (map[string][]*domain.Tag, error)
 }
 
 // Enricher denormalizes domain models for client consumption.
@@ -104,25 +107,36 @@ func (e *Enricher) EnrichBook(ctx context.Context, book *domain.Book) (*Book, er
 		}
 	}
 
-	// Enrich series info (for all series the book belongs to)
+	// Enrich series info (batch fetch all series, not N+1)
 	if len(book.Series) > 0 {
-		dto.SeriesInfo = make([]BookSeriesInfo, 0, len(book.Series))
-		for _, bs := range book.Series {
-			series, err := e.store.GetSeries(ctx, bs.SeriesID)
-			if err != nil {
-				// Don't fail enrichment if series lookup fails
-				// Skip this series entry
-				continue
-			}
-			dto.SeriesInfo = append(dto.SeriesInfo, BookSeriesInfo{
-				SeriesID: bs.SeriesID,
-				Name:     series.Name,
-				Sequence: bs.Sequence,
-			})
+		seriesIDs := make([]string, len(book.Series))
+		for i, bs := range book.Series {
+			seriesIDs[i] = bs.SeriesID
 		}
-		// Set primary series name for backward compatibility
-		if len(dto.SeriesInfo) > 0 {
-			dto.SeriesName = dto.SeriesInfo[0].Name
+
+		seriesList, err := e.store.GetSeriesByIDs(ctx, seriesIDs)
+		if err == nil {
+			seriesMap := make(map[string]*domain.Series, len(seriesList))
+			for _, series := range seriesList {
+				seriesMap[series.ID] = series
+			}
+
+			dto.SeriesInfo = make([]BookSeriesInfo, 0, len(book.Series))
+			for _, bs := range book.Series {
+				series, ok := seriesMap[bs.SeriesID]
+				if !ok {
+					continue
+				}
+				dto.SeriesInfo = append(dto.SeriesInfo, BookSeriesInfo{
+					SeriesID: bs.SeriesID,
+					Name:     series.Name,
+					Sequence: bs.Sequence,
+				})
+			}
+			// Set primary series name for backward compatibility
+			if len(dto.SeriesInfo) > 0 {
+				dto.SeriesName = dto.SeriesInfo[0].Name
+			}
 		}
 	}
 
@@ -195,9 +209,30 @@ func (e *Enricher) EnrichBooks(ctx context.Context, books []*domain.Book) ([]*Bo
 		}
 	}
 
-	// Note: We could batch-fetch series here too, but series lookups are rare
-	// compared to contributors (most books don't have series).
-	// Optimize if profiling shows series lookups are a bottleneck.
+	// Collect all unique series IDs across all books
+	seriesIDsMap := make(map[string]bool)
+	for _, book := range books {
+		for _, bs := range book.Series {
+			seriesIDsMap[bs.SeriesID] = true
+		}
+	}
+
+	// Batch fetch all series
+	var seriesMap map[string]*domain.Series
+	if len(seriesIDsMap) > 0 {
+		seriesIDs := make([]string, 0, len(seriesIDsMap))
+		for id := range seriesIDsMap {
+			seriesIDs = append(seriesIDs, id)
+		}
+
+		seriesList, err := e.store.GetSeriesByIDs(ctx, seriesIDs)
+		if err == nil {
+			seriesMap = make(map[string]*domain.Series, len(seriesList))
+			for _, series := range seriesList {
+				seriesMap[series.ID] = series
+			}
+		}
+	}
 
 	// Collect all unique genre IDs across all books
 	genreIDsMap := make(map[string]bool)
@@ -225,6 +260,13 @@ func (e *Enricher) EnrichBooks(ctx context.Context, books []*domain.Book) ([]*Bo
 			}
 		}
 	}
+
+	// Batch fetch all tags for all books
+	bookIDs := make([]string, len(books))
+	for i, book := range books {
+		bookIDs[i] = book.ID
+	}
+	tagsMap, _ := e.store.GetTagsForBookIDs(ctx, bookIDs)
 
 	// Enrich each book
 	enrichedBooks := make([]*Book, len(books))
@@ -273,13 +315,12 @@ func (e *Enricher) EnrichBooks(ctx context.Context, books []*domain.Book) ([]*Bo
 			}
 		}
 
-		// Enrich series info (for all series the book belongs to)
-		if len(book.Series) > 0 {
+		// Enrich series info (use pre-fetched series map)
+		if len(book.Series) > 0 && seriesMap != nil {
 			dto.SeriesInfo = make([]BookSeriesInfo, 0, len(book.Series))
 			for _, bs := range book.Series {
-				series, err := e.store.GetSeries(ctx, bs.SeriesID)
-				if err != nil {
-					// Don't fail entire batch if one series lookup fails
+				series, ok := seriesMap[bs.SeriesID]
+				if !ok {
 					continue
 				}
 				dto.SeriesInfo = append(dto.SeriesInfo, BookSeriesInfo{
@@ -304,15 +345,16 @@ func (e *Enricher) EnrichBooks(ctx context.Context, books []*domain.Book) ([]*Bo
 			}
 		}
 
-		// Enrich tags.
-		// Tag lookup failures are non-fatal - just skip tags.
-		if tags, err := e.store.GetTagsForBook(ctx, book.ID); err == nil && len(tags) > 0 {
-			dto.Tags = make([]BookTag, len(tags))
-			for j, tag := range tags {
-				dto.Tags[j] = BookTag{
-					ID:        tag.ID,
-					Slug:      tag.Slug,
-					BookCount: tag.BookCount,
+		// Enrich tags (use pre-fetched tags map)
+		if tagsMap != nil {
+			if tags, ok := tagsMap[book.ID]; ok && len(tags) > 0 {
+				dto.Tags = make([]BookTag, len(tags))
+				for j, tag := range tags {
+					dto.Tags[j] = BookTag{
+						ID:        tag.ID,
+						Slug:      tag.Slug,
+						BookCount: tag.BookCount,
+					}
 				}
 			}
 		}
@@ -325,10 +367,5 @@ func (e *Enricher) EnrichBooks(ctx context.Context, books []*domain.Book) ([]*Bo
 
 // hasRole checks if a BookContributor has the specified role.
 func hasRole(bc domain.BookContributor, role domain.ContributorRole) bool {
-	for _, r := range bc.Roles {
-		if r == role {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(bc.Roles, role)
 }

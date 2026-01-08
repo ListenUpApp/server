@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -125,7 +126,7 @@ type LeaderboardOutput struct {
 // === Handlers ===
 
 func (s *Server) handleGetLeaderboard(ctx context.Context, input *GetLeaderboardInput) (*LeaderboardOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +154,8 @@ func (s *Server) handleGetLeaderboard(ctx context.Context, input *GetLeaderboard
 
 	// Convert entries to response format
 	entries := make([]LeaderboardEntryResponse, len(leaderboard.Entries))
-	for i, e := range leaderboard.Entries {
+	for i := range leaderboard.Entries {
+		e := &leaderboard.Entries[i]
 		entry := LeaderboardEntryResponse{
 			Rank:          e.Rank,
 			UserID:        e.UserID,
@@ -181,10 +183,7 @@ func (s *Server) handleGetLeaderboard(ctx context.Context, input *GetLeaderboard
 	}
 
 	// Format community total time (handle negative/invalid values)
-	totalTimeMs := leaderboard.CommunityTotalTimeMs
-	if totalTimeMs < 0 {
-		totalTimeMs = 0
-	}
+	totalTimeMs := max(leaderboard.CommunityTotalTimeMs, 0)
 	totalMinutes := totalTimeMs / 60_000
 	hours := totalMinutes / 60
 	minutes := totalMinutes % 60
@@ -313,7 +312,7 @@ type GetUserReadingHistoryOutput struct {
 // === Book Readers Handler ===
 
 func (s *Server) handleGetBookReaders(ctx context.Context, input *GetBookReadersInput) (*GetBookReadersOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -354,7 +353,8 @@ func (s *Server) handleGetBookReaders(ctx context.Context, input *GetBookReaders
 	}
 
 	otherReaders := make([]ReaderSummaryResponse, len(result.OtherReaders))
-	for i, reader := range result.OtherReaders {
+	for i := range result.OtherReaders {
+		reader := &result.OtherReaders[i]
 		otherReaders[i] = ReaderSummaryResponse{
 			UserID:             reader.UserID,
 			DisplayName:        reader.DisplayName,
@@ -385,7 +385,7 @@ func (s *Server) handleGetBookReaders(ctx context.Context, input *GetBookReaders
 // === User Reading History Handler ===
 
 func (s *Server) handleGetUserReadingHistory(ctx context.Context, input *GetUserReadingHistoryInput) (*GetUserReadingHistoryOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -405,7 +405,8 @@ func (s *Server) handleGetUserReadingHistory(ctx context.Context, input *GetUser
 
 	// Convert to API format
 	sessions := make([]ReadingHistorySessionResponse, len(result.Sessions))
-	for i, session := range result.Sessions {
+	for i := range result.Sessions {
+		session := &result.Sessions[i]
 		sessions[i] = ReadingHistorySessionResponse{
 			ID:           session.ID,
 			BookID:       session.BookID,
@@ -481,7 +482,7 @@ type GetActivityFeedOutput struct {
 // === Activity Feed Handler ===
 
 func (s *Server) handleGetActivityFeed(ctx context.Context, input *GetActivityFeedInput) (*GetActivityFeedOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -619,7 +620,7 @@ type GetDiscoverBooksOutput struct {
 // === Currently Listening Handler ===
 
 func (s *Server) handleGetCurrentlyListening(ctx context.Context, input *GetCurrentlyListeningInput) (*GetCurrentlyListeningOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -677,7 +678,7 @@ func (s *Server) handleGetCurrentlyListening(ctx context.Context, input *GetCurr
 // === Discover Books Handler ===
 
 func (s *Server) handleGetDiscoverBooks(ctx context.Context, input *GetDiscoverBooksInput) (*GetDiscoverBooksOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -734,11 +735,8 @@ func (s *Server) getAuthorNameFromBook(ctx context.Context, book *domain.Book) s
 	// Collect author contributor IDs
 	var authorIDs []string
 	for _, contrib := range book.Contributors {
-		for _, role := range contrib.Roles {
-			if role == domain.RoleAuthor {
-				authorIDs = append(authorIDs, contrib.ContributorID)
-				break
-			}
+		if slices.Contains(contrib.Roles, domain.RoleAuthor) {
+			authorIDs = append(authorIDs, contrib.ContributorID)
 		}
 	}
 

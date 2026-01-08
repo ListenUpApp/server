@@ -278,7 +278,7 @@ type SetOpenRegistrationInput struct {
 // === Handlers ===
 
 func (s *Server) handleCreateInvite(ctx context.Context, input *CreateInviteInput) (*InviteOutput, error) {
-	userID, err := s.authenticateAndRequireAdmin(ctx, input.Authorization)
+	userID, err := s.RequireAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -316,8 +316,8 @@ func (s *Server) handleCreateInvite(ctx context.Context, input *CreateInviteInpu
 	}, nil
 }
 
-func (s *Server) handleListInvites(ctx context.Context, input *ListInvitesInput) (*ListInvitesOutput, error) {
-	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+func (s *Server) handleListInvites(ctx context.Context, _ *ListInvitesInput) (*ListInvitesOutput, error) {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -347,7 +347,7 @@ func (s *Server) handleListInvites(ctx context.Context, input *ListInvitesInput)
 }
 
 func (s *Server) handleDeleteInvite(ctx context.Context, input *DeleteInviteInput) (*MessageOutput, error) {
-	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -358,8 +358,8 @@ func (s *Server) handleDeleteInvite(ctx context.Context, input *DeleteInviteInpu
 	return &MessageOutput{Body: MessageResponse{Message: "Invite deleted"}}, nil
 }
 
-func (s *Server) handleListUsers(ctx context.Context, input *ListUsersInput) (*ListUsersOutput, error) {
-	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+func (s *Server) handleListUsers(ctx context.Context, _ *ListUsersInput) (*ListUsersOutput, error) {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -368,10 +368,7 @@ func (s *Server) handleListUsers(ctx context.Context, input *ListUsersInput) (*L
 		return nil, err
 	}
 
-	resp := make([]AdminUserResponse, len(users))
-	for i, u := range users {
-		resp[i] = mapAdminUserResponse(u)
-	}
+	resp := MapSlice(users, mapAdminUserResponse)
 
 	return &ListUsersOutput{
 		Body: ListUsersResponse{Users: resp, Total: len(resp)},
@@ -379,7 +376,7 @@ func (s *Server) handleListUsers(ctx context.Context, input *ListUsersInput) (*L
 }
 
 func (s *Server) handleGetAdminUser(ctx context.Context, input *GetAdminUserInput) (*AdminUserOutput, error) {
-	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -392,7 +389,7 @@ func (s *Server) handleGetAdminUser(ctx context.Context, input *GetAdminUserInpu
 }
 
 func (s *Server) handleUpdateAdminUser(ctx context.Context, input *UpdateAdminUserInput) (*AdminUserOutput, error) {
-	adminUserID, err := s.authenticateAndRequireAdmin(ctx, input.Authorization)
+	adminUserID, err := s.RequireAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -419,7 +416,7 @@ func (s *Server) handleUpdateAdminUser(ctx context.Context, input *UpdateAdminUs
 }
 
 func (s *Server) handleDeleteAdminUser(ctx context.Context, input *DeleteAdminUserInput) (*MessageOutput, error) {
-	adminUserID, err := s.authenticateAndRequireAdmin(ctx, input.Authorization)
+	adminUserID, err := s.RequireAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -431,8 +428,8 @@ func (s *Server) handleDeleteAdminUser(ctx context.Context, input *DeleteAdminUs
 	return &MessageOutput{Body: MessageResponse{Message: "User deleted"}}, nil
 }
 
-func (s *Server) handleListPendingUsers(ctx context.Context, input *ListPendingUsersInput) (*ListUsersOutput, error) {
-	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+func (s *Server) handleListPendingUsers(ctx context.Context, _ *ListPendingUsersInput) (*ListUsersOutput, error) {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -441,10 +438,7 @@ func (s *Server) handleListPendingUsers(ctx context.Context, input *ListPendingU
 		return nil, err
 	}
 
-	resp := make([]AdminUserResponse, len(users))
-	for i, u := range users {
-		resp[i] = mapAdminUserResponse(u)
-	}
+	resp := MapSlice(users, mapAdminUserResponse)
 
 	return &ListUsersOutput{
 		Body: ListUsersResponse{Users: resp, Total: len(resp)},
@@ -452,7 +446,7 @@ func (s *Server) handleListPendingUsers(ctx context.Context, input *ListPendingU
 }
 
 func (s *Server) handleApproveUser(ctx context.Context, input *ApproveUserInput) (*AdminUserOutput, error) {
-	adminUserID, err := s.authenticateAndRequireAdmin(ctx, input.Authorization)
+	adminUserID, err := s.RequireAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -466,7 +460,7 @@ func (s *Server) handleApproveUser(ctx context.Context, input *ApproveUserInput)
 }
 
 func (s *Server) handleDenyUser(ctx context.Context, input *DenyUserInput) (*MessageOutput, error) {
-	adminUserID, err := s.authenticateAndRequireAdmin(ctx, input.Authorization)
+	adminUserID, err := s.RequireAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -479,7 +473,7 @@ func (s *Server) handleDenyUser(ctx context.Context, input *DenyUserInput) (*Mes
 }
 
 func (s *Server) handleSetOpenRegistration(ctx context.Context, input *SetOpenRegistrationInput) (*MessageOutput, error) {
-	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -499,7 +493,7 @@ func (s *Server) handleSetOpenRegistration(ctx context.Context, input *SetOpenRe
 func mapAdminUserResponse(u *domain.User) AdminUserResponse {
 	status := string(u.Status)
 	if status == "" {
-		status = "active" // Backward compatibility
+		status = string(domain.UserStatusActive) // Backward compatibility
 	}
 	return AdminUserResponse{
 		ID:          u.ID,

@@ -157,7 +157,7 @@ func TestConvertToBook_WithFullMetadata(t *testing.T) {
 	book, err := ConvertToBook(ctx, item, mockStore)
 	require.NoError(t, err)
 	assert.NotEmpty(t, book.ID)
-	assert.True(t, book.ID[:5] == "book-")
+	assert.Equal(t, book.ID[:5], "book-")
 	assert.Equal(t, "/audiobooks/test-book", book.Path)
 	assert.Equal(t, "Test Book", book.Title)
 	assert.Equal(t, "A Test Subtitle", book.Subtitle)
@@ -646,7 +646,7 @@ func TestCompareFilenamesTransitivity(t *testing.T) {
 		"track20.mp3",
 	}
 
-	for i := 0; i < len(files); i++ {
+	for i := range files {
 		for j := i + 1; j < len(files); j++ {
 			result := compareFilenames(files[i], files[j])
 			if result >= 0 {

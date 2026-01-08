@@ -53,7 +53,7 @@ type StoreHandle struct {
 
 // Shutdown implements do.Shutdownable.
 func (h *StoreHandle) Shutdown() error {
-	return h.Store.Close()
+	return h.Close()
 }
 
 // ProvideStore provides the database store.

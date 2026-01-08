@@ -173,12 +173,15 @@ func (s *SearchService) ReindexAll(ctx context.Context) error {
 		return fmt.Errorf("list contributors: %w", err)
 	}
 
+	// Get book counts for all contributors in one scan (not N+1)
+	contributorBookCounts, _ := s.store.CountBooksForAllContributors(ctx)
+
 	contribDocs := make([]*search.SearchDocument, 0, len(contributors))
 	for _, c := range contributors {
 		if c.IsDeleted() {
 			continue
 		}
-		bookCount, _ := s.store.CountBooksForContributor(ctx, c.ID)
+		bookCount := contributorBookCounts[c.ID]
 		doc := search.ContributorToSearchDocument(c, bookCount)
 		contribDocs = append(contribDocs, doc)
 	}
@@ -233,33 +236,37 @@ func (s *SearchService) ReindexAll(ctx context.Context) error {
 
 // buildBookDocument creates a search document from a book with denormalized fields.
 func (s *SearchService) buildBookDocument(ctx context.Context, book *domain.Book) (*search.SearchDocument, error) {
+	// Batch fetch all contributors for this book (single query instead of N+1)
+	contributorIDs := make([]string, 0, len(book.Contributors))
+	for _, bc := range book.Contributors {
+		contributorIDs = append(contributorIDs, bc.ContributorID)
+	}
+
+	contributors, _ := s.store.GetContributorsByIDs(ctx, contributorIDs)
+	contributorMap := make(map[string]*domain.Contributor, len(contributors))
+	for _, c := range contributors {
+		contributorMap[c.ID] = c
+	}
+
 	// Get author and narrator names (first of each role)
 	var authorName string
 	var narratorName string
 
 	for _, bc := range book.Contributors {
-		if authorName == "" {
-			for _, role := range bc.Roles {
-				if role == domain.RoleAuthor {
-					c, err := s.store.GetContributor(ctx, bc.ContributorID)
-					if err == nil {
-						authorName = c.Name
-					}
-					break
-				}
+		c := contributorMap[bc.ContributorID]
+		if c == nil {
+			continue
+		}
+
+		for _, role := range bc.Roles {
+			if authorName == "" && role == domain.RoleAuthor {
+				authorName = c.Name
+			}
+			if narratorName == "" && role == domain.RoleNarrator {
+				narratorName = c.Name
 			}
 		}
-		if narratorName == "" {
-			for _, role := range bc.Roles {
-				if role == domain.RoleNarrator {
-					c, err := s.store.GetContributor(ctx, bc.ContributorID)
-					if err == nil {
-						narratorName = c.Name
-					}
-					break
-				}
-			}
-		}
+
 		if authorName != "" && narratorName != "" {
 			break
 		}
@@ -274,8 +281,8 @@ func (s *SearchService) buildBookDocument(ctx context.Context, book *domain.Book
 		}
 	}
 
-	// Get genre paths and slugs with ancestor expansion
-	genrePaths, genreSlugs := s.expandGenrePaths(ctx, book.GenreIDs)
+	// Batch fetch genres and expand paths (single query instead of N+1)
+	genrePaths, genreSlugs := s.expandGenrePathsBatch(ctx, book.GenreIDs)
 
 	// Get tag slugs for the book
 	tagSlugs, _ := s.store.GetTagSlugsForBook(ctx, book.ID)
@@ -293,9 +300,11 @@ func (s *SearchService) buildBookDocument(ctx context.Context, book *domain.Book
 	return doc, nil
 }
 
-// expandGenrePaths takes a list of genre IDs and returns:
+// expandGenrePathsBatch takes a list of genre IDs and returns:
 // 1. All genre paths including ancestors (for hierarchical filtering)
 // 2. All genre slugs (for exact matching)
+//
+// Uses batch fetch to avoid N+1 queries.
 //
 // For example, if a book has genre "Epic Fantasy" with path "/fiction/fantasy/epic-fantasy",
 // this returns:
@@ -304,16 +313,21 @@ func (s *SearchService) buildBookDocument(ctx context.Context, book *domain.Book
 //	genreSlugs: ["epic-fantasy"]
 //
 // This enables searches like "all Fantasy books" to include Epic Fantasy books.
-func (s *SearchService) expandGenrePaths(ctx context.Context, genreIDs []string) (genrePaths, genreSlugs []string) {
+func (s *SearchService) expandGenrePathsBatch(ctx context.Context, genreIDs []string) (genrePaths, genreSlugs []string) {
+	if len(genreIDs) == 0 {
+		return nil, nil
+	}
+
+	// Batch fetch all genres in one query
+	genres, err := s.store.GetGenresByIDs(ctx, genreIDs)
+	if err != nil {
+		return nil, nil
+	}
+
 	pathSet := make(map[string]bool)
 	slugSet := make(map[string]bool)
 
-	for _, genreID := range genreIDs {
-		genre, err := s.store.GetGenre(ctx, genreID)
-		if err != nil {
-			continue
-		}
-
+	for _, genre := range genres {
 		// Add the slug
 		if genre.Slug != "" {
 			slugSet[genre.Slug] = true

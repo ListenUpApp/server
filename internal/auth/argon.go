@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -30,10 +31,10 @@ const (
 func HashPassword(password string) (string, error) {
 	// Validate password to prevent DoS and catch bugs.
 	if password == "" {
-		return "", fmt.Errorf("password cannot be empty")
+		return "", errors.New("password cannot be empty")
 	}
 	if len(password) > maxPasswordLength {
-		return "", fmt.Errorf("password exceeds maximum length")
+		return "", errors.New("password exceeds maximum length")
 	}
 
 	// Generate a Cryptographically secure salt.
@@ -112,7 +113,7 @@ type argon2Params struct {
 func decodeHash(encodedHash string) (salt, hash []byte, params *argon2Params, err error) {
 	parts := strings.Split(encodedHash, "$")
 	if len(parts) != 6 {
-		return nil, nil, nil, fmt.Errorf("invalid hash format")
+		return nil, nil, nil, errors.New("invalid hash format")
 	}
 
 	// Verify algorithm is correct.

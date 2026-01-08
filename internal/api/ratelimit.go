@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/http/response"
@@ -52,12 +53,8 @@ func getClientIP(r *http.Request) string {
 	// Check X-Forwarded-For (may contain multiple IPs, first is client).
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		// Take first IP in the chain.
-		for i := 0; i < len(xff); i++ {
-			if xff[i] == ',' {
-				return xff[:i]
-			}
-		}
-		return xff
+		ip, _, _ := strings.Cut(xff, ",")
+		return ip
 	}
 
 	// Check X-Real-IP.
@@ -66,11 +63,9 @@ func getClientIP(r *http.Request) string {
 	}
 
 	// Fall back to RemoteAddr (strip port).
-	ip := r.RemoteAddr
-	for i := len(ip) - 1; i >= 0; i-- {
-		if ip[i] == ':' {
-			return ip[:i]
-		}
+	// Use LastIndex for IPv6 addresses like [::1]:8080
+	if idx := strings.LastIndex(r.RemoteAddr, ":"); idx != -1 {
+		return r.RemoteAddr[:idx]
 	}
-	return ip
+	return r.RemoteAddr
 }

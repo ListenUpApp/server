@@ -67,45 +67,45 @@ const (
 	// Sent to the deleted user so they can clear auth and show appropriate message.
 	EventUserDeleted EventType = "user.deleted"
 
-	// Collection events (admin-only)
+	// Collection events (admin-only).
 	EventCollectionCreated     EventType = "collection.created"
 	EventCollectionUpdated     EventType = "collection.updated"
 	EventCollectionDeleted     EventType = "collection.deleted"
 	EventCollectionBookAdded   EventType = "collection.book_added"
 	EventCollectionBookRemoved EventType = "collection.book_removed"
 
-	// Lens events (broadcast to all)
+	// Lens events (broadcast to all).
 	EventLensCreated     EventType = "lens.created"
 	EventLensUpdated     EventType = "lens.updated"
 	EventLensDeleted     EventType = "lens.deleted"
 	EventLensBookAdded   EventType = "lens.book_added"
 	EventLensBookRemoved EventType = "lens.book_removed"
 
-	// Tag events (broadcast to all)
+	// Tag events (broadcast to all).
 	EventTagCreated     EventType = "tag.created"
 	EventBookTagAdded   EventType = "book.tag_added"
 	EventBookTagRemoved EventType = "book.tag_removed"
 
-	// Inbox events (admin-only)
+	// Inbox events (admin-only).
 	EventInboxBookAdded    EventType = "inbox.book_added"
 	EventInboxBookReleased EventType = "inbox.book_released"
 
-	// Listening events (user-specific)
+	// Listening events (user-specific).
 	EventProgressUpdated       EventType = "listening.progress_updated"
 	EventListeningEventCreated EventType = "listening.event_created"
 	EventReadingSessionUpdated EventType = "reading_session.updated"
 
-	// Active session events (broadcast to all for "Currently Listening" feature)
+	// Active session events (broadcast to all for "Currently Listening" feature).
 	EventSessionStarted EventType = "session.started"
 	EventSessionEnded   EventType = "session.ended"
 
-	// Activity feed events (broadcast to all)
+	// Activity feed events (broadcast to all).
 	EventActivityCreated EventType = "activity.created"
 
-	// Profile events (broadcast to all)
+	// Profile events (broadcast to all).
 	EventProfileUpdated EventType = "profile.updated"
 
-	// User stats events (broadcast to all for leaderboard caching)
+	// User stats events (broadcast to all for leaderboard caching).
 	EventUserStatsUpdated EventType = "user_stats.updated"
 )
 

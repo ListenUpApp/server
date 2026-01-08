@@ -99,6 +99,9 @@ func setupTestServer(t *testing.T) *testServer {
 	// Create chi router
 	router := chi.NewRouter()
 
+	// Add auth middleware before routes
+	router.Use(authMiddleware(services.Auth))
+
 	// Configure huma API
 	humaConfig := huma.DefaultConfig("ListenUp API Test", "1.0.0")
 	humaConfig.Components.SecuritySchemes = map[string]*huma.SecurityScheme{
@@ -154,6 +157,7 @@ func setupTestServer(t *testing.T) *testServer {
 
 // testEnvelope wraps API responses for tests.
 type testEnvelope[T any] struct {
+	Version int    `json:"v"`
 	Success bool   `json:"success"`
 	Data    T      `json:"data"`
 	Error   string `json:"error,omitempty"`

@@ -8,6 +8,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -610,11 +611,8 @@ func (s *Store) GetBooksByContributorRole(ctx context.Context, contributorID str
 	for _, book := range allBooks {
 		for _, bc := range book.Contributors {
 			if bc.ContributorID == contributorID {
-				for _, r := range bc.Roles {
-					if r == role {
-						books = append(books, book)
-						break
-					}
+				if slices.Contains(bc.Roles, role) {
+					books = append(books, book)
 				}
 			}
 		}
@@ -836,6 +834,43 @@ func (s *Store) CountBooksForContributor(_ context.Context, contributorID string
 	return count, nil
 }
 
+// CountBooksForAllContributors returns book counts for all contributors in a single scan.
+// Much more efficient than calling CountBooksForContributor N times during reindexing.
+// Returns map[contributorID]bookCount.
+func (s *Store) CountBooksForAllContributors(_ context.Context) (map[string]int, error) {
+	counts := make(map[string]int)
+
+	prefix := []byte(bookByContributorPrefix)
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false // Only need keys
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		// Key format: idx:books:contributor:{contributorID}:{bookID}
+		prefixLen := len(bookByContributorPrefix)
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			key := string(it.Item().Key())
+			// Extract contributorID from key
+			rest := key[prefixLen:] // {contributorID}:{bookID}
+			colonIdx := strings.Index(rest, ":")
+			if colonIdx > 0 {
+				contributorID := rest[:colonIdx]
+				counts[contributorID]++
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("count books for all contributors: %w", err)
+	}
+
+	return counts, nil
+}
+
 // SearchContributorsByName performs a case-insensitive search for contributors by name.
 // Returns contributors whose names contain the query string, limited to `limit` results.
 // This is used for autocomplete in the contributor editing UI.
@@ -968,7 +1003,7 @@ func (s *Store) GetContributorsDeletedAfter(_ context.Context, timestamp time.Ti
 func (s *Store) MergeContributors(ctx context.Context, sourceID, targetID string) (*domain.Contributor, error) {
 	// Validate: can't merge contributor into itself
 	if sourceID == targetID {
-		return nil, fmt.Errorf("cannot merge contributor into itself")
+		return nil, errors.New("cannot merge contributor into itself")
 	}
 
 	// Get both contributors
@@ -999,7 +1034,8 @@ func (s *Store) MergeContributors(ctx context.Context, sourceID, targetID string
 		var sourceCreditedAs string
 
 		for _, bc := range book.Contributors {
-			if bc.ContributorID == sourceID {
+			switch bc.ContributorID {
+			case sourceID:
 				// Remember source's roles and creditedAs for merging
 				sourceRoles = bc.Roles
 				if bc.CreditedAs != "" {
@@ -1008,11 +1044,11 @@ func (s *Store) MergeContributors(ctx context.Context, sourceID, targetID string
 					sourceCreditedAs = source.Name
 				}
 				updated = true
-			} else if bc.ContributorID == targetID {
+			case targetID:
 				// Target already exists in this book
 				existingTargetIdx = len(newContributors)
 				newContributors = append(newContributors, bc)
-			} else {
+			default:
 				// Other contributors pass through unchanged
 				newContributors = append(newContributors, bc)
 			}
@@ -1230,4 +1266,43 @@ func (s *Store) UnmergeContributor(ctx context.Context, sourceID, aliasName stri
 	s.eventEmitter.Emit(sse.NewContributorCreatedEvent(newContributor))
 
 	return newContributor, nil
+}
+
+// CountContributors returns the total number of non-deleted contributors.
+// This is more efficient than ListContributors when only the count is needed.
+func (s *Store) CountContributors(_ context.Context) (int, error) {
+	var count int
+	prefix := []byte(contributorPrefix)
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false // Only need keys for counting
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			// We need to check if the contributor is deleted, so we must fetch the value
+			item := it.Item()
+			err := item.Value(func(val []byte) error {
+				var contributor domain.Contributor
+				if err := json.Unmarshal(val, &contributor); err != nil {
+					return nil // Skip malformed entries
+				}
+				if contributor.DeletedAt == nil {
+					count++
+				}
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, fmt.Errorf("count contributors: %w", err)
+	}
+
+	return count, nil
 }

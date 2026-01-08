@@ -4,6 +4,7 @@ package audio
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strconv"
@@ -24,7 +25,7 @@ func (p *FFprobeParser) ParseMultiFile(ctx context.Context, paths []string) (*Me
 	// FFprobe doesn't support multi-file aggregation.
 	// Fall back to parsing the first file.
 	if len(paths) == 0 {
-		return nil, fmt.Errorf("no files provided")
+		return nil, errors.New("no files provided")
 	}
 	return p.Parse(ctx, paths[0])
 }

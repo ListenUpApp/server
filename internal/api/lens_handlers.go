@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -238,8 +239,8 @@ type DiscoverLensesOutput struct {
 
 // === Handlers ===
 
-func (s *Server) handleListMyLenses(ctx context.Context, input *ListMyLensesInput) (*ListLensesOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+func (s *Server) handleListMyLenses(ctx context.Context, _ *ListMyLensesInput) (*ListLensesOutput, error) {
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -263,8 +264,8 @@ func (s *Server) handleListMyLenses(ctx context.Context, input *ListMyLensesInpu
 	return &ListLensesOutput{Body: ListLensesResponse{Lenses: resp}}, nil
 }
 
-func (s *Server) handleListDiscoverLenses(ctx context.Context, input *DiscoverLensesInput) (*DiscoverLensesOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+func (s *Server) handleListDiscoverLenses(ctx context.Context, _ *DiscoverLensesInput) (*DiscoverLensesOutput, error) {
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -302,7 +303,7 @@ func (s *Server) handleListDiscoverLenses(ctx context.Context, input *DiscoverLe
 }
 
 func (s *Server) handleCreateLens(ctx context.Context, input *CreateLensInput) (*LensOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -321,7 +322,7 @@ func (s *Server) handleCreateLens(ctx context.Context, input *CreateLensInput) (
 }
 
 func (s *Server) handleGetLens(ctx context.Context, input *GetLensInput) (*LensDetailOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -396,12 +397,10 @@ func (s *Server) handleGetLens(ctx context.Context, input *GetLensInput) (*LensD
 		} else {
 			// Fallback to extracting from contributors
 			for _, c := range book.Contributors {
-				for _, role := range c.Roles {
-					if role == domain.RoleAuthor {
-						// Get contributor name - for now we don't have it directly
-						// The enriched book would have it, so this is a fallback
-						break
-					}
+				if slices.Contains(c.Roles, domain.RoleAuthor) {
+					// Get contributor name - for now we don't have it directly
+					// The enriched book would have it, so this is a fallback
+
 				}
 			}
 			if bookResp.AuthorNames == nil {
@@ -434,7 +433,7 @@ func (s *Server) handleGetLens(ctx context.Context, input *GetLensInput) (*LensD
 }
 
 func (s *Server) handleUpdateLens(ctx context.Context, input *UpdateLensInput) (*LensOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -453,7 +452,7 @@ func (s *Server) handleUpdateLens(ctx context.Context, input *UpdateLensInput) (
 }
 
 func (s *Server) handleDeleteLens(ctx context.Context, input *DeleteLensInput) (*MessageOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -466,7 +465,7 @@ func (s *Server) handleDeleteLens(ctx context.Context, input *DeleteLensInput) (
 }
 
 func (s *Server) handleAddBooksToLens(ctx context.Context, input *AddBooksToLensInput) (*MessageOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -482,7 +481,7 @@ func (s *Server) handleAddBooksToLens(ctx context.Context, input *AddBooksToLens
 }
 
 func (s *Server) handleRemoveBookFromLens(ctx context.Context, input *RemoveBookFromLensInput) (*MessageOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}

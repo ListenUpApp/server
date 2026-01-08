@@ -65,15 +65,15 @@ func (s *Service) Start(instance *domain.Instance, port int) error {
 
 	// Build TXT records with server metadata
 	txtRecords := []string{
-		fmt.Sprintf("id=%s", instance.ID),
-		fmt.Sprintf("name=%s", instance.Name),
-		fmt.Sprintf("version=%s", ServerVersion),
-		fmt.Sprintf("api=%s", APIVersion),
+		"id=" + instance.ID,
+		"name=" + instance.Name,
+		"version=" + ServerVersion,
+		"api=" + APIVersion,
 	}
 
 	// Only include remote URL if configured
 	if instance.RemoteURL != "" {
-		txtRecords = append(txtRecords, fmt.Sprintf("remote=%s", instance.RemoteURL))
+		txtRecords = append(txtRecords, "remote="+instance.RemoteURL)
 	}
 
 	// Create mDNS service configuration

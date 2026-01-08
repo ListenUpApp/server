@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -151,7 +152,7 @@ type ListSharedWithMeInput struct {
 // === Handlers ===
 
 func (s *Server) handleShareCollection(ctx context.Context, input *ShareCollectionInput) (*ShareOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +177,7 @@ func (s *Server) handleShareCollection(ctx context.Context, input *ShareCollecti
 }
 
 func (s *Server) handleListCollectionShares(ctx context.Context, input *ListCollectionSharesInput) (*ListSharesOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -186,16 +187,13 @@ func (s *Server) handleListCollectionShares(ctx context.Context, input *ListColl
 		return nil, err
 	}
 
-	resp := make([]ShareResponse, len(shares))
-	for i, share := range shares {
-		resp[i] = mapShareResponse(share)
-	}
+	resp := MapSlice(shares, mapShareResponse)
 
 	return &ListSharesOutput{Body: ListSharesResponse{Shares: resp}}, nil
 }
 
 func (s *Server) handleGetShare(ctx context.Context, input *GetShareInput) (*ShareOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +207,7 @@ func (s *Server) handleGetShare(ctx context.Context, input *GetShareInput) (*Sha
 }
 
 func (s *Server) handleUpdateShare(ctx context.Context, input *UpdateShareInput) (*ShareOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +229,7 @@ func (s *Server) handleUpdateShare(ctx context.Context, input *UpdateShareInput)
 }
 
 func (s *Server) handleDeleteShare(ctx context.Context, input *DeleteShareInput) (*MessageOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -252,8 +250,8 @@ func (s *Server) handleDeleteShare(ctx context.Context, input *DeleteShareInput)
 	return &MessageOutput{Body: MessageResponse{Message: "Share removed"}}, nil
 }
 
-func (s *Server) handleListSharedWithMe(ctx context.Context, input *ListSharedWithMeInput) (*ListSharesOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+func (s *Server) handleListSharedWithMe(ctx context.Context, _ *ListSharedWithMeInput) (*ListSharesOutput, error) {
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -263,10 +261,7 @@ func (s *Server) handleListSharedWithMe(ctx context.Context, input *ListSharedWi
 		return nil, err
 	}
 
-	resp := make([]ShareResponse, len(shares))
-	for i, share := range shares {
-		resp[i] = mapShareResponse(share)
-	}
+	resp := MapSlice(shares, mapShareResponse)
 
 	return &ListSharesOutput{Body: ListSharesResponse{Shares: resp}}, nil
 }
@@ -291,7 +286,7 @@ func (s *Server) emitBooksForShare(ctx context.Context, collectionID, userID str
 	// Get the collection to find the owner and book IDs
 	coll, err := s.store.AdminGetCollection(ctx, collectionID)
 	if err != nil {
-		if err != store.ErrCollectionNotFound {
+		if !errors.Is(err, store.ErrCollectionNotFound) {
 			s.logger.Error("failed to get collection for share notification", "collection_id", collectionID, "error", err)
 		}
 		return

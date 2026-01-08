@@ -32,6 +32,60 @@ var (
 	ErrBookExists = errors.New("book already exists")
 )
 
+// stringSetDiff computes the difference between two string slices.
+// Returns (added, removed) where:
+//   - added contains elements in newItems but not in oldItems
+//   - removed contains elements in oldItems but not in newItems
+func stringSetDiff(oldItems, newItems []string) (added, removed []string) {
+	oldSet := make(map[string]bool, len(oldItems))
+	for _, item := range oldItems {
+		oldSet[item] = true
+	}
+
+	newSet := make(map[string]bool, len(newItems))
+	for _, item := range newItems {
+		newSet[item] = true
+		if !oldSet[item] {
+			added = append(added, item)
+		}
+	}
+
+	for _, item := range oldItems {
+		if !newSet[item] {
+			removed = append(removed, item)
+		}
+	}
+
+	return added, removed
+}
+
+// uint64SetDiff computes the difference between two uint64 slices.
+// Returns (added, removed) where:
+//   - added contains elements in newItems but not in oldItems
+//   - removed contains elements in oldItems but not in newItems
+func uint64SetDiff(oldItems, newItems []uint64) (added, removed []uint64) {
+	oldSet := make(map[uint64]bool, len(oldItems))
+	for _, item := range oldItems {
+		oldSet[item] = true
+	}
+
+	newSet := make(map[uint64]bool, len(newItems))
+	for _, item := range newItems {
+		newSet[item] = true
+		if !oldSet[item] {
+			added = append(added, item)
+		}
+	}
+
+	for _, item := range oldItems {
+		if !newSet[item] {
+			removed = append(removed, item)
+		}
+	}
+
+	return added, removed
+}
+
 // Book Operations.
 
 // CreateBook creates a new book.
@@ -68,7 +122,7 @@ func (s *Store) CreateBook(ctx context.Context, book *domain.Book) error {
 		// Create inode indices for eac haudio file (for fast file watching lookups).
 		for _, audioFile := range book.AudioFiles {
 			if audioFile.Inode > 0 {
-				inodeKey := []byte(fmt.Sprintf("%s%d", bookByInodePrefix, audioFile.Inode))
+				inodeKey := fmt.Appendf(nil, "%s%d", bookByInodePrefix, audioFile.Inode)
 				if err := txn.Set(inodeKey, []byte(book.ID)); err != nil {
 					return err
 				}
@@ -77,7 +131,7 @@ func (s *Store) CreateBook(ctx context.Context, book *domain.Book) error {
 
 		// Create contributor reverse indexes for efficient contributor -> books lookups.
 		for _, bc := range book.Contributors {
-			contributorBookKey := []byte(fmt.Sprintf("%s%s:%s", bookByContributorPrefix, bc.ContributorID, book.ID))
+			contributorBookKey := fmt.Appendf(nil, "%s%s:%s", bookByContributorPrefix, bc.ContributorID, book.ID)
 			if err := txn.Set(contributorBookKey, []byte{}); err != nil {
 				return err
 			}
@@ -85,7 +139,7 @@ func (s *Store) CreateBook(ctx context.Context, book *domain.Book) error {
 
 		// Create series reverse indexes for all series the book belongs to.
 		for _, bs := range book.Series {
-			seriesBookKey := []byte(fmt.Sprintf("%s%s:%s", bookBySeriesPrefix, bs.SeriesID, book.ID))
+			seriesBookKey := fmt.Appendf(nil, "%s%s:%s", bookBySeriesPrefix, bs.SeriesID, book.ID)
 			if err := txn.Set(seriesBookKey, []byte{}); err != nil {
 				return err
 			}
@@ -225,6 +279,49 @@ func (s *Store) getBookInternal(_ context.Context, id string) (*domain.Book, err
 	return &book, nil
 }
 
+// getBooksInternalByIDs retrieves multiple books by ID in a single transaction.
+// Skips books that are not found or soft-deleted.
+// For internal store use only.
+func (s *Store) getBooksInternalByIDs(_ context.Context, ids []string) ([]*domain.Book, error) {
+	if len(ids) == 0 {
+		return []*domain.Book{}, nil
+	}
+
+	books := make([]*domain.Book, 0, len(ids))
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		for _, id := range ids {
+			key := []byte(bookPrefix + id)
+			item, err := txn.Get(key)
+			if err != nil {
+				if errors.Is(err, badger.ErrKeyNotFound) {
+					continue // Skip not found
+				}
+				return err
+			}
+
+			var book domain.Book
+			if err := item.Value(func(val []byte) error {
+				return json.Unmarshal(val, &book)
+			}); err != nil {
+				continue // Skip malformed entries
+			}
+
+			if book.IsDeleted() {
+				continue // Skip soft-deleted
+			}
+
+			books = append(books, &book)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get books by ids: %w", err)
+	}
+
+	return books, nil
+}
+
 // GetBookByPath retrieves a book by its filesystem path.
 // This is used during file watching to check if a book already exists.
 // No access control - for internal system use only.
@@ -256,7 +353,7 @@ func (s *Store) GetBookByPath(ctx context.Context, path string) (*domain.Book, e
 // This is used during file watching for fast lookups when a file changes.
 // No access control - for internal system use only.
 func (s *Store) GetBookByInode(ctx context.Context, inode int64) (*domain.Book, error) {
-	inodeKey := []byte(fmt.Sprintf("%s%d", bookByInodePrefix, inode))
+	inodeKey := fmt.Appendf(nil, "%s%d", bookByInodePrefix, inode)
 
 	var bookID string
 	err := s.db.View(func(txn *badger.Txn) error {
@@ -318,100 +415,82 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 			}
 		}
 
-		// Update inode indices.
-		// Build maps of old and new inodes.
-		oldInodes := make(map[uint64]bool)
+		// Update inode indices using set diff.
+		oldInodes := make([]uint64, 0, len(oldBook.AudioFiles))
 		for _, af := range oldBook.AudioFiles {
 			if af.Inode > 0 {
-				oldInodes[af.Inode] = true
+				oldInodes = append(oldInodes, af.Inode)
 			}
 		}
-		newInodes := make(map[uint64]bool)
+		newInodes := make([]uint64, 0, len(book.AudioFiles))
 		for _, af := range book.AudioFiles {
 			if af.Inode > 0 {
-				newInodes[af.Inode] = true
+				newInodes = append(newInodes, af.Inode)
 			}
 		}
 
-		// Delete removed inodes.
-		for inode := range oldInodes {
-			if !newInodes[inode] {
-				inodeKey := []byte(fmt.Sprintf("%s%d", bookByInodePrefix, inode))
-				if err := txn.Delete(inodeKey); err != nil {
-					return err
-				}
+		addedInodes, removedInodes := uint64SetDiff(oldInodes, newInodes)
+
+		for _, inode := range removedInodes {
+			inodeKey := fmt.Appendf(nil, "%s%d", bookByInodePrefix, inode)
+			if err := txn.Delete(inodeKey); err != nil {
+				return err
+			}
+		}
+		for _, inode := range addedInodes {
+			inodeKey := fmt.Appendf(nil, "%s%d", bookByInodePrefix, inode)
+			if err := txn.Set(inodeKey, []byte(book.ID)); err != nil {
+				return err
 			}
 		}
 
-		// Add new inodes.
-		for inode := range newInodes {
-			if !oldInodes[inode] {
-				inodeKey := []byte(fmt.Sprintf("%s%d", bookByInodePrefix, inode))
-				if err := txn.Set(inodeKey, []byte(book.ID)); err != nil {
-					return err
-				}
+		// Update contributor reverse indexes using set diff.
+		oldContributorIDs := make([]string, len(oldBook.Contributors))
+		for i, bc := range oldBook.Contributors {
+			oldContributorIDs[i] = bc.ContributorID
+		}
+		newContributorIDs := make([]string, len(book.Contributors))
+		for i, bc := range book.Contributors {
+			newContributorIDs[i] = bc.ContributorID
+		}
+
+		addedContributors, removedContributors := stringSetDiff(oldContributorIDs, newContributorIDs)
+
+		for _, contributorID := range removedContributors {
+			contributorBookKey := fmt.Appendf(nil, "%s%s:%s", bookByContributorPrefix, contributorID, book.ID)
+			if err := txn.Delete(contributorBookKey); err != nil {
+				return err
+			}
+		}
+		for _, contributorID := range addedContributors {
+			contributorBookKey := fmt.Appendf(nil, "%s%s:%s", bookByContributorPrefix, contributorID, book.ID)
+			if err := txn.Set(contributorBookKey, []byte{}); err != nil {
+				return err
 			}
 		}
 
-		// Update contributor reverse indexes.
-		// Build maps of old and new contributors.
-		oldContributors := make(map[string]bool)
-		for _, bc := range oldBook.Contributors {
-			oldContributors[bc.ContributorID] = true
+		// Update series reverse indexes using set diff.
+		oldSeriesIDs := make([]string, len(oldBook.Series))
+		for i, bs := range oldBook.Series {
+			oldSeriesIDs[i] = bs.SeriesID
 		}
-		newContributors := make(map[string]bool)
-		for _, bc := range book.Contributors {
-			newContributors[bc.ContributorID] = true
+		newSeriesIDs := make([]string, len(book.Series))
+		for i, bs := range book.Series {
+			newSeriesIDs[i] = bs.SeriesID
 		}
 
-		// Delete removed contributors.
-		for contributorID := range oldContributors {
-			if !newContributors[contributorID] {
-				contributorBookKey := []byte(fmt.Sprintf("%s%s:%s", bookByContributorPrefix, contributorID, book.ID))
-				if err := txn.Delete(contributorBookKey); err != nil {
-					return err
-				}
+		addedSeries, removedSeries := stringSetDiff(oldSeriesIDs, newSeriesIDs)
+
+		for _, seriesID := range removedSeries {
+			seriesBookKey := fmt.Appendf(nil, "%s%s:%s", bookBySeriesPrefix, seriesID, book.ID)
+			if err := txn.Delete(seriesBookKey); err != nil {
+				return err
 			}
 		}
-
-		// Add new contributors.
-		for contributorID := range newContributors {
-			if !oldContributors[contributorID] {
-				contributorBookKey := []byte(fmt.Sprintf("%s%s:%s", bookByContributorPrefix, contributorID, book.ID))
-				if err := txn.Set(contributorBookKey, []byte{}); err != nil {
-					return err
-				}
-			}
-		}
-
-		// Update series reverse indexes.
-		// Build maps of old and new series.
-		oldSeries := make(map[string]bool)
-		for _, bs := range oldBook.Series {
-			oldSeries[bs.SeriesID] = true
-		}
-		newSeries := make(map[string]bool)
-		for _, bs := range book.Series {
-			newSeries[bs.SeriesID] = true
-		}
-
-		// Delete removed series.
-		for seriesID := range oldSeries {
-			if !newSeries[seriesID] {
-				seriesBookKey := []byte(fmt.Sprintf("%s%s:%s", bookBySeriesPrefix, seriesID, book.ID))
-				if err := txn.Delete(seriesBookKey); err != nil {
-					return err
-				}
-			}
-		}
-
-		// Add new series.
-		for seriesID := range newSeries {
-			if !oldSeries[seriesID] {
-				seriesBookKey := []byte(fmt.Sprintf("%s%s:%s", bookBySeriesPrefix, seriesID, book.ID))
-				if err := txn.Set(seriesBookKey, []byte{}); err != nil {
-					return err
-				}
+		for _, seriesID := range addedSeries {
+			seriesBookKey := fmt.Appendf(nil, "%s%s:%s", bookBySeriesPrefix, seriesID, book.ID)
+			if err := txn.Set(seriesBookKey, []byte{}); err != nil {
+				return err
 			}
 		}
 
@@ -512,7 +591,7 @@ func (s *Store) DeleteBook(ctx context.Context, id string) error {
 
 		for _, audioFile := range book.AudioFiles {
 			if audioFile.Inode > 0 {
-				inodeKey := []byte(fmt.Sprintf("%s%d", bookByInodePrefix, audioFile.Inode))
+				inodeKey := fmt.Appendf(nil, "%s%d", bookByInodePrefix, audioFile.Inode)
 				if err := txn.Delete(inodeKey); err != nil {
 					return err
 				}
@@ -521,7 +600,7 @@ func (s *Store) DeleteBook(ctx context.Context, id string) error {
 
 		// Delete contributor reverse indexes.
 		for _, bc := range book.Contributors {
-			contributorBookKey := []byte(fmt.Sprintf("%s%s:%s", bookByContributorPrefix, bc.ContributorID, book.ID))
+			contributorBookKey := fmt.Appendf(nil, "%s%s:%s", bookByContributorPrefix, bc.ContributorID, book.ID)
 			if err := txn.Delete(contributorBookKey); err != nil {
 				return err
 			}
@@ -529,7 +608,7 @@ func (s *Store) DeleteBook(ctx context.Context, id string) error {
 
 		// Delete series reverse indexes for all series the book was in.
 		for _, bs := range book.Series {
-			seriesBookKey := []byte(fmt.Sprintf("%s%s:%s", bookBySeriesPrefix, bs.SeriesID, book.ID))
+			seriesBookKey := fmt.Appendf(nil, "%s%s:%s", bookBySeriesPrefix, bs.SeriesID, book.ID)
 			if err := txn.Delete(seriesBookKey); err != nil {
 				return err
 			}
@@ -598,7 +677,8 @@ func (s *Store) DeleteBook(ctx context.Context, id string) error {
 // This is used for delta sync to inform clients which books were deleted.
 // Returns a list of book IDs that were soft-deleted after the given timestamp.
 func (s *Store) GetBooksDeletedAfter(_ context.Context, timestamp time.Time) ([]string, error) {
-	var bookIDs []string
+	// Pre-allocate with small capacity - deletions are typically rare
+	bookIDs := make([]string, 0, 16)
 
 	err := s.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
@@ -662,7 +742,7 @@ func (s *Store) BookExists(ctx context.Context, id string) (bool, error) {
 func (s *Store) ListBooks(ctx context.Context, params PaginationParams) (*PaginatedResult[*domain.Book], error) {
 	params.Validate()
 
-	var books []*domain.Book
+	books := make([]*domain.Book, 0, params.Limit)
 	var lastKey string
 	var hasMore bool
 
@@ -773,7 +853,8 @@ func (s *Store) ListBooks(ctx context.Context, params PaginationParams) (*Pagina
 // need it for synching down the the line.  Likely, you'll want to use the paginated function (ListBooks) instead.
 // But you're an adult (probably) do what you like.
 func (s *Store) ListAllBooks(ctx context.Context) ([]*domain.Book, error) {
-	var books []*domain.Book
+	// Pre-allocate with reasonable capacity for typical library size
+	books := make([]*domain.Book, 0, 256)
 
 	prefix := []byte(bookPrefix)
 
@@ -813,7 +894,8 @@ func (s *Store) ListAllBooks(ctx context.Context) ([]*domain.Book, error) {
 // Note: This now needs to fetch values to check DeletedAt field.
 // TODO: Consider adding an "active books" index for better performance.
 func (s *Store) GetAllBookIDs(_ context.Context) ([]string, error) {
-	var bookIDs []string
+	// Pre-allocate with reasonable capacity for typical library size
+	bookIDs := make([]string, 0, 256)
 
 	prefix := []byte(bookPrefix)
 
@@ -881,10 +963,7 @@ func (s *Store) GetBooksByCollectionPaginated(ctx context.Context, userID, colle
 	}
 
 	// Calculate end index.
-	endIdx := startIdx + params.Limit
-	if endIdx > len(coll.BookIDs) {
-		endIdx = len(coll.BookIDs)
-	}
+	endIdx := min(startIdx+params.Limit, len(coll.BookIDs))
 
 	// Get slice of book IDs for this page.
 	pageBookIDs := coll.BookIDs[startIdx:endIdx]
@@ -911,7 +990,7 @@ func (s *Store) GetBooksByCollectionPaginated(ctx context.Context, userID, colle
 	}
 
 	if hasMore {
-		result.NextCursor = EncodeCursor(fmt.Sprintf("%d", endIdx))
+		result.NextCursor = EncodeCursor(strconv.Itoa(endIdx))
 	}
 
 	return result, nil

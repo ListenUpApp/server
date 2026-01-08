@@ -323,10 +323,7 @@ func (s *StatsService) buildStreakCalendar(ctx context.Context, userID string, n
 		if hasListened && maxTime > 0 {
 			// Scale to 1-4 based on relative listening
 			ratio := float64(ms) / float64(maxTime)
-			intensity = int(ratio*3) + 1
-			if intensity > 4 {
-				intensity = 4
-			}
+			intensity = min(int(ratio*3)+1, 4)
 		}
 
 		calendar = append(calendar, domain.StreakDay{

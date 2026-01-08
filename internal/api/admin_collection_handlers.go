@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -173,8 +174,8 @@ type RemoveBookInput struct {
 
 // === Handlers ===
 
-func (s *Server) handleListAdminCollections(ctx context.Context, input *ListAdminCollectionsInput) (*ListAdminCollectionsOutput, error) {
-	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+func (s *Server) handleListAdminCollections(ctx context.Context, _ *ListAdminCollectionsInput) (*ListAdminCollectionsOutput, error) {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -200,7 +201,7 @@ func (s *Server) handleListAdminCollections(ctx context.Context, input *ListAdmi
 }
 
 func (s *Server) handleCreateAdminCollection(ctx context.Context, input *CreateAdminCollectionInput) (*AdminCollectionOutput, error) {
-	userID, err := s.authenticateAndRequireAdmin(ctx, input.Authorization)
+	userID, err := s.RequireAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -234,7 +235,7 @@ func (s *Server) handleCreateAdminCollection(ctx context.Context, input *CreateA
 	}
 
 	if err := s.store.CreateCollection(ctx, coll); err != nil {
-		if err == store.ErrDuplicateCollection {
+		if errors.Is(err, store.ErrDuplicateCollection) {
 			return nil, huma.Error409Conflict("Collection already exists")
 		}
 		return nil, err
@@ -255,13 +256,13 @@ func (s *Server) handleCreateAdminCollection(ctx context.Context, input *CreateA
 }
 
 func (s *Server) handleGetAdminCollection(ctx context.Context, input *GetAdminCollectionInput) (*AdminCollectionOutput, error) {
-	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
 	coll, err := s.store.AdminGetCollection(ctx, input.ID)
 	if err != nil {
-		if err == store.ErrCollectionNotFound {
+		if errors.Is(err, store.ErrCollectionNotFound) {
 			return nil, huma.Error404NotFound("Collection not found")
 		}
 		return nil, err
@@ -279,13 +280,13 @@ func (s *Server) handleGetAdminCollection(ctx context.Context, input *GetAdminCo
 }
 
 func (s *Server) handleUpdateAdminCollection(ctx context.Context, input *UpdateAdminCollectionInput) (*AdminCollectionOutput, error) {
-	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
 	coll, err := s.store.AdminGetCollection(ctx, input.ID)
 	if err != nil {
-		if err == store.ErrCollectionNotFound {
+		if errors.Is(err, store.ErrCollectionNotFound) {
 			return nil, huma.Error404NotFound("Collection not found")
 		}
 		return nil, err
@@ -316,14 +317,14 @@ func (s *Server) handleUpdateAdminCollection(ctx context.Context, input *UpdateA
 }
 
 func (s *Server) handleDeleteAdminCollection(ctx context.Context, input *DeleteAdminCollectionInput) (*MessageOutput, error) {
-	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
 	// Get collection first for SSE event
 	coll, err := s.store.AdminGetCollection(ctx, input.ID)
 	if err != nil {
-		if err == store.ErrCollectionNotFound {
+		if errors.Is(err, store.ErrCollectionNotFound) {
 			return nil, huma.Error404NotFound("Collection not found")
 		}
 		return nil, err
@@ -384,14 +385,14 @@ func (s *Server) handleDeleteAdminCollection(ctx context.Context, input *DeleteA
 }
 
 func (s *Server) handleAddBooksToCollection(ctx context.Context, input *AddBooksInput) (*MessageOutput, error) {
-	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
 	// Get collection first for SSE event and validation
 	coll, err := s.store.AdminGetCollection(ctx, input.ID)
 	if err != nil {
-		if err == store.ErrCollectionNotFound {
+		if errors.Is(err, store.ErrCollectionNotFound) {
 			return nil, huma.Error404NotFound("Collection not found")
 		}
 		return nil, err
@@ -446,14 +447,14 @@ func (s *Server) handleAddBooksToCollection(ctx context.Context, input *AddBooks
 }
 
 func (s *Server) handleRemoveBookFromAdminCollection(ctx context.Context, input *RemoveBookInput) (*MessageOutput, error) {
-	if _, err := s.authenticateAndRequireAdmin(ctx, input.Authorization); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
 	// Get collection first for SSE event
 	coll, err := s.store.AdminGetCollection(ctx, input.ID)
 	if err != nil {
-		if err == store.ErrCollectionNotFound {
+		if errors.Is(err, store.ErrCollectionNotFound) {
 			return nil, huma.Error404NotFound("Collection not found")
 		}
 		return nil, err

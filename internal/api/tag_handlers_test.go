@@ -96,6 +96,10 @@ func setupTagTestServer(t *testing.T) *tagTestServer {
 	}
 
 	router := chi.NewRouter()
+
+	// Add auth middleware before routes
+	router.Use(authMiddleware(services.Auth))
+
 	humaConfig := huma.DefaultConfig("ListenUp API Test", "1.0.0")
 	humaConfig.Components.SecuritySchemes = map[string]*huma.SecurityScheme{
 		"bearer": {

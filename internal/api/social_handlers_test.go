@@ -120,11 +120,11 @@ func TestGetBookReaders_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, envelope.Success)
-	assert.Equal(t, 1, len(envelope.Data.YourSessions))
+	assert.Len(t, envelope.Data.YourSessions, 1)
 	assert.Equal(t, sessionID, envelope.Data.YourSessions[0].ID)
 	assert.Equal(t, int64(1800000), envelope.Data.YourSessions[0].ListenTimeMs)
 	assert.Equal(t, 1, envelope.Data.TotalReaders)
-	assert.Equal(t, 0, len(envelope.Data.OtherReaders))
+	assert.Empty(t, envelope.Data.OtherReaders)
 }
 
 func TestGetBookReaders_Unauthorized(t *testing.T) {
@@ -202,8 +202,8 @@ func TestGetBookReaders_MultipleReaders(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, envelope.Success)
-	assert.Equal(t, 1, len(envelope.Data.YourSessions))
-	assert.Equal(t, 1, len(envelope.Data.OtherReaders))
+	assert.Len(t, envelope.Data.YourSessions, 1)
+	assert.Len(t, envelope.Data.OtherReaders, 1)
 	assert.Equal(t, 2, envelope.Data.TotalReaders)
 	assert.Equal(t, 1, envelope.Data.TotalCompletions)
 
@@ -265,7 +265,7 @@ func TestGetUserReadingHistory_Success(t *testing.T) {
 	assert.True(t, envelope.Success)
 	assert.Equal(t, 2, envelope.Data.TotalSessions)
 	assert.Equal(t, 1, envelope.Data.TotalCompleted)
-	assert.Equal(t, 2, len(envelope.Data.Sessions))
+	assert.Len(t, envelope.Data.Sessions, 2)
 
 	// Sessions should be ordered by most recent first
 	assert.Equal(t, session2ID, envelope.Data.Sessions[0].ID)
@@ -306,7 +306,7 @@ func TestGetUserReadingHistory_EmptyHistory(t *testing.T) {
 	assert.True(t, envelope.Success)
 	assert.Equal(t, 0, envelope.Data.TotalSessions)
 	assert.Equal(t, 0, envelope.Data.TotalCompleted)
-	assert.Equal(t, 0, len(envelope.Data.Sessions))
+	assert.Empty(t, envelope.Data.Sessions)
 }
 
 func TestGetUserReadingHistory_LimitParameter(t *testing.T) {
@@ -316,7 +316,7 @@ func TestGetUserReadingHistory_LimitParameter(t *testing.T) {
 	token, userID := createTestUserAndLoginWithID(t, ts)
 
 	// Create multiple sessions
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		bookID, err := id.Generate("book")
 		require.NoError(t, err)
 
@@ -344,7 +344,7 @@ func TestGetUserReadingHistory_LimitParameter(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, envelope.Success)
-	assert.Equal(t, 3, len(envelope.Data.Sessions))
+	assert.Len(t, envelope.Data.Sessions, 3)
 	assert.Equal(t, 3, envelope.Data.TotalSessions) // TotalSessions is the count of returned sessions, not all sessions
 }
 

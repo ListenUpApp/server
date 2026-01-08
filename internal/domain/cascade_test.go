@@ -75,7 +75,7 @@ func TestCascadeBookUpdate(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Len(t, mock.touchedEntities, 1)
-		assert.Equal(t, "", mock.touchedEntities[0].id)
+		assert.Empty(t, mock.touchedEntities[0].id)
 	})
 }
 

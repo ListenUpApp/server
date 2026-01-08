@@ -32,7 +32,7 @@ func TestSetup_Success(t *testing.T) {
 	assert.Equal(t, "admin@example.com", envelope.Data.User.Email)
 	assert.Equal(t, "Admin", envelope.Data.User.FirstName)
 	assert.Equal(t, "User", envelope.Data.User.LastName)
-	assert.Greater(t, envelope.Data.ExpiresIn, 0)
+	assert.Positive(t, envelope.Data.ExpiresIn)
 }
 
 func TestSetup_AlreadyConfigured(t *testing.T) {

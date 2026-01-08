@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -81,7 +82,7 @@ func (s *Store) GetActivity(ctx context.Context, id string) (*domain.Activity, e
 	var activity domain.Activity
 	err := s.get([]byte(activityPrefix+id), &activity)
 	if err != nil {
-		if err == badger.ErrKeyNotFound {
+		if errors.Is(err, badger.ErrKeyNotFound) {
 			return nil, fmt.Errorf("activity %s: %w", id, ErrNotFound)
 		}
 		return nil, fmt.Errorf("getting activity %s: %w", id, err)
@@ -270,7 +271,7 @@ func (s *Store) getActivityInTxn(txn *badger.Txn, id string) (*domain.Activity, 
 }
 
 // extractActivityIDFromTimeKey extracts activity ID from time index key.
-// Key format: activity:idx:time:{inverted_ts}:{id}
+// Key format: activity:idx:time:{inverted_ts}:{id}.
 func extractActivityIDFromTimeKey(key string) string {
 	const prefix = activityIdxTimePrefix
 	if len(key) <= len(prefix)+20 { // 19 digits + colon
@@ -282,7 +283,7 @@ func extractActivityIDFromTimeKey(key string) string {
 }
 
 // extractActivityIDFromUserKey extracts activity ID from user index key.
-// Key format: activity:idx:user:{userId}:{inverted_ts}:{id}
+// Key format: activity:idx:user:{userId}:{inverted_ts}:{id}.
 func extractActivityIDFromUserKey(key, userID string) string {
 	prefix := activityIdxUserPrefix + userID + ":"
 	if len(key) <= len(prefix)+20 {
@@ -293,7 +294,7 @@ func extractActivityIDFromUserKey(key, userID string) string {
 }
 
 // extractActivityIDFromBookKey extracts activity ID from book index key.
-// Key format: activity:idx:book:{bookId}:{inverted_ts}:{id}
+// Key format: activity:idx:book:{bookId}:{inverted_ts}:{id}.
 func extractActivityIDFromBookKey(key, bookID string) string {
 	prefix := activityIdxBookPrefix + bookID + ":"
 	if len(key) <= len(prefix)+20 {
@@ -317,7 +318,7 @@ func (s *Store) GetUserMilestoneState(ctx context.Context, userID string) (*doma
 	var state domain.UserMilestoneState
 	err := s.get([]byte(milestoneStatePrefix+userID), &state)
 	if err != nil {
-		if err == badger.ErrKeyNotFound {
+		if errors.Is(err, badger.ErrKeyNotFound) {
 			return nil, nil // No state yet, not an error
 		}
 		return nil, fmt.Errorf("getting milestone state for %s: %w", userID, err)

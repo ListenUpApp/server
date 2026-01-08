@@ -133,6 +133,58 @@ func TestGetEventsForUserBook(t *testing.T) {
 	assert.Len(t, result, 2)
 }
 
+func TestGetEventsForUserInRange(t *testing.T) {
+	s, cleanup := setupTestListeningStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	now := time.Now()
+
+	// Create events at different times
+	events := []*domain.ListeningEvent{
+		{ID: "evt-1", UserID: "user-A", BookID: "book-1", EndedAt: now.Add(-3 * 24 * time.Hour)}, // 3 days ago
+		{ID: "evt-2", UserID: "user-A", BookID: "book-1", EndedAt: now.Add(-2 * 24 * time.Hour)}, // 2 days ago
+		{ID: "evt-3", UserID: "user-A", BookID: "book-1", EndedAt: now.Add(-1 * 24 * time.Hour)}, // 1 day ago
+		{ID: "evt-4", UserID: "user-A", BookID: "book-1", EndedAt: now},                          // now
+		{ID: "evt-5", UserID: "user-B", BookID: "book-1", EndedAt: now.Add(-1 * 24 * time.Hour)}, // different user
+	}
+
+	for _, e := range events {
+		e.StartPositionMs = 0
+		e.EndPositionMs = 1000
+		e.StartedAt = e.EndedAt.Add(-time.Minute)
+		e.PlaybackSpeed = 1.0
+		e.DeviceID = "device-1"
+		e.DurationMs = 1000
+		e.CreatedAt = e.EndedAt
+		require.NoError(t, s.CreateListeningEvent(ctx, e))
+	}
+
+	// Query last 2 days (should get evt-3 and evt-4, not evt-1, evt-2, or user-B's event)
+	start := now.Add(-2*24*time.Hour + time.Hour) // 2 days ago + 1 hour (after evt-2)
+	end := now.Add(time.Hour)                     // 1 hour from now
+
+	result, err := s.GetEventsForUserInRange(ctx, "user-A", start, end)
+	require.NoError(t, err)
+	assert.Len(t, result, 2, "should return events within range")
+
+	// Verify we got the right events
+	ids := make(map[string]bool)
+	for _, e := range result {
+		ids[e.ID] = true
+	}
+	assert.True(t, ids["evt-3"], "should include evt-3")
+	assert.True(t, ids["evt-4"], "should include evt-4")
+	assert.False(t, ids["evt-1"], "should not include evt-1 (too old)")
+	assert.False(t, ids["evt-2"], "should not include evt-2 (too old)")
+	assert.False(t, ids["evt-5"], "should not include evt-5 (different user)")
+
+	// Query with zero start (all time)
+	allEvents, err := s.GetEventsForUserInRange(ctx, "user-A", time.Time{}, now.Add(time.Hour))
+	require.NoError(t, err)
+	assert.Len(t, allEvents, 4, "should return all events for user-A")
+}
+
 func TestProgressCRUD(t *testing.T) {
 	s, cleanup := setupTestListeningStore(t)
 	defer cleanup()

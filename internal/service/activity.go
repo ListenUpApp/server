@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/listenupapp/listenup-server/internal/color"
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/id"
 	"github.com/listenupapp/listenup-server/internal/sse"
@@ -25,7 +26,7 @@ type ActivityService struct {
 func (s *ActivityService) getUserAvatarInfo(ctx context.Context, userID string) (avatarType, avatarValue string) {
 	profile, err := s.store.GetUserProfile(ctx, userID)
 	if err != nil || profile == nil {
-		return "auto", ""
+		return string(domain.AvatarTypeAuto), ""
 	}
 	return string(profile.AvatarType), profile.AvatarValue
 }
@@ -65,7 +66,7 @@ func (s *ActivityService) RecordBookStarted(ctx context.Context, userID, bookID 
 		Type:            domain.ActivityStartedBook,
 		CreatedAt:       time.Now(),
 		UserDisplayName: user.Name(),
-		UserAvatarColor: avatarColorForUser(userID),
+		UserAvatarColor: color.ForUser(userID),
 		UserAvatarType:  avatarType,
 		UserAvatarValue: avatarValue,
 		BookID:          bookID,
@@ -120,7 +121,7 @@ func (s *ActivityService) RecordBookFinished(ctx context.Context, userID, bookID
 		Type:            domain.ActivityFinishedBook,
 		CreatedAt:       time.Now(),
 		UserDisplayName: user.Name(),
-		UserAvatarColor: avatarColorForUser(userID),
+		UserAvatarColor: color.ForUser(userID),
 		UserAvatarType:  avatarType,
 		UserAvatarValue: avatarValue,
 		BookID:          bookID,
@@ -168,7 +169,7 @@ func (s *ActivityService) RecordStreakMilestone(ctx context.Context, userID stri
 		Type:            domain.ActivityStreakMilestone,
 		CreatedAt:       time.Now(),
 		UserDisplayName: user.Name(),
-		UserAvatarColor: avatarColorForUser(userID),
+		UserAvatarColor: color.ForUser(userID),
 		UserAvatarType:  avatarType,
 		UserAvatarValue: avatarValue,
 		MilestoneValue:  days,
@@ -209,7 +210,7 @@ func (s *ActivityService) RecordListeningMilestone(ctx context.Context, userID s
 		Type:            domain.ActivityListeningMilestone,
 		CreatedAt:       time.Now(),
 		UserDisplayName: user.Name(),
-		UserAvatarColor: avatarColorForUser(userID),
+		UserAvatarColor: color.ForUser(userID),
 		UserAvatarType:  avatarType,
 		UserAvatarValue: avatarValue,
 		MilestoneValue:  hours,
@@ -250,7 +251,7 @@ func (s *ActivityService) RecordLensCreated(ctx context.Context, userID string, 
 		Type:            domain.ActivityLensCreated,
 		CreatedAt:       time.Now(),
 		UserDisplayName: user.Name(),
-		UserAvatarColor: avatarColorForUser(userID),
+		UserAvatarColor: color.ForUser(userID),
 		UserAvatarType:  avatarType,
 		UserAvatarValue: avatarValue,
 		LensID:          lens.ID,
@@ -320,7 +321,7 @@ func (s *ActivityService) RecordListeningSession(ctx context.Context, userID, bo
 		Type:            domain.ActivityListeningSession,
 		CreatedAt:       time.Now(),
 		UserDisplayName: user.Name(),
-		UserAvatarColor: avatarColorForUser(userID),
+		UserAvatarColor: color.ForUser(userID),
 		UserAvatarType:  avatarType,
 		UserAvatarValue: avatarValue,
 		BookID:          bookID,
@@ -349,10 +350,7 @@ func (s *ActivityService) RecordListeningSession(ctx context.Context, userID, bo
 // Only returns activities for books the viewing user can access.
 func (s *ActivityService) GetFeed(ctx context.Context, viewingUserID string, limit int, before *time.Time) ([]*domain.Activity, error) {
 	// Overfetch to account for ACL filtering
-	overfetchLimit := limit * 3
-	if overfetchLimit < 30 {
-		overfetchLimit = 30
-	}
+	overfetchLimit := max(limit*3, 30)
 
 	activities, err := s.store.GetActivitiesFeed(ctx, overfetchLimit, before)
 	if err != nil {

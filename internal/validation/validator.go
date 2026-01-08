@@ -26,7 +26,7 @@ func New() *Validator {
 			return fld.Name
 		}
 		// Remove options like omitempty, -
-		for i := 0; i < len(name); i++ {
+		for i := range len(name) {
 			if name[i] == ',' {
 				return name[:i]
 			}
@@ -80,23 +80,23 @@ func (v *Validator) friendlyMessage(e validator.FieldError) string {
 	case "uuid":
 		return "must be a valid UUID"
 	case "oneof":
-		return fmt.Sprintf("must be one of: %s", e.Param())
+		return "must be one of: " + e.Param()
 	case "gte":
-		return fmt.Sprintf("must be greater than or equal to %s", e.Param())
+		return "must be greater than or equal to " + e.Param()
 	case "lte":
-		return fmt.Sprintf("must be less than or equal to %s", e.Param())
+		return "must be less than or equal to " + e.Param()
 	case "gt":
-		return fmt.Sprintf("must be greater than %s", e.Param())
+		return "must be greater than " + e.Param()
 	case "lt":
-		return fmt.Sprintf("must be less than %s", e.Param())
+		return "must be less than " + e.Param()
 	case "gtefield":
-		return fmt.Sprintf("must be greater than or equal to %s", e.Param())
+		return "must be greater than or equal to " + e.Param()
 	case "gtfield":
-		return fmt.Sprintf("must be greater than %s", e.Param())
+		return "must be greater than " + e.Param()
 	case "ltefield":
-		return fmt.Sprintf("must be less than or equal to %s", e.Param())
+		return "must be less than or equal to " + e.Param()
 	case "ltfield":
-		return fmt.Sprintf("must be less than %s", e.Param())
+		return "must be less than " + e.Param()
 	default:
 		return "is invalid"
 	}

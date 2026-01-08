@@ -100,6 +100,25 @@ func (s *Store) GetUser(_ context.Context, id string) (*domain.User, error) {
 	return &user, nil
 }
 
+// GetUsersByIDs retrieves multiple users by their IDs.
+// Missing or deleted users are silently skipped.
+func (s *Store) GetUsersByIDs(ctx context.Context, ids []string) ([]*domain.User, error) {
+	users := make([]*domain.User, 0, len(ids))
+
+	for _, id := range ids {
+		user, err := s.GetUser(ctx, id)
+		if err != nil {
+			if errors.Is(err, ErrUserNotFound) {
+				continue // Skip missing users
+			}
+			return nil, err
+		}
+		users = append(users, user)
+	}
+
+	return users, nil
+}
+
 // GetUserByEmail retrieves a user by email address.
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) {
 	normalizedEmail := normalizeEmail(email)

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -30,7 +31,7 @@ func MaxCoverURL(url string) string {
 // Uses HTTP Range request to fetch only the bytes needed for JPEG/PNG parsing.
 func GetImageDimensions(ctx context.Context, httpClient *http.Client, url string) (width, height int, err error) {
 	if url == "" {
-		return 0, 0, fmt.Errorf("empty URL")
+		return 0, 0, errors.New("empty URL")
 	}
 
 	// Request first 32KB - enough for image headers

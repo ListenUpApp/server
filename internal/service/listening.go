@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/listenupapp/listenup-server/internal/color"
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/id"
 	"github.com/listenupapp/listenup-server/internal/sse"
@@ -60,6 +61,7 @@ func (s *ListeningService) SetStreakCalculator(calculator StreakCalculator) {
 
 // RecordEventRequest contains the data for recording a listening event.
 type RecordEventRequest struct {
+	EventID         string    `json:"event_id"` // Client-provided ID for idempotency
 	BookID          string    `json:"book_id" validate:"required"`
 	StartPositionMs int64     `json:"start_position_ms" validate:"gte=0"`
 	EndPositionMs   int64     `json:"end_position_ms" validate:"gtfield=StartPositionMs"`
@@ -77,6 +79,8 @@ type RecordEventResponse struct {
 }
 
 // RecordEvent records a listening event and updates progress.
+// If EventID is provided, this operation is idempotent - calling it multiple times
+// with the same EventID will only create the event once.
 func (s *ListeningService) RecordEvent(ctx context.Context, userID string, req RecordEventRequest) (*RecordEventResponse, error) {
 	// Validate request
 	if err := validate.Struct(req); err != nil {
@@ -89,10 +93,33 @@ func (s *ListeningService) RecordEvent(ctx context.Context, userID string, req R
 		return nil, fmt.Errorf("book not found: %w", err)
 	}
 
-	// Generate event ID
-	eventID, err := id.Generate("evt")
-	if err != nil {
-		return nil, fmt.Errorf("generate event ID: %w", err)
+	// Use client-provided ID if set, otherwise generate one
+	var eventID string
+	if req.EventID != "" {
+		eventID = req.EventID
+
+		// Idempotency check: if event already exists, return success
+		existing, err := s.store.GetListeningEvent(ctx, eventID)
+		if err == nil && existing != nil {
+			// Event already exists - return it (idempotent)
+			s.logger.Debug("listening event already exists (idempotent)",
+				"event_id", eventID,
+				"user_id", userID,
+			)
+			// Still need to get progress for the response
+			progress, _ := s.store.GetProgress(ctx, userID, req.BookID)
+			return &RecordEventResponse{
+				Event:    existing,
+				Progress: progress,
+			}, nil
+		}
+	} else {
+		// No client ID - generate one
+		var err error
+		eventID, err = id.Generate("evt")
+		if err != nil {
+			return nil, fmt.Errorf("generate event ID: %w", err)
+		}
 	}
 
 	// Create event
@@ -510,7 +537,7 @@ func (s *ListeningService) broadcastUserStatsUpdate(ctx context.Context, userID 
 
 	// Get user profile for avatar info
 	profile, _ := s.store.GetUserProfile(ctx, userID)
-	avatarType := "auto"
+	avatarType := string(domain.AvatarTypeAuto)
 	avatarValue := ""
 	if profile != nil {
 		avatarType = string(profile.AvatarType)
@@ -559,7 +586,7 @@ func (s *ListeningService) broadcastUserStatsUpdate(ctx context.Context, userID 
 		DisplayName:   user.DisplayName,
 		AvatarType:    avatarType,
 		AvatarValue:   avatarValue,
-		AvatarColor:   avatarColorForUser(userID),
+		AvatarColor:   color.ForUser(userID),
 		TotalTimeMs:   totalTimeMs,
 		TotalBooks:    totalBooks,
 		CurrentStreak: currentStreak,

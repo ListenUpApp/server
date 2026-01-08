@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -25,7 +24,7 @@ func setupTestSocialService(t *testing.T) (*SocialService, *store.Store, func())
 	testStore, err := store.New(dbPath, nil, store.NewNoopEmitter())
 	require.NoError(t, err)
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	svc := NewSocialService(testStore, logger)
 
 	cleanup := func() {

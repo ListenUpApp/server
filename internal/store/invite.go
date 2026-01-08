@@ -38,7 +38,7 @@ func (s *Store) CreateInvite(_ context.Context, invite *domain.Invite) error {
 		return fmt.Errorf("check invite exists: %w", err)
 	}
 	if exists {
-		return fmt.Errorf("invite ID already exists")
+		return errors.New("invite ID already exists")
 	}
 
 	codeKey := []byte(inviteByCodePrefix + invite.Code)

@@ -37,8 +37,8 @@ func (o *Options) setDefaults() {
 func (o *Options) shouldIgnore(path string) bool {
 	// Check if hidden and we're ignoring hidden files.
 	if o.IgnoreHidden {
-		parts := strings.Split(filepath.Clean(path), string(filepath.Separator))
-		for _, part := range parts {
+		parts := strings.SplitSeq(filepath.Clean(path), string(filepath.Separator))
+		for part := range parts {
 			if strings.HasPrefix(part, ".") && part != "." && part != ".." {
 				return true
 			}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
@@ -63,14 +64,14 @@ func (s *SyncService) GetManifest(ctx context.Context) (*ManifestResponse, error
 		checkpoint = time.Now()
 	}
 
-	// Get contributor count
-	contributors, err := s.store.ListContributors(ctx, store.PaginationParams{Limit: 10000})
+	// Get contributor count (efficient count-only query)
+	contributorCount, err := s.store.CountContributors(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	// Get series count
-	series, err := s.store.ListSeries(ctx, store.PaginationParams{Limit: 10000})
+	// Get series count (efficient count-only query)
+	seriesCount, err := s.store.CountSeries(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -83,13 +84,13 @@ func (s *SyncService) GetManifest(ctx context.Context) (*ManifestResponse, error
 	}
 
 	manifest.Counts.Books = len(bookIDs)
-	manifest.Counts.Contributors = len(contributors.Items)
-	manifest.Counts.Series = len(series.Items)
+	manifest.Counts.Contributors = contributorCount
+	manifest.Counts.Series = seriesCount
 
 	s.logger.Info("manifest generated",
 		"book_count", len(bookIDs),
-		"contributor_count", len(contributors.Items),
-		"series_count", len(series.Items),
+		"contributor_count", contributorCount,
+		"series_count", seriesCount,
 		"checkpoint", checkpoint.Format(time.RFC3339),
 	)
 
@@ -174,10 +175,7 @@ func (s *SyncService) GetBooksForSync(ctx context.Context, userID string, params
 	}
 
 	// Calculate end index
-	endIdx := startIdx + params.Limit
-	if endIdx > total {
-		endIdx = total
-	}
+	endIdx := min(startIdx+params.Limit, total)
 
 	// Slice the results
 	pageBooks := books[startIdx:endIdx]
@@ -202,7 +200,7 @@ func (s *SyncService) GetBooksForSync(ctx context.Context, userID string, params
 
 	// Set next cursor if there are more results
 	if hasMore {
-		response.NextCursor = store.EncodeCursor(fmt.Sprintf("%d", endIdx))
+		response.NextCursor = store.EncodeCursor(strconv.Itoa(endIdx))
 	}
 
 	s.logger.Info("books fetched for sync",
@@ -285,10 +283,7 @@ func (s *SyncService) GetContributorsForSync(ctx context.Context, userID string,
 		}, nil
 	}
 
-	endIdx := startIdx + params.Limit
-	if endIdx > total {
-		endIdx = total
-	}
+	endIdx := min(startIdx+params.Limit, total)
 
 	pageItems := contributors[startIdx:endIdx]
 	hasMore := endIdx < total
@@ -305,7 +300,7 @@ func (s *SyncService) GetContributorsForSync(ctx context.Context, userID string,
 	}
 
 	if hasMore {
-		response.NextCursor = store.EncodeCursor(fmt.Sprintf("%d", endIdx))
+		response.NextCursor = store.EncodeCursor(strconv.Itoa(endIdx))
 	}
 
 	s.logger.Info("contributors fetched for sync",
@@ -387,10 +382,7 @@ func (s *SyncService) GetSeriesForSync(ctx context.Context, userID string, param
 		}, nil
 	}
 
-	endIdx := startIdx + params.Limit
-	if endIdx > total {
-		endIdx = total
-	}
+	endIdx := min(startIdx+params.Limit, total)
 
 	pageItems := seriesList[startIdx:endIdx]
 	hasMore := endIdx < total
@@ -407,7 +399,7 @@ func (s *SyncService) GetSeriesForSync(ctx context.Context, userID string, param
 	}
 
 	if hasMore {
-		response.NextCursor = store.EncodeCursor(fmt.Sprintf("%d", endIdx))
+		response.NextCursor = store.EncodeCursor(strconv.Itoa(endIdx))
 	}
 
 	s.logger.Info("series fetched for sync",

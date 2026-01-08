@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -299,7 +300,7 @@ type ApplyContributorMetadataInput struct {
 // === Handlers ===
 
 func (s *Server) handleListContributors(ctx context.Context, input *ListContributorsInput) (*ListContributorsOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -316,10 +317,7 @@ func (s *Server) handleListContributors(ctx context.Context, input *ListContribu
 		return nil, err
 	}
 
-	resp := make([]ContributorResponse, len(result.Items))
-	for i, c := range result.Items {
-		resp[i] = mapContributorResponse(c)
-	}
+	resp := MapSlice(result.Items, mapContributorResponse)
 
 	return &ListContributorsOutput{
 		Body: ListContributorsResponse{
@@ -331,7 +329,7 @@ func (s *Server) handleListContributors(ctx context.Context, input *ListContribu
 }
 
 func (s *Server) handleCreateContributor(ctx context.Context, input *CreateContributorInput) (*ContributorOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -363,7 +361,7 @@ func (s *Server) handleCreateContributor(ctx context.Context, input *CreateContr
 }
 
 func (s *Server) handleGetContributor(ctx context.Context, input *GetContributorInput) (*ContributorOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -376,7 +374,7 @@ func (s *Server) handleGetContributor(ctx context.Context, input *GetContributor
 }
 
 func (s *Server) handleUpdateContributor(ctx context.Context, input *UpdateContributorInput) (*ContributorOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -413,7 +411,7 @@ func (s *Server) handleUpdateContributor(ctx context.Context, input *UpdateContr
 }
 
 func (s *Server) handleDeleteContributor(ctx context.Context, input *DeleteContributorInput) (*MessageOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -425,7 +423,7 @@ func (s *Server) handleDeleteContributor(ctx context.Context, input *DeleteContr
 }
 
 func (s *Server) handleGetContributorBooks(ctx context.Context, input *GetContributorBooksInput) (*ContributorBooksOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -461,7 +459,7 @@ func (s *Server) handleGetContributorBooks(ctx context.Context, input *GetContri
 }
 
 func (s *Server) handleMergeContributors(ctx context.Context, input *MergeContributorsInput) (*ContributorOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -474,7 +472,7 @@ func (s *Server) handleMergeContributors(ctx context.Context, input *MergeContri
 }
 
 func (s *Server) handleUnmergeContributor(ctx context.Context, input *UnmergeContributorInput) (*ContributorOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -487,7 +485,7 @@ func (s *Server) handleUnmergeContributor(ctx context.Context, input *UnmergeCon
 }
 
 func (s *Server) handleSearchContributors(ctx context.Context, input *SearchContributorsInput) (*SearchContributorsOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -514,7 +512,7 @@ func (s *Server) handleSearchContributors(ctx context.Context, input *SearchCont
 }
 
 func (s *Server) handleApplyContributorMetadata(ctx context.Context, input *ApplyContributorMetadataInput) (*ContributorOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -643,7 +641,7 @@ func (s *Server) handleServeContributorImage(w http.ResponseWriter, r *http.Requ
 
 	w.Header().Set("Content-Type", "image/jpeg")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
 	w.Write(data)
 }
 

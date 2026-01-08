@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -117,21 +118,19 @@ func SecurityHeaders(next http.Handler) http.Handler {
 
 // isSensitivePath returns true if the path might contain sensitive data in query params.
 func isSensitivePath(path string) bool {
-	sensitivePaths := []string{
-		"/api/v1/auth/",
-		"/api/v1/invites/",
-	}
-	for _, sp := range sensitivePaths {
-		if len(path) >= len(sp) && path[:len(sp)] == sp {
-			return true
-		}
-	}
-	return false
+	return strings.HasPrefix(path, "/api/v1/auth/") ||
+		strings.HasPrefix(path, "/api/v1/invites/")
 }
 
+// EnvelopeVersion is the current API envelope version.
+// Clients validate this to detect response structure mismatches early.
+const EnvelopeVersion = 1
+
 // APIEnvelope wraps all API responses in a consistent format.
-// This maintains compatibility with clients expecting {success, data, error} structure.
+// This maintains compatibility with clients expecting {v, success, data, error} structure.
+// The "v" field is a canary - if it's missing or wrong, clients know the structure is broken.
 type APIEnvelope struct { //nolint:revive // API prefix is intentional for clarity
+	Version int    `json:"v"`
 	Success bool   `json:"success"`
 	Data    any    `json:"data,omitempty"`
 	Error   string `json:"error,omitempty"`
@@ -139,15 +138,19 @@ type APIEnvelope struct { //nolint:revive // API prefix is intentional for clari
 
 // APIErrorEnvelope is used for error responses that include code and details.
 // Some errors (like 409 Conflict for disambiguation) need to return structured data.
+// The "v" field is a canary - if it's missing or wrong, clients know the structure is broken.
 type APIErrorEnvelope struct { //nolint:revive // API prefix is intentional for clarity
+	Version int    `json:"v"`
 	Code    string `json:"code"`
 	Message string `json:"message"`
 	Details any    `json:"details,omitempty"`
 }
 
 // EnvelopeTransformer wraps Huma responses in the standard API envelope format.
-// Clients expect responses wrapped as: {"success": bool, "data": ..., "error": ...}
+// Clients expect responses wrapped as: {"v": 1, "success": bool, "data": ..., "error": ...}
 // For errors with details (like disambiguation), returns full error structure.
+// The version field (v) acts as a canary - if parsing succeeds but v is missing,
+// clients know the response structure doesn't match expectations.
 func EnvelopeTransformer(_ huma.Context, status string, v any) (any, error) {
 	// Parse status code to determine success
 	statusCode, err := strconv.Atoi(status)
@@ -159,6 +162,7 @@ func EnvelopeTransformer(_ huma.Context, status string, v any) (any, error) {
 
 	if success {
 		return APIEnvelope{
+			Version: EnvelopeVersion,
 			Success: true,
 			Data:    v,
 		}, nil
@@ -168,6 +172,7 @@ func EnvelopeTransformer(_ huma.Context, status string, v any) (any, error) {
 	// This is needed for 409 Conflict responses that include disambiguation candidates
 	if apiErr, ok := v.(*APIError); ok && apiErr.Details != nil {
 		return APIErrorEnvelope{
+			Version: EnvelopeVersion,
 			Code:    apiErr.Code,
 			Message: apiErr.Message,
 			Details: apiErr.Details,
@@ -178,6 +183,7 @@ func EnvelopeTransformer(_ huma.Context, status string, v any) (any, error) {
 	errorMsg := extractErrorMessage(v)
 
 	return APIEnvelope{
+		Version: EnvelopeVersion,
 		Success: false,
 		Error:   errorMsg,
 	}, nil

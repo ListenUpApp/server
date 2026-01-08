@@ -139,10 +139,7 @@ func (s *SearchIndex) IndexDocuments(docs []*SearchDocument) error {
 	const batchSize = 500
 
 	for i := 0; i < len(docs); i += batchSize {
-		end := i + batchSize
-		if end > len(docs) {
-			end = len(docs)
-		}
+		end := min(i+batchSize, len(docs))
 		chunk := docs[i:end]
 
 		batch := s.index.NewBatch()

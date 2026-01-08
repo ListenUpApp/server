@@ -197,7 +197,7 @@ type MergeSeriesInput struct {
 // === Handlers ===
 
 func (s *Server) handleListSeries(ctx context.Context, input *ListSeriesInput) (*ListSeriesOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -214,10 +214,7 @@ func (s *Server) handleListSeries(ctx context.Context, input *ListSeriesInput) (
 		return nil, err
 	}
 
-	resp := make([]SeriesResponse, len(result.Items))
-	for i, series := range result.Items {
-		resp[i] = mapSeriesResponse(series)
-	}
+	resp := MapSlice(result.Items, mapSeriesResponse)
 
 	return &ListSeriesOutput{
 		Body: ListSeriesResponse{
@@ -229,7 +226,7 @@ func (s *Server) handleListSeries(ctx context.Context, input *ListSeriesInput) (
 }
 
 func (s *Server) handleCreateSeries(ctx context.Context, input *CreateSeriesInput) (*SeriesOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -258,7 +255,7 @@ func (s *Server) handleCreateSeries(ctx context.Context, input *CreateSeriesInpu
 }
 
 func (s *Server) handleGetSeries(ctx context.Context, input *GetSeriesInput) (*SeriesOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -271,7 +268,7 @@ func (s *Server) handleGetSeries(ctx context.Context, input *GetSeriesInput) (*S
 }
 
 func (s *Server) handleUpdateSeries(ctx context.Context, input *UpdateSeriesInput) (*SeriesOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -300,7 +297,7 @@ func (s *Server) handleUpdateSeries(ctx context.Context, input *UpdateSeriesInpu
 }
 
 func (s *Server) handleDeleteSeries(ctx context.Context, input *DeleteSeriesInput) (*MessageOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -312,7 +309,7 @@ func (s *Server) handleDeleteSeries(ctx context.Context, input *DeleteSeriesInpu
 }
 
 func (s *Server) handleGetSeriesBooks(ctx context.Context, input *GetSeriesBooksInput) (*SeriesBooksOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -344,8 +341,8 @@ func (s *Server) handleGetSeriesBooks(ctx context.Context, input *GetSeriesBooks
 	return &SeriesBooksOutput{Body: SeriesBooksResponse{Books: resp}}, nil
 }
 
-func (s *Server) handleMergeSeries(ctx context.Context, input *MergeSeriesInput) (*SeriesOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+func (s *Server) handleMergeSeries(ctx context.Context, _ *MergeSeriesInput) (*SeriesOutput, error) {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 

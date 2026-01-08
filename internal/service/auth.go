@@ -26,7 +26,7 @@ var validate = func() *validator.Validate {
 			return fld.Name
 		}
 		// Remove any options (like omitempty, -)
-		for i := 0; i < len(name); i++ {
+		for i := range len(name) {
 			if name[i] == ',' {
 				return name[:i]
 			}
@@ -364,7 +364,7 @@ func (s *AuthService) VerifyAccessToken(ctx context.Context, tokenString string)
 	user, err := s.store.GetUser(ctx, claims.UserID)
 	if err != nil {
 		if errors.Is(err, store.ErrUserNotFound) {
-			return nil, nil, fmt.Errorf("user not found")
+			return nil, nil, errors.New("user not found")
 		}
 		return nil, nil, fmt.Errorf("get user: %w", err)
 	}

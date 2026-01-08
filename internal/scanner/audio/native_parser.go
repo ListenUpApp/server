@@ -2,6 +2,7 @@ package audio
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -34,7 +35,7 @@ func (p *NativeParser) Parse(ctx context.Context, path string) (*Metadata, error
 // ParseMultiFile extracts combined metadata from multiple audio files.
 func (p *NativeParser) ParseMultiFile(ctx context.Context, paths []string) (*Metadata, error) {
 	if len(paths) == 0 {
-		return nil, fmt.Errorf("no files provided")
+		return nil, errors.New("no files provided")
 	}
 
 	// Detect format from first file.
@@ -55,7 +56,7 @@ func (p *NativeParser) ParseMultiFile(ctx context.Context, paths []string) (*Met
 
 		// Use metadata from first file, but sum durations.
 		if len(files) == 0 {
-			return nil, fmt.Errorf("no files opened")
+			return nil, errors.New("no files opened")
 		}
 
 		result := convertMetadata(files[0])

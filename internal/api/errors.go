@@ -3,7 +3,6 @@ package api
 import (
 	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 	domainerrors "github.com/listenupapp/listenup-server/internal/errors"
@@ -73,8 +72,15 @@ func RegisterErrorHandler() {
 
 // isNotFoundError checks if the error is a "not found" type error from the store.
 func isNotFoundError(err error) bool {
-	// Check for specific store errors
-	if errors.Is(err, store.ErrBookNotFound) ||
+	// Check for store.Error type with 404 status code.
+	// This catches ErrNotFound and all ErrNotFound.WithMessage() variants.
+	var storeErr *store.Error
+	if errors.As(err, &storeErr) && storeErr.HTTPCode() == 404 {
+		return true
+	}
+
+	// Check for specific simple errors (errors.New style)
+	return errors.Is(err, store.ErrBookNotFound) ||
 		errors.Is(err, store.ErrContributorNotFound) ||
 		errors.Is(err, store.ErrSeriesNotFound) ||
 		errors.Is(err, store.ErrCollectionNotFound) ||
@@ -82,16 +88,11 @@ func isNotFoundError(err error) bool {
 		errors.Is(err, store.ErrGenreNotFound) ||
 		errors.Is(err, store.ErrTagNotFound) ||
 		errors.Is(err, store.ErrInviteNotFound) ||
-		errors.Is(err, store.ErrSessionNotFound) {
-		return true
-	}
-
-	// Fallback: check if error message contains "not found"
-	if err != nil && strings.Contains(strings.ToLower(err.Error()), "not found") {
-		return true
-	}
-
-	return false
+		errors.Is(err, store.ErrSessionNotFound) ||
+		errors.Is(err, store.ErrLensNotFound) ||
+		errors.Is(err, store.ErrLibraryNotFound) ||
+		errors.Is(err, store.ErrShareNotFound) ||
+		errors.Is(err, store.ErrServerNotFound)
 }
 
 // statusToCode maps HTTP status codes to our domain error codes.

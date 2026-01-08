@@ -15,6 +15,7 @@ import (
 const (
 	listeningEventPrefix  = "evt:"
 	eventByUserPrefix     = "evt:idx:user:"
+	eventByUserTimePrefix = "evt:idx:user:time:" // Format: evt:idx:user:time:{userID}:{endedAtMs}:{eventID}
 	eventByBookPrefix     = "evt:idx:book:"
 	eventByUserBookPrefix = "evt:idx:userbook:"
 	progressPrefix        = "progress:"
@@ -48,6 +49,14 @@ func (s *Store) CreateListeningEvent(ctx context.Context, event *domain.Listenin
 		userIdx := eventByUserPrefix + event.UserID + ":" + event.ID
 		if err := txn.Set([]byte(userIdx), []byte(event.ID)); err != nil {
 			return fmt.Errorf("set user index: %w", err)
+		}
+
+		// Index: by user+time (for efficient range queries)
+		// Format: evt:idx:user:time:{userID}:{endedAtMs:020d}:{eventID}
+		// Zero-padded to 20 digits for lexicographic sorting (supports dates until year 2286)
+		userTimeIdx := fmt.Sprintf("%s%s:%020d:%s", eventByUserTimePrefix, event.UserID, event.EndedAt.UnixMilli(), event.ID)
+		if err := txn.Set([]byte(userTimeIdx), []byte(event.ID)); err != nil {
+			return fmt.Errorf("set user-time index: %w", err)
 		}
 
 		// Index: by book
@@ -109,14 +118,16 @@ func (s *Store) GetEventsForUserBook(ctx context.Context, userID, bookID string)
 }
 
 // getEventsByPrefix retrieves events matching an index prefix.
+// Uses a single transaction to collect IDs and fetch all events (no N+1).
 func (s *Store) getEventsByPrefix(ctx context.Context, prefix string) ([]*domain.ListeningEvent, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
-	var eventIDs []string
+	var events []*domain.ListeningEvent
 
 	err := s.db.View(func(txn *badger.Txn) error {
+		// First pass: collect event IDs from index
 		opts := badger.DefaultIteratorOptions
 		opts.Prefix = []byte(prefix)
 		opts.PrefetchValues = true
@@ -124,6 +135,7 @@ func (s *Store) getEventsByPrefix(ctx context.Context, prefix string) ([]*domain
 		it := txn.NewIterator(opts)
 		defer it.Close()
 
+		var eventIDs []string
 		for it.Seek([]byte(prefix)); it.ValidForPrefix([]byte(prefix)); it.Next() {
 			err := it.Item().Value(func(val []byte) error {
 				eventIDs = append(eventIDs, string(val))
@@ -133,21 +145,29 @@ func (s *Store) getEventsByPrefix(ctx context.Context, prefix string) ([]*domain
 				return err
 			}
 		}
+
+		// Second pass: batch fetch all events in same transaction
+		events = make([]*domain.ListeningEvent, 0, len(eventIDs))
+		for _, id := range eventIDs {
+			item, err := txn.Get([]byte(listeningEventPrefix + id))
+			if err != nil {
+				continue // Skip missing events
+			}
+
+			var event domain.ListeningEvent
+			if err := item.Value(func(val []byte) error {
+				return json.Unmarshal(val, &event)
+			}); err != nil {
+				continue // Skip corrupt events
+			}
+			events = append(events, &event)
+		}
+
 		return nil
 	})
 
 	if err != nil {
 		return nil, err
-	}
-
-	// Fetch actual events
-	events := make([]*domain.ListeningEvent, 0, len(eventIDs))
-	for _, id := range eventIDs {
-		event, err := s.GetListeningEvent(ctx, id)
-		if err != nil {
-			continue // Skip missing events
-		}
-		events = append(events, event)
 	}
 
 	return events, nil
@@ -248,27 +268,97 @@ func (s *Store) GetProgressForUser(ctx context.Context, userID string) ([]*domai
 }
 
 // GetEventsForUserInRange retrieves events for a user within a time range.
-// Uses the event's EndedAt timestamp for filtering (when listening occurred).
+// Uses the time-based index for efficient range scans (no full table scan).
 // start is inclusive, end is exclusive. Zero start = beginning of time.
 func (s *Store) GetEventsForUserInRange(
 	ctx context.Context,
 	userID string,
 	start, end time.Time,
 ) ([]*domain.ListeningEvent, error) {
-	allEvents, err := s.GetEventsForUser(ctx, userID)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	// Build seek and end prefixes for the time index
+	// Format: evt:idx:user:time:{userID}:{endedAtMs:020d}:{eventID}
+	userPrefix := eventByUserTimePrefix + userID + ":"
+
+	var startKey string
+	if start.IsZero() {
+		startKey = userPrefix // Start from beginning
+	} else {
+		startKey = fmt.Sprintf("%s%020d:", userPrefix, start.UnixMilli())
+	}
+
+	endMs := end.UnixMilli()
+
+	var events []*domain.ListeningEvent
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = []byte(userPrefix)
+		opts.PrefetchValues = true
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		// Collect event IDs within range
+		var eventIDs []string
+		for it.Seek([]byte(startKey)); it.ValidForPrefix([]byte(userPrefix)); it.Next() {
+			key := string(it.Item().Key())
+
+			// Extract timestamp from key to check end bound
+			// Key format: evt:idx:user:time:{userID}:{endedAtMs:020d}:{eventID}
+			rest := key[len(userPrefix):] // {endedAtMs:020d}:{eventID}
+			if len(rest) < 21 {           // 20 digits + colon
+				continue
+			}
+
+			var tsMs int64
+			if _, err := fmt.Sscanf(rest[:20], "%d", &tsMs); err != nil {
+				continue
+			}
+
+			// Stop if we've passed the end time
+			if tsMs >= endMs {
+				break
+			}
+
+			// Get event ID from index value
+			err := it.Item().Value(func(val []byte) error {
+				eventIDs = append(eventIDs, string(val))
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+
+		// Batch fetch events (same transaction)
+		events = make([]*domain.ListeningEvent, 0, len(eventIDs))
+		for _, id := range eventIDs {
+			item, err := txn.Get([]byte(listeningEventPrefix + id))
+			if err != nil {
+				continue // Skip missing events
+			}
+
+			var event domain.ListeningEvent
+			if err := item.Value(func(val []byte) error {
+				return json.Unmarshal(val, &event)
+			}); err != nil {
+				continue // Skip corrupt events
+			}
+			events = append(events, &event)
+		}
+
+		return nil
+	})
+
 	if err != nil {
 		return nil, err
 	}
 
-	var filtered []*domain.ListeningEvent
-	for _, e := range allEvents {
-		// Use EndedAt for "when did this listening session complete"
-		if (start.IsZero() || !e.EndedAt.Before(start)) && e.EndedAt.Before(end) {
-			filtered = append(filtered, e)
-		}
-	}
-
-	return filtered, nil
+	return events, nil
 }
 
 // GetProgressFinishedInRange retrieves books finished within a time range.

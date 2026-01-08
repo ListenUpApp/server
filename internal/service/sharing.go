@@ -3,6 +3,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -47,7 +48,7 @@ func (s *SharingService) ShareCollection(ctx context.Context, ownerUserID, colle
 
 	// Prevent sharing with self
 	if ownerUserID == sharedWithUserID {
-		return nil, fmt.Errorf("cannot share collection with yourself")
+		return nil, errors.New("cannot share collection with yourself")
 	}
 
 	// Create the share
@@ -93,7 +94,7 @@ func (s *SharingService) UnshareCollection(ctx context.Context, requestingUserID
 
 	// Only owner or the user who created the share can unshare
 	if !isOwner && share.SharedByUserID != requestingUserID {
-		return fmt.Errorf("only collection owner or share creator can unshare")
+		return errors.New("only collection owner or share creator can unshare")
 	}
 
 	if err := s.store.DeleteShare(ctx, shareID); err != nil {
@@ -128,7 +129,7 @@ func (s *SharingService) UpdateSharePermission(ctx context.Context, ownerUserID,
 		return nil, fmt.Errorf("check collection access: %w", err)
 	}
 	if !isOwner {
-		return nil, fmt.Errorf("only collection owner can update share permissions")
+		return nil, errors.New("only collection owner can update share permissions")
 	}
 
 	// Update permission
@@ -160,7 +161,7 @@ func (s *SharingService) ListCollectionShares(ctx context.Context, ownerUserID, 
 		return nil, fmt.Errorf("check collection access: %w", err)
 	}
 	if !canAccess || !isOwner {
-		return nil, fmt.Errorf("only collection owner can list shares")
+		return nil, errors.New("only collection owner can list shares")
 	}
 
 	shares, err := s.store.GetSharesForCollection(ctx, collectionID)
@@ -206,7 +207,7 @@ func (s *SharingService) GetShare(ctx context.Context, requestingUserID, shareID
 
 	// Requester must be: owner, the person shared with, or the person who shared
 	if !isOwner && share.SharedWithUserID != requestingUserID && share.SharedByUserID != requestingUserID {
-		return nil, fmt.Errorf("access denied: user not involved in this share")
+		return nil, errors.New("access denied: user not involved in this share")
 	}
 
 	return share, nil

@@ -96,10 +96,7 @@ func main() {
 		fmt.Printf("  User has access to %d books\n", len(books))
 
 		// Pick 3-5 random books for this user
-		numBooks := 3 + rng.Intn(3)
-		if numBooks > len(books) {
-			numBooks = len(books)
-		}
+		numBooks := min(3+rng.Intn(3), len(books))
 
 		// Shuffle and pick books
 		shuffled := make([]*domain.Book, len(books))
@@ -124,7 +121,7 @@ func main() {
 			// Pick 1-3 listening sessions per day
 			sessionsPerDay := 1 + rng.Intn(3)
 
-			for sess := 0; sess < sessionsPerDay; sess++ {
+			for range sessionsPerDay {
 				// Pick a random book from selected
 				book := selectedBooks[rng.Intn(len(selectedBooks))]
 

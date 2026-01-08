@@ -171,7 +171,7 @@ func (s *SearchIndex) Search(ctx context.Context, params SearchParams) (*SearchR
 		}
 
 		// Extract genre slugs (stored as array)
-		if gs, ok := hit.Fields["genre_slugs"].([]interface{}); ok {
+		if gs, ok := hit.Fields["genre_slugs"].([]any); ok {
 			searchHit.GenreSlugs = make([]string, 0, len(gs))
 			for _, g := range gs {
 				if s, ok := g.(string); ok {
@@ -184,7 +184,7 @@ func (s *SearchIndex) Search(ctx context.Context, params SearchParams) (*SearchR
 		}
 
 		// Extract tags (stored as array)
-		if ts, ok := hit.Fields["tags"].([]interface{}); ok {
+		if ts, ok := hit.Fields["tags"].([]any); ok {
 			searchHit.Tags = make([]string, 0, len(ts))
 			for _, t := range ts {
 				if s, ok := t.(string); ok {

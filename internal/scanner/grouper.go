@@ -99,9 +99,9 @@ func IsDiscDir(name string) bool {
 	}
 
 	for _, pattern := range patterns {
-		if strings.HasPrefix(name, pattern) {
+		if after, ok := strings.CutPrefix(name, pattern); ok {
 			// Check if followed by space or number.
-			rest := strings.TrimPrefix(name, pattern)
+			rest := after
 			rest = strings.TrimSpace(rest)
 			if rest != "" && (rest[0] >= '0' && rest[0] <= '9') {
 				return true

@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // Lens represents a user-curated list of books for personal organization and social discovery.
 // Unlike Collections (admin-managed access boundaries), Lenses are personal - each belongs
@@ -21,10 +24,8 @@ type Lens struct {
 // AddBook adds a book ID to the lens, prepending it to maintain newest-first ordering.
 // If the book is already present, this is a no-op. Updates UpdatedAt on success.
 func (l *Lens) AddBook(bookID string) bool {
-	for _, id := range l.BookIDs {
-		if id == bookID {
-			return false // Already present
-		}
+	if slices.Contains(l.BookIDs, bookID) {
+		return false // Already present
 	}
 	// Prepend to maintain newest-first ordering
 	l.BookIDs = append([]string{bookID}, l.BookIDs...)
@@ -47,10 +48,5 @@ func (l *Lens) RemoveBook(bookID string) bool {
 
 // ContainsBook checks if a book ID is in this lens.
 func (l *Lens) ContainsBook(bookID string) bool {
-	for _, id := range l.BookIDs {
-		if id == bookID {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(l.BookIDs, bookID)
 }

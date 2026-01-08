@@ -7,7 +7,10 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/go-chi/chi/v5"
+
 	"github.com/listenupapp/listenup-server/internal/auth"
+	"github.com/listenupapp/listenup-server/internal/color"
+	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/service"
 )
 
@@ -99,7 +102,9 @@ type SetupRequest struct {
 
 // SetupInput wraps the setup request for Huma.
 type SetupInput struct {
-	Body SetupRequest
+	Body          SetupRequest
+	XForwardedFor string `header:"X-Forwarded-For"`
+	XRealIP       string `header:"X-Real-IP"`
 }
 
 // LoginRequest is the request body for user login.
@@ -149,7 +154,9 @@ type RegisterRequest struct {
 
 // RegisterInput wraps the register request for Huma.
 type RegisterInput struct {
-	Body RegisterRequest
+	Body          RegisterRequest
+	XForwardedFor string `header:"X-Forwarded-For"`
+	XRealIP       string `header:"X-Real-IP"`
 }
 
 // RegisterResponse contains the result of a registration.
@@ -224,6 +231,11 @@ type MessageOutput struct {
 // === Handlers ===
 
 func (s *Server) handleSetup(ctx context.Context, input *SetupInput) (*AuthOutput, error) {
+	// Rate limit setup attempts (prevents brute force during initial setup window)
+	if err := s.checkAuthRateLimit(input.XForwardedFor, input.XRealIP); err != nil {
+		return nil, err
+	}
+
 	req := service.SetupRequest{
 		Email:     input.Body.Email,
 		Password:  input.Body.Password,
@@ -251,6 +263,11 @@ func (s *Server) handleSetup(ctx context.Context, input *SetupInput) (*AuthOutpu
 }
 
 func (s *Server) handleRegister(ctx context.Context, input *RegisterInput) (*RegisterOutput, error) {
+	// Rate limit registration attempts (prevents spam registrations)
+	if err := s.checkAuthRateLimit(input.XForwardedFor, input.XRealIP); err != nil {
+		return nil, err
+	}
+
 	req := service.RegisterRequest{
 		Email:     input.Body.Email,
 		Password:  input.Body.Password,
@@ -272,6 +289,11 @@ func (s *Server) handleRegister(ctx context.Context, input *RegisterInput) (*Reg
 }
 
 func (s *Server) handleLogin(ctx context.Context, input *LoginInput) (*AuthOutput, error) {
+	// Rate limit login attempts (prevents password brute force attacks)
+	if err := s.checkAuthRateLimit(input.XForwardedFor, input.XRealIP); err != nil {
+		return nil, err
+	}
+
 	req := service.LoginRequest{
 		Email:    input.Body.Email,
 		Password: input.Body.Password,
@@ -331,7 +353,9 @@ func (s *Server) handleLogout(ctx context.Context, input *LogoutInput) (*Message
 func (s *Server) handleCheckRegistrationStatus(ctx context.Context, input *CheckRegistrationStatusInput) (*RegistrationStatusOutput, error) {
 	user, err := s.store.GetUser(ctx, input.UserID)
 	if err != nil {
-		// Return "denied" for not found (could be deleted/denied)
+		// Return "denied" for not found (could be deleted/denied).
+		// This is intentional - we return a valid API response, not an error.
+		//nolint:nilerr // Returning "denied" status is valid business logic, not an error.
 		return &RegistrationStatusOutput{
 			Body: RegistrationStatusResponse{
 				UserID:   input.UserID,
@@ -343,10 +367,10 @@ func (s *Server) handleCheckRegistrationStatus(ctx context.Context, input *Check
 
 	status := string(user.Status)
 	if status == "" {
-		status = "active" // Backward compatibility for users without status
+		status = string(domain.UserStatusActive) // Backward compatibility for users without status
 	}
 
-	approved := status == "active"
+	approved := status == string(domain.UserStatusActive)
 
 	return &RegistrationStatusOutput{
 		Body: RegistrationStatusResponse{
@@ -387,14 +411,14 @@ func (s *Server) mapAuthResponse(ctx context.Context, resp *service.AuthResponse
 			LastLoginAt: resp.User.LastLoginAt,
 			AvatarType:  avatarType,
 			AvatarValue: avatarValue,
-			AvatarColor: avatarColorForUser(resp.User.ID),
+			AvatarColor: color.ForUser(resp.User.ID),
 		},
 	}
 }
 
 func extractIP(xForwardedFor, xRealIP string) string {
 	if xForwardedFor != "" {
-		for i := 0; i < len(xForwardedFor); i++ {
+		for i := range len(xForwardedFor) {
 			if xForwardedFor[i] == ',' {
 				return xForwardedFor[:i]
 			}
@@ -402,4 +426,28 @@ func extractIP(xForwardedFor, xRealIP string) string {
 		return xForwardedFor
 	}
 	return xRealIP
+}
+
+// checkAuthRateLimit checks if the request should be rate limited.
+// This is only applied to password-based auth endpoints (login, register, setup).
+// Token refresh and logout are NOT rate limited to avoid locking out legitimate users.
+// Returns nil if allowed, error if rate limited.
+func (s *Server) checkAuthRateLimit(xForwardedFor, xRealIP string) error {
+	ip := extractIP(xForwardedFor, xRealIP)
+	if ip == "" {
+		ip = "unknown"
+	}
+
+	if !s.authRateLimiter.Allow(ip) {
+		s.logger.Warn("Auth rate limit exceeded",
+			"ip", ip,
+		)
+		return &APIError{
+			status:  429,
+			Code:    "rate_limited",
+			Message: "Too many authentication attempts. Please try again later.",
+		}
+	}
+
+	return nil
 }

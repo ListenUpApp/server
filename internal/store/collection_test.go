@@ -954,7 +954,7 @@ func TestEnsureLibrary_Idempotent(t *testing.T) {
 	// Call multiple times.
 	var results []*BootstrapResult
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		result, err := store.EnsureLibrary(ctx, scanPath, testUserID)
 		require.NoError(t, err)
 		results = append(results, result)

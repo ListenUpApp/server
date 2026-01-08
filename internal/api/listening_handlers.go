@@ -110,7 +110,7 @@ type BatchListeningEventItem struct {
 }
 
 // BatchListeningEventsRequest is the request body for submitting multiple listening events.
-// Matches the client's ListeningEventsRequest format: {"events": [...]}
+// Matches the client's ListeningEventsRequest format: {"events": [...]}.
 type BatchListeningEventsRequest struct {
 	Events []BatchListeningEventItem `json:"events" validate:"required,min=1,dive" doc:"List of listening events"`
 }
@@ -293,7 +293,7 @@ type BookStatsOutput struct {
 // === Handlers ===
 
 func (s *Server) handleRecordListeningEvent(ctx context.Context, input *RecordListeningEventInput) (*RecordListeningEventOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -303,8 +303,10 @@ func (s *Server) handleRecordListeningEvent(ctx context.Context, input *RecordLi
 		"event_count", len(input.Body.Events),
 	)
 
-	var acknowledged []string
-	var failed []string
+	// Initialize as empty slices (not nil) so JSON marshals to [] instead of null.
+	// Nil slices serialize to null which causes client parsing errors.
+	acknowledged := []string{}
+	failed := []string{}
 
 	// Process each event in the batch
 	for _, event := range input.Body.Events {
@@ -323,6 +325,7 @@ func (s *Server) handleRecordListeningEvent(ctx context.Context, input *RecordLi
 			"device_id", event.DeviceID,
 		)
 		_, err := s.services.Listening.RecordEvent(ctx, userID, service.RecordEventRequest{
+			EventID:         event.ID, // Client-provided ID for idempotency
 			BookID:          event.BookID,
 			StartPositionMs: event.StartPositionMs,
 			EndPositionMs:   event.EndPositionMs,
@@ -348,7 +351,7 @@ func (s *Server) handleRecordListeningEvent(ctx context.Context, input *RecordLi
 }
 
 func (s *Server) handleGetProgress(ctx context.Context, input *GetProgressInput) (*ProgressOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -381,7 +384,7 @@ func (s *Server) handleGetProgress(ctx context.Context, input *GetProgressInput)
 }
 
 func (s *Server) handleResetProgress(ctx context.Context, input *ResetProgressInput) (*MessageOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -394,7 +397,7 @@ func (s *Server) handleResetProgress(ctx context.Context, input *ResetProgressIn
 }
 
 func (s *Server) handleGetContinueListening(ctx context.Context, input *GetContinueListeningInput) (*ContinueListeningOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -439,7 +442,7 @@ func (s *Server) handleGetContinueListening(ctx context.Context, input *GetConti
 }
 
 func (s *Server) handleGetUserStats(ctx context.Context, input *GetUserStatsInput) (*UserStatsOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -504,7 +507,7 @@ func (s *Server) handleGetUserStats(ctx context.Context, input *GetUserStatsInpu
 }
 
 func (s *Server) handleGetBookStats(ctx context.Context, input *GetBookStatsInput) (*BookStatsOutput, error) {
-	if _, err := s.authenticateRequest(ctx, input.Authorization); err != nil {
+	if _, err := GetUserID(ctx); err != nil {
 		return nil, err
 	}
 
@@ -523,7 +526,7 @@ func (s *Server) handleGetBookStats(ctx context.Context, input *GetBookStatsInpu
 }
 
 func (s *Server) handleGetListeningEvents(ctx context.Context, input *GetListeningEventsInput) (*GetListeningEventsOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -580,7 +583,7 @@ type EndPlaybackSessionInput struct {
 }
 
 func (s *Server) handleEndPlaybackSession(ctx context.Context, input *EndPlaybackSessionInput) (*MessageOutput, error) {
-	userID, err := s.authenticateRequest(ctx, input.Authorization)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}

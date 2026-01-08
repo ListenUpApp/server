@@ -106,11 +106,11 @@ func TestSyncMap_ConcurrentAccess(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Concurrent writes.
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < numOperations; j++ {
+			for j := range numOperations {
 				key := id*numOperations + j
 				sm.Store(key, key*2)
 			}
@@ -118,11 +118,11 @@ func TestSyncMap_ConcurrentAccess(t *testing.T) {
 	}
 
 	// Concurrent reads.
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < numOperations; j++ {
+			for j := range numOperations {
 				key := id*numOperations + j
 				sm.Load(key)
 			}
@@ -130,11 +130,11 @@ func TestSyncMap_ConcurrentAccess(t *testing.T) {
 	}
 
 	// Concurrent LoadOrStore.
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < numOperations; j++ {
+			for j := range numOperations {
 				key := id*numOperations + j
 				sm.LoadOrStore(key, key*3)
 			}
@@ -160,7 +160,7 @@ func TestSyncMap_LoadOrStore_Concurrent(t *testing.T) {
 	results := make([]*sync.Mutex, numGoroutines)
 	var wg sync.WaitGroup
 
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()

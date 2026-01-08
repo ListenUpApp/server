@@ -3,7 +3,6 @@
 package watcher
 
 import (
-	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -29,8 +28,7 @@ func TestLinuxBackend_FileCreation(t *testing.T) {
 	err = backend.Watch(tmpDir)
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	go backend.Start(ctx) //nolint:errcheck // Test goroutine
 
@@ -76,8 +74,7 @@ func TestLinuxBackend_FileDeletion(t *testing.T) {
 	err = backend.Watch(tmpDir)
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	go backend.Start(ctx) //nolint:errcheck // Test goroutine
 
@@ -111,8 +108,7 @@ func TestLinuxBackend_NewDirectoryWatching(t *testing.T) {
 	err = backend.Watch(tmpDir)
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	go backend.Start(ctx) //nolint:errcheck // Test goroutine
 
@@ -156,8 +152,7 @@ func TestLinuxBackend_IgnoreHidden(t *testing.T) {
 	err = backend.Watch(tmpDir)
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	go backend.Start(ctx) //nolint:errcheck // Test goroutine
 

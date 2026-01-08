@@ -185,7 +185,7 @@ func (s *Store) DeleteTag(ctx context.Context, tagID string) error {
 		}
 
 		// Remove all book associations.
-		prefix := []byte(fmt.Sprintf("%s%s:", tagBooksPrefix, tagID))
+		prefix := fmt.Appendf(nil, "%s%s:", tagBooksPrefix, tagID)
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchValues = false
 		opts.Prefix = prefix
@@ -204,7 +204,7 @@ func (s *Store) DeleteTag(ctx context.Context, tagID string) error {
 			lastColon := strings.LastIndex(parts, ":")
 			if lastColon != -1 {
 				bookID := parts[lastColon+1:]
-				reverseKey := []byte(fmt.Sprintf("%s%s:%s", bookTagsPrefix, bookID, tagID))
+				reverseKey := fmt.Appendf(nil, "%s%s:%s", bookTagsPrefix, bookID, tagID)
 				keysToDelete = append(keysToDelete, reverseKey)
 			}
 		}
@@ -274,7 +274,7 @@ func (s *Store) AddTagToBook(ctx context.Context, bookID, tagID string) error {
 
 	return s.db.Update(func(txn *badger.Txn) error {
 		// Check if relationship already exists.
-		btKey := []byte(fmt.Sprintf("%s%s:%s", tagBooksPrefix, tagID, bookID))
+		btKey := fmt.Appendf(nil, "%s%s:%s", tagBooksPrefix, tagID, bookID)
 		_, err := txn.Get(btKey)
 		if err == nil {
 			// Already exists, idempotent success.
@@ -290,7 +290,7 @@ func (s *Store) AddTagToBook(ctx context.Context, bookID, tagID string) error {
 		}
 
 		// Create reverse index: book -> tag.
-		tbKey := []byte(fmt.Sprintf("%s%s:%s", bookTagsPrefix, bookID, tagID))
+		tbKey := fmt.Appendf(nil, "%s%s:%s", bookTagsPrefix, bookID, tagID)
 		if err := txn.Set(tbKey, []byte{}); err != nil {
 			return err
 		}
@@ -309,7 +309,7 @@ func (s *Store) RemoveTagFromBook(ctx context.Context, bookID, tagID string) err
 
 	return s.db.Update(func(txn *badger.Txn) error {
 		// Check if relationship exists.
-		btKey := []byte(fmt.Sprintf("%s%s:%s", tagBooksPrefix, tagID, bookID))
+		btKey := fmt.Appendf(nil, "%s%s:%s", tagBooksPrefix, tagID, bookID)
 		_, err := txn.Get(btKey)
 		if errors.Is(err, badger.ErrKeyNotFound) {
 			// Doesn't exist, idempotent success.
@@ -325,7 +325,7 @@ func (s *Store) RemoveTagFromBook(ctx context.Context, bookID, tagID string) err
 		}
 
 		// Delete reverse index: book -> tag.
-		tbKey := []byte(fmt.Sprintf("%s%s:%s", bookTagsPrefix, bookID, tagID))
+		tbKey := fmt.Appendf(nil, "%s%s:%s", bookTagsPrefix, bookID, tagID)
 		if err := txn.Delete(tbKey); err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
 			return err
 		}
@@ -409,6 +409,70 @@ func (s *Store) GetTagsForBook(ctx context.Context, bookID string) ([]*domain.Ta
 	})
 
 	return tags, nil
+}
+
+// GetTagsForBookIDs returns tags for multiple books in a batch.
+// Returns a map of bookID -> []*domain.Tag.
+// Missing books or books with no tags will have empty slices.
+func (s *Store) GetTagsForBookIDs(ctx context.Context, bookIDs []string) (map[string][]*domain.Tag, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	// Collect all tag IDs for all books
+	bookTagIDs := make(map[string][]string, len(bookIDs))
+	allTagIDs := make(map[string]bool)
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		for _, bookID := range bookIDs {
+			prefix := fmt.Sprintf("%s%s:", bookTagsPrefix, bookID)
+			opts := badger.DefaultIteratorOptions
+			opts.Prefix = []byte(prefix)
+			opts.PrefetchValues = false
+
+			it := txn.NewIterator(opts)
+			for it.Seek([]byte(prefix)); it.ValidForPrefix([]byte(prefix)); it.Next() {
+				key := string(it.Item().Key())
+				tagID := strings.TrimPrefix(key, prefix)
+				bookTagIDs[bookID] = append(bookTagIDs[bookID], tagID)
+				allTagIDs[tagID] = true
+			}
+			it.Close()
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Batch fetch all unique tags
+	tagMap := make(map[string]*domain.Tag, len(allTagIDs))
+	for tagID := range allTagIDs {
+		t, err := s.GetTagByID(ctx, tagID)
+		if err == nil {
+			tagMap[tagID] = t
+		}
+	}
+
+	// Build result map
+	result := make(map[string][]*domain.Tag, len(bookIDs))
+	for _, bookID := range bookIDs {
+		tagIDs := bookTagIDs[bookID]
+		tags := make([]*domain.Tag, 0, len(tagIDs))
+		for _, tagID := range tagIDs {
+			if t, ok := tagMap[tagID]; ok {
+				tags = append(tags, t)
+			}
+		}
+		// Sort alphabetically by slug
+		sort.Slice(tags, func(i, j int) bool {
+			return tags[i].Slug < tags[j].Slug
+		})
+		result[bookID] = tags
+	}
+
+	return result, nil
 }
 
 // GetTagIDsForBook returns tag IDs for a book (for search indexing).
