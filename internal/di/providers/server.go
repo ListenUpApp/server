@@ -8,6 +8,7 @@ import (
 	"github.com/samber/do/v2"
 
 	"github.com/listenupapp/listenup-server/internal/api"
+	"github.com/listenupapp/listenup-server/internal/backup"
 	"github.com/listenupapp/listenup-server/internal/config"
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/logger"
@@ -123,7 +124,13 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 		Avatars:           storages.Avatars,
 	}
 
-	handler := api.NewServer(storeHandle.Store, services, storage, sseHandler, sseHandle.Manager, registrationBroadcaster, log.Logger)
+	// Create backup services
+	dataDir := cfg.Metadata.BasePath
+	backupDir := dataDir + "/backups"
+	backupSvc := backup.NewBackupService(storeHandle.Store, backupDir, dataDir, "dev", log.Logger)
+	restoreSvc := backup.NewRestoreService(storeHandle.Store, dataDir, log.Logger)
+
+	handler := api.NewServer(storeHandle.Store, services, storage, sseHandler, sseHandle.Manager, registrationBroadcaster, backupSvc, restoreSvc, log.Logger)
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Server.Port,

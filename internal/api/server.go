@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/listenupapp/listenup-server/internal/backup"
 	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
@@ -28,6 +29,8 @@ type Server struct {
 	api                       huma.API
 	logger                    *slog.Logger
 	authRateLimiter           *RateLimiter
+	backupService             *backup.BackupService
+	restoreService            *backup.RestoreService
 }
 
 // NewServer creates a new HTTP server with all routes configured.
@@ -38,6 +41,8 @@ func NewServer(
 	sseHandler *sse.Handler,
 	sseManager *sse.Manager,
 	registrationBroadcaster *sse.RegistrationBroadcaster,
+	backupSvc *backup.BackupService,
+	restoreSvc *backup.RestoreService,
 	logger *slog.Logger,
 ) *Server {
 	router := chi.NewRouter()
@@ -81,6 +86,8 @@ func NewServer(
 		api:                       api,
 		logger:                    logger,
 		authRateLimiter:           NewRateLimiter(20, time.Minute, 10),
+		backupService:             backupSvc,
+		restoreService:            restoreSvc,
 	}
 
 	s.registerRoutes()
@@ -140,6 +147,7 @@ func (s *Server) registerRoutes() {
 	s.registerAdminCollectionRoutes()
 	s.registerAdminInboxRoutes()
 	s.registerAdminSettingsRoutes()
+	s.registerAdminBackupRoutes()
 	s.registerBookRoutes()
 	s.registerMetadataRoutes()
 	s.registerSeriesRoutes()
