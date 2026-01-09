@@ -308,12 +308,14 @@ func (s *Store) initUsers() {
 
 // initCollectionShares initializes the CollectionShares entity on the store.
 // Indexes by user (for finding all shares a user has) and collection (for finding all shares of a collection).
+// Note: We use compound keys (value:ID) to make indexes unique while still supporting prefix-based lookups.
+// This pattern is consistent with other 1-many indexes like reading sessions.
 func (s *Store) initCollectionShares() {
 	s.CollectionShares = NewEntity[domain.CollectionShare](s, "share:").
 		WithIndex("user", func(cs *domain.CollectionShare) []string {
-			return []string{cs.SharedWithUserID}
+			return []string{cs.SharedWithUserID + ":" + cs.ID}
 		}).
 		WithIndex("collection", func(cs *domain.CollectionShare) []string {
-			return []string{cs.CollectionID}
+			return []string{cs.CollectionID + ":" + cs.ID}
 		})
 }

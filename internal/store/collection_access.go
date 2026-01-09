@@ -3,6 +3,7 @@ package store
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -323,6 +324,8 @@ func (s *Store) getInboxBookIDs(ctx context.Context, libraryID string) (map[stri
 // Logic depends on library access mode:
 //   - OPEN: book is uncollected OR user has access to a containing collection
 //   - RESTRICTED: user has global access OR access to a containing collection
+//
+// IMPORTANT: Inbox books are NEVER accessible, even with global access.
 func (s *Store) CanUserAccessBook(ctx context.Context, userID, bookID string) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
@@ -341,6 +344,15 @@ func (s *Store) CanUserAccessBook(ctx context.Context, userID, bookID string) (b
 		library = &domain.Library{AccessMode: domain.AccessModeOpen}
 	}
 
+	// SECURITY: Check if book is in inbox - inbox books are NEVER accessible
+	inboxBookIDs, err := s.getInboxBookIDs(ctx, library.ID)
+	if err != nil {
+		return false, fmt.Errorf("get inbox book IDs: %w", err)
+	}
+	if inboxBookIDs[bookID] {
+		return false, nil // Inbox books blocked for everyone
+	}
+
 	// Get user's collections
 	userCollections, err := s.GetCollectionsForUser(ctx, userID)
 	if err != nil {
@@ -357,7 +369,7 @@ func (s *Store) CanUserAccessBook(ctx context.Context, userID, bookID string) (b
 		}
 	}
 
-	// Global access grants access to everything
+	// Global access grants access to everything (except inbox, checked above)
 	if hasGlobalAccess {
 		return true, nil
 	}
@@ -430,6 +442,10 @@ func (s *Store) CanUserAccessCollection(ctx context.Context, userID, collectionI
 	// Get the collection (use internal method to bypass ACL)
 	collection, err := s.getCollectionInternal(ctx, collectionID)
 	if err != nil {
+		// Don't propagate ErrCollectionNotFound - return false to avoid leaking existence
+		if errors.Is(err, ErrCollectionNotFound) {
+			return false, domain.PermissionRead, false, nil
+		}
 		return false, domain.PermissionRead, false, err
 	}
 
@@ -441,7 +457,12 @@ func (s *Store) CanUserAccessCollection(ctx context.Context, userID, collectionI
 	// Check if collection is shared with user
 	share, err := s.GetShareForUserAndCollection(ctx, userID, collectionID)
 	if err != nil {
-		// No share found - return false without permission
+		// Share not found or other error - return false without permission
+		// Don't propagate ErrShareNotFound to avoid leaking collection existence
+		if errors.Is(err, ErrShareNotFound) {
+			return false, domain.PermissionRead, false, nil
+		}
+		// Real errors (db failure, etc.) should propagate
 		return false, domain.PermissionRead, false, err
 	}
 	if share == nil {

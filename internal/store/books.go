@@ -994,9 +994,14 @@ func (s *Store) GetBooksByCollectionPaginated(ctx context.Context, userID, colle
 	pageBookIDs := coll.BookIDs[startIdx:endIdx]
 
 	// Fetch Books.
+	// Note: Collection access was already verified above via GetCollection.
+	// We use getBookInternal here because:
+	// 1. Collection access check already ensures user can view these books
+	// 2. CanUserAccessBook would incorrectly block inbox books from users
+	//    who legitimately have access to the inbox collection
 	books := make([]*domain.Book, 0, len(pageBookIDs))
 	for _, bookID := range pageBookIDs {
-		book, err := s.GetBook(ctx, bookID, userID)
+		book, err := s.getBookInternal(ctx, bookID)
 		if err != nil {
 			if s.logger != nil {
 				s.logger.Warn("failed to get book from collection", "book_id", bookID, "collection_id", collectionID, "error", err)
