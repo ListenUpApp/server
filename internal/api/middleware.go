@@ -196,14 +196,14 @@ func extractErrorMessage(v any) string {
 		return apiErr.Message
 	}
 
-	// Try huma's ErrorModel (struct with Title, Detail, etc.)
+	// Try huma's ErrorModel (pointer)
 	if errModel, ok := v.(*huma.ErrorModel); ok {
-		if errModel.Detail != "" {
-			return errModel.Detail
-		}
-		if errModel.Title != "" {
-			return errModel.Title
-		}
+		return extractFromErrorModel(errModel)
+	}
+
+	// Try huma's ErrorModel (value) - Huma may pass by value in some cases
+	if errModel, ok := v.(huma.ErrorModel); ok {
+		return extractFromErrorModel(&errModel)
 	}
 
 	// Try map[string]any (generic error response)
@@ -224,5 +224,29 @@ func extractErrorMessage(v any) string {
 		return err.Error()
 	}
 
+	return "An error occurred"
+}
+
+// extractFromErrorModel extracts a message from huma's ErrorModel.
+func extractFromErrorModel(errModel *huma.ErrorModel) string {
+	// For validation errors, the details are in the Errors array
+	if len(errModel.Errors) > 0 {
+		// Combine all validation error messages
+		messages := make([]string, 0, len(errModel.Errors))
+		for _, e := range errModel.Errors {
+			if e.Message != "" {
+				messages = append(messages, e.Message)
+			}
+		}
+		if len(messages) > 0 {
+			return strings.Join(messages, "; ")
+		}
+	}
+	if errModel.Detail != "" {
+		return errModel.Detail
+	}
+	if errModel.Title != "" {
+		return errModel.Title
+	}
 	return "An error occurred"
 }

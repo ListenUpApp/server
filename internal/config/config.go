@@ -254,9 +254,7 @@ func (c *Config) Validate() error {
 		return errors.New("metadata base path cannot be empty after expansion")
 	}
 
-	if c.Library.AudiobookPath == "" {
-		return errors.New("audiobook path cannot be empty after expansion")
-	}
+	// AudiobookPath can be empty - library can be configured via API setup flow
 
 	// Auth durations are validated during LoadConfig parsing.
 	// Auth key is set by auth.LoadOrGenerateKey in main.
@@ -309,14 +307,14 @@ func (c *Config) expandMetadataPath() error {
 }
 
 // expandAudiobookPath expands ~ and makes the path absolute.
+// If empty, leaves it empty to allow setup via API.
 func (c *Config) expandAudiobookPath() error {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
+	// Allow empty path - library can be configured via API
+	if c.Library.AudiobookPath == "" {
+		return nil
 	}
-	defaultPath := filepath.Join(homeDir, "Audiobooks")
 
-	expanded, err := expandPath(c.Library.AudiobookPath, defaultPath)
+	expanded, err := expandPath(c.Library.AudiobookPath, "")
 	if err != nil {
 		return err
 	}

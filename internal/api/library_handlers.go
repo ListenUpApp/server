@@ -3,9 +3,12 @@ package api
 import (
 	"context"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/listenupapp/listenup-server/internal/scanner"
 )
 
 func (s *Server) registerLibraryRoutes() {
@@ -38,6 +41,26 @@ func (s *Server) registerLibraryRoutes() {
 		Tags:        []string{"Libraries"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleUpdateLibrary)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getLibraryStatus",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/library/status",
+		Summary:     "Get library status",
+		Description: "Returns whether a library exists and its basic info. Used by clients to determine if setup is needed.",
+		Tags:        []string{"Libraries"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetLibraryStatus)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "setupLibrary",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/library/setup",
+		Summary:     "Initial library setup",
+		Description: "Creates the library with initial scan paths. Admin only. Fails if library already exists.",
+		Tags:        []string{"Libraries"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleSetupLibrary)
 }
 
 // === DTOs ===
@@ -91,6 +114,43 @@ type UpdateLibraryInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Library ID"`
 	Body          UpdateLibraryRequest
+}
+
+// LibraryStatusInput contains parameters for getting library status.
+type LibraryStatusInput struct {
+	Authorization string `header:"Authorization"`
+}
+
+// LibraryStatusResponse contains library existence and basic info.
+type LibraryStatusResponse struct {
+	Exists     bool             `json:"exists" doc:"Whether a library exists"`
+	Library    *LibraryResponse `json:"library,omitempty" doc:"Library info if exists"`
+	NeedsSetup bool             `json:"needs_setup" doc:"Whether setup is required (true only for admins when no library)"`
+	BookCount  int              `json:"book_count" doc:"Number of books in library"`
+	IsScanning bool             `json:"is_scanning" doc:"Whether a scan is in progress"`
+}
+
+// LibraryStatusOutput wraps the response for Huma.
+type LibraryStatusOutput struct {
+	Body LibraryStatusResponse
+}
+
+// SetupLibraryInput contains parameters for initial library setup.
+type SetupLibraryInput struct {
+	Authorization string `header:"Authorization"`
+	Body          SetupLibraryRequest
+}
+
+// SetupLibraryRequest contains the initial library configuration.
+type SetupLibraryRequest struct {
+	Name      string   `json:"name" default:"My Library" doc:"Library name"`
+	ScanPaths []string `json:"scan_paths" minItems:"1" doc:"Initial scan paths"`
+	SkipInbox *bool    `json:"skip_inbox,omitempty" doc:"Skip inbox workflow for new books (default: false)"`
+}
+
+// SetupLibraryOutput wraps the response for Huma.
+type SetupLibraryOutput struct {
+	Body LibraryResponse
 }
 
 // === Handlers ===
@@ -166,6 +226,150 @@ func (s *Server) handleUpdateLibrary(ctx context.Context, input *UpdateLibraryIn
 			AccessMode: string(lib.GetAccessMode()),
 			CreatedAt:  lib.CreatedAt,
 			UpdatedAt:  lib.UpdatedAt,
+		},
+	}, nil
+}
+
+func (s *Server) handleGetLibraryStatus(ctx context.Context, _ *LibraryStatusInput) (*LibraryStatusOutput, error) {
+	userID, err := GetUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if user is admin
+	user, err := s.store.GetUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	isAdmin := user.IsAdmin()
+
+	library, err := s.store.GetDefaultLibrary(ctx)
+	if err != nil {
+		// No library exists
+		return &LibraryStatusOutput{
+			Body: LibraryStatusResponse{
+				Exists:     false,
+				NeedsSetup: isAdmin, // Only admins can set up
+				BookCount:  0,
+			},
+		}, nil
+	}
+
+	// Get book count
+	bookCount, err := s.store.CountBooks(ctx)
+	if err != nil {
+		bookCount = 0
+	}
+
+	isScanning := s.sseManager.IsScanning()
+
+	return &LibraryStatusOutput{
+		Body: LibraryStatusResponse{
+			Exists: true,
+			Library: &LibraryResponse{
+				ID:         library.ID,
+				Name:       library.Name,
+				OwnerID:    library.OwnerID,
+				ScanPaths:  library.ScanPaths,
+				SkipInbox:  library.SkipInbox,
+				AccessMode: string(library.GetAccessMode()),
+				CreatedAt:  library.CreatedAt,
+				UpdatedAt:  library.UpdatedAt,
+			},
+			NeedsSetup: false,
+			BookCount:  bookCount,
+			IsScanning: isScanning,
+		},
+	}, nil
+}
+
+func (s *Server) handleSetupLibrary(ctx context.Context, input *SetupLibraryInput) (*SetupLibraryOutput, error) {
+	adminID, err := s.RequireAdmin(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if library already exists
+	if existing, err := s.store.GetDefaultLibrary(ctx); err == nil && existing != nil {
+		return nil, huma.Error409Conflict("library already exists")
+	}
+
+	// Validate all paths exist and are accessible
+	for _, path := range input.Body.ScanPaths {
+		cleanPath := filepath.Clean(path)
+		if !filepath.IsAbs(cleanPath) {
+			return nil, huma.Error400BadRequest("scan paths must be absolute: " + path)
+		}
+
+		info, err := os.Stat(cleanPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil, huma.Error400BadRequest("path does not exist: " + path)
+			}
+			return nil, huma.Error400BadRequest("cannot access path: " + path)
+		}
+
+		if !info.IsDir() {
+			return nil, huma.Error400BadRequest("path is not a directory: " + path)
+		}
+	}
+
+	// Create library
+	name := input.Body.Name
+	if name == "" {
+		name = "My Library"
+	}
+
+	result, err := s.store.EnsureLibrary(ctx, input.Body.ScanPaths[0], adminID)
+	if err != nil {
+		s.logger.Error("failed to create library", "error", err)
+		return nil, huma.Error500InternalServerError("failed to create library")
+	}
+
+	library := result.Library
+	library.Name = name
+	if input.Body.SkipInbox != nil {
+		library.SkipInbox = *input.Body.SkipInbox
+	}
+
+	// Add remaining scan paths
+	for _, path := range input.Body.ScanPaths[1:] {
+		library.AddScanPath(filepath.Clean(path))
+	}
+
+	library.UpdatedAt = time.Now()
+	if err := s.store.UpdateLibrary(ctx, library); err != nil {
+		s.logger.Error("failed to update library", "library_id", library.ID, "error", err)
+		return nil, huma.Error500InternalServerError("failed to update library")
+	}
+
+	// Set scanning state IMMEDIATELY before launching async scan.
+	// This ensures getLibraryStatus() returns isScanning=true right away,
+	// even if the goroutine hasn't started executing yet.
+	s.sseManager.SetScanning(true)
+
+	// Trigger initial scan asynchronously (once per library, not per path)
+	go func() {
+		// Clear scanning state when goroutine exits (success or failure)
+		defer s.sseManager.SetScanning(false)
+
+		if s.services != nil && s.services.Book != nil {
+			if _, err := s.services.Book.TriggerScan(context.Background(), library.ID, scanner.ScanOptions{}); err != nil {
+				s.logger.Error("initial scan failed", "library_id", library.ID, "error", err)
+			}
+		}
+	}()
+
+	return &SetupLibraryOutput{
+		Body: LibraryResponse{
+			ID:         library.ID,
+			Name:       library.Name,
+			OwnerID:    library.OwnerID,
+			ScanPaths:  library.ScanPaths,
+			SkipInbox:  library.SkipInbox,
+			AccessMode: string(library.GetAccessMode()),
+			CreatedAt:  library.CreatedAt,
+			UpdatedAt:  library.UpdatedAt,
 		},
 	}, nil
 }

@@ -81,12 +81,43 @@ type Bootstrap struct {
 }
 
 // ProvideBootstrap ensures the library exists and returns bootstrap info.
+// If no audiobook path is configured, returns nil Library to allow setup via API.
 func ProvideBootstrap(i do.Injector) (*Bootstrap, error) {
 	cfg := do.MustInvoke[*config.Config](i)
 	log := do.MustInvoke[*logger.Logger](i)
 	storeHandle := do.MustInvoke[*StoreHandle](i)
 
 	ctx := context.Background()
+
+	// If no audiobook path is configured, check if library already exists
+	if cfg.Library.AudiobookPath == "" {
+		library, err := storeHandle.GetDefaultLibrary(ctx)
+		if err != nil {
+			// No library exists and none configured - server will start without library
+			// Admin can set it up via POST /api/v1/library/setup
+			log.Info("No library configured - setup required via API")
+			return &Bootstrap{
+				Library:         nil,
+				InboxCollection: nil,
+				IsNewLibrary:    false,
+			}, nil
+		}
+
+		// Library exists from previous setup
+		inbox, _ := storeHandle.GetInboxForLibrary(ctx, library.ID)
+		log.Info("Using existing library",
+			"library_id", library.ID,
+			"library_name", library.Name,
+			"scan_paths", len(library.ScanPaths),
+		)
+		return &Bootstrap{
+			Library:         library,
+			InboxCollection: inbox,
+			IsNewLibrary:    false,
+		}, nil
+	}
+
+	// Audiobook path is configured - ensure library exists
 	result, err := storeHandle.EnsureLibrary(ctx, cfg.Library.AudiobookPath, "system")
 	if err != nil {
 		return nil, err

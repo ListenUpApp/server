@@ -302,7 +302,10 @@ func (s *Store) GetOrCreateSeriesByName(ctx context.Context, name string) (*doma
 		return nil, fmt.Errorf("create series: %w", err)
 	}
 
-	s.eventEmitter.Emit(sse.NewSeriesCreatedEvent(series))
+	// Only emit SSE event if not in bulk mode (bulk scans suppress SSE events)
+	if !s.IsBulkMode() {
+		s.eventEmitter.Emit(sse.NewSeriesCreatedEvent(series))
+	}
 
 	return series, nil
 }

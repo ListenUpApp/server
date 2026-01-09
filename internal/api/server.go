@@ -160,4 +160,5 @@ func (s *Server) registerRoutes() {
 	s.registerCoverRoutes()
 	s.registerAudioRoutes()
 	s.registerWebRoutes()
+	s.registerFilesystemRoutes()
 }

@@ -119,6 +119,9 @@ func (s *Scanner) Scan(ctx context.Context, folderPath string, opts ScanOptions)
 	}
 
 	if opts.LibraryID != "" {
+		// Set scanning state synchronously BEFORE emitting event.
+		// This ensures API calls see isScanning=true immediately.
+		s.eventEmitter.SetScanning(true)
 		s.eventEmitter.Emit(sse.NewScanStartedEvent(opts.LibraryID))
 	}
 
@@ -153,8 +156,13 @@ func (s *Scanner) Scan(ctx context.Context, folderPath string, opts ScanOptions)
 	}
 
 	saveStart := time.Now()
-	if err := s.saveToDatabase(ctx, items, tracker, result, opts); err != nil {
-		return nil, err
+	// Enable bulk mode to suppress SSE events for contributor/series creation.
+	// Client will sync after scan completes via library.scan_completed event.
+	s.store.SetBulkMode(true)
+	saveErr := s.saveToDatabase(ctx, items, tracker, result, opts)
+	s.store.SetBulkMode(false) // Always restore, even on error
+	if saveErr != nil {
+		return nil, saveErr
 	}
 	saveDuration := time.Since(saveStart)
 	s.logger.Info("save phase complete", "duration", saveDuration)
@@ -176,6 +184,9 @@ func (s *Scanner) Scan(ctx context.Context, folderPath string, opts ScanOptions)
 			result.Updated,
 			result.Removed,
 		))
+		// Clear scanning state synchronously AFTER emitting event.
+		// This ensures API calls see isScanning=false only after scan is truly complete.
+		s.eventEmitter.SetScanning(false)
 	}
 
 	return result, nil

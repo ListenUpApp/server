@@ -584,6 +584,38 @@ func TestGetAllBookIDs_ManyBooks(t *testing.T) {
 	}
 }
 
+// TestCountBooks tests counting all books in the store.
+func TestCountBooks(t *testing.T) {
+	ctx := context.Background()
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	// Count with no books
+	count, err := store.CountBooks(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+
+	// Add some books
+	for i := 0; i < 5; i++ {
+		book := &domain.Book{
+			Syncable: domain.Syncable{
+				ID:        fmt.Sprintf("book-%d", i),
+				CreatedAt: time.Now(),
+				UpdatedAt: time.Now(),
+			},
+			Title: fmt.Sprintf("Book %d", i),
+			Path:  fmt.Sprintf("/test/path/book-%d", i),
+		}
+		err := store.CreateBook(ctx, book)
+		require.NoError(t, err)
+	}
+
+	// Count again
+	count, err = store.CountBooks(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 5, count)
+}
+
 // Soft Delete Tests.
 
 // TestSoftDelete verifies that DeleteBook soft-deletes instead of hard-deleting.

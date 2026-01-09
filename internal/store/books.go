@@ -890,6 +890,31 @@ func (s *Store) ListAllBooks(ctx context.Context) ([]*domain.Book, error) {
 	return books, nil
 }
 
+// CountBooks returns the total number of books in the store.
+func (s *Store) CountBooks(_ context.Context) (int, error) {
+	var count int
+	prefix := []byte(bookPrefix)
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false // Only need keys for counting
+		opts.Prefix = prefix
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			count++
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, fmt.Errorf("count books: %w", err)
+	}
+
+	return count, nil
+}
+
 // GetAllBookIDs returns all non-deleted book IDs.
 // Note: This now needs to fetch values to check DeletedAt field.
 // TODO: Consider adding an "active books" index for better performance.

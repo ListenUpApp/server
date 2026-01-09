@@ -34,6 +34,10 @@ type Manager struct {
 	// Shutdown state - protected by shutdownMu
 	shutdownMu sync.RWMutex
 	shutdown   bool
+
+	// Scan state tracking - protected by scanMu
+	scanMu     sync.RWMutex
+	isScanning bool
 }
 
 // NewManager creates a new SSE Manager.
@@ -134,6 +138,19 @@ func isAdminOnlyEvent(eventType EventType) bool {
 
 // broadcast sends an event to connected clients, filtered by user/collection.
 func (m *Manager) broadcast(event Event) {
+	// Track scan state based on scan events
+	//nolint:exhaustive // Only need to track these two events
+	switch event.Type {
+	case EventScanStarted:
+		m.scanMu.Lock()
+		m.isScanning = true
+		m.scanMu.Unlock()
+	case EventScanComplete:
+		m.scanMu.Lock()
+		m.isScanning = false
+		m.scanMu.Unlock()
+	}
+
 	var delivered, dropped, filtered int
 
 	m.mu.RLock()
@@ -312,6 +329,22 @@ func (m *Manager) ClientCount() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return len(m.clients)
+}
+
+// IsScanning returns whether a library scan is currently in progress.
+func (m *Manager) IsScanning() bool {
+	m.scanMu.RLock()
+	defer m.scanMu.RUnlock()
+	return m.isScanning
+}
+
+// SetScanning explicitly sets the scanning state.
+// Called directly by scanner to ensure synchronous state updates
+// (avoids race between Emit() queuing and broadcast() processing).
+func (m *Manager) SetScanning(scanning bool) {
+	m.scanMu.Lock()
+	defer m.scanMu.Unlock()
+	m.isScanning = scanning
 }
 
 // closeAllClients closes all client connections (used during shutdown).

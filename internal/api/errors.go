@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 	domainerrors "github.com/listenupapp/listenup-server/internal/errors"
@@ -62,10 +63,25 @@ func RegisterErrorHandler() {
 		// Map standard HTTP status codes to our error codes
 		code := statusToCode(status)
 
+		// For validation errors (422), extract detailed messages from the errors
+		// Huma passes validation details as error messages in the errs slice
+		finalMessage := message
+		if status == http.StatusUnprocessableEntity && len(errs) > 0 {
+			var details []string
+			for _, err := range errs {
+				if err != nil {
+					details = append(details, err.Error())
+				}
+			}
+			if len(details) > 0 {
+				finalMessage = strings.Join(details, "; ")
+			}
+		}
+
 		return &APIError{
 			status:  status,
 			Code:    code,
-			Message: message,
+			Message: finalMessage,
 		}
 	}
 }
