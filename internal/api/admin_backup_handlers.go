@@ -98,7 +98,7 @@ func (s *Server) registerAdminBackupRoutes() {
 // CreateBackupRequest is the request body for creating a backup.
 type CreateBackupRequest struct {
 	IncludeImages bool `json:"include_images,omitempty" doc:"Include cover images and avatars (increases backup size)"`
-	IncludeEvents bool `json:"include_events" default:"true" doc:"Include listening events (required for history)"`
+	IncludeEvents bool `json:"include_events,omitempty" default:"true" doc:"Include listening events (required for history)"`
 }
 
 // CreateBackupInput is the Huma input for creating a backup.
@@ -149,7 +149,11 @@ type DeleteBackupInput struct {
 }
 
 // DeleteBackupOutput is the Huma output for deleting a backup.
-type DeleteBackupOutput struct{}
+type DeleteBackupOutput struct {
+	Body struct {
+		Message string `json:"message" doc:"Success message"`
+	}
+}
 
 // DownloadBackupInput is the Huma input for downloading a backup.
 type DownloadBackupInput struct {
@@ -348,7 +352,11 @@ func (s *Server) handleDeleteBackup(ctx context.Context, input *DeleteBackupInpu
 		return nil, huma.Error500InternalServerError("failed to delete backup", err)
 	}
 
-	return &DeleteBackupOutput{}, nil
+	return &DeleteBackupOutput{
+		Body: struct {
+			Message string `json:"message" doc:"Success message"`
+		}{Message: "Backup deleted"},
+	}, nil
 }
 
 func (s *Server) handleValidateBackup(ctx context.Context, input *ValidateBackupInput) (*ValidateBackupOutput, error) {

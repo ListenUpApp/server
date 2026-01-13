@@ -89,10 +89,84 @@ func (m *Matcher) MatchUser(ctx context.Context, absUser *User) *UserMatch {
 		}
 	}
 
-	// 3. No match found - try to find suggestions for admin
+	// 3. Try username/display name match (strong if very similar)
+	if absUser.Username != "" {
+		if nameMatch := m.matchUserByName(ctx, absUser); nameMatch != nil {
+			return nameMatch
+		}
+	}
+
+	// 4. No match found - try to find suggestions for admin
 	match.Suggestions = m.suggestUsers(ctx, absUser)
 
 	return match
+}
+
+// matchUserByName attempts to match by username/display name.
+// Returns a strong match if there's exactly one user with a very similar name.
+func (m *Matcher) matchUserByName(ctx context.Context, absUser *User) *UserMatch {
+	absUsername := normalizeString(absUser.Username)
+
+	var bestMatch *UserMatch
+	var matchCount int
+
+	// Iterate over all users
+	for user, err := range m.store.Users.List(ctx) {
+		if err != nil {
+			m.logger.Warn("failed to iterate users for name matching", "error", err)
+			break
+		}
+
+		// Check display name similarity
+		displayNameSim := stringSimilarity(normalizeString(user.DisplayName), absUsername)
+
+		// Check first+last name similarity (if we have the full name)
+		var fullNameSim float64
+		if user.FirstName != "" || user.LastName != "" {
+			fullName := strings.TrimSpace(user.FirstName + " " + user.LastName)
+			fullNameSim = stringSimilarity(normalizeString(fullName), absUsername)
+		}
+
+		// Use the best similarity
+		bestSim := displayNameSim
+		matchType := "display name"
+		if fullNameSim > bestSim {
+			bestSim = fullNameSim
+			matchType = "full name"
+		}
+
+		// Strong match requires >= 0.9 similarity
+		if bestSim >= 0.9 {
+			matchCount++
+			if bestMatch == nil || bestSim > stringSimilarity(normalizeString(bestMatch.MatchReason), absUsername) {
+				bestMatch = &UserMatch{
+					ABSUser:     absUser,
+					ListenUpID:  user.ID,
+					Confidence:  MatchStrong,
+					MatchReason: fmt.Sprintf("%s match: %s (%.0f%%)", matchType, user.DisplayName, bestSim*100),
+				}
+			}
+		}
+	}
+
+	// Only return if there's exactly one strong match (avoid ambiguity)
+	if matchCount == 1 && bestMatch != nil {
+		m.logger.Info("name match found",
+			"abs_username", absUser.Username,
+			"listenup_id", bestMatch.ListenUpID,
+			"reason", bestMatch.MatchReason,
+		)
+		return bestMatch
+	}
+
+	if matchCount > 1 {
+		m.logger.Info("multiple name matches found, skipping auto-match",
+			"abs_username", absUser.Username,
+			"match_count", matchCount,
+		)
+	}
+
+	return nil
 }
 
 // suggestUsers finds potential ListenUp users that might match an ABS user.

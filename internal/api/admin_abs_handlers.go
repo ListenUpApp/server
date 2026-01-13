@@ -15,7 +15,8 @@ import (
 
 func (s *Server) registerAdminABSRoutes() {
 	// Upload endpoint uses chi directly for multipart form handling
-	s.router.Post("/api/v1/admin/abs/upload", s.handleUploadABSBackup)
+	// Wrapped with extended timeout (10 minutes) to handle large file uploads
+	s.router.Post("/api/v1/admin/abs/upload", withExtendedTimeout(s.handleUploadABSBackup, 10*time.Minute))
 
 	huma.Register(s.api, huma.Operation{
 		OperationID: "analyzeABSBackup",
@@ -357,15 +358,26 @@ func (s *Server) handleImportABSBackup(ctx context.Context, input *ImportABSInpu
 	}, nil
 }
 
+// withExtendedTimeout wraps a handler to extend read/write timeouts for large uploads.
+// This MUST be called before any body reading occurs.
+func withExtendedTimeout(next http.HandlerFunc, timeout time.Duration) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		rc := http.NewResponseController(w)
+		if err := rc.SetReadDeadline(time.Now().Add(timeout)); err != nil {
+			// Log but continue - some servers may not support this
+			_ = err
+		}
+		if err := rc.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
+			_ = err
+		}
+		next(w, r)
+	}
+}
+
 // handleUploadABSBackup handles multipart file uploads for ABS backups.
 // This is a chi handler (not Huma) because Huma doesn't easily support multipart forms.
+// Note: Must be wrapped with withExtendedTimeout when registering the route.
 func (s *Server) handleUploadABSBackup(w http.ResponseWriter, r *http.Request) {
-	// Extend the read deadline for large file uploads (5 minutes)
-	rc := http.NewResponseController(w)
-	if err := rc.SetReadDeadline(time.Now().Add(5 * time.Minute)); err != nil {
-		s.logger.Warn("failed to extend read deadline", "error", err)
-	}
-
 	// Check authentication via context (set by auth middleware)
 	ctx := r.Context()
 	if _, err := s.RequireAdmin(ctx); err != nil {
@@ -381,8 +393,8 @@ func (s *Server) handleUploadABSBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Limit upload size (100MB should be plenty for ABS backups)
-	r.Body = http.MaxBytesReader(w, r.Body, 100<<20)
+	// Limit upload size (1GB for large ABS backups with many users/sessions)
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<30)
 
 	file, header, err := r.FormFile("backup")
 	if err != nil {
