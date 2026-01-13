@@ -148,6 +148,7 @@ func (s *Server) registerRoutes() {
 	s.registerAdminInboxRoutes()
 	s.registerAdminSettingsRoutes()
 	s.registerAdminBackupRoutes()
+	s.registerAdminABSRoutes()
 	s.registerBookRoutes()
 	s.registerMetadataRoutes()
 	s.registerSeriesRoutes()

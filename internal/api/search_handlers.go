@@ -92,6 +92,12 @@ func (s *Server) handleSearch(ctx context.Context, input *SearchInput) (*SearchO
 		limit = 10
 	}
 
+	s.logger.Debug("Search request received",
+		"query", input.Query,
+		"types", input.Types,
+		"limit", limit,
+	)
+
 	// Build search params
 	params := search.SearchParams{
 		Query: input.Query,
@@ -130,8 +136,16 @@ func (s *Server) handleSearch(ctx context.Context, input *SearchInput) (*SearchO
 
 	result, err := s.services.Search.Search(ctx, params)
 	if err != nil {
+		s.logger.Error("Search failed", "error", err, "query", input.Query)
 		return nil, err
 	}
+
+	s.logger.Debug("Search completed",
+		"query", input.Query,
+		"total", result.Total,
+		"hits", len(result.Hits),
+		"took_ms", result.TookMs,
+	)
 
 	resp := SearchResponse{
 		Query:  input.Query,

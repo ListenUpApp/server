@@ -181,3 +181,13 @@ func (s *BackupService) Delete(ctx context.Context, id string) error {
 func (s *BackupService) GetPath(id string) string {
 	return filepath.Join(s.backupDir, id+".listenup.zip")
 }
+
+// GetUploadsDir returns the directory for uploaded backup files (e.g., ABS imports).
+// Creates the directory if it doesn't exist.
+func (s *BackupService) GetUploadsDir() (string, error) {
+	uploadsDir := filepath.Join(s.backupDir, "uploads")
+	if err := os.MkdirAll(uploadsDir, 0o755); err != nil {
+		return "", fmt.Errorf("create uploads dir: %w", err)
+	}
+	return uploadsDir, nil
+}
