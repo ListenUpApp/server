@@ -63,6 +63,16 @@ func (s *Server) registerListeningRoutes() {
 	}, s.handleGetContinueListening)
 
 	huma.Register(s.api, huma.Operation{
+		OperationID: "getAllProgress",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/listening/progress",
+		Summary:     "Get all progress",
+		Description: "Returns all playback progress for the current user (for sync)",
+		Tags:        []string{"Listening"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetAllProgress)
+
+	huma.Register(s.api, huma.Operation{
 		OperationID: "getUserStats",
 		Method:      http.MethodGet,
 		Path:        "/api/v1/listening/stats",
@@ -204,6 +214,31 @@ type ContinueListeningResponse struct {
 // ContinueListeningOutput wraps the continue listening response for Huma.
 type ContinueListeningOutput struct {
 	Body ContinueListeningResponse
+}
+
+// GetAllProgressInput contains parameters for getting all progress.
+type GetAllProgressInput struct {
+	Authorization string `header:"Authorization"`
+}
+
+// ProgressSyncItem represents a single progress record for sync.
+type ProgressSyncItem struct {
+	BookID            string  `json:"book_id" doc:"Book ID"`
+	CurrentPositionMs int64   `json:"current_position_ms" doc:"Current position in ms"`
+	IsFinished        bool    `json:"is_finished" doc:"Whether finished"`
+	FinishedAt        *string `json:"finished_at,omitempty" doc:"When finished (ISO 8601)"`
+	LastPlayedAt      string  `json:"last_played_at" doc:"Last played (ISO 8601)"`
+	UpdatedAt         string  `json:"updated_at" doc:"Last update (ISO 8601)"`
+}
+
+// AllProgressResponse contains all progress records for sync.
+type AllProgressResponse struct {
+	Items []ProgressSyncItem `json:"items" doc:"Progress items"`
+}
+
+// AllProgressOutput wraps the all progress response for Huma.
+type AllProgressOutput struct {
+	Body AllProgressResponse
 }
 
 // GetUserStatsInput contains parameters for getting user stats.
@@ -439,6 +474,44 @@ func (s *Server) handleGetContinueListening(ctx context.Context, input *GetConti
 	}
 
 	return &ContinueListeningOutput{Body: ContinueListeningResponse{Items: resp}}, nil
+}
+
+func (s *Server) handleGetAllProgress(ctx context.Context, input *GetAllProgressInput) (*AllProgressOutput, error) {
+	userID, err := GetUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	slog.Info("fetching all progress for sync", "user_id", userID)
+
+	progressRecords, err := s.store.GetProgressForUser(ctx, userID)
+	if err != nil {
+		slog.Error("get all progress failed", "error", err)
+		return nil, err
+	}
+
+	slog.Info("all progress result",
+		"user_id", userID,
+		"record_count", len(progressRecords),
+	)
+
+	items := make([]ProgressSyncItem, len(progressRecords))
+	for i, p := range progressRecords {
+		item := ProgressSyncItem{
+			BookID:            p.BookID,
+			CurrentPositionMs: p.CurrentPositionMs,
+			IsFinished:        p.IsFinished,
+			LastPlayedAt:      p.LastPlayedAt.Format(time.RFC3339),
+			UpdatedAt:         p.UpdatedAt.Format(time.RFC3339),
+		}
+		if p.FinishedAt != nil {
+			finishedAt := p.FinishedAt.Format(time.RFC3339)
+			item.FinishedAt = &finishedAt
+		}
+		items[i] = item
+	}
+
+	return &AllProgressOutput{Body: AllProgressResponse{Items: items}}, nil
 }
 
 func (s *Server) handleGetUserStats(ctx context.Context, input *GetUserStatsInput) (*UserStatsOutput, error) {

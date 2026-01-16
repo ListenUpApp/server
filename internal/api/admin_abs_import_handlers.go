@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -11,6 +13,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/listenupapp/listenup-server/internal/backup/abs"
 	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/id"
+	"github.com/listenupapp/listenup-server/internal/store"
 )
 
 func (s *Server) registerAdminABSImportRoutes() {
@@ -353,9 +357,13 @@ type ImportABSSessionsInput struct {
 
 type ImportABSSessionsOutput struct {
 	Body struct {
-		SessionsImported int    `json:"sessions_imported" doc:"Sessions imported this batch"`
-		EventsCreated    int    `json:"events_created" doc:"Listening events created"`
-		Duration         string `json:"duration" doc:"Import duration"`
+		SessionsImported     int    `json:"sessions_imported" doc:"Sessions successfully imported"`
+		SessionsFailed       int    `json:"sessions_failed" doc:"Sessions that failed to import"`
+		EventsCreated        int    `json:"events_created" doc:"Listening events created"`
+		ProgressRebuilt      int    `json:"progress_rebuilt" doc:"User+book progress records rebuilt"`
+		ProgressFailed       int    `json:"progress_failed" doc:"Progress rebuilds that failed"`
+		ABSProgressUnmatched int    `json:"abs_progress_unmatched" doc:"Books where ABS progress could not be matched (finished status may be incorrect)"`
+		Duration             string `json:"duration" doc:"Import duration"`
 	}
 }
 
@@ -448,15 +456,76 @@ func (s *Server) handleCreateABSImport(ctx context.Context, input *CreateABSImpo
 		}
 
 		// Apply auto-match if confidence is strong enough
+		wasAutoMapped := false
 		if um.Confidence.ShouldAutoImport() && um.ListenUpID != "" {
 			user.ListenUpID = &um.ListenUpID
 			now := time.Now()
 			user.MappedAt = &now
-			usersMapped++
+			wasAutoMapped = true
 		}
 
 		if err := s.store.CreateABSImportUser(ctx, user); err != nil {
-			s.logger.Warn("failed to store import user", slog.String("error", err.Error()))
+			s.logger.Error("failed to store import user",
+				slog.String("abs_user_id", um.ABSUser.ID),
+				slog.String("error", err.Error()))
+			continue // Skip counting if store failed
+		}
+
+		// Store user's media progress entries (for finished status tracking)
+		progressStored := 0
+		finishedStored := 0
+		for _, mp := range um.ABSUser.Progress {
+			if !mp.IsBook() {
+				continue // Skip podcasts
+			}
+			if mp.LibraryItemID == "" {
+				s.logger.Warn("skipping media progress with empty library item ID",
+					slog.String("abs_user_id", um.ABSUser.ID),
+					slog.String("progress_id", mp.ID))
+				continue
+			}
+			progress := &domain.ABSImportProgress{
+				ImportID:    imp.ID,
+				ABSUserID:   um.ABSUser.ID,
+				ABSMediaID:  mp.LibraryItemID, // This is books.id, same as LibraryItem.MediaID
+				CurrentTime: int64(mp.CurrentTime * 1000),
+				Duration:    int64(mp.Duration * 1000),
+				Progress:    mp.Progress,
+				IsFinished:  mp.IsFinished,
+				LastUpdate:  mp.LastUpdateTime(),
+				Status:      domain.SessionStatusPendingBook, // Will be updated when book is mapped
+			}
+			if mp.FinishedAt > 0 {
+				finishedAt := time.UnixMilli(mp.FinishedAt)
+				progress.FinishedAt = &finishedAt
+			}
+			if err := s.store.CreateABSImportProgress(ctx, progress); err != nil {
+				s.logger.Error("failed to store import progress",
+					slog.String("abs_user_id", um.ABSUser.ID),
+					slog.String("abs_media_id", mp.LibraryItemID),
+					slog.String("error", err.Error()))
+				// Continue - progress storage failure is not critical
+			} else {
+				progressStored++
+				if mp.IsFinished {
+					finishedStored++
+					s.logger.Debug("stored FINISHED progress entry",
+						slog.String("abs_user_id", um.ABSUser.ID),
+						slog.String("abs_media_id", mp.LibraryItemID),
+						slog.Int64("duration_ms", progress.Duration),
+						slog.Int64("current_time_ms", progress.CurrentTime))
+				}
+			}
+		}
+		s.logger.Info("stored ABS import progress for user",
+			slog.String("abs_user_id", um.ABSUser.ID),
+			slog.String("abs_username", um.ABSUser.Username),
+			slog.Int("progress_stored", progressStored),
+			slog.Int("finished_stored", finishedStored))
+
+		// Only count after successful store
+		if wasAutoMapped {
+			usersMapped++
 		}
 	}
 
@@ -478,25 +547,98 @@ func (s *Server) handleCreateABSImport(ctx context.Context, input *CreateABSImpo
 		}
 
 		// Apply auto-match if confidence is strong enough
+		wasAutoMapped := false
 		if bm.Confidence.ShouldAutoImport() && bm.ListenUpID != "" {
 			book.ListenUpID = &bm.ListenUpID
 			now := time.Now()
 			book.MappedAt = &now
-			booksMapped++
+			wasAutoMapped = true
 		}
 
 		if err := s.store.CreateABSImportBook(ctx, book); err != nil {
-			s.logger.Warn("failed to store import book", slog.String("error", err.Error()))
+			s.logger.Error("failed to store import book",
+				slog.String("abs_media_id", bm.ABSItem.MediaID),
+				slog.String("title", bm.ABSItem.Media.Metadata.Title),
+				slog.String("error", err.Error()))
+			continue // Skip counting if store failed
+		}
+		listenUpIDStr := ""
+		if book.ListenUpID != nil {
+			listenUpIDStr = *book.ListenUpID
+		}
+		s.logger.Debug("stored ABS import book",
+			slog.String("abs_media_id", bm.ABSItem.MediaID),
+			slog.String("abs_title", book.ABSTitle),
+			slog.Bool("auto_mapped", wasAutoMapped),
+			slog.String("listenup_id", listenUpIDStr))
+
+		// Only count after successful store
+		if wasAutoMapped {
+			booksMapped++
 		}
 	}
 
+	// DIAGNOSTIC: Log book mapping summary
+	s.logger.Info("import creation: book mapping summary",
+		slog.Int("total_books_in_abs", len(analysis.BookMatches)),
+		slog.Int("auto_mapped_to_listenup", booksMapped),
+		slog.Int("unmapped_books", len(analysis.BookMatches)-booksMapped))
+
+	// Build a lookup from book MediaID (what sessions use) to the stored ABSMediaID
+	// This handles potential discrepancies between session.LibraryItemID and book ABSMediaID
+	bookMediaIDLookup := make(map[string]string) // session's mediaID -> book's ABSMediaID
+	for _, bm := range analysis.BookMatches {
+		// The book's ABSMediaID is bm.ABSItem.MediaID
+		// Sessions might reference this as their LibraryItemID
+		bookMediaIDLookup[bm.ABSItem.MediaID] = bm.ABSItem.MediaID
+		// Also map the libraryItem's ID (li.id) to the book's mediaID in case sessions use li.id
+		if bm.ABSItem.ID != "" && bm.ABSItem.ID != bm.ABSItem.MediaID {
+			bookMediaIDLookup[bm.ABSItem.ID] = bm.ABSItem.MediaID
+		}
+	}
+
+	s.logger.Info("built book media ID lookup for session normalization",
+		slog.Int("lookup_entries", len(bookMediaIDLookup)),
+		slog.Int("book_count", len(analysis.BookMatches)),
+	)
+
 	// Store all sessions with initial status
-	for _, session := range backup.Sessions {
+	sessionsStored := 0
+	sessionsNormalized := 0
+	sessionsUnmatched := 0
+	unmatchedSample := make([]string, 0, 5)
+	for i, session := range backup.Sessions {
+		// DEBUG: Log first 5 sessions to trace position values
+		if i < 5 {
+			s.logger.Debug("storing ABS import session",
+				slog.String("session_id", session.ID),
+				slog.String("title", session.DisplayTitle),
+				slog.Float64("startTime_sec", session.StartTime),
+				slog.Float64("currentTime_sec", session.CurrentTime),
+				slog.Int64("start_position_ms", session.StartPositionMs()),
+				slog.Int64("end_position_ms", session.EndPositionMs()),
+			)
+		}
+
+		// Try to normalize the session's ABSMediaID to match a book's ABSMediaID
+		absMediaID := session.LibraryItemID
+		if normalizedID, found := bookMediaIDLookup[absMediaID]; found {
+			if normalizedID != absMediaID {
+				sessionsNormalized++
+			}
+			absMediaID = normalizedID
+		} else {
+			sessionsUnmatched++
+			if len(unmatchedSample) < 5 {
+				unmatchedSample = append(unmatchedSample, absMediaID)
+			}
+		}
+
 		sess := &domain.ABSImportSession{
 			ImportID:      imp.ID,
 			ABSSessionID:  session.ID,
 			ABSUserID:     session.UserID,
-			ABSMediaID:    session.LibraryItemID, // This is actually mediaId
+			ABSMediaID:    absMediaID, // Normalized to match book's ABSMediaID
 			StartTime:     session.StartedAtTime(),
 			Duration:      session.DurationMs(),
 			StartPosition: session.StartPositionMs(),
@@ -505,20 +647,54 @@ func (s *Server) handleCreateABSImport(ctx context.Context, input *CreateABSImpo
 		}
 
 		if err := s.store.CreateABSImportSession(ctx, sess); err != nil {
-			s.logger.Warn("failed to store import session", slog.String("error", err.Error()))
+			s.logger.Error("failed to store import session",
+				slog.String("session_id", session.ID),
+				slog.String("user_id", session.UserID),
+				slog.String("error", err.Error()))
+			continue // Session won't be available for import
 		}
+		sessionsStored++
+	}
+
+	// Log session normalization stats
+	if sessionsUnmatched > 0 {
+		s.logger.Warn("sessions with unmatched ABSMediaID - these won't be ready for import",
+			slog.Int("unmatched_count", sessionsUnmatched),
+			slog.Int("total_sessions", len(backup.Sessions)),
+			slog.Any("unmatched_sample", unmatchedSample),
+		)
+	}
+	if sessionsNormalized > 0 {
+		s.logger.Info("sessions with normalized ABSMediaID",
+			slog.Int("normalized_count", sessionsNormalized),
+		)
+	}
+
+	// Log if any sessions failed to store
+	if sessionsStored < len(backup.Sessions) {
+		s.logger.Warn("some sessions failed to store",
+			slog.Int("stored", sessionsStored),
+			slog.Int("total", len(backup.Sessions)))
 	}
 
 	// Recalculate session statuses based on mappings
 	if err := s.store.RecalculateSessionStatuses(ctx, imp.ID); err != nil {
-		s.logger.Warn("failed to recalculate session statuses", slog.String("error", err.Error()))
+		s.logger.Error("failed to recalculate session statuses",
+			slog.String("import_id", imp.ID),
+			slog.String("error", err.Error()))
+		// Continue - statuses will be wrong but data is stored
 	}
 
 	// Update import with mapped counts
 	imp.UsersMapped = usersMapped
 	imp.BooksMapped = booksMapped
 	if err := s.store.UpdateABSImport(ctx, imp); err != nil {
-		s.logger.Warn("failed to update import counts", slog.String("error", err.Error()))
+		s.logger.Error("failed to update import counts",
+			slog.String("import_id", imp.ID),
+			slog.Int("users_mapped", usersMapped),
+			slog.Int("books_mapped", booksMapped),
+			slog.String("error", err.Error()))
+		// Continue - counts may be wrong in DB but response will be correct
 	}
 
 	return &CreateABSImportOutput{
@@ -626,7 +802,7 @@ func (s *Server) handleMapABSImportUser(ctx context.Context, input *MapABSImport
 
 	// Recalculate session statuses
 	if err := s.store.RecalculateSessionStatuses(ctx, input.ID); err != nil {
-		s.logger.Warn("failed to recalculate sessions", slog.String("error", err.Error()))
+		s.logger.Error("failed to recalculate sessions", slog.String("error", err.Error()))
 	}
 
 	// Update import stats
@@ -654,7 +830,7 @@ func (s *Server) handleClearABSImportUserMapping(ctx context.Context, input *Cle
 
 	// Recalculate session statuses
 	if err := s.store.RecalculateSessionStatuses(ctx, input.ID); err != nil {
-		s.logger.Warn("failed to recalculate sessions", slog.String("error", err.Error()))
+		s.logger.Error("failed to recalculate sessions", slog.String("error", err.Error()))
 	}
 
 	// Update import stats
@@ -717,7 +893,7 @@ func (s *Server) handleMapABSImportBook(ctx context.Context, input *MapABSImport
 
 	// Recalculate session statuses
 	if err := s.store.RecalculateSessionStatuses(ctx, input.ID); err != nil {
-		s.logger.Warn("failed to recalculate sessions", slog.String("error", err.Error()))
+		s.logger.Error("failed to recalculate sessions", slog.String("error", err.Error()))
 	}
 
 	// Update import stats
@@ -745,7 +921,7 @@ func (s *Server) handleClearABSImportBookMapping(ctx context.Context, input *Cle
 
 	// Recalculate session statuses
 	if err := s.store.RecalculateSessionStatuses(ctx, input.ID); err != nil {
-		s.logger.Warn("failed to recalculate sessions", slog.String("error", err.Error()))
+		s.logger.Error("failed to recalculate sessions", slog.String("error", err.Error()))
 	}
 
 	// Update import stats
@@ -777,8 +953,14 @@ func (s *Server) handleListABSImportSessions(ctx context.Context, input *ListABS
 		return nil, huma.Error500InternalServerError("failed to list sessions", err)
 	}
 
-	// Also get all sessions for summary
-	allSessions, _ := s.store.ListABSImportSessions(ctx, input.ID, domain.SessionFilterAll)
+	// Also get all sessions for summary - if this fails, we still return filtered results
+	// but with empty summary (better than hiding the error completely)
+	allSessions, err := s.store.ListABSImportSessions(ctx, input.ID, domain.SessionFilterAll)
+	if err != nil {
+		s.logger.Error("failed to get all sessions for summary", slog.String("error", err.Error()))
+		// Continue with empty allSessions - summary will be zeros
+		allSessions = nil
+	}
 
 	resp := &ListABSImportSessionsOutput{}
 	resp.Body.Sessions = make([]ABSImportSessionResponse, len(sessions))
@@ -821,20 +1003,34 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 	if len(readySessions) == 0 {
 		return &ImportABSSessionsOutput{
 			Body: struct {
-				SessionsImported int    `json:"sessions_imported" doc:"Sessions imported this batch"`
-				EventsCreated    int    `json:"events_created" doc:"Listening events created"`
-				Duration         string `json:"duration" doc:"Import duration"`
+				SessionsImported     int    `json:"sessions_imported" doc:"Sessions successfully imported"`
+				SessionsFailed       int    `json:"sessions_failed" doc:"Sessions that failed to import"`
+				EventsCreated        int    `json:"events_created" doc:"Listening events created"`
+				ProgressRebuilt      int    `json:"progress_rebuilt" doc:"User+book progress records rebuilt"`
+				ProgressFailed       int    `json:"progress_failed" doc:"Progress rebuilds that failed"`
+				ABSProgressUnmatched int    `json:"abs_progress_unmatched" doc:"Books where ABS progress could not be matched (finished status may be incorrect)"`
+				Duration             string `json:"duration" doc:"Import duration"`
 			}{
-				SessionsImported: 0,
-				EventsCreated:    0,
-				Duration:         time.Since(start).String(),
+				SessionsImported:     0,
+				SessionsFailed:       0,
+				EventsCreated:        0,
+				ProgressRebuilt:      0,
+				ProgressFailed:       0,
+				ABSProgressUnmatched: 0,
+				Duration:             time.Since(start).String(),
 			},
 		}, nil
 	}
 
-	// Get all user and book mappings
-	users, _ := s.store.ListABSImportUsers(ctx, input.ID, domain.MappingFilterMapped)
-	books, _ := s.store.ListABSImportBooks(ctx, input.ID, domain.MappingFilterMapped)
+	// Get all user and book mappings - these MUST succeed or import will silently fail
+	users, err := s.store.ListABSImportUsers(ctx, input.ID, domain.MappingFilterMapped)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("failed to load user mappings", err)
+	}
+	books, err := s.store.ListABSImportBooks(ctx, input.ID, domain.MappingFilterMapped)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("failed to load book mappings", err)
+	}
 
 	userMap := make(map[string]string) // ABS user ID -> ListenUp user ID
 	for _, u := range users {
@@ -850,11 +1046,38 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 		}
 	}
 
+	// DIAGNOSTIC: Log mapping counts and sample data
+	s.logger.Info("execute import: mapping summary",
+		slog.Int("user_mappings", len(userMap)),
+		slog.Int("book_mappings", len(bookMap)),
+		slog.Int("ready_sessions", len(readySessions)))
+
+	// DIAGNOSTIC: Log sample of book mappings for debugging
+	bookMapSample := make([]string, 0, 5)
+	for absID, luID := range bookMap {
+		bookMapSample = append(bookMapSample, absID+" -> "+luID)
+		if len(bookMapSample) >= 5 {
+			break
+		}
+	}
+	s.logger.Debug("execute import: book mapping sample", slog.Any("samples", bookMapSample))
+
 	// Import each ready session
 	sessionsImported := 0
+	sessionsFailed := 0
 	eventsCreated := 0
 
-	for _, sess := range readySessions {
+	// Track user+book combinations to update progress after import
+	// Include ABS IDs so we can look up finished status from ABSImportProgress
+	type userBookKey struct {
+		userID     string // ListenUp user ID
+		bookID     string // ListenUp book ID
+		absUserID  string // ABS user ID (for progress lookup)
+		absMediaID string // ABS media ID (for progress lookup)
+	}
+	affectedUserBooks := make(map[userBookKey]bool)
+
+	for i, sess := range readySessions {
 		listenUpUserID, userOK := userMap[sess.ABSUserID]
 		listenUpBookID, bookOK := bookMap[sess.ABSMediaID]
 
@@ -862,8 +1085,31 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 			continue // Skip if mappings not found (shouldn't happen for ready sessions)
 		}
 
+		// DEBUG: Log first 5 sessions to trace position values
+		if i < 5 {
+			s.logger.Debug("creating listening event from ABS session",
+				slog.String("session_id", sess.ABSSessionID),
+				slog.String("abs_media_id", sess.ABSMediaID),
+				slog.String("listenup_book_id", listenUpBookID),
+				slog.Int64("start_position", sess.StartPosition),
+				slog.Int64("end_position", sess.EndPosition),
+				slog.Int64("duration", sess.Duration),
+			)
+		}
+
+		// Generate event ID
+		eventID, err := id.Generate("evt")
+		if err != nil {
+			s.logger.Error("failed to generate event ID",
+				slog.String("session_id", sess.ABSSessionID),
+				slog.String("error", err.Error()))
+			sessionsFailed++
+			continue
+		}
+
 		// Create listening event
 		event := &domain.ListeningEvent{
+			ID:              eventID,
 			UserID:          listenUpUserID,
 			BookID:          listenUpBookID,
 			StartPositionMs: sess.StartPosition,
@@ -878,18 +1124,205 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 		}
 
 		if err := s.store.CreateListeningEvent(ctx, event); err != nil {
-			s.logger.Warn("failed to create event", slog.String("error", err.Error()))
+			s.logger.Error("failed to create listening event",
+				slog.String("session_id", sess.ABSSessionID),
+				slog.String("error", err.Error()))
+			sessionsFailed++
 			continue
 		}
 
 		eventsCreated++
+		affectedUserBooks[userBookKey{
+			userID:     listenUpUserID,
+			bookID:     listenUpBookID,
+			absUserID:  sess.ABSUserID,
+			absMediaID: sess.ABSMediaID,
+		}] = true
 
-		// Mark session as imported
+		// Mark session as imported - if this fails, the event was still created
+		// so we count it as imported but log the status update failure
 		if err := s.store.UpdateABSImportSessionStatus(ctx, input.ID, sess.ABSSessionID, domain.SessionStatusImported); err != nil {
-			s.logger.Warn("failed to mark session imported", slog.String("error", err.Error()))
+			s.logger.Error("failed to mark session imported (event was created)",
+				slog.String("session_id", sess.ABSSessionID),
+				slog.String("error", err.Error()))
 		}
 
 		sessionsImported++
+	}
+
+	// DIAGNOSTIC: Log session import results
+	s.logger.Info("execute import: session import complete",
+		slog.Int("sessions_imported", sessionsImported),
+		slog.Int("sessions_failed", sessionsFailed),
+		slog.Int("events_created", eventsCreated),
+		slog.Int("unique_user_book_combos", len(affectedUserBooks)))
+
+	// Rebuild PlaybackProgress for all affected user+book combinations
+	// This is critical for Continue Listening to work after ABS import
+	progressRebuilt := 0
+	progressFailed := 0
+	progressUnmatchedABS := 0 // Books where we couldn't match ABS progress data
+	for key := range affectedUserBooks {
+		matched, err := s.rebuildProgressFromEvents(ctx, input.ID, key.userID, key.bookID, key.absUserID, key.absMediaID)
+		if err != nil {
+			s.logger.Error("failed to rebuild progress",
+				slog.String("user_id", key.userID),
+				slog.String("book_id", key.bookID),
+				slog.String("error", err.Error()))
+			progressFailed++
+		} else {
+			progressRebuilt++
+			if !matched {
+				progressUnmatchedABS++
+			}
+		}
+	}
+	s.logger.Info("rebuilt progress for imported sessions",
+		slog.Int("progress_rebuilt", progressRebuilt),
+		slog.Int("progress_failed", progressFailed),
+		slog.Int("progress_unmatched_abs", progressUnmatchedABS))
+
+	// Create progress records from MediaProgress entries that don't have sessions
+	// This ensures the Readers section is populated even for books without detailed history
+	//
+	// IMPORTANT: We iterate over stored ABSImportProgress entries directly rather than
+	// iterating over bookMap. This handles cases where the ABSMediaID in progress
+	// (from mediaProgresses.mediaItemId) might differ from the key used in bookMap
+	// (from libraryItems.mediaId).
+	progressFromMediaProgress := 0
+	progressSkippedNoBook := 0
+	progressSkippedHasProgress := 0
+	for _, u := range users {
+		if u.ListenUpID == nil {
+			continue
+		}
+		listenUpUserID := *u.ListenUpID
+
+		// Get all MediaProgress entries stored for this user
+		allProgress, err := s.store.ListABSImportProgressForUser(ctx, input.ID, u.ABSUserID)
+		if err != nil {
+			s.logger.Warn("failed to list ABS progress for user",
+				slog.String("abs_user_id", u.ABSUserID),
+				slog.String("error", err.Error()))
+			continue
+		}
+
+		// DIAGNOSTIC: Log progress entries for this user
+		s.logger.Info("found ABS progress entries for user",
+			slog.String("abs_user_id", u.ABSUserID),
+			slog.String("listenup_user_id", listenUpUserID),
+			slog.Int("count", len(allProgress)))
+
+		for _, absProgress := range allProgress {
+			if absProgress.CurrentTime == 0 {
+				s.logger.Debug("skipping progress with zero position",
+					slog.String("abs_media_id", absProgress.ABSMediaID))
+				continue // No position to import
+			}
+
+			// Find the matching book - first try direct lookup, then try via bookMap
+			var listenUpBookID string
+			absBook, err := s.store.GetABSImportBook(ctx, input.ID, absProgress.ABSMediaID)
+			if err == nil && absBook != nil && absBook.ListenUpID != nil {
+				listenUpBookID = *absBook.ListenUpID
+				s.logger.Debug("found book via direct lookup",
+					slog.String("abs_progress_media_id", absProgress.ABSMediaID),
+					slog.String("listenup_book_id", listenUpBookID),
+					slog.Bool("is_finished", absProgress.IsFinished))
+			} else {
+				// Fallback: check if bookMap has this ID (handles potential ID variations)
+				if id, ok := bookMap[absProgress.ABSMediaID]; ok {
+					listenUpBookID = id
+					s.logger.Debug("found book via bookMap fallback",
+						slog.String("abs_progress_media_id", absProgress.ABSMediaID),
+						slog.String("listenup_book_id", listenUpBookID))
+				} else {
+					s.logger.Warn("no book mapping found for ABS progress - SKIPPING",
+						slog.String("abs_media_id", absProgress.ABSMediaID),
+						slog.Int64("current_time_ms", absProgress.CurrentTime),
+						slog.Bool("is_finished", absProgress.IsFinished),
+						slog.Float64("progress_pct", absProgress.Progress*100))
+					progressSkippedNoBook++
+					continue
+				}
+			}
+
+			// Skip if we already have progress from sessions
+			key := userBookKey{
+				userID:     listenUpUserID,
+				bookID:     listenUpBookID,
+				absUserID:  u.ABSUserID,
+				absMediaID: absProgress.ABSMediaID,
+			}
+			if affectedUserBooks[key] {
+				s.logger.Debug("skipping - already handled via sessions",
+					slog.String("abs_media_id", absProgress.ABSMediaID),
+					slog.String("listenup_book_id", listenUpBookID))
+				continue // Already handled via sessions
+			}
+
+			// Only create if no existing progress
+			existingProgress, _ := s.store.GetProgress(ctx, listenUpUserID, listenUpBookID)
+			if existingProgress != nil {
+				s.logger.Debug("skipping - existing progress found",
+					slog.String("abs_media_id", absProgress.ABSMediaID),
+					slog.String("listenup_book_id", listenUpBookID),
+					slog.Bool("existing_is_finished", existingProgress.IsFinished),
+					slog.Float64("existing_progress_pct", existingProgress.Progress*100))
+				progressSkippedHasProgress++
+				continue // Already has progress
+			}
+
+			// Get book duration from ListenUp
+			book, err := s.store.GetBookNoAccessCheck(ctx, listenUpBookID)
+			if err != nil || book == nil {
+				continue
+			}
+
+			// Calculate position - clamp if needed, but don't skip books without duration
+			bookDurationMs := book.TotalDuration
+			positionMs := absProgress.CurrentTime
+			if bookDurationMs > 0 && positionMs > bookDurationMs {
+				positionMs = int64(float64(bookDurationMs) * 0.98)
+			}
+
+			progress := &domain.PlaybackProgress{
+				UserID:            listenUpUserID,
+				BookID:            listenUpBookID,
+				CurrentPositionMs: positionMs,
+				StartedAt:         absProgress.LastUpdate, // Best approximation
+				LastPlayedAt:      absProgress.LastUpdate,
+				TotalListenTimeMs: positionMs, // Approximate
+				UpdatedAt:         time.Now(),
+				IsFinished:        absProgress.IsFinished,
+			}
+			if bookDurationMs > 0 {
+				progress.Progress = float64(positionMs) / float64(bookDurationMs)
+			}
+			if absProgress.IsFinished {
+				progress.FinishedAt = absProgress.FinishedAt
+			}
+
+			if err := s.store.UpsertProgress(ctx, progress); err != nil {
+				s.logger.Warn("failed to create progress from MediaProgress",
+					slog.String("user_id", listenUpUserID),
+					slog.String("book_id", listenUpBookID),
+					slog.String("error", err.Error()))
+			} else {
+				progressFromMediaProgress++
+				s.logger.Debug("created progress from MediaProgress",
+					slog.String("user_id", listenUpUserID),
+					slog.String("book_id", listenUpBookID),
+					slog.Bool("is_finished", progress.IsFinished),
+					slog.Float64("progress_pct", progress.Progress*100))
+			}
+		}
+	}
+	if progressFromMediaProgress > 0 || progressSkippedNoBook > 0 {
+		s.logger.Info("created progress from MediaProgress",
+			slog.Int("created", progressFromMediaProgress),
+			slog.Int("skipped_no_book", progressSkippedNoBook),
+			slog.Int("skipped_has_progress", progressSkippedHasProgress))
 	}
 
 	// Update import stats
@@ -897,13 +1330,21 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 
 	return &ImportABSSessionsOutput{
 		Body: struct {
-			SessionsImported int    `json:"sessions_imported" doc:"Sessions imported this batch"`
-			EventsCreated    int    `json:"events_created" doc:"Listening events created"`
-			Duration         string `json:"duration" doc:"Import duration"`
+			SessionsImported      int    `json:"sessions_imported" doc:"Sessions successfully imported"`
+			SessionsFailed        int    `json:"sessions_failed" doc:"Sessions that failed to import"`
+			EventsCreated         int    `json:"events_created" doc:"Listening events created"`
+			ProgressRebuilt       int    `json:"progress_rebuilt" doc:"User+book progress records rebuilt"`
+			ProgressFailed        int    `json:"progress_failed" doc:"Progress rebuilds that failed"`
+			ABSProgressUnmatched  int    `json:"abs_progress_unmatched" doc:"Books where ABS progress could not be matched (finished status may be incorrect)"`
+			Duration              string `json:"duration" doc:"Import duration"`
 		}{
-			SessionsImported: sessionsImported,
-			EventsCreated:    eventsCreated,
-			Duration:         time.Since(start).String(),
+			SessionsImported:     sessionsImported,
+			SessionsFailed:       sessionsFailed,
+			EventsCreated:        eventsCreated,
+			ProgressRebuilt:      progressRebuilt,
+			ProgressFailed:       progressFailed,
+			ABSProgressUnmatched: progressUnmatchedABS,
+			Duration:             time.Since(start).String(),
 		},
 	}, nil
 }
@@ -938,12 +1379,27 @@ func (s *Server) handleSkipABSSession(ctx context.Context, input *SkipABSSession
 func (s *Server) updateImportStats(ctx context.Context, importID string) {
 	imp, err := s.store.GetABSImport(ctx, importID)
 	if err != nil {
+		s.logger.Error("updateImportStats: failed to get import", slog.String("import_id", importID), slog.String("error", err.Error()))
 		return
 	}
 
-	users, _ := s.store.ListABSImportUsers(ctx, importID, domain.MappingFilterAll)
-	books, _ := s.store.ListABSImportBooks(ctx, importID, domain.MappingFilterAll)
-	sessions, _ := s.store.ListABSImportSessions(ctx, importID, domain.SessionFilterImported)
+	users, err := s.store.ListABSImportUsers(ctx, importID, domain.MappingFilterAll)
+	if err != nil {
+		s.logger.Error("updateImportStats: failed to list users", slog.String("import_id", importID), slog.String("error", err.Error()))
+		return
+	}
+
+	books, err := s.store.ListABSImportBooks(ctx, importID, domain.MappingFilterAll)
+	if err != nil {
+		s.logger.Error("updateImportStats: failed to list books", slog.String("import_id", importID), slog.String("error", err.Error()))
+		return
+	}
+
+	sessions, err := s.store.ListABSImportSessions(ctx, importID, domain.SessionFilterImported)
+	if err != nil {
+		s.logger.Error("updateImportStats: failed to list sessions", slog.String("import_id", importID), slog.String("error", err.Error()))
+		return
+	}
 
 	usersMapped := 0
 	for _, u := range users {
@@ -963,7 +1419,9 @@ func (s *Server) updateImportStats(ctx context.Context, importID string) {
 	imp.BooksMapped = booksMapped
 	imp.SessionsImported = len(sessions)
 
-	_ = s.store.UpdateABSImport(ctx, imp)
+	if err := s.store.UpdateABSImport(ctx, imp); err != nil {
+		s.logger.Error("updateImportStats: failed to update import", slog.String("import_id", importID), slog.String("error", err.Error()))
+	}
 }
 
 func toABSImportResponse(imp *domain.ABSImport) ABSImportResponse {
@@ -1071,4 +1529,242 @@ func extractBookSuggestionIDs(suggestions []abs.BookSuggestion) []string {
 		ids[i] = s.BookID
 	}
 	return ids
+}
+
+// rebuildProgressFromEvents rebuilds PlaybackProgress for a user+book from all events.
+// This is used after ABS import to ensure Continue Listening works correctly.
+// Handles duration mismatch: if ABS position > ListenUp duration, clamps to 98% to avoid
+// incorrectly marking books as completed.
+// Also honors the finished status from ABSImportProgress if the book was marked completed in ABS.
+// Returns (absProgressMatched, error) where absProgressMatched indicates if ABS progress was found.
+func (s *Server) rebuildProgressFromEvents(ctx context.Context, importID, userID, bookID, absUserID, absMediaID string) (absProgressMatched bool, err error) {
+	// Get all events for this user+book
+	events, err := s.store.GetEventsForUserBook(ctx, userID, bookID)
+	if err != nil {
+		return false, fmt.Errorf("get events: %w", err)
+	}
+
+	if len(events) == 0 {
+		return true, nil // Nothing to do - consider matched (no progress to check)
+	}
+
+	// DEBUG: Log events being used for progress rebuild
+	s.logger.Debug("events for progress rebuild",
+		slog.String("user_id", userID),
+		slog.String("book_id", bookID),
+		slog.Int("event_count", len(events)),
+	)
+	for i, e := range events {
+		if i < 3 { // Log first 3 events
+			s.logger.Debug("event detail",
+				slog.String("event_id", e.ID),
+				slog.String("event_book_id", e.BookID),
+				slog.Int64("end_position_ms", e.EndPositionMs),
+			)
+		}
+	}
+
+	// Get book duration from ListenUp
+	book, err := s.store.GetBookNoAccessCheck(ctx, bookID)
+	if err != nil {
+		return false, fmt.Errorf("get book: %w", err)
+	}
+	if book == nil {
+		return false, fmt.Errorf("book %s not found (nil returned without error)", bookID)
+	}
+	bookDurationMs := book.TotalDuration
+	if bookDurationMs <= 0 {
+		return false, fmt.Errorf("book %s has invalid duration: %d", bookID, bookDurationMs)
+	}
+
+	// Find the latest event and calculate totals
+	var latestEvent *domain.ListeningEvent
+	var totalListenTimeMs int64
+	var maxPositionMs int64
+	var earliestStartedAt time.Time
+
+	for _, event := range events {
+		totalListenTimeMs += event.DurationMs
+
+		// Track max position (forward progress only)
+		if event.EndPositionMs > maxPositionMs {
+			maxPositionMs = event.EndPositionMs
+		}
+
+		// Track latest event by EndedAt
+		if latestEvent == nil || event.EndedAt.After(latestEvent.EndedAt) {
+			latestEvent = event
+		}
+
+		// Track earliest start
+		if earliestStartedAt.IsZero() || event.StartedAt.Before(earliestStartedAt) {
+			earliestStartedAt = event.StartedAt
+		}
+	}
+
+	// Handle duration mismatch: if imported position exceeds book duration,
+	// clamp to 98% to avoid incorrectly marking as completed.
+	// This can happen when ABS had a different duration than ListenUp.
+	if maxPositionMs > bookDurationMs && bookDurationMs > 0 {
+		s.logger.Warn("ABS position exceeds book duration, clamping",
+			slog.String("user_id", userID),
+			slog.String("book_id", bookID),
+			slog.Int64("abs_position_ms", maxPositionMs),
+			slog.Int64("book_duration_ms", bookDurationMs))
+		// Clamp to 98% - this ensures the book appears in Continue Listening
+		// rather than being incorrectly marked as finished
+		maxPositionMs = int64(float64(bookDurationMs) * 0.98)
+	}
+
+	// Get existing progress or create new
+	existingProgress, err := s.store.GetProgress(ctx, userID, bookID)
+	if err != nil && !errors.Is(err, store.ErrProgressNotFound) {
+		// Real error, not just "not found"
+		return false, fmt.Errorf("get progress: %w", err)
+	}
+
+	var progress *domain.PlaybackProgress
+	needsSave := true
+	if existingProgress != nil {
+		// Update existing - only if we have newer data
+		if latestEvent.EndedAt.After(existingProgress.LastPlayedAt) {
+			progress = existingProgress
+			progress.CurrentPositionMs = maxPositionMs
+			progress.TotalListenTimeMs += totalListenTimeMs - existingProgress.TotalListenTimeMs // Add delta
+			progress.LastPlayedAt = latestEvent.EndedAt
+			progress.UpdatedAt = time.Now()
+
+			// Recalculate progress percentage
+			if bookDurationMs > 0 {
+				progress.Progress = float64(maxPositionMs) / float64(bookDurationMs)
+			}
+
+			// Check completion (but we already clamped to avoid false positives)
+			if bookDurationMs > 0 && float64(progress.CurrentPositionMs) >= float64(bookDurationMs)*0.99 {
+				progress.IsFinished = true
+				now := time.Now()
+				progress.FinishedAt = &now
+			}
+		} else {
+			// Existing progress is newer - don't update position data
+			// BUT still check ABS finished status below (user might have finished in ABS
+			// but only played a few seconds in ListenUp)
+			progress = existingProgress
+			needsSave = false // Will be set to true if we update IsFinished
+		}
+	} else {
+		// Create new progress
+		progress = &domain.PlaybackProgress{
+			UserID:            userID,
+			BookID:            bookID,
+			CurrentPositionMs: maxPositionMs,
+			StartedAt:         earliestStartedAt,
+			LastPlayedAt:      latestEvent.EndedAt,
+			TotalListenTimeMs: totalListenTimeMs,
+			UpdatedAt:         time.Now(),
+		}
+
+		// Calculate progress percentage
+		if bookDurationMs > 0 {
+			progress.Progress = float64(maxPositionMs) / float64(bookDurationMs)
+		}
+
+		// Check completion
+		if bookDurationMs > 0 && float64(progress.CurrentPositionMs) >= float64(bookDurationMs)*0.99 {
+			progress.IsFinished = true
+			now := time.Now()
+			progress.FinishedAt = &now
+		}
+	}
+
+	// Check if ABS marked this book as finished (honors original listening history)
+	// This handles cases where the position doesn't reach 99% but the user marked it complete in ABS
+	//
+	// IMPORTANT: We look up ABSImportProgress by ListenUp book ID rather than ABS media ID.
+	// This is because ABS playbackSessions.mediaItemId and mediaProgresses.mediaItemId can contain
+	// DIFFERENT UUIDs for the same logical book. By resolving through the ListenUp book ID,
+	// we correctly match progress entries regardless of which ABS ID scheme was used.
+	absProgressMatched = true // Assume matched unless we explicitly fail to find it
+	s.logger.Info("checking ABS finished status for book",
+		slog.String("book_id", bookID),
+		slog.String("import_id", importID),
+		slog.String("abs_user_id", absUserID),
+		slog.Bool("progress_is_finished", progress.IsFinished),
+		slog.Float64("progress_pct", progress.Progress*100))
+	if !progress.IsFinished && importID != "" && absUserID != "" {
+		absProgress, err := s.store.FindABSImportProgressByListenUpBook(ctx, importID, absUserID, bookID)
+		if err != nil {
+			s.logger.Warn("failed to find ABS import progress by book",
+				slog.String("abs_user_id", absUserID),
+				slog.String("book_id", bookID),
+				slog.String("error", err.Error()))
+			absProgressMatched = false
+		} else if absProgress == nil {
+			s.logger.Warn("no ABS import progress maps to this book - cannot honor ABS finished status",
+				slog.String("import_id", importID),
+				slog.String("abs_user_id", absUserID),
+				slog.String("book_id", bookID))
+			absProgressMatched = false
+		} else if absProgress.IsFinished {
+			progress.IsFinished = true
+			if absProgress.FinishedAt != nil {
+				progress.FinishedAt = absProgress.FinishedAt
+			} else {
+				now := time.Now()
+				progress.FinishedAt = &now
+			}
+			progress.UpdatedAt = time.Now()
+			needsSave = true // ABS says finished, must save this
+			s.logger.Info("marking book as finished from ABS import",
+				slog.String("user_id", userID),
+				slog.String("book_id", bookID),
+				slog.String("abs_media_id", absProgress.ABSMediaID))
+		} else {
+			s.logger.Debug("ABS import progress found but not finished",
+				slog.String("abs_user_id", absUserID),
+				slog.String("abs_media_id", absProgress.ABSMediaID),
+				slog.Bool("abs_is_finished", absProgress.IsFinished))
+		}
+	}
+
+	// Save progress if we have changes
+	if !needsSave {
+		s.logger.Debug("skipping save - existing progress is newer and no ABS finished status change",
+			slog.String("book_id", bookID))
+		return absProgressMatched, nil
+	}
+
+	if err := s.store.UpsertProgress(ctx, progress); err != nil {
+		return absProgressMatched, fmt.Errorf("upsert progress: %w", err)
+	}
+
+	// VERIFY: Read back what was actually saved to confirm IsFinished persisted
+	savedProgress, verifyErr := s.store.GetProgress(ctx, userID, bookID)
+	if verifyErr != nil {
+		s.logger.Error("VERIFY FAILED: could not read back saved progress",
+			slog.String("user_id", userID),
+			slog.String("book_id", bookID),
+			slog.String("error", verifyErr.Error()))
+	} else {
+		s.logger.Info("VERIFY: read back saved progress",
+			slog.String("book_id", bookID),
+			slog.Bool("intended_is_finished", progress.IsFinished),
+			slog.Bool("saved_is_finished", savedProgress.IsFinished),
+			slog.Bool("match", progress.IsFinished == savedProgress.IsFinished))
+		if progress.IsFinished != savedProgress.IsFinished {
+			s.logger.Error("VERIFY MISMATCH: IsFinished was not saved correctly!",
+				slog.String("book_id", bookID),
+				slog.Bool("intended", progress.IsFinished),
+				slog.Bool("actual", savedProgress.IsFinished))
+		}
+	}
+
+	s.logger.Debug("rebuilt progress from events",
+		slog.String("user_id", userID),
+		slog.String("book_id", bookID),
+		slog.Int64("position_ms", progress.CurrentPositionMs),
+		slog.Float64("progress", progress.Progress),
+		slog.Bool("is_finished", progress.IsFinished))
+
+	return absProgressMatched, nil
 }

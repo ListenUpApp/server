@@ -314,6 +314,119 @@ func TestRecordEvent_Idempotency(t *testing.T) {
 	assert.Equal(t, clientEventID, events[0].ID)
 }
 
+// TestABSImport_DirectEventCreation_RequiresProgressRebuild demonstrates that
+// events created directly (like ABS import does) without going through RecordEvent()
+// will NOT appear in Continue Listening unless PlaybackProgress is rebuilt afterward.
+//
+// The ABS import handler now calls rebuildProgressFromEvents() after importing sessions,
+// which creates the necessary PlaybackProgress records.
+func TestABSImport_DirectEventCreation_RequiresProgressRebuild(t *testing.T) {
+	svc, testStore, cleanup := setupTestListening(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a test book with specific duration (10 hours)
+	bookDurationMs := int64(36_000_000) // 10 hours
+	createTestBookForListening(t, testStore, "book-abs-1", bookDurationMs)
+
+	// Simulate ABS import: Create ListeningEvent directly WITHOUT going through RecordEvent()
+	absPositionMs := int64(32_400_000) // 90% of 10-hour book
+	event := &domain.ListeningEvent{
+		ID:              "evt-abs-import-1",
+		UserID:          "user-abs",
+		BookID:          "book-abs-1",
+		StartPositionMs: 0,
+		EndPositionMs:   absPositionMs,
+		DurationMs:      absPositionMs,
+		DeviceID:        "abs-import",
+		DeviceName:      "ABS Import",
+		StartedAt:       time.Now().Add(-time.Hour),
+		EndedAt:         time.Now(),
+		PlaybackSpeed:   1.0,
+		CreatedAt:       time.Now(),
+	}
+	err := testStore.CreateListeningEvent(ctx, event)
+	require.NoError(t, err)
+
+	// Without progress rebuild, Continue Listening returns nothing
+	results, err := svc.GetContinueListening(ctx, "user-abs", 10)
+	require.NoError(t, err)
+	assert.Len(t, results, 0, "No progress exists yet - ABS import handler must call rebuildProgressFromEvents")
+
+	// Verify the event WAS created
+	events, err := testStore.GetEventsForUser(ctx, "user-abs")
+	require.NoError(t, err)
+	assert.Len(t, events, 1, "Event was created")
+
+	// Verify NO progress exists yet
+	progress, err := testStore.GetProgress(ctx, "user-abs", "book-abs-1")
+	assert.Error(t, err, "No progress exists until rebuildProgressFromEvents is called")
+	assert.Nil(t, progress)
+
+	// Note: The ABS import handler (admin_abs_import_handlers.go) now calls
+	// rebuildProgressFromEvents() after importing sessions, which will create
+	// the necessary PlaybackProgress records. This test documents the
+	// requirement for that step.
+}
+
+// TestABSImport_DurationMismatch_ViaRecordEvent tests that when ABS position
+// is based on a different book duration than ListenUp's, progress calculation
+// using RecordEvent will be incorrect.
+//
+// This demonstrates WHY the ABS import handler uses rebuildProgressFromEvents
+// with clamping logic instead of RecordEvent.
+//
+// Example: ABS thinks book is 10.5 hours, user at 95% = 35,910,000ms
+// ListenUp thinks book is 10 hours (36,000,000ms)
+// Progress = 35,910,000 / 36,000,000 = 99.75% → FILTERED as "finished"!
+func TestABSImport_DurationMismatch_ViaRecordEvent(t *testing.T) {
+	svc, testStore, cleanup := setupTestListening(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// ListenUp's book duration (10 hours)
+	listenUpDurationMs := int64(36_000_000)
+	createTestBookForListening(t, testStore, "book-duration-test", listenUpDurationMs)
+
+	// ABS thought the book was 10.5 hours, user was at 95% in ABS
+	absDurationMs := int64(37_800_000) // 10.5 hours
+	absProgress := 0.95
+	absPositionMs := int64(float64(absDurationMs) * absProgress) // 35,910,000ms
+
+	// Using RecordEvent directly (NOT what ABS import does anymore)
+	// This demonstrates the problem that the clamping fix solves
+	req := RecordEventRequest{
+		BookID:          "book-duration-test",
+		StartPositionMs: 0,
+		EndPositionMs:   absPositionMs, // Position from ABS exceeds ListenUp duration
+		StartedAt:       time.Now().Add(-time.Hour),
+		EndedAt:         time.Now(),
+		PlaybackSpeed:   1.0,
+		DeviceID:        "abs-import",
+		DeviceName:      "ABS Import",
+	}
+	resp, err := svc.RecordEvent(ctx, "user-duration-test", req)
+	require.NoError(t, err)
+
+	// RecordEvent calculates progress using ListenUp's duration
+	// 35,910,000 / 36,000,000 = 99.75% >= 99% threshold → marked as finished
+	// This is why ABS import uses rebuildProgressFromEvents with clamping instead
+	expectedProgress := float64(absPositionMs) / float64(listenUpDurationMs) // 0.9975
+	assert.InDelta(t, expectedProgress, resp.Progress.Progress, 0.001)
+	assert.True(t, resp.Progress.IsFinished, "Book incorrectly marked as finished due to duration mismatch")
+
+	// Book won't appear in Continue Listening because it's "finished"
+	results, err := svc.GetContinueListening(ctx, "user-duration-test", 10)
+	require.NoError(t, err)
+	assert.Len(t, results, 0, "Book filtered out - this is why ABS import uses clamping")
+
+	// Note: The ABS import handler's rebuildProgressFromEvents() function
+	// handles this by clamping positions that exceed book duration to 98%,
+	// ensuring books appear in Continue Listening even with duration mismatches.
+}
+
 func TestGetUserStats(t *testing.T) {
 	svc, testStore, cleanup := setupTestListening(t)
 	defer cleanup()

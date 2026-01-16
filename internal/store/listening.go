@@ -154,13 +154,16 @@ func (s *Store) getEventsByPrefix(ctx context.Context, prefix string) ([]*domain
 				continue // Skip missing events
 			}
 
-			var event domain.ListeningEvent
+			// IMPORTANT: Allocate on heap to avoid loop variable pointer bug.
+			// Using `var event` inside loop and taking &event would cause all
+			// pointers to reference the same memory location (the last value).
+			event := new(domain.ListeningEvent)
 			if err := item.Value(func(val []byte) error {
-				return json.Unmarshal(val, &event)
+				return json.Unmarshal(val, event)
 			}); err != nil {
 				continue // Skip corrupt events
 			}
-			events = append(events, &event)
+			events = append(events, event)
 		}
 
 		return nil
@@ -249,14 +252,17 @@ func (s *Store) GetProgressForUser(ctx context.Context, userID string) ([]*domai
 		defer it.Close()
 
 		for it.Seek([]byte(prefix)); it.ValidForPrefix([]byte(prefix)); it.Next() {
-			var progress domain.PlaybackProgress
+			// IMPORTANT: Allocate on heap to avoid pointer aliasing.
+			// Using `var progress` and taking &progress would cause all
+			// pointers to potentially reference the same memory location.
+			progress := new(domain.PlaybackProgress)
 			err := it.Item().Value(func(val []byte) error {
-				return json.Unmarshal(val, &progress)
+				return json.Unmarshal(val, progress)
 			})
 			if err != nil {
 				return err
 			}
-			results = append(results, &progress)
+			results = append(results, progress)
 		}
 		return nil
 	})
@@ -342,13 +348,14 @@ func (s *Store) GetEventsForUserInRange(
 				continue // Skip missing events
 			}
 
-			var event domain.ListeningEvent
+			// IMPORTANT: Allocate on heap to avoid loop variable pointer bug.
+			event := new(domain.ListeningEvent)
 			if err := item.Value(func(val []byte) error {
-				return json.Unmarshal(val, &event)
+				return json.Unmarshal(val, event)
 			}); err != nil {
 				continue // Skip corrupt events
 			}
-			events = append(events, &event)
+			events = append(events, event)
 		}
 
 		return nil
@@ -399,6 +406,32 @@ func (s *Store) GetContinueListening(ctx context.Context, userID string, limit i
 		return nil, err
 	}
 
+	// DEBUG: Log all progress entries and their finished status
+	if s.logger != nil {
+		s.logger.Info("GetContinueListening: fetched all progress",
+			"user_id", userID,
+			"total_count", len(allProgress))
+	}
+	finishedCount := 0
+	for _, p := range allProgress {
+		if p.IsFinished {
+			finishedCount++
+			if s.logger != nil {
+				s.logger.Info("GetContinueListening: FINISHED book will be excluded",
+					"book_id", p.BookID,
+					"progress", p.Progress,
+					"current_position_ms", p.CurrentPositionMs,
+					"is_finished", p.IsFinished)
+			}
+		}
+	}
+	if s.logger != nil {
+		s.logger.Info("GetContinueListening: finished book count",
+			"user_id", userID,
+			"finished_count", finishedCount,
+			"in_progress_count", len(allProgress)-finishedCount)
+	}
+
 	// Scan 2: All preferences for user
 	allPrefs, err := s.GetAllBookPreferences(ctx, userID)
 	if err != nil {
@@ -414,12 +447,32 @@ func (s *Store) GetContinueListening(ctx context.Context, userID string, limit i
 	}
 
 	// Filter: in-progress, not finished, not hidden
+	// A book has progress if EITHER:
+	// - Progress > 0 (percentage calculated correctly), OR
+	// - CurrentPositionMs > 0 (position set, but percentage may be missing due to duration=0 at import)
+	// This handles edge cases from ABS import where duration might be 0 during import but set later
 	var result []*domain.PlaybackProgress
 	for _, p := range allProgress {
-		if p.IsFinished || p.Progress == 0 || hiddenBooks[p.BookID] {
+		hasProgress := p.Progress > 0 || p.CurrentPositionMs > 0
+		if p.IsFinished || !hasProgress || hiddenBooks[p.BookID] {
+			if p.IsFinished && s.logger != nil {
+				s.logger.Debug("GetContinueListening: excluding finished book",
+					"book_id", p.BookID)
+			}
 			continue
 		}
+		if s.logger != nil {
+			s.logger.Debug("GetContinueListening: including in-progress book",
+				"book_id", p.BookID,
+				"progress", p.Progress,
+				"is_finished", p.IsFinished)
+		}
 		result = append(result, p)
+	}
+	if s.logger != nil {
+		s.logger.Info("GetContinueListening: final result count",
+			"user_id", userID,
+			"result_count", len(result))
 	}
 
 	// Sort by LastPlayedAt descending (most recent first)

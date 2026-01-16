@@ -132,6 +132,7 @@ type ABSImportProgress struct {
 	Duration     int64      `json:"duration"`      // Total duration in milliseconds
 	Progress     float64    `json:"progress"`      // 0.0 to 1.0
 	IsFinished   bool       `json:"is_finished"`
+	FinishedAt   *time.Time `json:"finished_at,omitempty"` // When the book was finished
 	LastUpdate   time.Time  `json:"last_update"`
 
 	// Import status

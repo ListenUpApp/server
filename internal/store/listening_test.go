@@ -340,3 +340,67 @@ func TestGetContinueListening_RespectsLimit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, results, 3)
 }
+
+// TestGetContinueListening_IncludesPositionWithoutPercentage tests that books with
+// CurrentPositionMs > 0 but Progress == 0 are included in Continue Listening.
+// This handles edge cases from ABS import where duration might be 0 during import
+// but set correctly later, resulting in Progress=0 but a valid position.
+func TestGetContinueListening_IncludesPositionWithoutPercentage(t *testing.T) {
+	s, cleanup := setupTestListeningStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	now := time.Now()
+
+	// Create progress entries with different states
+	progressData := []struct {
+		bookID            string
+		currentPositionMs int64
+		progress          float64 // 0.0 - 1.0
+		expectIncluded    bool
+	}{
+		// Has both position and percentage - should be included
+		{"book-normal", 1800000, 0.5, true},
+		// Has position but no percentage (ABS import edge case) - should be included
+		{"book-abs-import", 900000, 0.0, true},
+		// Has neither position nor percentage - should be excluded
+		{"book-not-started", 0, 0.0, false},
+		// Has percentage but no position (edge case) - should be included
+		{"book-only-progress", 0, 0.3, true},
+	}
+
+	for _, pd := range progressData {
+		progress := &domain.PlaybackProgress{
+			UserID:            "user-123",
+			BookID:            pd.bookID,
+			CurrentPositionMs: pd.currentPositionMs,
+			Progress:          pd.progress,
+			LastPlayedAt:      now,
+			UpdatedAt:         now,
+		}
+		require.NoError(t, s.UpsertProgress(ctx, progress))
+	}
+
+	// Get continue listening
+	results, err := s.GetContinueListening(ctx, "user-123", 10)
+	require.NoError(t, err)
+
+	// Build map for easier assertion
+	resultBooks := make(map[string]bool)
+	for _, r := range results {
+		resultBooks[r.BookID] = true
+	}
+
+	// Verify each book is included or excluded as expected
+	for _, pd := range progressData {
+		if pd.expectIncluded {
+			assert.True(t, resultBooks[pd.bookID],
+				"book %s should be included (position=%d, progress=%.2f)",
+				pd.bookID, pd.currentPositionMs, pd.progress)
+		} else {
+			assert.False(t, resultBooks[pd.bookID],
+				"book %s should be excluded (position=%d, progress=%.2f)",
+				pd.bookID, pd.currentPositionMs, pd.progress)
+		}
+	}
+}

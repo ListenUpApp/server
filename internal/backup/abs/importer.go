@@ -345,6 +345,9 @@ func (im *Importer) rebuildBookProgress(
 		return fmt.Errorf("get book: %w", err)
 	}
 
+	// Check if progress already exists (may have IsFinished from ABS import)
+	existingProgress, _ := im.store.GetProgress(ctx, userID, bookID)
+
 	// Sort events by time
 	sortEventsByTime(events)
 
@@ -354,6 +357,20 @@ func (im *Importer) rebuildBookProgress(
 	// Update with remaining events
 	for _, event := range events[1:] {
 		progress.UpdateFromEvent(event, book.TotalDuration)
+	}
+
+	// IMPORTANT: Preserve IsFinished from ABS import if it was set.
+	// The ABS import sets IsFinished based on the actual ABS media progress,
+	// which may be more accurate than our position-based calculation
+	// (e.g., when book duration was 0 during import, or position tracking differs).
+	if existingProgress != nil && existingProgress.IsFinished && !progress.IsFinished {
+		im.logger.Debug("preserving IsFinished from ABS import",
+			"user_id", userID,
+			"book_id", bookID,
+			"existing_finished_at", existingProgress.FinishedAt,
+		)
+		progress.IsFinished = true
+		progress.FinishedAt = existingProgress.FinishedAt
 	}
 
 	// Save progress

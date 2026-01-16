@@ -912,6 +912,178 @@ func TestGetABSImportStats(t *testing.T) {
 	assert.Equal(t, 2, imported)
 }
 
+func TestFindABSImportProgressByListenUpBook(t *testing.T) {
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create import
+	imp := &domain.ABSImport{ID: "import_123", Status: domain.ABSImportStatusActive}
+	require.NoError(t, store.CreateABSImport(ctx, imp))
+
+	// Create a book mapping: absMediaID1 -> listenUpBookID1
+	book := &domain.ABSImportBook{
+		ImportID:   "import_123",
+		ABSMediaID: "abs-media-id-1",
+		ListenUpID: strPtr("listenup-book-1"),
+	}
+	require.NoError(t, store.CreateABSImportBook(ctx, book))
+
+	// Create progress with different ABS media ID (simulates the ABS schema inconsistency)
+	// Progress uses a different mediaItemId but still maps to the same ListenUp book
+	progress := &domain.ABSImportProgress{
+		ImportID:    "import_123",
+		ABSUserID:   "user-1",
+		ABSMediaID:  "abs-media-id-1", // Same as book mapping
+		CurrentTime: 12345,
+		Duration:    50000,
+		IsFinished:  true,
+	}
+	require.NoError(t, store.CreateABSImportProgress(ctx, progress))
+
+	// Test finding progress by ListenUp book ID (should work)
+	found, err := store.FindABSImportProgressByListenUpBook(ctx, "import_123", "user-1", "listenup-book-1")
+	require.NoError(t, err)
+	require.NotNil(t, found)
+	assert.Equal(t, "abs-media-id-1", found.ABSMediaID)
+	assert.True(t, found.IsFinished)
+
+	// Test finding progress for non-existent book (should return nil)
+	notFound, err := store.FindABSImportProgressByListenUpBook(ctx, "import_123", "user-1", "non-existent-book")
+	require.NoError(t, err)
+	assert.Nil(t, notFound)
+
+	// Test finding progress for non-existent user (should return nil)
+	notFound, err = store.FindABSImportProgressByListenUpBook(ctx, "import_123", "non-existent-user", "listenup-book-1")
+	require.NoError(t, err)
+	assert.Nil(t, notFound)
+}
+
+func TestFindABSImportProgressByListenUpBook_DifferentABSMediaIDs(t *testing.T) {
+	// This test simulates the real ABS schema issue where:
+	// - playbackSessions.mediaItemId = "session-media-id-A"
+	// - mediaProgresses.mediaItemId = "progress-media-id-B"
+	// Both refer to the same logical book, but have different UUIDs
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	imp := &domain.ABSImport{ID: "import_123", Status: domain.ABSImportStatusActive}
+	require.NoError(t, store.CreateABSImport(ctx, imp))
+
+	// Book is mapped using the session's media ID (from sessions)
+	book := &domain.ABSImportBook{
+		ImportID:   "import_123",
+		ABSMediaID: "session-media-id-A",
+		ListenUpID: strPtr("listenup-book-1"),
+	}
+	require.NoError(t, store.CreateABSImportBook(ctx, book))
+
+	// But progress is stored with a DIFFERENT ABS media ID (from mediaProgresses table)
+	progress := &domain.ABSImportProgress{
+		ImportID:    "import_123",
+		ABSUserID:   "user-1",
+		ABSMediaID:  "progress-media-id-B", // Different from book!
+		CurrentTime: 12345,
+		IsFinished:  true,
+	}
+	require.NoError(t, store.CreateABSImportProgress(ctx, progress))
+
+	// Create a second book mapping for the progress's media ID pointing to same ListenUp book
+	// (This simulates what happens when ABS has two entries for the same logical book)
+	book2 := &domain.ABSImportBook{
+		ImportID:   "import_123",
+		ABSMediaID: "progress-media-id-B",
+		ListenUpID: strPtr("listenup-book-1"),
+	}
+	require.NoError(t, store.CreateABSImportBook(ctx, book2))
+
+	// Now finding by ListenUp book ID should work
+	found, err := store.FindABSImportProgressByListenUpBook(ctx, "import_123", "user-1", "listenup-book-1")
+	require.NoError(t, err)
+	require.NotNil(t, found)
+	assert.Equal(t, "progress-media-id-B", found.ABSMediaID) // Found via the progress's media ID
+	assert.True(t, found.IsFinished)
+}
+
+func TestFindABSImportProgressByListenUpBook_DurationMatching(t *testing.T) {
+	// This test simulates the case where there's NO matching ABSMediaID at all
+	// between progress and book mappings, so we fall back to duration-based matching
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	imp := &domain.ABSImport{ID: "import_123", Status: domain.ABSImportStatusActive}
+	require.NoError(t, store.CreateABSImport(ctx, imp))
+
+	// Book mapping exists with a specific ABS media ID
+	book := &domain.ABSImportBook{
+		ImportID:      "import_123",
+		ABSMediaID:    "book-media-id-X",
+		ListenUpID:    strPtr("listenup-book-1"),
+		ABSDurationMs: 3600000, // 1 hour in milliseconds
+	}
+	require.NoError(t, store.CreateABSImportBook(ctx, book))
+
+	// Progress has a COMPLETELY DIFFERENT ABS media ID that doesn't match any book
+	// But it has a similar duration (within 5% tolerance)
+	progress := &domain.ABSImportProgress{
+		ImportID:    "import_123",
+		ABSUserID:   "user-1",
+		ABSMediaID:  "completely-different-progress-id", // No book mapping exists for this!
+		CurrentTime: 1800000,                            // 30 min
+		Duration:    3650000,                            // ~1 hour (within 5% of book duration)
+		IsFinished:  true,
+	}
+	require.NoError(t, store.CreateABSImportProgress(ctx, progress))
+
+	// Should find the progress via duration matching (Strategy 3)
+	found, err := store.FindABSImportProgressByListenUpBook(ctx, "import_123", "user-1", "listenup-book-1")
+	require.NoError(t, err)
+	require.NotNil(t, found)
+	assert.Equal(t, "completely-different-progress-id", found.ABSMediaID)
+	assert.True(t, found.IsFinished)
+}
+
+func TestFindABSImportProgressByListenUpBook_DurationMismatch(t *testing.T) {
+	// Test that duration matching doesn't match books with very different durations
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	imp := &domain.ABSImport{ID: "import_123", Status: domain.ABSImportStatusActive}
+	require.NoError(t, store.CreateABSImport(ctx, imp))
+
+	// Book mapping with 1 hour duration
+	book := &domain.ABSImportBook{
+		ImportID:      "import_123",
+		ABSMediaID:    "book-media-id-X",
+		ListenUpID:    strPtr("listenup-book-1"),
+		ABSDurationMs: 3600000, // 1 hour
+	}
+	require.NoError(t, store.CreateABSImportBook(ctx, book))
+
+	// Progress with very different duration (10 hours - not within 5%)
+	progress := &domain.ABSImportProgress{
+		ImportID:    "import_123",
+		ABSUserID:   "user-1",
+		ABSMediaID:  "different-progress-id",
+		CurrentTime: 1000000,
+		Duration:    36000000, // 10 hours - way different!
+		IsFinished:  true,
+	}
+	require.NoError(t, store.CreateABSImportProgress(ctx, progress))
+
+	// Should NOT find a match because duration is too different
+	found, err := store.FindABSImportProgressByListenUpBook(ctx, "import_123", "user-1", "listenup-book-1")
+	require.NoError(t, err)
+	assert.Nil(t, found) // No match expected
+}
+
 // --- Helper ---
 
 func strPtr(s string) *string {

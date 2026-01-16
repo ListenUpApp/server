@@ -5,6 +5,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
@@ -692,13 +693,68 @@ func (s *Store) RecalculateSessionStatuses(ctx context.Context, importID string)
 		bookMapped[b.ABSMediaID] = b.IsMapped()
 	}
 
+	// DIAGNOSTIC: Log book ABSMediaIDs for debugging
+	if s.logger != nil {
+		s.logger.Info("RecalculateSessionStatuses: book mapping summary",
+			slog.Int("total_books", len(books)),
+			slog.Int("mapped_books", len(bookMapped)),
+		)
+		bookSample := make([]string, 0, 5)
+		for absMediaID := range bookMapped {
+			bookSample = append(bookSample, absMediaID)
+			if len(bookSample) >= 5 {
+				break
+			}
+		}
+		s.logger.Debug("RecalculateSessionStatuses: sample book ABSMediaIDs", slog.Any("sample", bookSample))
+	}
+
 	// Get all sessions (excluding already imported/skipped)
 	sessions, err := s.ListABSImportSessions(ctx, importID, domain.SessionFilterAll)
 	if err != nil {
 		return fmt.Errorf("list sessions: %w", err)
 	}
 
+	// DIAGNOSTIC: Collect unique session ABSMediaIDs and check for mismatches
+	sessionMediaIDs := make(map[string]int)
+	unmatchedMediaIDs := make(map[string]int)
+	for _, session := range sessions {
+		sessionMediaIDs[session.ABSMediaID]++
+		if _, found := bookMapped[session.ABSMediaID]; !found {
+			unmatchedMediaIDs[session.ABSMediaID]++
+		}
+	}
+	if s.logger != nil {
+		s.logger.Info("RecalculateSessionStatuses: session ABSMediaID analysis",
+			slog.Int("total_sessions", len(sessions)),
+			slog.Int("unique_session_media_ids", len(sessionMediaIDs)),
+			slog.Int("unmatched_media_ids", len(unmatchedMediaIDs)),
+		)
+		if len(unmatchedMediaIDs) > 0 {
+			unmatchedSample := make([]string, 0, 5)
+			for mediaID := range unmatchedMediaIDs {
+				unmatchedSample = append(unmatchedSample, mediaID)
+				if len(unmatchedSample) >= 5 {
+					break
+				}
+			}
+			s.logger.Warn("RecalculateSessionStatuses: session ABSMediaIDs not found in book mappings - THIS IS THE CAUSE OF IMPORT FAILURES",
+				slog.Any("unmatched_sample", unmatchedSample),
+				slog.Int("sessions_affected", func() int {
+					total := 0
+					for _, count := range unmatchedMediaIDs {
+						total += count
+					}
+					return total
+				}()),
+			)
+		}
+	}
+
 	// Update each session's status
+	readyCount := 0
+	pendingUserCount := 0
+	pendingBookCount := 0
 	for _, session := range sessions {
 		// Skip already final states
 		if session.Status == domain.SessionStatusImported || session.Status == domain.SessionStatusSkipped {
@@ -712,10 +768,13 @@ func (s *Store) RecalculateSessionStatuses(ctx context.Context, importID string)
 		switch {
 		case userOK && bookOK:
 			newStatus = domain.SessionStatusReady
+			readyCount++
 		case !userOK:
 			newStatus = domain.SessionStatusPendingUser
+			pendingUserCount++
 		default:
 			newStatus = domain.SessionStatusPendingBook
+			pendingBookCount++
 		}
 
 		if session.Status != newStatus {
@@ -723,6 +782,14 @@ func (s *Store) RecalculateSessionStatuses(ctx context.Context, importID string)
 				return fmt.Errorf("update session %s: %w", session.ABSSessionID, err)
 			}
 		}
+	}
+
+	if s.logger != nil {
+		s.logger.Info("RecalculateSessionStatuses: status update summary",
+			slog.Int("ready", readyCount),
+			slog.Int("pending_user", pendingUserCount),
+			slog.Int("pending_book", pendingBookCount),
+		)
 	}
 
 	return nil
@@ -773,6 +840,196 @@ func (s *Store) GetABSImportStats(ctx context.Context, importID string) (mapped,
 	return usersMapped + booksMapped, (len(users) - usersMapped) + (len(books) - booksMapped), sessionsReady, sessionsImported, nil
 }
 
+// --- ABSImportProgress CRUD ---
+
+// CreateABSImportProgress creates a new ABS import progress entry.
+func (s *Store) CreateABSImportProgress(_ context.Context, progress *domain.ABSImportProgress) error {
+	key := s.absImportProgressKey(progress.ImportID, progress.ABSUserID, progress.ABSMediaID)
+
+	return s.db.Update(func(txn *badger.Txn) error {
+		data, err := json.Marshal(progress)
+		if err != nil {
+			return fmt.Errorf("marshal import progress: %w", err)
+		}
+
+		return txn.Set(key, data)
+	})
+}
+
+// GetABSImportProgress retrieves an ABS import progress entry.
+func (s *Store) GetABSImportProgress(_ context.Context, importID, absUserID, absMediaID string) (*domain.ABSImportProgress, error) {
+	key := s.absImportProgressKey(importID, absUserID, absMediaID)
+
+	var progress domain.ABSImportProgress
+	if err := s.get(key, &progress); err != nil {
+		if errors.Is(err, badger.ErrKeyNotFound) {
+			return nil, nil // Not found is OK - not all books have progress
+		}
+		return nil, fmt.Errorf("get import progress: %w", err)
+	}
+
+	return &progress, nil
+}
+
+// ListABSImportProgressForUser lists all progress entries for a user in an import.
+// This allows iteration over stored progress rather than relying on book mappings.
+func (s *Store) ListABSImportProgressForUser(_ context.Context, importID, absUserID string) ([]*domain.ABSImportProgress, error) {
+	prefix := []byte(absImportProgressPrefix + importID + ":" + absUserID + ":")
+
+	var results []*domain.ABSImportProgress
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = prefix
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+			// IMPORTANT: Allocate on heap to avoid pointer aliasing.
+			progress := new(domain.ABSImportProgress)
+			if err := item.Value(func(val []byte) error {
+				return json.Unmarshal(val, progress)
+			}); err != nil {
+				return err
+			}
+			results = append(results, progress)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list import progress for user: %w", err)
+	}
+
+	return results, nil
+}
+
+// FindABSImportProgressByListenUpBook finds an ABSImportProgress entry that maps to a specific ListenUp book.
+// This is needed because ABS playbackSessions.mediaItemId and mediaProgresses.mediaItemId can contain
+// different UUIDs for the same logical book.
+//
+// The function uses two strategies:
+// 1. Direct lookup: Check if progress.ABSMediaID has a book mapping to the target ListenUp book
+// 2. Reverse lookup: Find all ABSImportBook entries that map to the target ListenUp book,
+//    then check if any progress entry matches those ABS media IDs
+//
+// Strategy 2 is important because the progress might be stored with a different ABSMediaID
+// than the book mapping uses (due to ABS internal ID inconsistencies).
+func (s *Store) FindABSImportProgressByListenUpBook(ctx context.Context, importID, absUserID, listenUpBookID string) (*domain.ABSImportProgress, error) {
+	// Get all progress entries for this user
+	allProgress, err := s.ListABSImportProgressForUser(ctx, importID, absUserID)
+	if err != nil {
+		return nil, fmt.Errorf("list progress for user: %w", err)
+	}
+
+	slog.Info("FindABSImportProgressByListenUpBook: searching",
+		slog.String("import_id", importID),
+		slog.String("abs_user_id", absUserID),
+		slog.String("listenup_book_id", listenUpBookID),
+		slog.Int("progress_count", len(allProgress)))
+
+	if len(allProgress) == 0 {
+		slog.Warn("FindABSImportProgressByListenUpBook: no progress entries for user",
+			slog.String("abs_user_id", absUserID))
+		return nil, nil
+	}
+
+	// Log all progress entries for this user
+	for i, p := range allProgress {
+		slog.Info("FindABSImportProgressByListenUpBook: progress entry",
+			slog.Int("index", i),
+			slog.String("abs_media_id", p.ABSMediaID),
+			slog.Bool("is_finished", p.IsFinished),
+			slog.Int64("duration_ms", p.Duration),
+			slog.Int64("current_time_ms", p.CurrentTime))
+	}
+
+	// Strategy 1: Direct lookup - check if progress.ABSMediaID maps to the target book
+	slog.Info("FindABSImportProgressByListenUpBook: trying Strategy 1 (direct lookup)")
+	for _, progress := range allProgress {
+		book, err := s.GetABSImportBook(ctx, importID, progress.ABSMediaID)
+		if err != nil {
+			slog.Info("FindABSImportProgressByListenUpBook: no book found for progress ABSMediaID",
+				slog.String("abs_media_id", progress.ABSMediaID),
+				slog.Bool("progress_is_finished", progress.IsFinished),
+				slog.String("error", err.Error()))
+			continue
+		}
+		if book == nil {
+			slog.Warn("FindABSImportProgressByListenUpBook: book is nil",
+				slog.String("abs_media_id", progress.ABSMediaID))
+			continue
+		}
+		slog.Info("FindABSImportProgressByListenUpBook: checking book mapping",
+			slog.String("abs_media_id", progress.ABSMediaID),
+			slog.String("book_title", book.ABSTitle),
+			slog.Bool("has_listenup_id", book.ListenUpID != nil),
+			slog.Bool("progress_is_finished", progress.IsFinished))
+		if book.ListenUpID != nil {
+			slog.Info("FindABSImportProgressByListenUpBook: book has ListenUpID",
+				slog.String("abs_media_id", progress.ABSMediaID),
+				slog.String("book_listenup_id", *book.ListenUpID),
+				slog.String("target_listenup_id", listenUpBookID),
+				slog.Bool("match", *book.ListenUpID == listenUpBookID))
+			if *book.ListenUpID == listenUpBookID {
+				slog.Info("FindABSImportProgressByListenUpBook: FOUND via Strategy 1",
+					slog.String("abs_media_id", progress.ABSMediaID),
+					slog.Bool("is_finished", progress.IsFinished))
+				return progress, nil
+			}
+		}
+	}
+
+	// Strategy 2: Reverse lookup - find all book mappings to the target ListenUp book
+	// then see if any progress entry shares similar characteristics
+	slog.Info("FindABSImportProgressByListenUpBook: trying Strategy 2 (reverse lookup)")
+	allBooks, err := s.ListABSImportBooks(ctx, importID, domain.MappingFilterMapped)
+	if err != nil {
+		return nil, fmt.Errorf("list import books: %w", err)
+	}
+
+	// Build a set of ABSMediaIDs that map to the target ListenUp book
+	absMediaIDsForBook := make(map[string]bool)
+	for _, book := range allBooks {
+		if book.ListenUpID != nil && *book.ListenUpID == listenUpBookID {
+			absMediaIDsForBook[book.ABSMediaID] = true
+			slog.Info("FindABSImportProgressByListenUpBook: found book mapping to target",
+				slog.String("abs_media_id", book.ABSMediaID),
+				slog.String("listenup_id", *book.ListenUpID))
+		}
+	}
+
+	slog.Info("FindABSImportProgressByListenUpBook: Strategy 2 found book mappings",
+		slog.Int("count", len(absMediaIDsForBook)))
+
+	// Check if any progress entry's ABSMediaID is in our set
+	for _, progress := range allProgress {
+		if absMediaIDsForBook[progress.ABSMediaID] {
+			slog.Info("FindABSImportProgressByListenUpBook: FOUND via Strategy 2",
+				slog.String("abs_media_id", progress.ABSMediaID),
+				slog.Bool("is_finished", progress.IsFinished))
+			return progress, nil
+		}
+	}
+
+	// Strategy 3 (duration matching) was removed because it caused incorrect matches.
+	// When book UUIDs differ between ABS book entries and progress entries, duration
+	// matching could match completely unrelated books with similar durations.
+	// It's better to not match than to match incorrectly.
+
+	slog.Warn("FindABSImportProgressByListenUpBook: could not match ABS progress - skipping",
+		slog.String("listenup_book_id", listenUpBookID),
+		slog.Int("book_mappings_checked", len(absMediaIDsForBook)),
+		slog.Int("progress_entries_checked", len(allProgress)))
+	return nil, nil // Not found - Strategies 1 and 2 both failed
+}
+
+func abs(x int64) int64 {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
 // --- Key builders ---
 
 func (s *Store) absImportKey(id string) []byte {
@@ -805,6 +1062,10 @@ func (s *Store) absImportSessionKey(importID, sessionID string) []byte {
 
 func (s *Store) absImportSessionStatusKey(importID string, status domain.SessionImportStatus, sessionID string) []byte {
 	return []byte(absImportSessionByStatusPrefix + importID + ":" + string(status) + ":" + sessionID)
+}
+
+func (s *Store) absImportProgressKey(importID, absUserID, absMediaID string) []byte {
+	return []byte(absImportProgressPrefix + importID + ":" + absUserID + ":" + absMediaID)
 }
 
 // --- Helper functions ---

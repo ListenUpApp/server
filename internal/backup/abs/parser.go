@@ -307,28 +307,52 @@ func parseSeries(db *sql.DB, backup *Backup) error {
 }
 
 func parseSessions(db *sql.DB, backup *Backup) error {
-	// Note: playbackSessions uses mediaItemId which references books.id
-	// We store this in LibraryItemID for consistency with our matching logic
-	// (we match using libraryItems.mediaId which also references books.id)
+	// DEBUG: Log the actual schema to verify column names
+	schemaRows, err := db.Query(`PRAGMA table_info(playbackSessions)`)
+	if err == nil {
+		defer schemaRows.Close()
+		slog.Debug("playbackSessions schema:")
+		for schemaRows.Next() {
+			var cid int
+			var name, colType string
+			var notNull, pk int
+			var dflt any
+			if err := schemaRows.Scan(&cid, &name, &colType, &notNull, &dflt, &pk); err == nil {
+				slog.Debug("column", slog.Int("cid", cid), slog.String("name", name), slog.String("type", colType))
+			}
+		}
+	}
+
+	// IMPORTANT: playbackSessions.mediaItemId can contain EITHER:
+	// - books.id directly (older ABS versions), OR
+	// - libraryItems.id (row UUID that needs to be resolved to books.id)
+	//
+	// We JOIN through libraryItems to handle both cases consistently:
+	// - If mediaItemId = libraryItems.id → gets li.mediaId (the books.id reference)
+	// - If mediaItemId = books.id directly → li.mediaId will be NULL, so we fall back to mediaItemId
+	//
+	// This is the same resolution logic used in parseMediaProgress to ensure
+	// both sessions and progress use the same ID format (books.id).
 	query := `
 		SELECT
-			id,
-			COALESCE(userId, ''),
-			COALESCE(libraryId, ''),
-			COALESCE(mediaItemId, ''),
-			COALESCE(mediaItemType, 'book'),
-			COALESCE(displayTitle, ''),
-			COALESCE(displayAuthor, ''),
-			COALESCE(duration, 0),
-			COALESCE(timeListening, 0),
-			COALESCE(startTime, 0),
-			COALESCE(currentTime, 0),
-			COALESCE(date, ''),
-			COALESCE(dayOfWeek, ''),
-			COALESCE(strftime('%s', createdAt) * 1000, 0),
-			COALESCE(strftime('%s', updatedAt) * 1000, 0)
-		FROM playbackSessions
-		WHERE mediaItemType = 'book' OR mediaItemType IS NULL
+			ps.id,
+			COALESCE(ps.userId, ''),
+			COALESCE(ps.libraryId, ''),
+			COALESCE(li.mediaId, ps.mediaItemId, ''),
+			COALESCE(ps.mediaItemType, 'book'),
+			COALESCE(ps.displayTitle, ''),
+			COALESCE(ps.displayAuthor, ''),
+			COALESCE(ps.duration, 0),
+			COALESCE(ps.timeListening, 0),
+			COALESCE(ps.startTime, 0),
+			COALESCE(ps.currentTime, 0),
+			COALESCE(ps.date, ''),
+			COALESCE(ps.dayOfWeek, ''),
+			COALESCE(strftime('%s', ps.createdAt) * 1000, 0),
+			COALESCE(strftime('%s', ps.updatedAt) * 1000, 0)
+		FROM playbackSessions ps
+		LEFT JOIN libraryItems li ON ps.mediaItemId = li.id
+		WHERE ps.mediaItemType = 'book' OR ps.mediaItemType IS NULL
 	`
 
 	rows, err := db.Query(query)
@@ -337,6 +361,7 @@ func parseSessions(db *sql.DB, backup *Backup) error {
 	}
 	defer rows.Close()
 
+	sessionCount := 0
 	for rows.Next() {
 		var s Session
 		err := rows.Scan(
@@ -360,34 +385,115 @@ func parseSessions(db *sql.DB, backup *Backup) error {
 			return err
 		}
 
+		// DEBUG: Log first 5 sessions to trace position values
+		if sessionCount < 5 {
+			slog.Debug("parsed ABS session from SQLite",
+				slog.String("id", s.ID),
+				slog.String("title", s.DisplayTitle),
+				slog.Float64("startTime_sec", s.StartTime),
+				slog.Float64("currentTime_sec", s.CurrentTime),
+				slog.Int64("startPos_ms", s.StartPositionMs()),
+				slog.Int64("endPos_ms", s.EndPositionMs()),
+			)
+		}
+		sessionCount++
+
 		if s.MediaType == "" {
 			s.MediaType = "book"
 		}
 
 		backup.Sessions = append(backup.Sessions, s)
 	}
+
+	// DEBUG: Summarize position distribution
+	uniquePositions := make(map[int64]int)
+	for _, s := range backup.Sessions {
+		uniquePositions[s.EndPositionMs()]++
+	}
+	slog.Info("ABS session position summary",
+		slog.Int("total_sessions", len(backup.Sessions)),
+		slog.Int("unique_end_positions", len(uniquePositions)),
+	)
+	// Log the top 5 most common positions
+	if len(uniquePositions) > 0 && len(uniquePositions) <= 5 {
+		for pos, count := range uniquePositions {
+			slog.Debug("position frequency", slog.Int64("end_position_ms", pos), slog.Int("count", count))
+		}
+	}
+
 	return rows.Err()
 }
 
 func parseMediaProgress(db *sql.DB, backup *Backup) error {
-	// Note: mediaProgresses uses mediaItemId which references books.id
-	// We store this in LibraryItemID for consistency with our matching logic
-	query := `
-		SELECT
-			id,
-			userId,
-			COALESCE(mediaItemId, ''),
-			COALESCE(mediaItemType, 'book'),
-			COALESCE(duration, 0),
-			COALESCE(currentTime, 0),
-			COALESCE(isFinished, 0),
-			COALESCE(hideFromContinueListening, 0),
-			COALESCE(strftime('%s', updatedAt) * 1000, 0),
-			COALESCE(strftime('%s', createdAt) * 1000, 0),
-			COALESCE(strftime('%s', finishedAt) * 1000, 0)
-		FROM mediaProgresses
-		WHERE mediaItemType = 'book' OR mediaItemType IS NULL
-	`
+	// Detect schema version by checking for libraryItemId column.
+	// Newer ABS versions (2.17+) removed libraryItemId from mediaProgresses
+	// since mediaItemId now directly references the book/media item.
+	hasLibraryItemID := false
+	schemaRows, err := db.Query(`PRAGMA table_info(mediaProgresses)`)
+	if err == nil {
+		defer schemaRows.Close()
+		for schemaRows.Next() {
+			var cid int
+			var name, colType string
+			var notNull, pk int
+			var dflt any
+			if err := schemaRows.Scan(&cid, &name, &colType, &notNull, &dflt, &pk); err == nil {
+				slog.Debug("mediaProgresses column", slog.String("name", name), slog.String("type", colType))
+				if name == "libraryItemId" {
+					hasLibraryItemID = true
+				}
+			}
+		}
+	}
+
+	// Build query based on schema version.
+	// - Old schema: libraryItemId exists, may need JOIN to get mediaId
+	// - New schema: mediaItemId directly references the book
+	var query string
+	if hasLibraryItemID {
+		slog.Debug("using legacy ABS schema with libraryItemId JOIN")
+		query = `
+			SELECT
+				mp.id,
+				mp.userId,
+				COALESCE(mp.mediaItemId, li.mediaId, ''),
+				COALESCE(mp.mediaItemType, 'book'),
+				COALESCE(mp.duration, 0),
+				COALESCE(mp.currentTime, 0),
+				COALESCE(mp.isFinished, 0),
+				COALESCE(mp.hideFromContinueListening, 0),
+				COALESCE(strftime('%s', mp.updatedAt) * 1000, 0),
+				COALESCE(strftime('%s', mp.createdAt) * 1000, 0),
+				COALESCE(strftime('%s', mp.finishedAt) * 1000, 0)
+			FROM mediaProgresses mp
+			LEFT JOIN libraryItems li ON mp.libraryItemId = li.id
+			WHERE mp.mediaItemType = 'book' OR mp.mediaItemType IS NULL
+		`
+	} else {
+		slog.Debug("using modern ABS schema (mediaItemId only)")
+		// IMPORTANT: Even in "modern" ABS, mediaItemId might contain libraryItems.id
+		// instead of books.id (mediaId). We JOIN through libraryItems to resolve this.
+		// The JOIN handles both cases:
+		// - If mediaItemId = libraryItems.id → gets li.mediaId (the books.id reference)
+		// - If mediaItemId = books.id directly → li.mediaId will be NULL, so we use mediaItemId
+		query = `
+			SELECT
+				mp.id,
+				mp.userId,
+				COALESCE(li.mediaId, mp.mediaItemId, ''),
+				COALESCE(mp.mediaItemType, 'book'),
+				COALESCE(mp.duration, 0),
+				COALESCE(mp.currentTime, 0),
+				COALESCE(mp.isFinished, 0),
+				COALESCE(mp.hideFromContinueListening, 0),
+				COALESCE(strftime('%s', mp.updatedAt) * 1000, 0),
+				COALESCE(strftime('%s', mp.createdAt) * 1000, 0),
+				COALESCE(strftime('%s', mp.finishedAt) * 1000, 0)
+			FROM mediaProgresses mp
+			LEFT JOIN libraryItems li ON mp.mediaItemId = li.id
+			WHERE mp.mediaItemType = 'book' OR mp.mediaItemType IS NULL
+		`
+	}
 
 	rows, err := db.Query(query)
 	if err != nil {
@@ -436,6 +542,30 @@ func parseMediaProgress(db *sql.DB, backup *Backup) error {
 
 	if err := rows.Err(); err != nil {
 		return err
+	}
+
+	// DEBUG: Summarize mediaProgress positions
+	totalProgress := 0
+	uniquePositions := make(map[int64]int)
+	for _, progList := range progressMap {
+		for _, p := range progList {
+			totalProgress++
+			posMs := int64(p.CurrentTime * 1000)
+			uniquePositions[posMs]++
+		}
+	}
+	slog.Info("ABS mediaProgress summary",
+		slog.Int("total_entries", totalProgress),
+		slog.Int("unique_positions", len(uniquePositions)),
+	)
+	// Log first 5 unique positions
+	count := 0
+	for pos, freq := range uniquePositions {
+		if count >= 5 {
+			break
+		}
+		slog.Debug("mediaProgress position", slog.Int64("position_ms", pos), slog.Int("frequency", freq))
+		count++
 	}
 
 	// Attach progress to users
