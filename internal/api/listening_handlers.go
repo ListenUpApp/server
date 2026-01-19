@@ -53,6 +53,36 @@ func (s *Server) registerListeningRoutes() {
 	}, s.handleResetProgress)
 
 	huma.Register(s.api, huma.Operation{
+		OperationID: "markComplete",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/books/{id}/progress/complete",
+		Summary:     "Mark book as complete",
+		Description: "Marks a book as finished regardless of current position",
+		Tags:        []string{"Listening"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleMarkComplete)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "discardProgress",
+		Method:      http.MethodDelete,
+		Path:        "/api/v1/books/{id}/progress/discard",
+		Summary:     "Discard book progress",
+		Description: "Removes playback progress for a book (DNF / start over)",
+		Tags:        []string{"Listening"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleDiscardProgress)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "restartBook",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/books/{id}/progress/restart",
+		Summary:     "Restart book",
+		Description: "Resets a book to listen again from the beginning",
+		Tags:        []string{"Listening"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleRestartBook)
+
+	huma.Register(s.api, huma.Operation{
 		OperationID: "getContinueListening",
 		Method:      http.MethodGet,
 		Path:        "/api/v1/listening/continue",
@@ -117,6 +147,7 @@ type BatchListeningEventItem struct {
 	EndedAtMs       int64   `json:"ended_at" validate:"required" doc:"When playback ended (epoch ms)"`
 	PlaybackSpeed   float32 `json:"playback_speed" validate:"gt=0,lte=4" doc:"Playback speed"`
 	DeviceID        string  `json:"device_id" validate:"required,max=100" doc:"Device ID"`
+	Source          string  `json:"source,omitempty" doc:"Event source: playback, import, or manual (default: playback)"`
 }
 
 // BatchListeningEventsRequest is the request body for submitting multiple listening events.
@@ -154,6 +185,7 @@ type ListeningEventResponse struct {
 	EndedAt         time.Time `json:"ended_at" doc:"Ended at"`
 	PlaybackSpeed   float32   `json:"playback_speed" doc:"Playback speed"`
 	DeviceID        string    `json:"device_id" doc:"Device ID"`
+	Source          string    `json:"source" doc:"Event source: playback, import, or manual"`
 }
 
 // ProgressResponse contains playback progress data.
@@ -185,6 +217,58 @@ type ProgressOutput struct {
 type ResetProgressInput struct {
 	Authorization string `header:"Authorization"`
 	ID            string `path:"id" doc:"Book ID"`
+}
+
+// MarkCompleteRequest contains the request body for marking a book complete.
+type MarkCompleteRequest struct {
+	FinishedAt *string `json:"finished_at,omitempty" doc:"When finished (ISO 8601). Defaults to now."`
+}
+
+// MarkCompleteInput contains parameters for marking a book complete.
+type MarkCompleteInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Book ID"`
+	Body          MarkCompleteRequest
+}
+
+// MarkCompleteResponse contains the updated progress after marking complete.
+type MarkCompleteResponse struct {
+	BookID            string  `json:"book_id" doc:"Book ID"`
+	IsFinished        bool    `json:"is_finished" doc:"Whether finished"`
+	FinishedAt        *string `json:"finished_at,omitempty" doc:"When finished (ISO 8601)"`
+	CurrentPositionMs int64   `json:"current_position_ms" doc:"Current position in ms"`
+	UpdatedAt         string  `json:"updated_at" doc:"Last update (ISO 8601)"`
+}
+
+// MarkCompleteOutput wraps the mark complete response for Huma.
+type MarkCompleteOutput struct {
+	Body MarkCompleteResponse
+}
+
+// DiscardProgressInput contains parameters for discarding book progress.
+type DiscardProgressInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Book ID"`
+	KeepHistory   bool   `query:"keep_history" default:"true" doc:"Keep listening history (default true)"`
+}
+
+// RestartBookInput contains parameters for restarting a book.
+type RestartBookInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Book ID"`
+}
+
+// RestartBookResponse contains the updated progress after restarting.
+type RestartBookResponse struct {
+	BookID            string `json:"book_id" doc:"Book ID"`
+	IsFinished        bool   `json:"is_finished" doc:"Whether finished (always false)"`
+	CurrentPositionMs int64  `json:"current_position_ms" doc:"Current position in ms (always 0)"`
+	UpdatedAt         string `json:"updated_at" doc:"Last update (ISO 8601)"`
+}
+
+// RestartBookOutput wraps the restart book response for Huma.
+type RestartBookOutput struct {
+	Body RestartBookResponse
 }
 
 // GetContinueListeningInput contains parameters for getting continue listening items.
@@ -368,6 +452,7 @@ func (s *Server) handleRecordListeningEvent(ctx context.Context, input *RecordLi
 			EndedAt:         time.UnixMilli(event.EndedAtMs),
 			PlaybackSpeed:   event.PlaybackSpeed,
 			DeviceID:        event.DeviceID,
+			Source:          event.Source,
 		})
 		if err != nil {
 			// Log but don't fail the whole batch
@@ -408,7 +493,7 @@ func (s *Server) handleGetProgress(ctx context.Context, input *GetProgressInput)
 			BookID:            progress.BookID,
 			CurrentPositionMs: progress.CurrentPositionMs,
 			TotalDurationMs:   book.TotalDuration,
-			Progress:          progress.Progress,
+			Progress:          progress.ComputeProgress(book.TotalDuration),
 			TotalListenTimeMs: progress.TotalListenTimeMs,
 			StartedAt:         progress.StartedAt,
 			LastPlayedAt:      progress.LastPlayedAt,
@@ -429,6 +514,79 @@ func (s *Server) handleResetProgress(ctx context.Context, input *ResetProgressIn
 	}
 
 	return &MessageOutput{Body: MessageResponse{Message: "Progress reset"}}, nil
+}
+
+func (s *Server) handleMarkComplete(ctx context.Context, input *MarkCompleteInput) (*MarkCompleteOutput, error) {
+	userID, err := GetUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse optional finished_at timestamp
+	var finishedAt *time.Time
+	if input.Body.FinishedAt != nil && *input.Body.FinishedAt != "" {
+		parsed, err := time.Parse(time.RFC3339, *input.Body.FinishedAt)
+		if err != nil {
+			return nil, huma.Error400BadRequest("invalid finished_at format, expected RFC3339")
+		}
+		finishedAt = &parsed
+	}
+
+	state, err := s.services.Listening.MarkComplete(ctx, userID, input.ID, finishedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	// Format response
+	var finishedAtStr *string
+	if state.FinishedAt != nil {
+		formatted := state.FinishedAt.Format(time.RFC3339)
+		finishedAtStr = &formatted
+	}
+
+	return &MarkCompleteOutput{
+		Body: MarkCompleteResponse{
+			BookID:            state.BookID,
+			IsFinished:        state.IsFinished,
+			FinishedAt:        finishedAtStr,
+			CurrentPositionMs: state.CurrentPositionMs,
+			UpdatedAt:         state.UpdatedAt.Format(time.RFC3339),
+		},
+	}, nil
+}
+
+func (s *Server) handleDiscardProgress(ctx context.Context, input *DiscardProgressInput) (*MessageOutput, error) {
+	userID, err := GetUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.services.Listening.DiscardProgress(ctx, userID, input.ID, input.KeepHistory); err != nil {
+		return nil, err
+	}
+
+	return &MessageOutput{Body: MessageResponse{Message: "Progress discarded"}}, nil
+}
+
+func (s *Server) handleRestartBook(ctx context.Context, input *RestartBookInput) (*RestartBookOutput, error) {
+	userID, err := GetUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	state, err := s.services.Listening.RestartBook(ctx, userID, input.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &RestartBookOutput{
+		Body: RestartBookResponse{
+			BookID:            state.BookID,
+			IsFinished:        state.IsFinished,
+			CurrentPositionMs: state.CurrentPositionMs,
+			UpdatedAt:         state.UpdatedAt.Format(time.RFC3339),
+		},
+	}, nil
 }
 
 func (s *Server) handleGetContinueListening(ctx context.Context, input *GetContinueListeningInput) (*ContinueListeningOutput, error) {
@@ -482,9 +640,9 @@ func (s *Server) handleGetAllProgress(ctx context.Context, input *GetAllProgress
 		return nil, err
 	}
 
-	slog.Info("fetching all progress for sync", "user_id", userID)
+	slog.Info("fetching all state for sync", "user_id", userID)
 
-	progressRecords, err := s.store.GetProgressForUser(ctx, userID)
+	progressRecords, err := s.store.GetStateForUser(ctx, userID)
 	if err != nil {
 		slog.Error("get all progress failed", "error", err)
 		return nil, err
@@ -629,6 +787,7 @@ func (s *Server) handleGetListeningEvents(ctx context.Context, input *GetListeni
 			EndedAt:         e.EndedAt,
 			PlaybackSpeed:   e.PlaybackSpeed,
 			DeviceID:        e.DeviceID,
+			Source:          e.Source,
 		}
 	}
 

@@ -1261,14 +1261,20 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 				continue // Already handled via sessions
 			}
 
-			// Only create if no existing progress
-			existingProgress, _ := s.store.GetProgress(ctx, listenUpUserID, listenUpBookID)
+			// Only create if no existing state
+			existingProgress, _ := s.store.GetState(ctx, listenUpUserID, listenUpBookID)
 			if existingProgress != nil {
+				// Get book duration for logging
+				existingBook, _ := s.store.GetBookNoAccessCheck(ctx, listenUpBookID)
+				existingDuration := int64(0)
+				if existingBook != nil {
+					existingDuration = existingBook.TotalDuration
+				}
 				s.logger.Debug("skipping - existing progress found",
 					slog.String("abs_media_id", absProgress.ABSMediaID),
 					slog.String("listenup_book_id", listenUpBookID),
 					slog.Bool("existing_is_finished", existingProgress.IsFinished),
-					slog.Float64("existing_progress_pct", existingProgress.Progress*100))
+					slog.Float64("existing_progress_pct", existingProgress.ComputeProgress(existingDuration)*100))
 				progressSkippedHasProgress++
 				continue // Already has progress
 			}
@@ -1286,7 +1292,7 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 				positionMs = int64(float64(bookDurationMs) * 0.98)
 			}
 
-			progress := &domain.PlaybackProgress{
+			progress := &domain.PlaybackState{
 				UserID:            listenUpUserID,
 				BookID:            listenUpBookID,
 				CurrentPositionMs: positionMs,
@@ -1296,15 +1302,12 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 				UpdatedAt:         time.Now(),
 				IsFinished:        absProgress.IsFinished,
 			}
-			if bookDurationMs > 0 {
-				progress.Progress = float64(positionMs) / float64(bookDurationMs)
-			}
 			if absProgress.IsFinished {
 				progress.FinishedAt = absProgress.FinishedAt
 			}
 
-			if err := s.store.UpsertProgress(ctx, progress); err != nil {
-				s.logger.Warn("failed to create progress from MediaProgress",
+			if err := s.store.UpsertState(ctx, progress); err != nil {
+				s.logger.Warn("failed to create state from MediaProgress",
 					slog.String("user_id", listenUpUserID),
 					slog.String("book_id", listenUpBookID),
 					slog.String("error", err.Error()))
@@ -1314,7 +1317,7 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 					slog.String("user_id", listenUpUserID),
 					slog.String("book_id", listenUpBookID),
 					slog.Bool("is_finished", progress.IsFinished),
-					slog.Float64("progress_pct", progress.Progress*100))
+					slog.Float64("progress_pct", progress.ComputeProgress(bookDurationMs)*100))
 			}
 		}
 	}
@@ -1616,14 +1619,14 @@ func (s *Server) rebuildProgressFromEvents(ctx context.Context, importID, userID
 		maxPositionMs = int64(float64(bookDurationMs) * 0.98)
 	}
 
-	// Get existing progress or create new
-	existingProgress, err := s.store.GetProgress(ctx, userID, bookID)
+	// Get existing state or create new
+	existingProgress, err := s.store.GetState(ctx, userID, bookID)
 	if err != nil && !errors.Is(err, store.ErrProgressNotFound) {
 		// Real error, not just "not found"
-		return false, fmt.Errorf("get progress: %w", err)
+		return false, fmt.Errorf("get state: %w", err)
 	}
 
-	var progress *domain.PlaybackProgress
+	var progress *domain.PlaybackState
 	needsSave := true
 	if existingProgress != nil {
 		// Update existing - only if we have newer data
@@ -1633,11 +1636,6 @@ func (s *Server) rebuildProgressFromEvents(ctx context.Context, importID, userID
 			progress.TotalListenTimeMs += totalListenTimeMs - existingProgress.TotalListenTimeMs // Add delta
 			progress.LastPlayedAt = latestEvent.EndedAt
 			progress.UpdatedAt = time.Now()
-
-			// Recalculate progress percentage
-			if bookDurationMs > 0 {
-				progress.Progress = float64(maxPositionMs) / float64(bookDurationMs)
-			}
 
 			// Check completion (but we already clamped to avoid false positives)
 			if bookDurationMs > 0 && float64(progress.CurrentPositionMs) >= float64(bookDurationMs)*0.99 {
@@ -1654,7 +1652,7 @@ func (s *Server) rebuildProgressFromEvents(ctx context.Context, importID, userID
 		}
 	} else {
 		// Create new progress
-		progress = &domain.PlaybackProgress{
+		progress = &domain.PlaybackState{
 			UserID:            userID,
 			BookID:            bookID,
 			CurrentPositionMs: maxPositionMs,
@@ -1662,11 +1660,6 @@ func (s *Server) rebuildProgressFromEvents(ctx context.Context, importID, userID
 			LastPlayedAt:      latestEvent.EndedAt,
 			TotalListenTimeMs: totalListenTimeMs,
 			UpdatedAt:         time.Now(),
-		}
-
-		// Calculate progress percentage
-		if bookDurationMs > 0 {
-			progress.Progress = float64(maxPositionMs) / float64(bookDurationMs)
 		}
 
 		// Check completion
@@ -1690,7 +1683,7 @@ func (s *Server) rebuildProgressFromEvents(ctx context.Context, importID, userID
 		slog.String("import_id", importID),
 		slog.String("abs_user_id", absUserID),
 		slog.Bool("progress_is_finished", progress.IsFinished),
-		slog.Float64("progress_pct", progress.Progress*100))
+		slog.Float64("progress_pct", progress.ComputeProgress(bookDurationMs)*100))
 	if !progress.IsFinished && importID != "" && absUserID != "" {
 		absProgress, err := s.store.FindABSImportProgressByListenUpBook(ctx, importID, absUserID, bookID)
 		if err != nil {
@@ -1734,12 +1727,12 @@ func (s *Server) rebuildProgressFromEvents(ctx context.Context, importID, userID
 		return absProgressMatched, nil
 	}
 
-	if err := s.store.UpsertProgress(ctx, progress); err != nil {
-		return absProgressMatched, fmt.Errorf("upsert progress: %w", err)
+	if err := s.store.UpsertState(ctx, progress); err != nil {
+		return absProgressMatched, fmt.Errorf("upsert state: %w", err)
 	}
 
 	// VERIFY: Read back what was actually saved to confirm IsFinished persisted
-	savedProgress, verifyErr := s.store.GetProgress(ctx, userID, bookID)
+	savedProgress, verifyErr := s.store.GetState(ctx, userID, bookID)
 	if verifyErr != nil {
 		s.logger.Error("VERIFY FAILED: could not read back saved progress",
 			slog.String("user_id", userID),
@@ -1763,7 +1756,7 @@ func (s *Server) rebuildProgressFromEvents(ctx context.Context, importID, userID
 		slog.String("user_id", userID),
 		slog.String("book_id", bookID),
 		slog.Int64("position_ms", progress.CurrentPositionMs),
-		slog.Float64("progress", progress.Progress),
+		slog.Float64("progress", progress.ComputeProgress(bookDurationMs)),
 		slog.Bool("is_finished", progress.IsFinished))
 
 	return absProgressMatched, nil

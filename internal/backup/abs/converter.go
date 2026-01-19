@@ -59,6 +59,7 @@ func (c *Converter) SessionToEvent(
 		PlaybackSpeed:   1.0, // ABS doesn't store playback speed per session
 		DeviceID:        "abs-import",
 		DeviceName:      "Audiobookshelf Import",
+		Source:          domain.EventSourceImport,
 		DurationMs:      durationMs,
 		CreatedAt:       time.Now(),
 	}
@@ -101,6 +102,7 @@ func (c *Converter) ProgressToEvents(
 		PlaybackSpeed:   1.0,
 		DeviceID:        "abs-import-progress",
 		DeviceName:      "Audiobookshelf Progress Import",
+		Source:          domain.EventSourceImport,
 		DurationMs:      currentPositionMs, // Approximate
 		CreatedAt:       time.Now(),
 	}}

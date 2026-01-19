@@ -86,7 +86,7 @@ func TestRecordEvent_CreatesEventAndProgress(t *testing.T) {
 	assert.Equal(t, "user-456", resp.Progress.UserID)
 	assert.Equal(t, "book-123", resp.Progress.BookID)
 	assert.Equal(t, int64(1800000), resp.Progress.CurrentPositionMs)
-	assert.Equal(t, 0.5, resp.Progress.Progress)
+	assert.Equal(t, 0.5, resp.Progress.ComputeProgress(3600000)) // 30min / 60min
 	assert.False(t, resp.Progress.IsFinished)
 }
 
@@ -112,7 +112,7 @@ func TestRecordEvent_UpdatesExistingProgress(t *testing.T) {
 
 	resp1, err := svc.RecordEvent(ctx, "user-456", req1)
 	require.NoError(t, err)
-	assert.Equal(t, 0.5, resp1.Progress.Progress)
+	assert.Equal(t, 0.5, resp1.Progress.ComputeProgress(3600000))
 
 	// Second event - listen from 30 min to 45 min
 	req2 := RecordEventRequest{
@@ -127,7 +127,7 @@ func TestRecordEvent_UpdatesExistingProgress(t *testing.T) {
 
 	resp2, err := svc.RecordEvent(ctx, "user-456", req2)
 	require.NoError(t, err)
-	assert.Equal(t, 0.75, resp2.Progress.Progress)
+	assert.Equal(t, 0.75, resp2.Progress.ComputeProgress(3600000))
 	assert.Equal(t, int64(2700000), resp2.Progress.TotalListenTimeMs) // 30 + 15 min
 }
 
@@ -359,8 +359,8 @@ func TestABSImport_DirectEventCreation_RequiresProgressRebuild(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, events, 1, "Event was created")
 
-	// Verify NO progress exists yet
-	progress, err := testStore.GetProgress(ctx, "user-abs", "book-abs-1")
+	// Verify NO state exists yet
+	progress, err := testStore.GetState(ctx, "user-abs", "book-abs-1")
 	assert.Error(t, err, "No progress exists until rebuildProgressFromEvents is called")
 	assert.Nil(t, progress)
 
@@ -414,7 +414,7 @@ func TestABSImport_DurationMismatch_ViaRecordEvent(t *testing.T) {
 	// 35,910,000 / 36,000,000 = 99.75% >= 99% threshold → marked as finished
 	// This is why ABS import uses rebuildProgressFromEvents with clamping instead
 	expectedProgress := float64(absPositionMs) / float64(listenUpDurationMs) // 0.9975
-	assert.InDelta(t, expectedProgress, resp.Progress.Progress, 0.001)
+	assert.InDelta(t, expectedProgress, resp.Progress.ComputeProgress(listenUpDurationMs), 0.001)
 	assert.True(t, resp.Progress.IsFinished, "Book incorrectly marked as finished due to duration mismatch")
 
 	// Book won't appear in Continue Listening because it's "finished"

@@ -294,17 +294,25 @@ func (s *ReadingSessionService) AbandonSession(ctx context.Context, userID, book
 
 // abandonSessionInternal abandons a specific session instance.
 func (s *ReadingSessionService) abandonSessionInternal(ctx context.Context, session *domain.BookReadingSession) error {
-	// Get current progress from store
-	progress, err := s.store.GetProgress(ctx, session.UserID, session.BookID)
+	// Get book for duration (no access check - if user has a session, they had access)
+	// If book doesn't exist (e.g., deleted), we still want to abandon the session
+	var bookDurationMs int64
+	book, err := s.store.GetBookNoAccessCheck(ctx, session.BookID)
+	if err == nil && book != nil {
+		bookDurationMs = book.TotalDuration
+	}
+
+	// Get current state from store
+	progress, err := s.store.GetState(ctx, session.UserID, session.BookID)
 	if err != nil && !errors.Is(err, store.ErrProgressNotFound) {
-		return fmt.Errorf("get progress: %w", err)
+		return fmt.Errorf("get state: %w", err)
 	}
 
 	// Calculate final values
 	var finalProgress float64
 	var listenTimeMs int64
 	if progress != nil {
-		finalProgress = progress.Progress
+		finalProgress = progress.ComputeProgress(bookDurationMs)
 		listenTimeMs = progress.TotalListenTimeMs
 	}
 

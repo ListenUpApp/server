@@ -162,8 +162,8 @@ func (s *Store) deleteByPrefix(ctx context.Context, prefix string) error {
 }
 
 // SaveProgress saves or updates playback progress.
-func (s *Store) SaveProgress(ctx context.Context, progress *domain.PlaybackProgress) error {
-	key := progressPrefix + domain.ProgressID(progress.UserID, progress.BookID)
+func (s *Store) SaveProgress(ctx context.Context, progress *domain.PlaybackState) error {
+	key := progressPrefix + domain.StateID(progress.UserID, progress.BookID)
 	return s.set([]byte(key), progress)
 }
 

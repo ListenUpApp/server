@@ -70,12 +70,13 @@ type RecordEventRequest struct {
 	PlaybackSpeed   float32   `json:"playback_speed" validate:"gt=0,lte=4"`
 	DeviceID        string    `json:"device_id" validate:"required"`
 	DeviceName      string    `json:"device_name"`
+	Source          string    `json:"source"` // playback, import, or manual (defaults to playback)
 }
 
 // RecordEventResponse contains the created event and updated progress.
 type RecordEventResponse struct {
 	Event    *domain.ListeningEvent   `json:"event"`
-	Progress *domain.PlaybackProgress `json:"progress"`
+	Progress *domain.PlaybackState `json:"progress"`
 }
 
 // RecordEvent records a listening event and updates progress.
@@ -106,8 +107,8 @@ func (s *ListeningService) RecordEvent(ctx context.Context, userID string, req R
 				"event_id", eventID,
 				"user_id", userID,
 			)
-			// Still need to get progress for the response
-			progress, _ := s.store.GetProgress(ctx, userID, req.BookID)
+			// Still need to get state for the response
+			progress, _ := s.store.GetState(ctx, userID, req.BookID)
 			return &RecordEventResponse{
 				Event:    existing,
 				Progress: progress,
@@ -136,33 +137,38 @@ func (s *ListeningService) RecordEvent(ctx context.Context, userID string, req R
 		req.DeviceName,
 	)
 
+	// Override source if provided (defaults to playback)
+	if req.Source != "" {
+		event.Source = req.Source
+	}
+
 	// Store event
 	if err := s.store.CreateListeningEvent(ctx, event); err != nil {
 		return nil, fmt.Errorf("store event: %w", err)
 	}
 
-	// Get or create progress
-	existingProgress, err := s.store.GetProgress(ctx, userID, req.BookID)
+	// Get or create state
+	existingProgress, err := s.store.GetState(ctx, userID, req.BookID)
 	if err != nil && !errors.Is(err, store.ErrProgressNotFound) {
-		return nil, fmt.Errorf("get progress: %w", err)
+		return nil, fmt.Errorf("get state: %w", err)
 	}
 
 	// Track if book was previously finished
 	wasFinished := existingProgress != nil && existingProgress.IsFinished
 
-	var progress *domain.PlaybackProgress
+	var progress *domain.PlaybackState
 	if existingProgress == nil {
 		// First event for this book
-		progress = domain.NewPlaybackProgress(event, book.TotalDuration)
+		progress = domain.NewPlaybackState(event, book.TotalDuration)
 	} else {
 		// Update existing progress
 		progress = existingProgress
 		progress.UpdateFromEvent(event, book.TotalDuration)
 	}
 
-	// Store progress
-	if err := s.store.UpsertProgress(ctx, progress); err != nil {
-		return nil, fmt.Errorf("store progress: %w", err)
+	// Store state
+	if err := s.store.UpsertState(ctx, progress); err != nil {
+		return nil, fmt.Errorf("store state: %w", err)
 	}
 
 	// Track reading session (non-blocking - don't fail if session operations fail)
@@ -176,7 +182,7 @@ func (s *ListeningService) RecordEvent(ctx context.Context, userID string, req R
 
 	// Check if just completed (99%+)
 	if progress.IsFinished && !wasFinished {
-		if err := s.readingSessionService.CompleteSession(ctx, userID, req.BookID, progress.Progress, progress.TotalListenTimeMs); err != nil {
+		if err := s.readingSessionService.CompleteSession(ctx, userID, req.BookID, progress.ComputeProgress(book.TotalDuration), progress.TotalListenTimeMs); err != nil {
 			s.logger.Warn("failed to complete session", "error", err, "user_id", userID, "book_id", req.BookID)
 		}
 	}
@@ -186,11 +192,11 @@ func (s *ListeningService) RecordEvent(ctx context.Context, userID string, req R
 		"user_id", userID,
 		"book_id", req.BookID,
 		"duration_ms", event.DurationMs,
-		"progress", progress.Progress,
+		"progress", progress.ComputeProgress(book.TotalDuration),
 	)
 
 	// Emit SSE events so other devices and UI can update
-	s.events.Emit(sse.NewProgressUpdatedEvent(userID, progress))
+	s.events.Emit(sse.NewProgressUpdatedEvent(userID, progress, book.TotalDuration))
 	s.events.Emit(sse.NewListeningEventCreatedEvent(userID, event))
 
 	// Check for milestone crossings (non-blocking)
@@ -265,9 +271,9 @@ func (s *ListeningService) checkMilestones(ctx context.Context, userID string, n
 	}
 }
 
-// GetProgress retrieves playback progress for a specific book.
-func (s *ListeningService) GetProgress(ctx context.Context, userID, bookID string) (*domain.PlaybackProgress, error) {
-	progress, err := s.store.GetProgress(ctx, userID, bookID)
+// GetProgress retrieves playback state for a specific book.
+func (s *ListeningService) GetProgress(ctx context.Context, userID, bookID string) (*domain.PlaybackState, error) {
+	progress, err := s.store.GetState(ctx, userID, bookID)
 	if err != nil {
 		return nil, err
 	}
@@ -318,7 +324,7 @@ func (s *ListeningService) GetContinueListening(ctx context.Context, userID stri
 		items = append(items, &domain.ContinueListeningItem{
 			BookID:            progress.BookID,
 			CurrentPositionMs: progress.CurrentPositionMs,
-			Progress:          progress.Progress,
+			Progress:          progress.ComputeProgress(book.TotalDuration),
 			LastPlayedAt:      progress.LastPlayedAt,
 			Title:             book.Title,
 			AuthorName:        authorName,
@@ -345,7 +351,7 @@ func (s *ListeningService) ResetProgress(ctx context.Context, userID, bookID str
 		// Continue with reset even if abandon fails
 	}
 
-	return s.store.DeleteProgress(ctx, userID, bookID)
+	return s.store.DeleteState(ctx, userID, bookID)
 }
 
 // GetUserSettings retrieves user playback settings.
@@ -470,7 +476,7 @@ type UserStats struct {
 
 // GetUserStats calculates listening statistics for a user.
 func (s *ListeningService) GetUserStats(ctx context.Context, userID string) (*UserStats, error) {
-	allProgress, err := s.store.GetProgressForUser(ctx, userID)
+	allProgress, err := s.store.GetStateForUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -512,9 +518,9 @@ func (s *ListeningService) GetBookStats(ctx context.Context, bookID string) (*Bo
 
 	stats.TotalListeners = len(listeners)
 
-	// Check completion status by looking at progress
+	// Check completion status by looking at state
 	for userID := range listeners {
-		progress, err := s.store.GetProgress(ctx, userID, bookID)
+		progress, err := s.store.GetState(ctx, userID, bookID)
 		if err == nil && progress != nil && progress.IsFinished {
 			finished[userID] = true
 		}
@@ -523,6 +529,148 @@ func (s *ListeningService) GetBookStats(ctx context.Context, bookID string) (*Bo
 	stats.CompletedCount = len(finished)
 
 	return stats, nil
+}
+
+// MarkComplete marks a book as finished regardless of current position.
+// This allows users to mark a book as complete manually (e.g., DNF at 90%).
+func (s *ListeningService) MarkComplete(ctx context.Context, userID, bookID string, finishedAt *time.Time) (*domain.PlaybackState, error) {
+	// Get book for duration (no access check - if user is marking complete, they had access)
+	book, err := s.store.GetBookNoAccessCheck(ctx, bookID)
+	if err != nil {
+		return nil, fmt.Errorf("book not found: %w", err)
+	}
+
+	state, err := s.store.GetState(ctx, userID, bookID)
+	if err != nil && !errors.Is(err, store.ErrProgressNotFound) {
+		return nil, fmt.Errorf("getting state: %w", err)
+	}
+
+	now := time.Now()
+	if finishedAt == nil {
+		finishedAt = &now
+	}
+
+	if state == nil {
+		// Create new state if none exists
+		state = &domain.PlaybackState{
+			UserID:            userID,
+			BookID:            bookID,
+			CurrentPositionMs: 0,
+			IsFinished:        true,
+			FinishedAt:        finishedAt,
+			StartedAt:         now,
+			LastPlayedAt:      now,
+			UpdatedAt:         now,
+		}
+	} else {
+		state.IsFinished = true
+		state.FinishedAt = finishedAt
+		state.UpdatedAt = now
+	}
+
+	if err := s.store.UpsertState(ctx, state); err != nil {
+		return nil, fmt.Errorf("saving state: %w", err)
+	}
+
+	// Complete any active reading session
+	if err := s.readingSessionService.CompleteSession(ctx, userID, bookID, state.ComputeProgress(book.TotalDuration), state.TotalListenTimeMs); err != nil {
+		s.logger.Warn("failed to complete session on mark complete", "error", err, "user_id", userID, "book_id", bookID)
+	}
+
+	s.logger.Info("marked book as complete",
+		"user_id", userID,
+		"book_id", bookID,
+		"finished_at", finishedAt,
+	)
+
+	// Emit SSE event
+	s.events.Emit(sse.NewProgressUpdatedEvent(userID, state, book.TotalDuration))
+
+	return state, nil
+}
+
+// DiscardProgress removes playback state for a book.
+// If keepHistory is true (default), listening events are preserved.
+func (s *ListeningService) DiscardProgress(ctx context.Context, userID, bookID string, keepHistory bool) error {
+	// Abandon active reading session before discarding progress
+	if err := s.readingSessionService.AbandonSession(ctx, userID, bookID); err != nil {
+		s.logger.Warn("failed to abandon session on discard", "error", err, "user_id", userID, "book_id", bookID)
+		// Continue with discard even if abandon fails
+	}
+
+	// Delete state
+	if err := s.store.DeleteState(ctx, userID, bookID); err != nil {
+		return fmt.Errorf("deleting state: %w", err)
+	}
+
+	// Optionally delete events (rare - GDPR style purge)
+	if !keepHistory {
+		if err := s.store.DeleteEventsForUserBook(ctx, userID, bookID); err != nil {
+			return fmt.Errorf("deleting events: %w", err)
+		}
+	}
+
+	s.logger.Info("discarded progress",
+		"user_id", userID,
+		"book_id", bookID,
+		"keep_history", keepHistory,
+	)
+
+	// Emit SSE event
+	s.events.Emit(sse.NewProgressDeletedEvent(userID, bookID))
+
+	return nil
+}
+
+// RestartBook resets a book to listen again from the beginning.
+// Preserves history but clears current position and finished status.
+func (s *ListeningService) RestartBook(ctx context.Context, userID, bookID string) (*domain.PlaybackState, error) {
+	// Get book for duration (no access check - if user is restarting, they had access)
+	book, err := s.store.GetBookNoAccessCheck(ctx, bookID)
+	if err != nil {
+		return nil, fmt.Errorf("book not found: %w", err)
+	}
+
+	state, err := s.store.GetState(ctx, userID, bookID)
+	if err != nil && !errors.Is(err, store.ErrProgressNotFound) {
+		return nil, fmt.Errorf("getting state: %w", err)
+	}
+
+	now := time.Now()
+
+	if state == nil {
+		state = &domain.PlaybackState{
+			UserID:    userID,
+			BookID:    bookID,
+			StartedAt: now,
+		}
+	}
+
+	// Preserve original StartedAt if it exists
+	state.CurrentPositionMs = 0
+	state.IsFinished = false
+	state.FinishedAt = nil
+	state.LastPlayedAt = now
+	state.UpdatedAt = now
+
+	if err := s.store.UpsertState(ctx, state); err != nil {
+		return nil, fmt.Errorf("saving state: %w", err)
+	}
+
+	// This will create a new reading session (marked as re-read if previously completed)
+	if _, err := s.readingSessionService.EnsureActiveSession(ctx, userID, bookID); err != nil {
+		s.logger.Warn("failed to create session on restart", "error", err, "user_id", userID, "book_id", bookID)
+	}
+
+	s.logger.Info("restarted book",
+		"user_id", userID,
+		"book_id", bookID,
+	)
+
+	// Emit SSE event
+	s.events.Emit(sse.NewProgressUpdatedEvent(userID, state, book.TotalDuration))
+
+	return state, nil
 }
 
 // broadcastUserStatsUpdate broadcasts updated all-time stats for a user.
@@ -561,7 +709,7 @@ func (s *ListeningService) broadcastUserStatsUpdate(ctx context.Context, userID 
 	}
 
 	// Get finished books count
-	allProgress, err := s.store.GetProgressForUser(ctx, userID)
+	allProgress, err := s.store.GetStateForUser(ctx, userID)
 	if err != nil {
 		s.logger.Warn("failed to get progress for stats broadcast", "user_id", userID, "error", err)
 		return

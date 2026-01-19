@@ -18,7 +18,7 @@ func (i *Importer) rebuildProgress(ctx context.Context) error {
 	}
 
 	// Stream all events, build progress by user+book
-	progressMap := make(map[string]*domain.PlaybackProgress)
+	progressMap := make(map[string]*domain.PlaybackState)
 	orphanedCount := 0
 
 	for event, err := range i.store.StreamListeningEvents(ctx) {
@@ -27,7 +27,7 @@ func (i *Importer) rebuildProgress(ctx context.Context) error {
 			continue
 		}
 
-		key := domain.ProgressID(event.UserID, event.BookID)
+		key := domain.StateID(event.UserID, event.BookID)
 
 		// Get book duration for progress calculation
 		book, err := i.store.GetBookNoAccessCheck(ctx, event.BookID)
@@ -39,7 +39,7 @@ func (i *Importer) rebuildProgress(ctx context.Context) error {
 
 		progress, exists := progressMap[key]
 		if !exists {
-			progress = domain.NewPlaybackProgress(event, book.TotalDuration)
+			progress = domain.NewPlaybackState(event, book.TotalDuration)
 			progressMap[key] = progress
 		} else {
 			progress.UpdateFromEvent(event, book.TotalDuration)

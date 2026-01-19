@@ -95,6 +95,7 @@ const (
 
 	// Listening events (user-specific).
 	EventProgressUpdated       EventType = "listening.progress_updated"
+	EventProgressDeleted       EventType = "listening.progress_deleted"
 	EventListeningEventCreated EventType = "listening.event_created"
 	EventReadingSessionUpdated EventType = "reading_session.updated"
 
@@ -698,17 +699,34 @@ type ProgressUpdatedEventData struct {
 }
 
 // NewProgressUpdatedEvent creates a listening.progress_updated event for a specific user.
-func NewProgressUpdatedEvent(userID string, progress *domain.PlaybackProgress) Event {
+// bookDurationMs is used to compute progress percentage on-demand.
+func NewProgressUpdatedEvent(userID string, progress *domain.PlaybackState, bookDurationMs int64) Event {
 	return Event{
 		Type: EventProgressUpdated,
 		Data: ProgressUpdatedEventData{
 			BookID:            progress.BookID,
 			CurrentPositionMs: progress.CurrentPositionMs,
-			Progress:          progress.Progress,
+			Progress:          progress.ComputeProgress(bookDurationMs),
 			TotalListenTimeMs: progress.TotalListenTimeMs,
 			IsFinished:        progress.IsFinished,
 			LastPlayedAt:      progress.LastPlayedAt,
 		},
+		UserID:    userID, // Only send to this user
+		Timestamp: time.Now(),
+	}
+}
+
+// ProgressDeletedEventData is the data payload for listening.progress_deleted events.
+type ProgressDeletedEventData struct {
+	BookID string `json:"book_id"`
+}
+
+// NewProgressDeletedEvent creates a listening.progress_deleted event for a specific user.
+// Used when progress is discarded (DNF/start over).
+func NewProgressDeletedEvent(userID, bookID string) Event {
+	return Event{
+		Type:      EventProgressDeleted,
+		Data:      ProgressDeletedEventData{BookID: bookID},
 		UserID:    userID, // Only send to this user
 		Timestamp: time.Now(),
 	}

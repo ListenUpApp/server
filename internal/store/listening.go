@@ -117,6 +117,60 @@ func (s *Store) GetEventsForUserBook(ctx context.Context, userID, bookID string)
 	return s.getEventsByPrefix(ctx, eventByUserBookPrefix+userID+":"+bookID+":")
 }
 
+// DeleteEventsForUserBook deletes all listening events for a user and book.
+// This is used for GDPR-style purges when keepHistory=false.
+func (s *Store) DeleteEventsForUserBook(ctx context.Context, userID, bookID string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	// First, get all events for this user+book to collect their IDs
+	events, err := s.GetEventsForUserBook(ctx, userID, bookID)
+	if err != nil {
+		return fmt.Errorf("get events for deletion: %w", err)
+	}
+
+	if len(events) == 0 {
+		return nil // Nothing to delete
+	}
+
+	// Delete primary records and all indexes in a single transaction
+	return s.db.Update(func(txn *badger.Txn) error {
+		for _, event := range events {
+			// Delete primary key
+			if err := txn.Delete([]byte(listeningEventPrefix + event.ID)); err != nil {
+				return fmt.Errorf("delete event %s: %w", event.ID, err)
+			}
+
+			// Delete index: by user
+			userIdx := eventByUserPrefix + event.UserID + ":" + event.ID
+			if err := txn.Delete([]byte(userIdx)); err != nil {
+				return fmt.Errorf("delete user index: %w", err)
+			}
+
+			// Delete index: by user+time
+			userTimeIdx := fmt.Sprintf("%s%s:%020d:%s", eventByUserTimePrefix, event.UserID, event.EndedAt.UnixMilli(), event.ID)
+			if err := txn.Delete([]byte(userTimeIdx)); err != nil {
+				return fmt.Errorf("delete user-time index: %w", err)
+			}
+
+			// Delete index: by book
+			bookIdx := eventByBookPrefix + event.BookID + ":" + event.ID
+			if err := txn.Delete([]byte(bookIdx)); err != nil {
+				return fmt.Errorf("delete book index: %w", err)
+			}
+
+			// Delete index: by user+book
+			userBookIdx := eventByUserBookPrefix + event.UserID + ":" + event.BookID + ":" + event.ID
+			if err := txn.Delete([]byte(userBookIdx)); err != nil {
+				return fmt.Errorf("delete user-book index: %w", err)
+			}
+		}
+
+		return nil
+	})
+}
+
 // getEventsByPrefix retrieves events matching an index prefix.
 // Uses a single transaction to collect IDs and fetch all events (no N+1).
 func (s *Store) getEventsByPrefix(ctx context.Context, prefix string) ([]*domain.ListeningEvent, error) {
@@ -176,14 +230,14 @@ func (s *Store) getEventsByPrefix(ctx context.Context, prefix string) ([]*domain
 	return events, nil
 }
 
-// GetProgress retrieves playback progress for a user+book.
-func (s *Store) GetProgress(ctx context.Context, userID, bookID string) (*domain.PlaybackProgress, error) {
+// GetState retrieves playback state for a user+book.
+func (s *Store) GetState(ctx context.Context, userID, bookID string) (*domain.PlaybackState, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
-	key := progressPrefix + domain.ProgressID(userID, bookID)
-	var progress domain.PlaybackProgress
+	key := progressPrefix + domain.StateID(userID, bookID)
+	var progress domain.PlaybackState
 
 	err := s.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte(key))
@@ -205,13 +259,13 @@ func (s *Store) GetProgress(ctx context.Context, userID, bookID string) (*domain
 	return &progress, nil
 }
 
-// UpsertProgress creates or updates playback progress.
-func (s *Store) UpsertProgress(ctx context.Context, progress *domain.PlaybackProgress) error {
+// UpsertState creates or updates playback state.
+func (s *Store) UpsertState(ctx context.Context, progress *domain.PlaybackState) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 
-	key := progressPrefix + domain.ProgressID(progress.UserID, progress.BookID)
+	key := progressPrefix + domain.StateID(progress.UserID, progress.BookID)
 	data, err := json.Marshal(progress)
 	if err != nil {
 		return fmt.Errorf("marshal progress: %w", err)
@@ -222,26 +276,26 @@ func (s *Store) UpsertProgress(ctx context.Context, progress *domain.PlaybackPro
 	})
 }
 
-// DeleteProgress removes playback progress.
-func (s *Store) DeleteProgress(ctx context.Context, userID, bookID string) error {
+// DeleteState removes playback state.
+func (s *Store) DeleteState(ctx context.Context, userID, bookID string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 
-	key := progressPrefix + domain.ProgressID(userID, bookID)
+	key := progressPrefix + domain.StateID(userID, bookID)
 	return s.db.Update(func(txn *badger.Txn) error {
 		return txn.Delete([]byte(key))
 	})
 }
 
-// GetProgressForUser retrieves all progress records for a user.
-func (s *Store) GetProgressForUser(ctx context.Context, userID string) ([]*domain.PlaybackProgress, error) {
+// GetStateForUser retrieves all state records for a user.
+func (s *Store) GetStateForUser(ctx context.Context, userID string) ([]*domain.PlaybackState, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
 	prefix := progressPrefix + userID + ":"
-	var results []*domain.PlaybackProgress
+	var results []*domain.PlaybackState
 
 	err := s.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
@@ -255,7 +309,7 @@ func (s *Store) GetProgressForUser(ctx context.Context, userID string) ([]*domai
 			// IMPORTANT: Allocate on heap to avoid pointer aliasing.
 			// Using `var progress` and taking &progress would cause all
 			// pointers to potentially reference the same memory location.
-			progress := new(domain.PlaybackProgress)
+			progress := new(domain.PlaybackState)
 			err := it.Item().Value(func(val []byte) error {
 				return json.Unmarshal(val, progress)
 			})
@@ -368,19 +422,19 @@ func (s *Store) GetEventsForUserInRange(
 	return events, nil
 }
 
-// GetProgressFinishedInRange retrieves books finished within a time range.
+// GetStateFinishedInRange retrieves books finished within a time range.
 // start is inclusive, end is exclusive. Zero start = beginning of time.
-func (s *Store) GetProgressFinishedInRange(
+func (s *Store) GetStateFinishedInRange(
 	ctx context.Context,
 	userID string,
 	start, end time.Time,
-) ([]*domain.PlaybackProgress, error) {
-	allProgress, err := s.GetProgressForUser(ctx, userID)
+) ([]*domain.PlaybackState, error) {
+	allProgress, err := s.GetStateForUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	var finished []*domain.PlaybackProgress
+	var finished []*domain.PlaybackState
 	for _, p := range allProgress {
 		if p.IsFinished && p.FinishedAt != nil {
 			finishedAt := *p.FinishedAt
@@ -395,13 +449,13 @@ func (s *Store) GetProgressFinishedInRange(
 
 // GetContinueListening returns in-progress books, excluding hidden ones.
 // Uses batch lookup: 2 prefix scans instead of N+1 queries.
-func (s *Store) GetContinueListening(ctx context.Context, userID string, limit int) ([]*domain.PlaybackProgress, error) {
+func (s *Store) GetContinueListening(ctx context.Context, userID string, limit int) ([]*domain.PlaybackState, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
-	// Scan 1: All progress for user
-	allProgress, err := s.GetProgressForUser(ctx, userID)
+	// Scan 1: All state for user
+	allProgress, err := s.GetStateForUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -419,7 +473,6 @@ func (s *Store) GetContinueListening(ctx context.Context, userID string, limit i
 			if s.logger != nil {
 				s.logger.Info("GetContinueListening: FINISHED book will be excluded",
 					"book_id", p.BookID,
-					"progress", p.Progress,
 					"current_position_ms", p.CurrentPositionMs,
 					"is_finished", p.IsFinished)
 			}
@@ -447,13 +500,10 @@ func (s *Store) GetContinueListening(ctx context.Context, userID string, limit i
 	}
 
 	// Filter: in-progress, not finished, not hidden
-	// A book has progress if EITHER:
-	// - Progress > 0 (percentage calculated correctly), OR
-	// - CurrentPositionMs > 0 (position set, but percentage may be missing due to duration=0 at import)
-	// This handles edge cases from ABS import where duration might be 0 during import but set later
-	var result []*domain.PlaybackProgress
+	// A book has progress if CurrentPositionMs > 0 (position has been tracked)
+	var result []*domain.PlaybackState
 	for _, p := range allProgress {
-		hasProgress := p.Progress > 0 || p.CurrentPositionMs > 0
+		hasProgress := p.CurrentPositionMs > 0
 		if p.IsFinished || !hasProgress || hiddenBooks[p.BookID] {
 			if p.IsFinished && s.logger != nil {
 				s.logger.Debug("GetContinueListening: excluding finished book",
@@ -464,7 +514,7 @@ func (s *Store) GetContinueListening(ctx context.Context, userID string, limit i
 		if s.logger != nil {
 			s.logger.Debug("GetContinueListening: including in-progress book",
 				"book_id", p.BookID,
-				"progress", p.Progress,
+				"current_position_ms", p.CurrentPositionMs,
 				"is_finished", p.IsFinished)
 		}
 		result = append(result, p)
@@ -476,7 +526,7 @@ func (s *Store) GetContinueListening(ctx context.Context, userID string, limit i
 	}
 
 	// Sort by LastPlayedAt descending (most recent first)
-	slices.SortFunc(result, func(a, b *domain.PlaybackProgress) int {
+	slices.SortFunc(result, func(a, b *domain.PlaybackState) int {
 		return b.LastPlayedAt.Compare(a.LastPlayedAt)
 	})
 

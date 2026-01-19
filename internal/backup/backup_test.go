@@ -397,21 +397,21 @@ func TestRebuildProgress(t *testing.T) {
 	// Verify events were imported
 	assert.Equal(t, 2, restoreResult.Imported["listening_events"])
 
-	// Verify progress was rebuilt
-	progress, err := destStore.GetProgress(ctx, "user-1", "book-1")
+	// Verify state was rebuilt
+	progress, err := destStore.GetState(ctx, "user-1", "book-1")
 	require.NoError(t, err)
-	assert.Equal(t, int64(1800000), progress.CurrentPositionMs) // 30 minutes
-	assert.Equal(t, int64(1800000), progress.TotalListenTimeMs) // 30 minutes total
-	assert.InDelta(t, 0.5, progress.Progress, 0.01)             // 50% progress
-	assert.False(t, progress.IsFinished)                        // Not finished yet
+	assert.Equal(t, int64(1800000), progress.CurrentPositionMs)              // 30 minutes
+	assert.Equal(t, int64(1800000), progress.TotalListenTimeMs)              // 30 minutes total
+	assert.InDelta(t, 0.5, progress.ComputeProgress(3600000), 0.01)          // 50% progress (30min / 60min)
+	assert.False(t, progress.IsFinished)                                     // Not finished yet
 
-	// Now test RebuildProgress directly by clearing progress and rebuilding
+	// Now test RebuildProgress directly by clearing state and rebuilding
 	// First, let's verify we can call RebuildProgress
 	err = restoreSvc.RebuildProgress(ctx)
 	require.NoError(t, err)
 
-	// Progress should still be correct after rebuild
-	progress, err = destStore.GetProgress(ctx, "user-1", "book-1")
+	// State should still be correct after rebuild
+	progress, err = destStore.GetState(ctx, "user-1", "book-1")
 	require.NoError(t, err)
 	assert.Equal(t, int64(1800000), progress.CurrentPositionMs)
 }

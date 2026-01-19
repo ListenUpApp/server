@@ -117,7 +117,7 @@ func (s *SocialService) GetLeaderboard(
 		}
 
 		// Get finished books count
-		finishedProgress, err := s.store.GetProgressFinishedInRange(ctx, user.ID, start, end)
+		finishedProgress, err := s.store.GetStateFinishedInRange(ctx, user.ID, start, end)
 		if err != nil {
 			s.logger.Debug("failed to get finished progress", "user_id", user.ID, "error", err)
 		}
@@ -547,10 +547,10 @@ func (s *SocialService) GetRandomBooks(ctx context.Context, viewingUserID string
 		return nil, fmt.Errorf("getting accessible books: %w", err)
 	}
 
-	// Get user's progress to exclude books they've started
-	allProgress, err := s.store.GetProgressForUser(ctx, viewingUserID)
+	// Get user's state to exclude books they've started
+	allProgress, err := s.store.GetStateForUser(ctx, viewingUserID)
 	if err != nil {
-		s.logger.Debug("failed to get user progress", "user_id", viewingUserID, "error", err)
+		s.logger.Debug("failed to get user state", "user_id", viewingUserID, "error", err)
 		// Continue without filtering - better to show something
 		allProgress = nil
 	}

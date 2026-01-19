@@ -327,8 +327,8 @@ func (s *ProfileService) GetFullProfile(ctx context.Context, profileUserID, view
 // getRecentBooksFiltered returns the profile user's recently finished books,
 // filtered to only books the viewing user can access.
 func (s *ProfileService) getRecentBooksFiltered(ctx context.Context, profileUserID, viewingUserID string, limit int) ([]RecentBookSummary, error) {
-	// Get profile user's finished progress
-	finishedProgress, err := s.store.GetProgressFinishedInRange(ctx, profileUserID, time.Time{}, time.Now())
+	// Get profile user's finished state
+	finishedProgress, err := s.store.GetStateFinishedInRange(ctx, profileUserID, time.Time{}, time.Now())
 	if err != nil {
 		return nil, err
 	}

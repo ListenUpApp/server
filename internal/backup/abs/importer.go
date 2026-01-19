@@ -345,14 +345,14 @@ func (im *Importer) rebuildBookProgress(
 		return fmt.Errorf("get book: %w", err)
 	}
 
-	// Check if progress already exists (may have IsFinished from ABS import)
-	existingProgress, _ := im.store.GetProgress(ctx, userID, bookID)
+	// Check if state already exists (may have IsFinished from ABS import)
+	existingProgress, _ := im.store.GetState(ctx, userID, bookID)
 
 	// Sort events by time
 	sortEventsByTime(events)
 
 	// Build progress from first event
-	progress := domain.NewPlaybackProgress(events[0], book.TotalDuration)
+	progress := domain.NewPlaybackState(events[0], book.TotalDuration)
 
 	// Update with remaining events
 	for _, event := range events[1:] {
@@ -373,14 +373,14 @@ func (im *Importer) rebuildBookProgress(
 		progress.FinishedAt = existingProgress.FinishedAt
 	}
 
-	// Save progress
-	if err := im.store.UpsertProgress(ctx, progress); err != nil {
-		return fmt.Errorf("upsert progress: %w", err)
+	// Save state
+	if err := im.store.UpsertState(ctx, progress); err != nil {
+		return fmt.Errorf("upsert state: %w", err)
 	}
 
 	// Emit SSE event so clients update their Continue Listening section
 	if im.events != nil {
-		im.events.Emit(sse.NewProgressUpdatedEvent(userID, progress))
+		im.events.Emit(sse.NewProgressUpdatedEvent(userID, progress, book.TotalDuration))
 	}
 
 	return nil
