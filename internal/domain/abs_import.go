@@ -25,13 +25,13 @@ const (
 // ABSImport represents a connected ABS backup that can be processed incrementally.
 // The import persists across sessions, allowing admins to leave and return later.
 type ABSImport struct {
-	ID         string          `json:"id"`
-	Name       string          `json:"name"`        // User-friendly name (e.g., "ABS Backup 2024")
-	BackupPath string          `json:"backup_path"` // Original file path for reference
-	Status     ABSImportStatus `json:"status"`
-	CreatedAt  time.Time       `json:"created_at"`
-	UpdatedAt  time.Time       `json:"updated_at"`
-	CompletedAt *time.Time     `json:"completed_at,omitempty"`
+	ID          string          `json:"id"`
+	Name        string          `json:"name"`        // User-friendly name (e.g., "ABS Backup 2024")
+	BackupPath  string          `json:"backup_path"` // Original file path for reference
+	Status      ABSImportStatus `json:"status"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+	CompletedAt *time.Time      `json:"completed_at,omitempty"`
 
 	// Summary stats (denormalized for quick display)
 	TotalUsers       int `json:"total_users"`
@@ -128,12 +128,12 @@ type ABSImportProgress struct {
 	ABSMediaID string `json:"abs_media_id"`
 
 	// Progress data
-	CurrentTime  int64      `json:"current_time"`  // Position in milliseconds
-	Duration     int64      `json:"duration"`      // Total duration in milliseconds
-	Progress     float64    `json:"progress"`      // 0.0 to 1.0
-	IsFinished   bool       `json:"is_finished"`
-	FinishedAt   *time.Time `json:"finished_at,omitempty"` // When the book was finished
-	LastUpdate   time.Time  `json:"last_update"`
+	CurrentTime int64      `json:"current_time"` // Position in milliseconds
+	Duration    int64      `json:"duration"`     // Total duration in milliseconds
+	Progress    float64    `json:"progress"`     // 0.0 to 1.0
+	IsFinished  bool       `json:"is_finished"`
+	FinishedAt  *time.Time `json:"finished_at,omitempty"` // When the book was finished
+	LastUpdate  time.Time  `json:"last_update"`
 
 	// Import status
 	Status     SessionImportStatus `json:"status"`
@@ -154,7 +154,7 @@ type SessionStatusFilter string
 
 const (
 	SessionFilterAll      SessionStatusFilter = "all"
-	SessionFilterPending  SessionStatusFilter = "pending"  // pending_user or pending_book
+	SessionFilterPending  SessionStatusFilter = "pending" // pending_user or pending_book
 	SessionFilterReady    SessionStatusFilter = "ready"
 	SessionFilterImported SessionStatusFilter = "imported"
 	SessionFilterSkipped  SessionStatusFilter = "skipped"

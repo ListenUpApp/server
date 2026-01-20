@@ -7,7 +7,7 @@ const FormatVersion = "1.0"
 
 // Manifest describes backup contents and metadata.
 type Manifest struct {
-	Version string    `json:"version"`
+	Version   string    `json:"version"`
 	CreatedAt time.Time `json:"created_at"`
 
 	// Server identity

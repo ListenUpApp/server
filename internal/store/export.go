@@ -185,7 +185,7 @@ func (s *Store) GetCollectionNoAccessCheck(ctx context.Context, id string) (*dom
 func (s *Store) UpdateCollectionNoAccessCheck(ctx context.Context, coll *domain.Collection) error {
 	key := []byte(collectionPrefix + coll.ID)
 
-	coll.UpdatedAt = coll.UpdatedAt // preserve original UpdatedAt
+	// UpdatedAt is preserved as-is from the input (no modification)
 	return s.set(key, coll)
 }
 

@@ -1008,9 +1008,10 @@ func TestFindABSImportProgressByListenUpBook_DifferentABSMediaIDs(t *testing.T) 
 	assert.True(t, found.IsFinished)
 }
 
-func TestFindABSImportProgressByListenUpBook_DurationMatching(t *testing.T) {
-	// This test simulates the case where there's NO matching ABSMediaID at all
-	// between progress and book mappings, so we fall back to duration-based matching
+func TestFindABSImportProgressByListenUpBook_NoMatchWhenIDsDiffer(t *testing.T) {
+	// This test verifies that when there's NO matching ABSMediaID between
+	// progress and book mappings, no match is returned. Duration-based matching
+	// (Strategy 3) was removed because it caused incorrect matches.
 	store, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -1029,23 +1030,20 @@ func TestFindABSImportProgressByListenUpBook_DurationMatching(t *testing.T) {
 	require.NoError(t, store.CreateABSImportBook(ctx, book))
 
 	// Progress has a COMPLETELY DIFFERENT ABS media ID that doesn't match any book
-	// But it has a similar duration (within 5% tolerance)
 	progress := &domain.ABSImportProgress{
 		ImportID:    "import_123",
 		ABSUserID:   "user-1",
 		ABSMediaID:  "completely-different-progress-id", // No book mapping exists for this!
 		CurrentTime: 1800000,                            // 30 min
-		Duration:    3650000,                            // ~1 hour (within 5% of book duration)
+		Duration:    3650000,                            // ~1 hour (similar duration but IDs don't match)
 		IsFinished:  true,
 	}
 	require.NoError(t, store.CreateABSImportProgress(ctx, progress))
 
-	// Should find the progress via duration matching (Strategy 3)
+	// Should NOT find the progress because IDs don't match (duration matching was removed)
 	found, err := store.FindABSImportProgressByListenUpBook(ctx, "import_123", "user-1", "listenup-book-1")
 	require.NoError(t, err)
-	require.NotNil(t, found)
-	assert.Equal(t, "completely-different-progress-id", found.ABSMediaID)
-	assert.True(t, found.IsFinished)
+	assert.Nil(t, found) // No match when ABSMediaIDs don't align
 }
 
 func TestFindABSImportProgressByListenUpBook_DurationMismatch(t *testing.T) {

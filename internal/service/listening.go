@@ -75,8 +75,8 @@ type RecordEventRequest struct {
 
 // RecordEventResponse contains the created event and updated progress.
 type RecordEventResponse struct {
-	Event    *domain.ListeningEvent   `json:"event"`
-	Progress *domain.PlaybackState `json:"progress"`
+	Event    *domain.ListeningEvent `json:"event"`
+	Progress *domain.PlaybackState  `json:"progress"`
 }
 
 // RecordEvent records a listening event and updates progress.

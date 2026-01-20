@@ -1446,25 +1446,25 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 
 	return &ImportABSSessionsOutput{
 		Body: struct {
-			SessionsImported        int    `json:"sessions_imported" doc:"Sessions successfully imported"`
-			SessionsFailed          int    `json:"sessions_failed" doc:"Sessions that failed to import"`
-			EventsCreated           int    `json:"events_created" doc:"Listening events created"`
-			ProgressRebuilt         int    `json:"progress_rebuilt" doc:"User+book progress records rebuilt"`
-			ProgressFailed          int    `json:"progress_failed" doc:"Progress rebuilds that failed"`
-			ABSProgressUnmatched    int    `json:"abs_progress_unmatched" doc:"Books where ABS progress could not be matched (finished status may be incorrect)"`
-			ReadingSessionsCreated  int    `json:"reading_sessions_created" doc:"BookReadingSession records created for readers section"`
-			ReadingSessionsSkipped  int    `json:"reading_sessions_skipped" doc:"Sessions skipped (already existed)"`
-			Duration                string `json:"duration" doc:"Import duration"`
+			SessionsImported       int    `json:"sessions_imported" doc:"Sessions successfully imported"`
+			SessionsFailed         int    `json:"sessions_failed" doc:"Sessions that failed to import"`
+			EventsCreated          int    `json:"events_created" doc:"Listening events created"`
+			ProgressRebuilt        int    `json:"progress_rebuilt" doc:"User+book progress records rebuilt"`
+			ProgressFailed         int    `json:"progress_failed" doc:"Progress rebuilds that failed"`
+			ABSProgressUnmatched   int    `json:"abs_progress_unmatched" doc:"Books where ABS progress could not be matched (finished status may be incorrect)"`
+			ReadingSessionsCreated int    `json:"reading_sessions_created" doc:"BookReadingSession records created for readers section"`
+			ReadingSessionsSkipped int    `json:"reading_sessions_skipped" doc:"Sessions skipped (already existed)"`
+			Duration               string `json:"duration" doc:"Import duration"`
 		}{
-			SessionsImported:        sessionsImported,
-			SessionsFailed:          sessionsFailed,
-			EventsCreated:           eventsCreated,
-			ProgressRebuilt:         progressRebuilt,
-			ProgressFailed:          progressFailed,
-			ABSProgressUnmatched:    progressUnmatchedABS,
-			ReadingSessionsCreated:  readingSessionsCreated,
-			ReadingSessionsSkipped:  readingSessionsSkipped,
-			Duration:                time.Since(start).String(),
+			SessionsImported:       sessionsImported,
+			SessionsFailed:         sessionsFailed,
+			EventsCreated:          eventsCreated,
+			ProgressRebuilt:        progressRebuilt,
+			ProgressFailed:         progressFailed,
+			ABSProgressUnmatched:   progressUnmatchedABS,
+			ReadingSessionsCreated: readingSessionsCreated,
+			ReadingSessionsSkipped: readingSessionsSkipped,
+			Duration:               time.Since(start).String(),
 		},
 	}, nil
 }

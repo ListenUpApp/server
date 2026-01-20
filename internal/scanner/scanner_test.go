@@ -11,13 +11,33 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
+func setupTestStore(t *testing.T) (*store.Store, func()) {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	s, err := store.New(dbPath, nil, store.NewNoopEmitter())
+	if err != nil {
+		t.Fatalf("failed to create test store: %v", err)
+	}
+
+	cleanup := func() {
+		_ = s.Close()
+	}
+
+	return s, cleanup
+}
+
 func TestScanner_Scan_EmptyDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	// Create mock store (nil is ok for now since we're not using it yet).
-	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	// Create a real test store since the scanner needs it for bulk mode operations
+	testStore, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	scanner := NewScanner(testStore, store.NewNoopEmitter(), nil, logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{

@@ -400,10 +400,10 @@ func TestRebuildProgress(t *testing.T) {
 	// Verify state was rebuilt
 	progress, err := destStore.GetState(ctx, "user-1", "book-1")
 	require.NoError(t, err)
-	assert.Equal(t, int64(1800000), progress.CurrentPositionMs)              // 30 minutes
-	assert.Equal(t, int64(1800000), progress.TotalListenTimeMs)              // 30 minutes total
-	assert.InDelta(t, 0.5, progress.ComputeProgress(3600000), 0.01)          // 50% progress (30min / 60min)
-	assert.False(t, progress.IsFinished)                                     // Not finished yet
+	assert.Equal(t, int64(1800000), progress.CurrentPositionMs)     // 30 minutes
+	assert.Equal(t, int64(1800000), progress.TotalListenTimeMs)     // 30 minutes total
+	assert.InDelta(t, 0.5, progress.ComputeProgress(3600000), 0.01) // 50% progress (30min / 60min)
+	assert.False(t, progress.IsFinished)                            // Not finished yet
 
 	// Now test RebuildProgress directly by clearing state and rebuilding
 	// First, let's verify we can call RebuildProgress

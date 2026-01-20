@@ -94,10 +94,10 @@ type BackupInfo struct {
 
 // RestoreResult contains the outcome of a restore operation.
 type RestoreResult struct {
-	Imported map[string]int  `json:"imported"`
-	Skipped  map[string]int  `json:"skipped"`
-	Errors   []RestoreError  `json:"errors,omitempty"`
-	Duration time.Duration   `json:"duration"`
+	Imported map[string]int `json:"imported"`
+	Skipped  map[string]int `json:"skipped"`
+	Errors   []RestoreError `json:"errors,omitempty"`
+	Duration time.Duration  `json:"duration"`
 }
 
 // RestoreError describes a non-fatal error during restore.

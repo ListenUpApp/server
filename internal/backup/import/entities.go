@@ -77,7 +77,7 @@ func (i *Importer) importUsers(ctx context.Context, zr *zip.ReadCloser, opts Res
 						skipped++
 						continue
 					}
-				// MergeKeepBackup falls through to update
+					// MergeKeepBackup falls through to update
 				}
 			}
 

@@ -167,4 +167,3 @@ func isSystemDirectory(name string) bool {
 	}
 	return systemDirs[name]
 }
-

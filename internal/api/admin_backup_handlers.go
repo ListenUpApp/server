@@ -382,19 +382,19 @@ func (s *Server) handleValidateBackup(ctx context.Context, input *ValidateBackup
 		resp.ServerID = result.Manifest.ServerID
 		resp.ServerName = result.Manifest.ServerName
 		resp.ExpectedCounts = map[string]int{
-			"users":            result.ExpectedCounts.Users,
-			"libraries":        result.ExpectedCounts.Libraries,
-			"books":            result.ExpectedCounts.Books,
-			"contributors":     result.ExpectedCounts.Contributors,
-			"series":           result.ExpectedCounts.Series,
-			"genres":           result.ExpectedCounts.Genres,
-			"tags":             result.ExpectedCounts.Tags,
-			"collections":      result.ExpectedCounts.Collections,
+			"users":             result.ExpectedCounts.Users,
+			"libraries":         result.ExpectedCounts.Libraries,
+			"books":             result.ExpectedCounts.Books,
+			"contributors":      result.ExpectedCounts.Contributors,
+			"series":            result.ExpectedCounts.Series,
+			"genres":            result.ExpectedCounts.Genres,
+			"tags":              result.ExpectedCounts.Tags,
+			"collections":       result.ExpectedCounts.Collections,
 			"collection_shares": result.ExpectedCounts.CollectionShares,
-			"lenses":           result.ExpectedCounts.Lenses,
-			"activities":       result.ExpectedCounts.Activities,
-			"listening_events": result.ExpectedCounts.ListeningEvents,
-			"reading_sessions": result.ExpectedCounts.ReadingSessions,
+			"lenses":            result.ExpectedCounts.Lenses,
+			"activities":        result.ExpectedCounts.Activities,
+			"listening_events":  result.ExpectedCounts.ListeningEvents,
+			"reading_sessions":  result.ExpectedCounts.ReadingSessions,
 		}
 	}
 

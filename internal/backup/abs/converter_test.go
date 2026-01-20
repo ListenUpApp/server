@@ -13,9 +13,9 @@ func TestSessionToEvent(t *testing.T) {
 		UserID:        "abs-user-1",
 		LibraryItemID: "abs-item-1",
 		MediaType:     "book",
-		StartTime:     0,           // Position at start: 0s
-		CurrentTime:   300,         // Position at end: 5min
-		Duration:      300,         // 5 minutes listened
+		StartTime:     0,   // Position at start: 0s
+		CurrentTime:   300, // Position at end: 5min
+		Duration:      300, // 5 minutes listened
 		TimeListening: 300,
 		StartedAt:     1704067200000, // 2024-01-01 00:00:00 UTC
 		UpdatedAt:     1704067500000, // 2024-01-01 00:05:00 UTC (5 min later)
@@ -166,7 +166,7 @@ func TestCalculateSessionStats(t *testing.T) {
 			UserID:        "u2",
 			LibraryItemID: "i1",
 			MediaType:     "book",
-			Duration:      600, // 10 min
+			Duration:      600,           // 10 min
 			StartedAt:     1704153600000, // Next day
 		},
 		{
@@ -174,7 +174,7 @@ func TestCalculateSessionStats(t *testing.T) {
 			UserID:        "u1",
 			LibraryItemID: "i2",
 			MediaType:     "book",
-			Duration:      900, // 15 min
+			Duration:      900,           // 15 min
 			StartedAt:     1704240000000, // Day after
 		},
 	}

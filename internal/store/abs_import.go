@@ -14,24 +14,24 @@ import (
 
 const (
 	// Primary prefixes
-	absImportPrefix        = "abs:import:"
-	absImportUserPrefix    = "abs:import:user:"
-	absImportBookPrefix    = "abs:import:book:"
-	absImportSessionPrefix = "abs:import:session:"
+	absImportPrefix         = "abs:import:"
+	absImportUserPrefix     = "abs:import:user:"
+	absImportBookPrefix     = "abs:import:book:"
+	absImportSessionPrefix  = "abs:import:session:"
 	absImportProgressPrefix = "abs:import:progress:"
 
 	// Index prefixes
-	absImportByStatusPrefix       = "abs:idx:import:status:"
-	absImportUserUnmappedPrefix   = "abs:idx:import:user:unmapped:"
-	absImportBookUnmappedPrefix   = "abs:idx:import:book:unmapped:"
+	absImportByStatusPrefix        = "abs:idx:import:status:"
+	absImportUserUnmappedPrefix    = "abs:idx:import:user:unmapped:"
+	absImportBookUnmappedPrefix    = "abs:idx:import:book:unmapped:"
 	absImportSessionByStatusPrefix = "abs:idx:import:session:status:"
 )
 
 var (
-	ErrABSImportNotFound     = errors.New("ABS import not found")
-	ErrABSImportExists       = errors.New("ABS import already exists")
-	ErrABSImportUserNotFound = errors.New("ABS import user not found")
-	ErrABSImportBookNotFound = errors.New("ABS import book not found")
+	ErrABSImportNotFound        = errors.New("ABS import not found")
+	ErrABSImportExists          = errors.New("ABS import already exists")
+	ErrABSImportUserNotFound    = errors.New("ABS import user not found")
+	ErrABSImportBookNotFound    = errors.New("ABS import book not found")
 	ErrABSImportSessionNotFound = errors.New("ABS import session not found")
 )
 
@@ -908,9 +908,9 @@ func (s *Store) ListABSImportProgressForUser(_ context.Context, importID, absUse
 // different UUIDs for the same logical book.
 //
 // The function uses two strategies:
-// 1. Direct lookup: Check if progress.ABSMediaID has a book mapping to the target ListenUp book
-// 2. Reverse lookup: Find all ABSImportBook entries that map to the target ListenUp book,
-//    then check if any progress entry matches those ABS media IDs
+//  1. Direct lookup: Check if progress.ABSMediaID has a book mapping to the target ListenUp book
+//  2. Reverse lookup: Find all ABSImportBook entries that map to the target ListenUp book,
+//     then check if any progress entry matches those ABS media IDs
 //
 // Strategy 2 is important because the progress might be stored with a different ABSMediaID
 // than the book mapping uses (due to ABS internal ID inconsistencies).
@@ -1021,13 +1021,6 @@ func (s *Store) FindABSImportProgressByListenUpBook(ctx context.Context, importI
 		slog.Int("book_mappings_checked", len(absMediaIDsForBook)),
 		slog.Int("progress_entries_checked", len(allProgress)))
 	return nil, nil // Not found - Strategies 1 and 2 both failed
-}
-
-func abs(x int64) int64 {
-	if x < 0 {
-		return -x
-	}
-	return x
 }
 
 // --- Key builders ---

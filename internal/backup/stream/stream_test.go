@@ -85,19 +85,25 @@ func TestWriterReader_RoundTrip(t *testing.T) {
 }
 
 func TestOpenFile_NotFound(t *testing.T) {
-	// Create empty zip
-	var buf bytes.Buffer
-	zw := zip.NewWriter(&buf)
-	zw.Close()
+	// Create empty zip in temp file
+	tmpDir := t.TempDir()
+	zipPath := filepath.Join(tmpDir, "empty.zip")
 
-	// Open and try to find nonexistent file
-	r, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	f, err := os.Create(zipPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Wrap in ReadCloser
-	zr := &zip.ReadCloser{Reader: *r}
+	zw := zip.NewWriter(f)
+	zw.Close()
+	f.Close()
+
+	// Open and try to find nonexistent file
+	zr, err := zip.OpenReader(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer zr.Close()
 
 	_, err = OpenFile(zr, "nonexistent.jsonl")
 	if err == nil {

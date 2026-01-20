@@ -45,11 +45,11 @@ func (c MatchConfidence) ShouldAutoImport() bool {
 
 // UserMatch represents an attempt to match an ABS user to a ListenUp user.
 type UserMatch struct {
-	ABSUser      *User           // Original ABS user
-	ListenUpID   string          // Matched ListenUp user ID (empty if no match)
-	Confidence   MatchConfidence // How confident we are
-	MatchReason  string          // Human-readable explanation
-	Suggestions  []UserSuggestion // Possible matches for admin review
+	ABSUser     *User            // Original ABS user
+	ListenUpID  string           // Matched ListenUp user ID (empty if no match)
+	Confidence  MatchConfidence  // How confident we are
+	MatchReason string           // Human-readable explanation
+	Suggestions []UserSuggestion // Possible matches for admin review
 }
 
 // UserSuggestion is a suggested ListenUp user for an unmatched ABS user.
@@ -63,21 +63,21 @@ type UserSuggestion struct {
 
 // BookMatch represents an attempt to match an ABS item to a ListenUp book.
 type BookMatch struct {
-	ABSItem      *LibraryItem    // Original ABS item
-	ListenUpID   string          // Matched ListenUp book ID (empty if no match)
-	Confidence   MatchConfidence // How confident we are
-	MatchReason  string          // Human-readable explanation
-	Suggestions  []BookSuggestion // Possible matches for admin review
+	ABSItem     *LibraryItem     // Original ABS item
+	ListenUpID  string           // Matched ListenUp book ID (empty if no match)
+	Confidence  MatchConfidence  // How confident we are
+	MatchReason string           // Human-readable explanation
+	Suggestions []BookSuggestion // Possible matches for admin review
 }
 
 // BookSuggestion is a suggested ListenUp book for an unmatched ABS item.
 type BookSuggestion struct {
-	BookID        string  // ListenUp book ID
-	Title         string  // For display
-	Author        string  // For display
-	DurationMs    int64   // For comparison
-	Score         float64 // Similarity score 0.0-1.0
-	Reason        string  // Why this is suggested
+	BookID     string  // ListenUp book ID
+	Title      string  // For display
+	Author     string  // For display
+	DurationMs int64   // For comparison
+	Score      float64 // Similarity score 0.0-1.0
+	Reason     string  // Why this is suggested
 }
 
 // AnalysisOptions configures the backup analysis.
@@ -132,22 +132,22 @@ type AnalysisResult struct {
 	TotalSessions int `json:"total_sessions"`
 
 	// User matching results
-	UserMatches       []UserMatch `json:"user_matches"`
-	UsersMatched      int         `json:"users_matched"`       // Strong or definitive
-	UsersPending      int         `json:"users_pending"`       // None or weak
+	UserMatches  []UserMatch `json:"user_matches"`
+	UsersMatched int         `json:"users_matched"` // Strong or definitive
+	UsersPending int         `json:"users_pending"` // None or weak
 
 	// Book matching results
-	BookMatches       []BookMatch `json:"book_matches"`
-	BooksMatched      int         `json:"books_matched"`       // Strong or definitive
-	BooksPending      int         `json:"books_pending"`       // None or weak
+	BookMatches  []BookMatch `json:"book_matches"`
+	BooksMatched int         `json:"books_matched"` // Strong or definitive
+	BooksPending int         `json:"books_pending"` // None or weak
 
 	// Sessions that can be imported (both user and book matched)
-	SessionsReady     int `json:"sessions_ready"`
-	SessionsPending   int `json:"sessions_pending"`
+	SessionsReady   int `json:"sessions_ready"`
+	SessionsPending int `json:"sessions_pending"`
 
 	// Progress records that can be imported
-	ProgressReady     int `json:"progress_ready"`
-	ProgressPending   int `json:"progress_pending"`
+	ProgressReady   int `json:"progress_ready"`
+	ProgressPending int `json:"progress_pending"`
 
 	// Issues found during analysis
 	Warnings []string `json:"warnings,omitempty"`
@@ -188,12 +188,12 @@ func DefaultImportOptions() ImportOptions {
 // ImportResult contains the results of executing an ABS import.
 type ImportResult struct {
 	// What was imported
-	SessionsImported        int `json:"sessions_imported"`
-	SessionsSkipped         int `json:"sessions_skipped"`
-	ProgressImported        int `json:"progress_imported"`
-	ProgressSkipped         int `json:"progress_skipped"`
-	EventsCreated           int `json:"events_created"`            // Total ListeningEvents created
-	ReadingSessionsCreated  int `json:"reading_sessions_created"`  // BookReadingSession records for readers section
+	SessionsImported       int `json:"sessions_imported"`
+	SessionsSkipped        int `json:"sessions_skipped"`
+	ProgressImported       int `json:"progress_imported"`
+	ProgressSkipped        int `json:"progress_skipped"`
+	EventsCreated          int `json:"events_created"`           // Total ListeningEvents created
+	ReadingSessionsCreated int `json:"reading_sessions_created"` // BookReadingSession records for readers section
 
 	// Users whose progress was affected (for rebuild)
 	AffectedUserIDs []string `json:"affected_user_ids"`

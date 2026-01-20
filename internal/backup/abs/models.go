@@ -38,19 +38,19 @@ func (u *User) IsImportable() bool {
 // MediaProgress represents embedded listening progress in ABS user records.
 // This is the "current state" — where the user left off.
 type MediaProgress struct {
-	ID              string  `json:"id"`
-	LibraryItemID   string  `json:"libraryItemId"`
-	EpisodeID       string  `json:"episodeId,omitempty"` // For podcasts (we skip these)
-	MediaItemID     string  `json:"mediaItemId"`
-	MediaItemType   string  `json:"mediaItemType"` // "book" or "podcast"
-	Duration        float64 `json:"duration"`      // Total book duration in seconds
-	CurrentTime     float64 `json:"currentTime"`   // Current position in seconds
-	Progress        float64 `json:"progress"`      // 0.0 - 1.0
-	IsFinished      bool    `json:"isFinished"`
-	HideFromContinue bool   `json:"hideFromContinueListening"`
-	LastUpdate      int64   `json:"lastUpdate"`     // Unix milliseconds
-	StartedAt       int64   `json:"startedAt"`      // Unix milliseconds
-	FinishedAt      int64   `json:"finishedAt"`     // Unix milliseconds (0 if not finished)
+	ID               string  `json:"id"`
+	LibraryItemID    string  `json:"libraryItemId"`
+	EpisodeID        string  `json:"episodeId,omitempty"` // For podcasts (we skip these)
+	MediaItemID      string  `json:"mediaItemId"`
+	MediaItemType    string  `json:"mediaItemType"` // "book" or "podcast"
+	Duration         float64 `json:"duration"`      // Total book duration in seconds
+	CurrentTime      float64 `json:"currentTime"`   // Current position in seconds
+	Progress         float64 `json:"progress"`      // 0.0 - 1.0
+	IsFinished       bool    `json:"isFinished"`
+	HideFromContinue bool    `json:"hideFromContinueListening"`
+	LastUpdate       int64   `json:"lastUpdate"` // Unix milliseconds
+	StartedAt        int64   `json:"startedAt"`  // Unix milliseconds
+	FinishedAt       int64   `json:"finishedAt"` // Unix milliseconds (0 if not finished)
 }
 
 // IsBook returns true if this progress is for an audiobook (not podcast).
@@ -65,14 +65,14 @@ func (p *MediaProgress) LastUpdateTime() time.Time {
 
 // Library represents an ABS library configuration.
 type Library struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Folders     []Folder `json:"folders"`
-	MediaType   string   `json:"mediaType"` // "book" or "podcast"
-	Provider    string   `json:"provider"`
-	Settings    any      `json:"settings"`
-	CreatedAt   int64    `json:"createdAt"`
-	LastUpdate  int64    `json:"lastUpdate"`
+	ID         string   `json:"id"`
+	Name       string   `json:"name"`
+	Folders    []Folder `json:"folders"`
+	MediaType  string   `json:"mediaType"` // "book" or "podcast"
+	Provider   string   `json:"provider"`
+	Settings   any      `json:"settings"`
+	CreatedAt  int64    `json:"createdAt"`
+	LastUpdate int64    `json:"lastUpdate"`
 }
 
 // Folder is a library folder path.
@@ -90,13 +90,13 @@ func (l *Library) IsBookLibrary() bool {
 // ABS calls these "library items" — we only care about books.
 type LibraryItem struct {
 	ID           string    `json:"id"`
-	MediaID      string    `json:"mediaId"`                // References books.id - used for session matching
-	INO          string    `json:"ino"`                    // Inode of root folder
+	MediaID      string    `json:"mediaId"` // References books.id - used for session matching
+	INO          string    `json:"ino"`     // Inode of root folder
 	LibraryID    string    `json:"libraryId"`
 	FolderID     string    `json:"folderId"`
 	Path         string    `json:"path"`
 	RelPath      string    `json:"relPath"`
-	MediaType    string    `json:"mediaType"`              // "book" or "podcast"
+	MediaType    string    `json:"mediaType"` // "book" or "podcast"
 	IsFile       bool      `json:"isFile"`
 	IsMissing    bool      `json:"isMissing"`
 	IsInvalid    bool      `json:"isInvalid"`
@@ -118,14 +118,14 @@ func (i *LibraryItem) IsValid() bool {
 
 // BookMedia contains book-specific metadata.
 type BookMedia struct {
-	Metadata    BookMetadata `json:"metadata"`
-	CoverPath   string       `json:"coverPath,omitempty"`
-	Tags        []string     `json:"tags,omitempty"`
-	AudioFiles  []AudioFile  `json:"audioFiles"`
-	Chapters    []Chapter    `json:"chapters,omitempty"`
-	Duration    float64      `json:"duration"`    // Total duration in seconds
-	Size        int64        `json:"size"`        // Total size in bytes
-	EbookFile   any          `json:"ebookFile"`   // We ignore ebooks
+	Metadata   BookMetadata `json:"metadata"`
+	CoverPath  string       `json:"coverPath,omitempty"`
+	Tags       []string     `json:"tags,omitempty"`
+	AudioFiles []AudioFile  `json:"audioFiles"`
+	Chapters   []Chapter    `json:"chapters,omitempty"`
+	Duration   float64      `json:"duration"`  // Total duration in seconds
+	Size       int64        `json:"size"`      // Total size in bytes
+	EbookFile  any          `json:"ebookFile"` // We ignore ebooks
 }
 
 // DurationMs returns duration in milliseconds (ListenUp's format).
@@ -184,23 +184,23 @@ type SeriesRef struct {
 
 // AudioFile represents an audio file within a book.
 type AudioFile struct {
-	Index    int     `json:"index"`
-	INO      string  `json:"ino"`      // Inode
-	Metadata any     `json:"metadata"` // Raw ffprobe data
-	AddedAt  int64   `json:"addedAt"`
-	UpdatedAt int64  `json:"updatedAt"`
-	TrackNumFromMeta   int     `json:"trackNumFromMeta"`
-	DiscNumFromMeta    int     `json:"discNumFromMeta"`
-	TrackNumFromFilename int   `json:"trackNumFromFilename"`
-	DiscNumFromFilename  int   `json:"discNumFromFilename"`
-	Duration  float64 `json:"duration"` // Seconds
-	BitRate   int     `json:"bitRate"`
-	Language  string  `json:"language,omitempty"`
-	Codec     string  `json:"codec"`
-	TimeBase  string  `json:"timeBase"`
-	Channels  int     `json:"channels"`
-	ChannelLayout string `json:"channelLayout"`
-	MimeType  string  `json:"mimeType"`
+	Index                int     `json:"index"`
+	INO                  string  `json:"ino"`      // Inode
+	Metadata             any     `json:"metadata"` // Raw ffprobe data
+	AddedAt              int64   `json:"addedAt"`
+	UpdatedAt            int64   `json:"updatedAt"`
+	TrackNumFromMeta     int     `json:"trackNumFromMeta"`
+	DiscNumFromMeta      int     `json:"discNumFromMeta"`
+	TrackNumFromFilename int     `json:"trackNumFromFilename"`
+	DiscNumFromFilename  int     `json:"discNumFromFilename"`
+	Duration             float64 `json:"duration"` // Seconds
+	BitRate              int     `json:"bitRate"`
+	Language             string  `json:"language,omitempty"`
+	Codec                string  `json:"codec"`
+	TimeBase             string  `json:"timeBase"`
+	Channels             int     `json:"channels"`
+	ChannelLayout        string  `json:"channelLayout"`
+	MimeType             string  `json:"mimeType"`
 }
 
 // DurationMs returns duration in milliseconds.
@@ -240,29 +240,29 @@ type Series struct {
 // This is the historical record of a listening span — when the user listened,
 // for how long, and what positions they moved between.
 type Session struct {
-	ID              string  `json:"id"`
-	UserID          string  `json:"userId"`
-	LibraryID       string  `json:"libraryId"`
-	LibraryItemID   string  `json:"libraryItemId"`
-	EpisodeID       string  `json:"episodeId,omitempty"` // For podcasts
-	MediaType       string  `json:"mediaType"`           // "book" or "podcast"
-	MediaMetadata   any     `json:"mediaMetadata"`       // Book info at time of session
-	Chapters        []any   `json:"chapters,omitempty"`
-	DisplayTitle    string  `json:"displayTitle"`
-	DisplayAuthor   string  `json:"displayAuthor"`
-	CoverPath       string  `json:"coverPath,omitempty"`
-	Duration        float64 `json:"duration"`            // Duration of listening in seconds
-	PlayMethod      int     `json:"playMethod"`          // 0=direct, 1=transcode, etc.
-	MediaPlayer     string  `json:"mediaPlayer"`
-	DeviceInfo      any     `json:"deviceInfo,omitempty"`
-	ServerVersion   string  `json:"serverVersion,omitempty"`
-	Date            string  `json:"date,omitempty"`      // "YYYY-MM-DD"
-	DayOfWeek       string  `json:"dayOfWeek,omitempty"` // "Monday", etc.
-	TimeListening   float64 `json:"timeListening"`       // Same as duration?
-	StartTime       float64 `json:"startTime"`           // Position at session start (seconds)
-	CurrentTime     float64 `json:"currentTime"`         // Position at session end (seconds)
-	StartedAt       int64   `json:"startedAt"`           // Unix milliseconds
-	UpdatedAt       int64   `json:"updatedAt"`           // Unix milliseconds
+	ID            string  `json:"id"`
+	UserID        string  `json:"userId"`
+	LibraryID     string  `json:"libraryId"`
+	LibraryItemID string  `json:"libraryItemId"`
+	EpisodeID     string  `json:"episodeId,omitempty"` // For podcasts
+	MediaType     string  `json:"mediaType"`           // "book" or "podcast"
+	MediaMetadata any     `json:"mediaMetadata"`       // Book info at time of session
+	Chapters      []any   `json:"chapters,omitempty"`
+	DisplayTitle  string  `json:"displayTitle"`
+	DisplayAuthor string  `json:"displayAuthor"`
+	CoverPath     string  `json:"coverPath,omitempty"`
+	Duration      float64 `json:"duration"`   // Duration of listening in seconds
+	PlayMethod    int     `json:"playMethod"` // 0=direct, 1=transcode, etc.
+	MediaPlayer   string  `json:"mediaPlayer"`
+	DeviceInfo    any     `json:"deviceInfo,omitempty"`
+	ServerVersion string  `json:"serverVersion,omitempty"`
+	Date          string  `json:"date,omitempty"`      // "YYYY-MM-DD"
+	DayOfWeek     string  `json:"dayOfWeek,omitempty"` // "Monday", etc.
+	TimeListening float64 `json:"timeListening"`       // Same as duration?
+	StartTime     float64 `json:"startTime"`           // Position at session start (seconds)
+	CurrentTime   float64 `json:"currentTime"`         // Position at session end (seconds)
+	StartedAt     int64   `json:"startedAt"`           // Unix milliseconds
+	UpdatedAt     int64   `json:"updatedAt"`           // Unix milliseconds
 }
 
 // IsBook returns true if this session is for an audiobook.

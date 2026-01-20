@@ -33,11 +33,11 @@ func NewAdminService(store *store.Store, logger *slog.Logger, registrationBroadc
 
 // UpdateUserRequest contains the fields that can be updated on a user.
 type UpdateUserRequest struct {
-	DisplayName *string             `json:"display_name,omitempty"`
-	FirstName   *string             `json:"first_name,omitempty"`
-	LastName    *string             `json:"last_name,omitempty"`
-	Role        *domain.Role        `json:"role,omitempty"`
-	Permissions *PermissionsUpdate  `json:"permissions,omitempty"`
+	DisplayName *string            `json:"display_name,omitempty"`
+	FirstName   *string            `json:"first_name,omitempty"`
+	LastName    *string            `json:"last_name,omitempty"`
+	Role        *domain.Role       `json:"role,omitempty"`
+	Permissions *PermissionsUpdate `json:"permissions,omitempty"`
 }
 
 // PermissionsUpdate contains optional permission updates.

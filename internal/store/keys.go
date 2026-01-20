@@ -4,6 +4,7 @@ import "sync"
 
 // keyPool provides reusable byte slices for building database keys.
 // This reduces allocations on the hot path of database operations.
+// We store *[]byte (pointer to slice) to avoid allocations when boxing into interface{}.
 var keyPool = sync.Pool{
 	New: func() any {
 		// Pre-allocate 256 bytes which covers most key sizes:
@@ -12,7 +13,8 @@ var keyPool = sync.Pool{
 		// - Index name (10-30 bytes)
 		// - ":" (1 byte)
 		// - Value/ID (21+ bytes for NanoID)
-		return make([]byte, 0, 256)
+		buf := make([]byte, 0, 256)
+		return &buf
 	},
 }
 
@@ -26,10 +28,11 @@ var keyPool = sync.Pool{
 //	defer releaseKey(key)
 //	item, err := txn.Get(key)
 func buildKey(prefix, suffix string) []byte {
-	buf, _ := keyPool.Get().([]byte)
-	buf = buf[:0] // Reset length, keep capacity
+	bufPtr := keyPool.Get().(*[]byte)
+	buf := (*bufPtr)[:0] // Reset length, keep capacity
 	buf = append(buf, prefix...)
 	buf = append(buf, suffix...)
+	*bufPtr = buf // Update the pointer's slice header
 	return buf
 }
 
@@ -43,13 +46,14 @@ func buildKey(prefix, suffix string) []byte {
 //	defer releaseKey(key)
 //	item, err := txn.Get(key)
 func buildIndexKey(prefix, indexName, value string) []byte {
-	buf, _ := keyPool.Get().([]byte)
-	buf = buf[:0] // Reset length, keep capacity
+	bufPtr := keyPool.Get().(*[]byte)
+	buf := (*bufPtr)[:0] // Reset length, keep capacity
 	buf = append(buf, prefix...)
 	buf = append(buf, "idx:"...)
 	buf = append(buf, indexName...)
 	buf = append(buf, ':')
 	buf = append(buf, value...)
+	*bufPtr = buf // Update the pointer's slice header
 	return buf
 }
 
@@ -59,6 +63,6 @@ func releaseKey(key []byte) {
 	// Only pool buffers that have reasonable capacity
 	// Avoids keeping oversized buffers in the pool
 	if cap(key) <= 512 {
-		keyPool.Put(key[:0])
+		keyPool.Put(&key)
 	}
 }

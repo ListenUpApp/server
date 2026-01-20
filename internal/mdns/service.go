@@ -111,14 +111,14 @@ func (s *Service) Start(instance *domain.Instance, port int) error {
 	// Parameters: interface, protocol, flags, name, type, domain, host, port, txt
 	err = entryGroup.AddService(
 		avahi.InterfaceUnspec, // All interfaces
-		avahi.ProtoUnspec,    // IPv4 and IPv6
-		0,                    // No flags
-		hostname,             // Service name (visible in discovery)
-		ServiceType,          // _listenup._tcp
-		"local",              // Domain
-		"",                   // Host (empty = use avahi default)
-		uint16(port),         // Port
-		txtRecords,           // TXT records
+		avahi.ProtoUnspec,     // IPv4 and IPv6
+		0,                     // No flags
+		hostname,              // Service name (visible in discovery)
+		ServiceType,           // _listenup._tcp
+		"local",               // Domain
+		"",                    // Host (empty = use avahi default)
+		uint16(port),          // Port
+		txtRecords,            // TXT records
 	)
 	if err != nil {
 		s.cleanup()

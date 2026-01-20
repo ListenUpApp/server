@@ -52,7 +52,7 @@ func TestStringSimilarity(t *testing.T) {
 		{"identical", "identical", 1.0, 1.0},
 		{"", "", 1.0, 1.0}, // Both empty = identical
 		{"", "something", 0.0, 0.0},
-		{"hello", "helo", 0.7, 0.9},          // One char difference
+		{"hello", "helo", 0.7, 0.9},           // One char difference
 		{"completely", "different", 0.0, 0.3}, // Very different
 		{"similar", "similr", 0.8, 0.95},      // One char missing
 	}

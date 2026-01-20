@@ -60,13 +60,13 @@ type AnalyzeABSInput struct {
 
 // ABSUserMatchResponse represents a user matching result.
 type ABSUserMatchResponse struct {
-	ABSUserID     string               `json:"abs_user_id" doc:"ABS user ID"`
-	ABSUsername   string               `json:"abs_username" doc:"ABS username"`
-	ABSEmail      string               `json:"abs_email,omitempty" doc:"ABS email"`
-	ListenUpID    string               `json:"listenup_id,omitempty" doc:"Matched ListenUp user ID"`
-	Confidence    string               `json:"confidence" doc:"Match confidence: none, weak, strong, definitive"`
-	MatchReason   string               `json:"match_reason,omitempty" doc:"Why this match was made"`
-	Suggestions   []ABSUserSuggestion  `json:"suggestions,omitempty" doc:"Suggested matches for admin review"`
+	ABSUserID   string              `json:"abs_user_id" doc:"ABS user ID"`
+	ABSUsername string              `json:"abs_username" doc:"ABS username"`
+	ABSEmail    string              `json:"abs_email,omitempty" doc:"ABS email"`
+	ListenUpID  string              `json:"listenup_id,omitempty" doc:"Matched ListenUp user ID"`
+	Confidence  string              `json:"confidence" doc:"Match confidence: none, weak, strong, definitive"`
+	MatchReason string              `json:"match_reason,omitempty" doc:"Why this match was made"`
+	Suggestions []ABSUserSuggestion `json:"suggestions,omitempty" doc:"Suggested matches for admin review"`
 }
 
 // ABSUserSuggestion is a suggested user match.
@@ -101,9 +101,9 @@ type ABSBookSuggestion struct {
 
 // AnalyzeABSResponse is the response from analyzing an ABS backup.
 type AnalyzeABSResponse struct {
-	BackupPath    string                 `json:"backup_path" doc:"Path to analyzed backup"`
-	AnalyzedAt    string                 `json:"analyzed_at" doc:"When analysis was performed"`
-	Summary       string                 `json:"summary" doc:"Human-readable summary of backup contents"`
+	BackupPath string `json:"backup_path" doc:"Path to analyzed backup"`
+	AnalyzedAt string `json:"analyzed_at" doc:"When analysis was performed"`
+	Summary    string `json:"summary" doc:"Human-readable summary of backup contents"`
 
 	// Counts
 	TotalUsers    int `json:"total_users" doc:"Total importable users in backup"`
@@ -111,10 +111,10 @@ type AnalyzeABSResponse struct {
 	TotalSessions int `json:"total_sessions" doc:"Total listening sessions in backup"`
 
 	// Match results
-	UsersMatched  int `json:"users_matched" doc:"Users that matched automatically"`
-	UsersPending  int `json:"users_pending" doc:"Users needing manual mapping"`
-	BooksMatched  int `json:"books_matched" doc:"Books that matched automatically"`
-	BooksPending  int `json:"books_pending" doc:"Books needing manual mapping"`
+	UsersMatched int `json:"users_matched" doc:"Users that matched automatically"`
+	UsersPending int `json:"users_pending" doc:"Users needing manual mapping"`
+	BooksMatched int `json:"books_matched" doc:"Books that matched automatically"`
+	BooksPending int `json:"books_pending" doc:"Books needing manual mapping"`
 
 	// What can be imported
 	SessionsReady   int `json:"sessions_ready" doc:"Sessions ready to import"`

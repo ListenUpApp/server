@@ -16,12 +16,12 @@ import (
 
 // BackupService manages backup creation and listing.
 type BackupService struct {
-	store      *store.Store
-	backupDir  string
-	dataDir    string
-	version    string
-	logger     *slog.Logger
-	exporter   *export.Exporter
+	store     *store.Store
+	backupDir string
+	dataDir   string
+	version   string
+	logger    *slog.Logger
+	exporter  *export.Exporter
 }
 
 // NewBackupService creates a BackupService.

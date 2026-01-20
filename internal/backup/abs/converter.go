@@ -150,12 +150,12 @@ func sortEventsByStartTime(events []*domain.ListeningEvent) {
 
 // SessionStats calculates summary statistics for converted sessions.
 type SessionStats struct {
-	TotalSessions     int
-	TotalDurationMs   int64
-	EarliestSession   time.Time
-	LatestSession     time.Time
-	UniqueBooks       int
-	UniqueUsers       int
+	TotalSessions   int
+	TotalDurationMs int64
+	EarliestSession time.Time
+	LatestSession   time.Time
+	UniqueBooks     int
+	UniqueUsers     int
 }
 
 // CalculateSessionStats computes statistics for a batch of sessions.
