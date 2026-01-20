@@ -26,10 +26,21 @@ func NewSharingService(store *store.Store, logger *slog.Logger) *SharingService 
 }
 
 // ShareCollection shares a collection with another user.
-// Only the collection owner can share the collection.
+// The requesting user must own the collection AND have share permission.
 func (s *SharingService) ShareCollection(ctx context.Context, ownerUserID, collectionID, sharedWithUserID string, permission domain.SharePermission) (*domain.CollectionShare, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+
+	// Get the requesting user to check permissions
+	requestingUser, err := s.store.GetUser(ctx, ownerUserID)
+	if err != nil {
+		return nil, fmt.Errorf("get requesting user: %w", err)
+	}
+
+	// Check if user has share permission
+	if !requestingUser.CanShare() {
+		return nil, errors.New("user does not have permission to share collections")
 	}
 
 	// Verify the requester owns the collection

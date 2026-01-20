@@ -17,6 +17,9 @@ import (
 // Store uses this to broadcast changes without depending on SSE implementation details.
 type EventEmitter interface {
 	Emit(event any)
+	// SetScanning sets the scanning state synchronously.
+	// Used by scanner to ensure API calls see correct state immediately.
+	SetScanning(scanning bool)
 }
 
 // NoopEmitter is a no-op implementation of EventEmitter for testing.
@@ -24,6 +27,9 @@ type NoopEmitter struct{}
 
 // Emit implements EventEmitter.Emit as a no-op.
 func (NoopEmitter) Emit(_ any) {}
+
+// SetScanning implements EventEmitter.SetScanning as a no-op.
+func (NoopEmitter) SetScanning(_ bool) {}
 
 // NewNoopEmitter creates a new no-op emitter for testing.
 func NewNoopEmitter() EventEmitter {
@@ -92,6 +98,12 @@ type Store struct {
 
 	// SSE event emitter for broadcasting changes.
 	eventEmitter EventEmitter
+
+	// bulkMode suppresses SSE events during bulk operations (e.g., library scan).
+	// When true, contributor.created and series.created events are not emitted.
+	// This prevents flooding SSE connections during initial library scans.
+	bulkMode   bool
+	bulkModeMu sync.RWMutex
 
 	// Search indexer for keeping search in sync with store changes.
 	// Set via SetSearchIndexer after store creation to avoid circular dependencies.
@@ -214,6 +226,23 @@ func (s *Store) SetTranscodeDeleter(deleter TranscodeDeleter) {
 	s.transcodeDeleter = deleter
 }
 
+// SetBulkMode enables or disables bulk mode for the store.
+// When enabled, SSE events for contributor.created and series.created are suppressed.
+// This prevents flooding SSE connections during bulk operations like library scans.
+// The scanner should call SetBulkMode(true) before scanning and SetBulkMode(false) after.
+func (s *Store) SetBulkMode(enabled bool) {
+	s.bulkModeMu.Lock()
+	defer s.bulkModeMu.Unlock()
+	s.bulkMode = enabled
+}
+
+// IsBulkMode returns whether the store is in bulk mode.
+func (s *Store) IsBulkMode() bool {
+	s.bulkModeMu.RLock()
+	defer s.bulkModeMu.RUnlock()
+	return s.bulkMode
+}
+
 // Helper methods for database operations.
 
 // get retrieves a value by key.
@@ -279,12 +308,14 @@ func (s *Store) initUsers() {
 
 // initCollectionShares initializes the CollectionShares entity on the store.
 // Indexes by user (for finding all shares a user has) and collection (for finding all shares of a collection).
+// Note: We use compound keys (value:ID) to make indexes unique while still supporting prefix-based lookups.
+// This pattern is consistent with other 1-many indexes like reading sessions.
 func (s *Store) initCollectionShares() {
 	s.CollectionShares = NewEntity[domain.CollectionShare](s, "share:").
 		WithIndex("user", func(cs *domain.CollectionShare) []string {
-			return []string{cs.SharedWithUserID}
+			return []string{cs.SharedWithUserID + ":" + cs.ID}
 		}).
 		WithIndex("collection", func(cs *domain.CollectionShare) []string {
-			return []string{cs.CollectionID}
+			return []string{cs.CollectionID + ":" + cs.ID}
 		})
 }

@@ -32,6 +32,7 @@ type Services struct {
 	ReadingSession *service.ReadingSessionService // Reading session tracking
 	Activity       *service.ActivityService       // Activity feed
 	Profile        *service.ProfileService        // User profiles
+	Library        *service.LibraryService        // Library management
 }
 
 // StorageServices groups file storage handlers used by the API server.

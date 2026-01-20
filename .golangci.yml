@@ -1,14 +1,11 @@
-version: "2"
 run:
   modules-download-mode: readonly
   tests: true
   allow-parallel-runners: true
 output:
-  formats:
-    text:
-      path: stdout
-      print-linter-name: true
-      print-issued-lines: true
+  format: colored-line-number
+  print-linter-name: true
+  print-issued-lines: true
 linters:
   enable:
     - bidichk
@@ -30,7 +27,6 @@ linters:
     - intrange
     - makezero
     - misspell
-    - modernize
     - nakedret
     - nestif
     - nilerr
@@ -98,10 +94,6 @@ linters:
       max-func-lines: 30
     nestif:
       min-complexity: 5
-    modernize:
-      # Disable omitzero since it conflicts with omitempty for struct fields
-      disabled-checks:
-        - omitzero
     revive:
       enable-all-rules: false
       rules:
@@ -160,10 +152,6 @@ linters:
           - nestif
           - revive
         path: cmd/(chaptest|dbinspect|seed)/
-      # Exclude modernize omitzero check - omitempty is intentional for JSON API compatibility
-      - linters:
-          - modernize
-        text: "omitzero"
       # Exclude internal/errors package naming - it's intentionally named that way
       - linters:
           - revive
@@ -192,10 +180,6 @@ linters:
       - linters:
           - nilerr
         path: internal/store/(contributors|series)\.go
-      # Exclude modernize for audible contributor - complex function with conflicting auto-fixes
-      - linters:
-          - modernize
-        path: internal/metadata/audible/contributor\.go
       - linters:
           - gocyclo
           - nestif
@@ -257,13 +241,3 @@ issues:
   max-same-issues: 0
   uniq-by-line: true
   new: false
-formatters:
-  enable:
-    - gofmt
-    - goimports
-  exclusions:
-    generated: lax
-    paths:
-      - third_party$
-      - builtin$
-      - examples$

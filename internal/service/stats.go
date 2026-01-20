@@ -68,13 +68,13 @@ func (s *StatsService) GetUserStats(
 	)
 
 	// Fetch finished books in range
-	finishedProgress, err := s.store.GetProgressFinishedInRange(ctx, userID, start, end)
+	finishedProgress, err := s.store.GetStateFinishedInRange(ctx, userID, start, end)
 	if err != nil {
 		return nil, err
 	}
 
-	// Fetch all progress for books started count
-	allProgress, err := s.store.GetProgressForUser(ctx, userID)
+	// Fetch all state for books started count
+	allProgress, err := s.store.GetStateForUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}

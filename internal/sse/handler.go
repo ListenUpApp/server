@@ -80,6 +80,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Use ResponseController for modern HTTP handling (Go 1.20+).
 	rc := http.NewResponseController(w)
 
+	// SSE connections are long-lived. Disable the server's WriteTimeout immediately
+	// to prevent premature connection closure. The heartbeat mechanism (30s) handles
+	// keepalive, and we set per-write deadlines (60s) in sendEvent().
+	// Use a very long deadline (24 hours) instead of 0 for compatibility.
+	if err := rc.SetWriteDeadline(time.Now().Add(24 * time.Hour)); err != nil {
+		h.logger.Debug("failed to disable write timeout for SSE", slog.String("error", err.Error()))
+	}
+
 	// Flush headers immediately.
 	if err := rc.Flush(); err != nil {
 		h.logger.Error("failed to flush headers", slog.String("error", err.Error()))

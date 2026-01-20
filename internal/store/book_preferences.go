@@ -93,14 +93,15 @@ func (s *Store) GetAllBookPreferences(ctx context.Context, userID string) ([]*do
 		defer it.Close()
 
 		for it.Seek([]byte(prefix)); it.ValidForPrefix([]byte(prefix)); it.Next() {
-			var prefs domain.BookPreferences
+			// IMPORTANT: Allocate on heap to avoid pointer aliasing.
+			prefs := new(domain.BookPreferences)
 			err := it.Item().Value(func(val []byte) error {
-				return json.Unmarshal(val, &prefs)
+				return json.Unmarshal(val, prefs)
 			})
 			if err != nil {
 				return err
 			}
-			results = append(results, &prefs)
+			results = append(results, prefs)
 		}
 		return nil
 	})

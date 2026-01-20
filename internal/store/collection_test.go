@@ -976,3 +976,442 @@ func TestEnsureLibrary_Idempotent(t *testing.T) {
 	// Should still have only one scan path.
 	assert.Len(t, results[4].Library.ScanPaths, 1)
 }
+
+// === Permission Enforcement Tests ===
+// These tests verify ACL checks work correctly at the store level.
+
+const unauthorizedUserID = "unauthorized-user-999"
+
+func TestGetCollection_UnauthorizedUserReturnsNotFound(t *testing.T) {
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create library and collection owned by testUserID
+	lib := &domain.Library{
+		ID:        "lib-acl-001",
+		Name:      "ACL Test Library",
+		ScanPaths: []string{"/path/to/audiobooks"},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	err := store.CreateLibrary(ctx, lib)
+	require.NoError(t, err)
+
+	coll := &domain.Collection{
+		ID:        "coll-acl-001",
+		LibraryID: lib.ID,
+		OwnerID:   testUserID, // Owned by testUserID
+		Name:      "Private Collection",
+		BookIDs:   []string{},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	err = store.CreateCollection(ctx, coll)
+	require.NoError(t, err)
+
+	// Owner can access
+	retrieved, err := store.GetCollection(ctx, coll.ID, testUserID)
+	require.NoError(t, err)
+	assert.Equal(t, coll.ID, retrieved.ID)
+
+	// Unauthorized user gets NotFound (not Forbidden - security best practice)
+	_, err = store.GetCollection(ctx, coll.ID, unauthorizedUserID)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrCollectionNotFound, "unauthorized access should return NotFound to avoid leaking existence")
+}
+
+func TestGetCollection_SharedUserCanAccess(t *testing.T) {
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create library and collection
+	lib := &domain.Library{
+		ID:        "lib-shared-001",
+		Name:      "Shared Test Library",
+		ScanPaths: []string{"/path/to/audiobooks"},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	err := store.CreateLibrary(ctx, lib)
+	require.NoError(t, err)
+
+	coll := &domain.Collection{
+		ID:        "coll-shared-001",
+		LibraryID: lib.ID,
+		OwnerID:   testUserID,
+		Name:      "Shared Collection",
+		BookIDs:   []string{},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	err = store.CreateCollection(ctx, coll)
+	require.NoError(t, err)
+
+	sharedUserID := "shared-user-456"
+
+	// Before sharing: shared user cannot access
+	_, err = store.GetCollection(ctx, coll.ID, sharedUserID)
+	assert.ErrorIs(t, err, ErrCollectionNotFound)
+
+	// Create share with Read permission
+	share := &domain.CollectionShare{
+		CollectionID:     coll.ID,
+		SharedWithUserID: sharedUserID,
+		SharedByUserID:   testUserID,
+		Permission:       domain.PermissionRead,
+	}
+	err = store.CreateShare(ctx, share)
+	require.NoError(t, err)
+
+	// After sharing: shared user can access
+	retrieved, err := store.GetCollection(ctx, coll.ID, sharedUserID)
+	require.NoError(t, err)
+	assert.Equal(t, coll.ID, retrieved.ID)
+}
+
+func TestUpdateCollection_RequiresWritePermission(t *testing.T) {
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create library and collection
+	lib := &domain.Library{
+		ID:        "lib-write-001",
+		Name:      "Write Test Library",
+		ScanPaths: []string{"/path/to/audiobooks"},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	err := store.CreateLibrary(ctx, lib)
+	require.NoError(t, err)
+
+	coll := &domain.Collection{
+		ID:        "coll-write-001",
+		LibraryID: lib.ID,
+		OwnerID:   testUserID,
+		Name:      "Original Name",
+		BookIDs:   []string{},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	err = store.CreateCollection(ctx, coll)
+	require.NoError(t, err)
+
+	// Owner can update
+	coll.Name = "Updated by Owner"
+	err = store.UpdateCollection(ctx, coll, testUserID)
+	require.NoError(t, err)
+
+	// Share with Read-only user
+	readOnlyUserID := "readonly-user-789"
+	shareRead := &domain.CollectionShare{
+		CollectionID:     coll.ID,
+		SharedWithUserID: readOnlyUserID,
+		SharedByUserID:   testUserID,
+		Permission:       domain.PermissionRead,
+	}
+	err = store.CreateShare(ctx, shareRead)
+	require.NoError(t, err)
+
+	// Read-only user cannot update
+	coll.Name = "Attempted Update by Read-Only"
+	err = store.UpdateCollection(ctx, coll, readOnlyUserID)
+	assert.Error(t, err, "read-only user should not be able to update")
+
+	// Share with Write user
+	writeUserID := "write-user-101"
+	shareWrite := &domain.CollectionShare{
+		CollectionID:     coll.ID,
+		SharedWithUserID: writeUserID,
+		SharedByUserID:   testUserID,
+		Permission:       domain.PermissionWrite,
+	}
+	err = store.CreateShare(ctx, shareWrite)
+	require.NoError(t, err)
+
+	// Write user can update
+	coll.Name = "Updated by Write User"
+	err = store.UpdateCollection(ctx, coll, writeUserID)
+	require.NoError(t, err)
+
+	// Verify the update persisted
+	retrieved, err := store.GetCollection(ctx, coll.ID, testUserID)
+	require.NoError(t, err)
+	assert.Equal(t, "Updated by Write User", retrieved.Name)
+}
+
+func TestDeleteCollection_RequiresOwnership(t *testing.T) {
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create library and collection
+	lib := &domain.Library{
+		ID:        "lib-delete-001",
+		Name:      "Delete Test Library",
+		ScanPaths: []string{"/path/to/audiobooks"},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	err := store.CreateLibrary(ctx, lib)
+	require.NoError(t, err)
+
+	coll := &domain.Collection{
+		ID:        "coll-delete-001",
+		LibraryID: lib.ID,
+		OwnerID:   testUserID,
+		Name:      "Collection To Delete",
+		BookIDs:   []string{},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	err = store.CreateCollection(ctx, coll)
+	require.NoError(t, err)
+
+	// Share with Write user
+	writeUserID := "write-user-delete-101"
+	share := &domain.CollectionShare{
+		CollectionID:     coll.ID,
+		SharedWithUserID: writeUserID,
+		SharedByUserID:   testUserID,
+		Permission:       domain.PermissionWrite,
+	}
+	err = store.CreateShare(ctx, share)
+	require.NoError(t, err)
+
+	// Write user (non-owner) cannot delete
+	err = store.DeleteCollection(ctx, coll.ID, writeUserID)
+	assert.Error(t, err, "non-owner with write permission should not be able to delete")
+
+	// Verify collection still exists
+	_, err = store.GetCollection(ctx, coll.ID, testUserID)
+	require.NoError(t, err, "collection should still exist after failed delete attempt")
+
+	// Owner can delete
+	err = store.DeleteCollection(ctx, coll.ID, testUserID)
+	require.NoError(t, err)
+
+	// Verify collection is gone
+	_, err = store.GetCollection(ctx, coll.ID, testUserID)
+	assert.ErrorIs(t, err, ErrCollectionNotFound)
+}
+
+func TestAddBookToCollection_RequiresWritePermission(t *testing.T) {
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create library and collection
+	lib := &domain.Library{
+		ID:        "lib-addbook-001",
+		Name:      "AddBook Test Library",
+		ScanPaths: []string{"/path/to/audiobooks"},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	err := store.CreateLibrary(ctx, lib)
+	require.NoError(t, err)
+
+	coll := &domain.Collection{
+		ID:        "coll-addbook-001",
+		LibraryID: lib.ID,
+		OwnerID:   testUserID,
+		Name:      "Add Book Test Collection",
+		BookIDs:   []string{},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	err = store.CreateCollection(ctx, coll)
+	require.NoError(t, err)
+
+	// Share with Read-only user
+	readOnlyUserID := "readonly-addbook-user"
+	shareRead := &domain.CollectionShare{
+		CollectionID:     coll.ID,
+		SharedWithUserID: readOnlyUserID,
+		SharedByUserID:   testUserID,
+		Permission:       domain.PermissionRead,
+	}
+	err = store.CreateShare(ctx, shareRead)
+	require.NoError(t, err)
+
+	// Read-only user cannot add book
+	err = store.AddBookToCollection(ctx, "book-read-attempt", coll.ID, readOnlyUserID)
+	assert.Error(t, err, "read-only user should not be able to add books")
+
+	// Share with Write user
+	writeUserID := "write-addbook-user"
+	shareWrite := &domain.CollectionShare{
+		CollectionID:     coll.ID,
+		SharedWithUserID: writeUserID,
+		SharedByUserID:   testUserID,
+		Permission:       domain.PermissionWrite,
+	}
+	err = store.CreateShare(ctx, shareWrite)
+	require.NoError(t, err)
+
+	// Write user can add book
+	err = store.AddBookToCollection(ctx, "book-write-success", coll.ID, writeUserID)
+	require.NoError(t, err)
+
+	// Verify book was added
+	retrieved, err := store.GetCollection(ctx, coll.ID, testUserID)
+	require.NoError(t, err)
+	assert.Contains(t, retrieved.BookIDs, "book-write-success")
+}
+
+func TestRemoveBookFromCollection_RequiresWritePermission(t *testing.T) {
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create library and collection with books
+	lib := &domain.Library{
+		ID:        "lib-removebook-001",
+		Name:      "RemoveBook Test Library",
+		ScanPaths: []string{"/path/to/audiobooks"},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	err := store.CreateLibrary(ctx, lib)
+	require.NoError(t, err)
+
+	coll := &domain.Collection{
+		ID:        "coll-removebook-001",
+		LibraryID: lib.ID,
+		OwnerID:   testUserID,
+		Name:      "Remove Book Test Collection",
+		BookIDs:   []string{"book-to-remove-1", "book-to-remove-2"},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	err = store.CreateCollection(ctx, coll)
+	require.NoError(t, err)
+
+	// Share with Read-only user
+	readOnlyUserID := "readonly-removebook-user"
+	shareRead := &domain.CollectionShare{
+		CollectionID:     coll.ID,
+		SharedWithUserID: readOnlyUserID,
+		SharedByUserID:   testUserID,
+		Permission:       domain.PermissionRead,
+	}
+	err = store.CreateShare(ctx, shareRead)
+	require.NoError(t, err)
+
+	// Read-only user cannot remove book
+	err = store.RemoveBookFromCollection(ctx, "book-to-remove-1", coll.ID, readOnlyUserID)
+	assert.Error(t, err, "read-only user should not be able to remove books")
+
+	// Verify book still exists
+	retrieved, err := store.GetCollection(ctx, coll.ID, testUserID)
+	require.NoError(t, err)
+	assert.Contains(t, retrieved.BookIDs, "book-to-remove-1")
+
+	// Share with Write user
+	writeUserID := "write-removebook-user"
+	shareWrite := &domain.CollectionShare{
+		CollectionID:     coll.ID,
+		SharedWithUserID: writeUserID,
+		SharedByUserID:   testUserID,
+		Permission:       domain.PermissionWrite,
+	}
+	err = store.CreateShare(ctx, shareWrite)
+	require.NoError(t, err)
+
+	// Write user can remove book
+	err = store.RemoveBookFromCollection(ctx, "book-to-remove-1", coll.ID, writeUserID)
+	require.NoError(t, err)
+
+	// Verify book was removed
+	retrieved, err = store.GetCollection(ctx, coll.ID, testUserID)
+	require.NoError(t, err)
+	assert.NotContains(t, retrieved.BookIDs, "book-to-remove-1")
+	assert.Contains(t, retrieved.BookIDs, "book-to-remove-2") // Other book still there
+}
+
+func TestCanUserAccessCollection_ReturnsCorrectPermissions(t *testing.T) {
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create library and collection
+	lib := &domain.Library{
+		ID:        "lib-canaccess-001",
+		Name:      "CanAccess Test Library",
+		ScanPaths: []string{"/path/to/audiobooks"},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	err := store.CreateLibrary(ctx, lib)
+	require.NoError(t, err)
+
+	coll := &domain.Collection{
+		ID:        "coll-canaccess-001",
+		LibraryID: lib.ID,
+		OwnerID:   testUserID,
+		Name:      "CanAccess Test Collection",
+		BookIDs:   []string{},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	err = store.CreateCollection(ctx, coll)
+	require.NoError(t, err)
+
+	// Owner: should have access, Write permission, and isOwner=true
+	canAccess, permission, isOwner, err := store.CanUserAccessCollection(ctx, testUserID, coll.ID)
+	require.NoError(t, err)
+	assert.True(t, canAccess)
+	assert.Equal(t, domain.PermissionWrite, permission)
+	assert.True(t, isOwner)
+
+	// Unauthorized user: no access, but no error (to avoid information leakage)
+	canAccess, _, _, err = store.CanUserAccessCollection(ctx, "random-user", coll.ID)
+	require.NoError(t, err) // No error returned to avoid leaking collection existence
+	assert.False(t, canAccess)
+
+	// Share with Read permission
+	readUserID := "read-permission-user"
+	shareRead := &domain.CollectionShare{
+		CollectionID:     coll.ID,
+		SharedWithUserID: readUserID,
+		SharedByUserID:   testUserID,
+		Permission:       domain.PermissionRead,
+	}
+	err = store.CreateShare(ctx, shareRead)
+	require.NoError(t, err)
+
+	// Read user: access=true, permission=Read, isOwner=false
+	canAccess, permission, isOwner, err = store.CanUserAccessCollection(ctx, readUserID, coll.ID)
+	require.NoError(t, err)
+	assert.True(t, canAccess)
+	assert.Equal(t, domain.PermissionRead, permission)
+	assert.False(t, isOwner)
+
+	// Share with Write permission
+	writeUserID := "write-permission-user"
+	shareWrite := &domain.CollectionShare{
+		CollectionID:     coll.ID,
+		SharedWithUserID: writeUserID,
+		SharedByUserID:   testUserID,
+		Permission:       domain.PermissionWrite,
+	}
+	err = store.CreateShare(ctx, shareWrite)
+	require.NoError(t, err)
+
+	// Write user: access=true, permission=Write, isOwner=false
+	canAccess, permission, isOwner, err = store.CanUserAccessCollection(ctx, writeUserID, coll.ID)
+	require.NoError(t, err)
+	assert.True(t, canAccess)
+	assert.Equal(t, domain.PermissionWrite, permission)
+	assert.False(t, isOwner)
+}

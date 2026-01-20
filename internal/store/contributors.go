@@ -379,7 +379,10 @@ func (s *Store) GetOrCreateContributorByNameWithAlias(ctx context.Context, name 
 		return nil, false, fmt.Errorf("create contributor: %w", err)
 	}
 
-	s.eventEmitter.Emit(sse.NewContributorCreatedEvent(contributor))
+	// Only emit SSE event if not in bulk mode (bulk scans suppress SSE events)
+	if !s.IsBulkMode() {
+		s.eventEmitter.Emit(sse.NewContributorCreatedEvent(contributor))
+	}
 
 	return contributor, false, nil
 }

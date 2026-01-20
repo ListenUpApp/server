@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -63,6 +64,17 @@ func (s *Server) registerAdminRoutes() {
 		Tags:        []string{"Admin"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleListPendingUsers)
+
+	// Search users - must be registered BEFORE /users/{id} to avoid route conflict
+	huma.Register(s.api, huma.Operation{
+		OperationID: "searchUsers",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/admin/users/search",
+		Summary:     "Search users",
+		Description: "Searches users by name or email (for mapping UIs)",
+		Tags:        []string{"Admin"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleSearchUsers)
 
 	huma.Register(s.api, huma.Operation{
 		OperationID: "getAdminUser",
@@ -189,20 +201,27 @@ type ListUsersInput struct {
 	Authorization string `header:"Authorization"`
 }
 
+// UserPermissionsResponse contains user permission flags in API responses.
+type UserPermissionsResponse struct {
+	CanDownload bool `json:"can_download" doc:"Whether user can download content"`
+	CanShare    bool `json:"can_share" doc:"Whether user can share collections"`
+}
+
 // AdminUserResponse is the API response for a user in admin context.
 type AdminUserResponse struct {
-	ID          string    `json:"id" doc:"User ID"`
-	Email       string    `json:"email" doc:"Email address"`
-	DisplayName string    `json:"display_name" doc:"Display name"`
-	FirstName   string    `json:"first_name" doc:"First name"`
-	LastName    string    `json:"last_name" doc:"Last name"`
-	Role        string    `json:"role" doc:"User role"`
-	Status      string    `json:"status" doc:"User status (active, pending)"`
-	IsRoot      bool      `json:"is_root" doc:"Is root user"`
-	InvitedBy   string    `json:"invited_by,omitempty" doc:"User ID who invited this user"`
-	LastLoginAt time.Time `json:"last_login_at,omitempty" doc:"Last login timestamp"`
-	CreatedAt   time.Time `json:"created_at" doc:"Creation time"`
-	UpdatedAt   time.Time `json:"updated_at" doc:"Last update time"`
+	ID          string                  `json:"id" doc:"User ID"`
+	Email       string                  `json:"email" doc:"Email address"`
+	DisplayName string                  `json:"display_name" doc:"Display name"`
+	FirstName   string                  `json:"first_name" doc:"First name"`
+	LastName    string                  `json:"last_name" doc:"Last name"`
+	Role        string                  `json:"role" doc:"User role"`
+	Status      string                  `json:"status" doc:"User status (active, pending)"`
+	IsRoot      bool                    `json:"is_root" doc:"Is root user"`
+	Permissions UserPermissionsResponse `json:"permissions" doc:"User permissions"`
+	InvitedBy   string                  `json:"invited_by,omitempty" doc:"User ID who invited this user"`
+	LastLoginAt time.Time               `json:"last_login_at,omitempty" doc:"Last login timestamp"`
+	CreatedAt   time.Time               `json:"created_at" doc:"Creation time"`
+	UpdatedAt   time.Time               `json:"updated_at" doc:"Last update time"`
 }
 
 // ListUsersResponse is the API response for listing users.
@@ -227,11 +246,18 @@ type AdminUserOutput struct {
 	Body AdminUserResponse
 }
 
+// UpdatePermissionsRequest contains optional permission updates in requests.
+type UpdatePermissionsRequest struct {
+	CanDownload *bool `json:"can_download,omitempty" doc:"Whether user can download content"`
+	CanShare    *bool `json:"can_share,omitempty" doc:"Whether user can share collections"`
+}
+
 // UpdateAdminUserRequest is the request body for updating a user.
 type UpdateAdminUserRequest struct {
-	FirstName *string `json:"first_name,omitempty" validate:"omitempty,min=1,max=100" doc:"First name"`
-	LastName  *string `json:"last_name,omitempty" validate:"omitempty,min=1,max=100" doc:"Last name"`
-	Role      *string `json:"role,omitempty" validate:"omitempty,oneof=admin member" doc:"User role"`
+	FirstName   *string                   `json:"first_name,omitempty" validate:"omitempty,min=1,max=100" doc:"First name"`
+	LastName    *string                   `json:"last_name,omitempty" validate:"omitempty,min=1,max=100" doc:"Last name"`
+	Role        *string                   `json:"role,omitempty" validate:"omitempty,oneof=admin member" doc:"User role"`
+	Permissions *UpdatePermissionsRequest `json:"permissions,omitempty" doc:"User permissions"`
 }
 
 // UpdateAdminUserInput is the Huma input for updating a user.
@@ -273,6 +299,33 @@ type SetOpenRegistrationRequest struct {
 type SetOpenRegistrationInput struct {
 	Authorization string `header:"Authorization"`
 	Body          SetOpenRegistrationRequest
+}
+
+// SearchUsersInput is the Huma input for searching users.
+type SearchUsersInput struct {
+	Authorization string `header:"Authorization"`
+	Query         string `query:"q" doc:"Search query (matches email, display name, first/last name)"`
+	Limit         int    `query:"limit" default:"10" doc:"Maximum number of results to return"`
+}
+
+// UserSearchResult is a single user search result.
+type UserSearchResult struct {
+	ID          string `json:"id" doc:"User ID"`
+	Email       string `json:"email" doc:"Email address"`
+	DisplayName string `json:"display_name" doc:"Display name"`
+	FirstName   string `json:"first_name" doc:"First name"`
+	LastName    string `json:"last_name" doc:"Last name"`
+}
+
+// SearchUsersResponse is the API response for searching users.
+type SearchUsersResponse struct {
+	Users []UserSearchResult `json:"users" doc:"Matching users"`
+	Total int                `json:"total" doc:"Total matches returned"`
+}
+
+// SearchUsersOutput is the Huma output wrapper for searching users.
+type SearchUsersOutput struct {
+	Body SearchUsersResponse
 }
 
 // === Handlers ===
@@ -401,10 +454,20 @@ func (s *Server) handleUpdateAdminUser(ctx context.Context, input *UpdateAdminUs
 		role = &r
 	}
 
+	// Convert permissions update
+	var perms *service.PermissionsUpdate
+	if input.Body.Permissions != nil {
+		perms = &service.PermissionsUpdate{
+			CanDownload: input.Body.Permissions.CanDownload,
+			CanShare:    input.Body.Permissions.CanShare,
+		}
+	}
+
 	req := service.UpdateUserRequest{
-		FirstName: input.Body.FirstName,
-		LastName:  input.Body.LastName,
-		Role:      role,
+		FirstName:   input.Body.FirstName,
+		LastName:    input.Body.LastName,
+		Role:        role,
+		Permissions: perms,
 	}
 
 	user, err := s.services.Admin.UpdateUser(ctx, adminUserID, input.ID, req)
@@ -489,6 +552,62 @@ func (s *Server) handleSetOpenRegistration(ctx context.Context, input *SetOpenRe
 	return &MessageOutput{Body: MessageResponse{Message: message}}, nil
 }
 
+func (s *Server) handleSearchUsers(ctx context.Context, input *SearchUsersInput) (*SearchUsersOutput, error) {
+	if _, err := s.RequireAdmin(ctx); err != nil {
+		return nil, err
+	}
+
+	// Fetch all users and filter in memory (simple approach for now)
+	// For larger user bases, consider adding a dedicated store method with prefix scanning
+	users, err := s.services.Admin.ListUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	limit := input.Limit
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
+	query := strings.ToLower(strings.TrimSpace(input.Query))
+	var results []UserSearchResult
+
+	for _, u := range users {
+		// Skip pending users - only active users can be mapped
+		if u.Status == domain.UserStatusPending {
+			continue
+		}
+
+		// Match against email, display name, first name, last name
+		if query == "" ||
+			strings.Contains(strings.ToLower(u.Email), query) ||
+			strings.Contains(strings.ToLower(u.DisplayName), query) ||
+			strings.Contains(strings.ToLower(u.FirstName), query) ||
+			strings.Contains(strings.ToLower(u.LastName), query) {
+			results = append(results, UserSearchResult{
+				ID:          u.ID,
+				Email:       u.Email,
+				DisplayName: u.DisplayName,
+				FirstName:   u.FirstName,
+				LastName:    u.LastName,
+			})
+			if len(results) >= limit {
+				break
+			}
+		}
+	}
+
+	return &SearchUsersOutput{
+		Body: SearchUsersResponse{
+			Users: results,
+			Total: len(results),
+		},
+	}, nil
+}
+
 // mapAdminUserResponse converts a domain.User to AdminUserResponse.
 func mapAdminUserResponse(u *domain.User) AdminUserResponse {
 	status := string(u.Status)
@@ -504,6 +623,10 @@ func mapAdminUserResponse(u *domain.User) AdminUserResponse {
 		Role:        string(u.Role),
 		Status:      status,
 		IsRoot:      u.IsRoot,
+		Permissions: UserPermissionsResponse{
+			CanDownload: u.CanDownload(),
+			CanShare:    u.CanShare(),
+		},
 		InvitedBy:   u.InvitedBy,
 		LastLoginAt: u.LastLoginAt,
 		CreatedAt:   u.CreatedAt,

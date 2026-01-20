@@ -177,20 +177,19 @@ func main() {
 			progressPct := 10 + rng.Intn(80)
 			positionMs := book.TotalDuration * int64(progressPct) / 100
 
-			progress := &domain.PlaybackProgress{
+			progress := &domain.PlaybackState{
 				UserID:            user.ID,
 				BookID:            book.ID,
 				CurrentPositionMs: positionMs,
-				Progress:          float64(progressPct) / 100.0,
 				StartedAt:         now.AddDate(0, 0, -rng.Intn(14)),
 				LastPlayedAt:      now,
 				UpdatedAt:         now,
 			}
 
-			if err := s.UpsertProgress(ctx, progress); err != nil {
-				log.Printf("Failed to update progress for %s: %v", book.Title, err)
+			if err := s.UpsertState(ctx, progress); err != nil {
+				log.Printf("Failed to update state for %s: %v", book.Title, err)
 			} else {
-				fmt.Printf("  Updated progress for: %s (%d%%)\n", book.Title, progressPct)
+				fmt.Printf("  Updated state for: %s (%d%%)\n", book.Title, progressPct)
 			}
 		}
 	}

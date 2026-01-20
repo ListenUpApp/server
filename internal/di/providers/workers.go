@@ -59,7 +59,10 @@ type FileWatcherHandle struct {
 // Shutdown implements do.Shutdownable.
 func (h *FileWatcherHandle) Shutdown() error {
 	h.cancel()
-	return h.Stop()
+	if h.Watcher != nil {
+		return h.Stop()
+	}
+	return nil
 }
 
 // ProvideFileWatcher provides the file system watcher.
@@ -68,17 +71,35 @@ func ProvideFileWatcher(i do.Injector) (*FileWatcherHandle, error) {
 	bootstrap := do.MustInvoke[*Bootstrap](i)
 	eventProcessor := do.MustInvoke[*processor.EventProcessor](i)
 
+	// If no library exists yet, return a no-op watcher
+	if bootstrap.Library == nil {
+		log.Info("No library configured - file watcher disabled until setup")
+		ctx, cancel := context.WithCancel(context.Background())
+		return &FileWatcherHandle{
+			Watcher: nil,
+			cancel:  cancel,
+		}, ctx.Err() // This will be nil
+	}
+
 	w, err := watcher.New(log.Logger, watcher.Options{IgnoreHidden: true})
 	if err != nil {
 		return nil, err
 	}
 
-	// Watch library paths
+	// Watch library paths (skip non-existent paths gracefully)
+	watchedPaths := 0
 	for _, scanPath := range bootstrap.Library.ScanPaths {
 		if err := w.Watch(scanPath); err != nil {
-			return nil, err
+			// Log warning but continue - path may not exist yet or may have been removed
+			log.Warn("Cannot watch scan path", "path", scanPath, "error", err)
+			continue
 		}
 		log.Info("Watching scan path", "path", scanPath)
+		watchedPaths++
+	}
+
+	if watchedPaths == 0 {
+		log.Warn("No valid scan paths to watch - library paths may not exist")
 	}
 
 	// Start in background

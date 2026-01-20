@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
@@ -890,6 +891,31 @@ func (s *Store) ListAllBooks(ctx context.Context) ([]*domain.Book, error) {
 	return books, nil
 }
 
+// CountBooks returns the total number of books in the store.
+func (s *Store) CountBooks(_ context.Context) (int, error) {
+	var count int
+	prefix := []byte(bookPrefix)
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false // Only need keys for counting
+		opts.Prefix = prefix
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			count++
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, fmt.Errorf("count books: %w", err)
+	}
+
+	return count, nil
+}
+
 // GetAllBookIDs returns all non-deleted book IDs.
 // Note: This now needs to fetch values to check DeletedAt field.
 // TODO: Consider adding an "active books" index for better performance.
@@ -969,9 +995,14 @@ func (s *Store) GetBooksByCollectionPaginated(ctx context.Context, userID, colle
 	pageBookIDs := coll.BookIDs[startIdx:endIdx]
 
 	// Fetch Books.
+	// Note: Collection access was already verified above via GetCollection.
+	// We use getBookInternal here because:
+	// 1. Collection access check already ensures user can view these books
+	// 2. CanUserAccessBook would incorrectly block inbox books from users
+	//    who legitimately have access to the inbox collection
 	books := make([]*domain.Book, 0, len(pageBookIDs))
 	for _, bookID := range pageBookIDs {
-		book, err := s.GetBook(ctx, bookID, userID)
+		book, err := s.getBookInternal(ctx, bookID)
 		if err != nil {
 			if s.logger != nil {
 				s.logger.Warn("failed to get book from collection", "book_id", bookID, "collection_id", collectionID, "error", err)
@@ -1236,4 +1267,176 @@ func (s *Store) SetBookSeries(ctx context.Context, bookID string, seriesInputs [
 	}
 
 	return book, nil
+}
+
+// GetBookByASIN retrieves a book by its Amazon ASIN.
+// This iterates over all books since ASIN lookups are rare (import only).
+// Returns ErrBookNotFound if no book with this ASIN exists.
+func (s *Store) GetBookByASIN(ctx context.Context, asin string) (*domain.Book, error) {
+	if asin == "" {
+		return nil, ErrBookNotFound
+	}
+
+	var found *domain.Book
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = []byte(bookPrefix)
+		opts.PrefetchValues = true
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek([]byte(bookPrefix)); it.ValidForPrefix([]byte(bookPrefix)); it.Next() {
+			// Check context cancellation periodically
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+
+			var book domain.Book
+			err := it.Item().Value(func(val []byte) error {
+				return json.Unmarshal(val, &book)
+			})
+			if err != nil {
+				continue // Skip malformed entries
+			}
+
+			if book.IsDeleted() {
+				continue
+			}
+
+			if book.ASIN == asin {
+				found = &book
+				return nil // Found it, stop iterating
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get book by ASIN: %w", err)
+	}
+
+	if found == nil {
+		return nil, ErrBookNotFound
+	}
+
+	return found, nil
+}
+
+// GetBookByISBN retrieves a book by its ISBN.
+// This iterates over all books since ISBN lookups are rare (import only).
+// Returns ErrBookNotFound if no book with this ISBN exists.
+func (s *Store) GetBookByISBN(ctx context.Context, isbn string) (*domain.Book, error) {
+	if isbn == "" {
+		return nil, ErrBookNotFound
+	}
+
+	var found *domain.Book
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = []byte(bookPrefix)
+		opts.PrefetchValues = true
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek([]byte(bookPrefix)); it.ValidForPrefix([]byte(bookPrefix)); it.Next() {
+			// Check context cancellation periodically
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+
+			var book domain.Book
+			err := it.Item().Value(func(val []byte) error {
+				return json.Unmarshal(val, &book)
+			})
+			if err != nil {
+				continue // Skip malformed entries
+			}
+
+			if book.IsDeleted() {
+				continue
+			}
+
+			if book.ISBN == isbn {
+				found = &book
+				return nil // Found it, stop iterating
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get book by ISBN: %w", err)
+	}
+
+	if found == nil {
+		return nil, ErrBookNotFound
+	}
+
+	return found, nil
+}
+
+// SearchBooksByTitle finds books with titles similar to the query.
+// Returns candidates for fuzzy matching during ABS import.
+// This is a simple substring/prefix match - for full-text search use the SearchService.
+func (s *Store) SearchBooksByTitle(ctx context.Context, title string) ([]*domain.Book, error) {
+	if title == "" {
+		return nil, nil
+	}
+
+	// Normalize title for comparison
+	normalizedQuery := normalizeForSearch(title)
+	var candidates []*domain.Book
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = []byte(bookPrefix)
+		opts.PrefetchValues = true
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek([]byte(bookPrefix)); it.ValidForPrefix([]byte(bookPrefix)); it.Next() {
+			// Check context cancellation periodically
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+
+			var book domain.Book
+			err := it.Item().Value(func(val []byte) error {
+				return json.Unmarshal(val, &book)
+			})
+			if err != nil {
+				continue // Skip malformed entries
+			}
+
+			if book.IsDeleted() {
+				continue
+			}
+
+			// Check if title contains query (case-insensitive)
+			normalizedTitle := normalizeForSearch(book.Title)
+			if strings.Contains(normalizedTitle, normalizedQuery) ||
+				strings.Contains(normalizedQuery, normalizedTitle) {
+				candidates = append(candidates, &book)
+			}
+
+			// Limit candidates to prevent memory explosion
+			if len(candidates) >= 100 {
+				break
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("search books by title: %w", err)
+	}
+
+	return candidates, nil
+}
+
+// normalizeForSearch normalizes a string for search comparison.
+func normalizeForSearch(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
 }

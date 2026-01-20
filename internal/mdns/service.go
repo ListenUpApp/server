@@ -1,4 +1,16 @@
 // Package mdns provides mDNS/Zeroconf service advertisement for ListenUp server discovery.
+//
+// This implementation uses avahi's D-Bus API for robust service registration.
+// Unlike spawning external processes or creating separate multicast sockets,
+// D-Bus integration works WITH the system's mDNS infrastructure:
+//
+//   - Clean registration/deregistration lifecycle
+//   - No orphaned processes or zombies
+//   - No port conflicts with avahi-daemon
+//   - Proper cleanup on server shutdown
+//
+// If avahi is unavailable (Docker, cloud environments), the server continues
+// to function - users can always enter the server URL manually.
 package mdns
 
 import (
@@ -7,7 +19,8 @@ import (
 	"os"
 	"sync"
 
-	"github.com/hashicorp/mdns"
+	"github.com/godbus/dbus/v5"
+	"github.com/holoplot/go-avahi"
 	"github.com/listenupapp/listenup-server/internal/domain"
 )
 
@@ -19,16 +32,16 @@ const (
 	APIVersion = "v1"
 
 	// ServerVersion is the current server version advertised in TXT records.
-	// TODO: Extract to a shared version package.
 	ServerVersion = "1.0.0"
 )
 
-// Service manages mDNS advertisement for the ListenUp server.
-// It allows local network discovery of the server without manual configuration.
+// Service manages mDNS advertisement for the ListenUp server via avahi D-Bus.
 type Service struct {
-	server *mdns.Server
-	logger *slog.Logger
-	mu     sync.Mutex
+	conn       *dbus.Conn
+	server     *avahi.Server
+	entryGroup *avahi.EntryGroup
+	logger     *slog.Logger
+	mu         sync.Mutex
 }
 
 // NewService creates a new mDNS service.
@@ -38,87 +51,130 @@ func NewService(logger *slog.Logger) *Service {
 	}
 }
 
-// Start begins advertising the server via mDNS.
-// It should be called after the HTTP server is running.
+// Start begins advertising the server via mDNS using avahi's D-Bus API.
 //
-// Parameters:
-//   - instance: Server instance containing ID, name, and URLs
-//   - port: The HTTP server port
+// This connects to the system D-Bus, creates an avahi entry group, and
+// registers the service. The service remains advertised until Stop() is called.
 //
-// Returns an error if mDNS advertisement fails to start.
-// Errors are typically non-fatal (e.g., multicast not supported in Docker).
+// Returns an error if avahi is unavailable (non-fatal for server operation).
 func (s *Service) Start(instance *domain.Instance, port int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Stop existing server if running (for restart scenarios)
-	if s.server != nil {
-		_ = s.server.Shutdown()
-		s.server = nil
-	}
+	// Clean up any existing registration first
+	s.stopLocked()
 
-	// Get hostname for mDNS instance name
-	host, err := os.Hostname()
+	// Connect to system D-Bus
+	conn, err := dbus.SystemBus()
 	if err != nil {
-		host = "listenup-server"
+		return fmt.Errorf("connect to system D-Bus: %w", err)
+	}
+	s.conn = conn
+
+	// Create avahi server connection
+	server, err := avahi.ServerNew(conn)
+	if err != nil {
+		s.conn.Close()
+		s.conn = nil
+		return fmt.Errorf("connect to avahi: %w", err)
+	}
+	s.server = server
+
+	// Create entry group for our service
+	entryGroup, err := server.EntryGroupNew()
+	if err != nil {
+		s.conn.Close()
+		s.conn = nil
+		s.server = nil
+		return fmt.Errorf("create entry group: %w", err)
+	}
+	s.entryGroup = entryGroup
+
+	// Get hostname for service name
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "listenup-server"
 	}
 
-	// Build TXT records with server metadata
-	txtRecords := []string{
-		"id=" + instance.ID,
-		"name=" + instance.Name,
-		"version=" + ServerVersion,
-		"api=" + APIVersion,
+	// Build TXT records as [][]byte
+	txtRecords := [][]byte{
+		[]byte("id=" + instance.ID),
+		[]byte("name=" + instance.Name),
+		[]byte("version=" + ServerVersion),
+		[]byte("api=" + APIVersion),
 	}
-
-	// Only include remote URL if configured
 	if instance.RemoteURL != "" {
-		txtRecords = append(txtRecords, "remote="+instance.RemoteURL)
+		txtRecords = append(txtRecords, []byte("remote="+instance.RemoteURL))
 	}
 
-	// Create mDNS service configuration
-	service, err := mdns.NewMDNSService(
-		host,        // Instance name (hostname)
-		ServiceType, // Service type (_listenup._tcp)
-		"",          // Domain (empty = .local)
-		"",          // Host (empty = use system hostname)
-		port,        // Port
-		nil,         // IPs (nil = all interfaces)
-		txtRecords,  // TXT records
+	// Register the service
+	// Parameters: interface, protocol, flags, name, type, domain, host, port, txt
+	err = entryGroup.AddService(
+		avahi.InterfaceUnspec, // All interfaces
+		avahi.ProtoUnspec,     // IPv4 and IPv6
+		0,                     // No flags
+		hostname,              // Service name (visible in discovery)
+		ServiceType,           // _listenup._tcp
+		"local",               // Domain
+		"",                    // Host (empty = use avahi default)
+		uint16(port),          // Port
+		txtRecords,            // TXT records
 	)
 	if err != nil {
-		return fmt.Errorf("create mDNS service: %w", err)
+		s.cleanup()
+		return fmt.Errorf("add service: %w", err)
 	}
 
-	// Create and start mDNS server
-	server, err := mdns.NewServer(&mdns.Config{
-		Zone: service,
-	})
-	if err != nil {
-		return fmt.Errorf("start mDNS server: %w", err)
+	// Commit to announce the service on the network
+	if err := entryGroup.Commit(); err != nil {
+		s.cleanup()
+		return fmt.Errorf("commit entry group: %w", err)
 	}
-
-	s.server = server
 
 	s.logger.Info("mDNS advertisement started",
 		"service", ServiceType,
 		"port", port,
 		"name", instance.Name,
 		"id", instance.ID,
+		"method", "avahi-dbus",
 	)
 
 	return nil
 }
 
-// Stop stops mDNS advertising.
+// Stop stops mDNS advertising and deregisters the service.
 // Safe to call multiple times or if not started.
 func (s *Service) Stop() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.stopLocked()
+}
 
-	if s.server != nil {
-		_ = s.server.Shutdown()
-		s.server = nil
+// stopLocked performs the actual stop. Caller must hold the mutex.
+func (s *Service) stopLocked() {
+	if s.entryGroup != nil || s.conn != nil {
+		s.cleanup()
 		s.logger.Info("mDNS advertisement stopped")
 	}
+}
+
+// cleanup releases all avahi resources. Caller must hold the mutex.
+func (s *Service) cleanup() {
+	if s.entryGroup != nil && s.server != nil {
+		// Free the entry group via server - this deregisters the service
+		s.server.EntryGroupFree(s.entryGroup)
+		s.entryGroup = nil
+	}
+	s.server = nil
+	if s.conn != nil {
+		_ = s.conn.Close()
+		s.conn = nil
+	}
+}
+
+// Running returns true if mDNS is currently advertising.
+func (s *Service) Running() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.entryGroup != nil
 }

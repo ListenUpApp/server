@@ -28,6 +28,9 @@ const (
 	EventScanStarted EventType = "library.scan_started"
 	// EventScanComplete represents a library scan completion event.
 	EventScanComplete EventType = "library.scan_completed"
+	// EventLibraryAccessModeChanged represents a library access mode change.
+	// Broadcast to all users so they can refresh their book lists.
+	EventLibraryAccessModeChanged EventType = "library.access_mode_changed"
 
 	// TODO: See if we actually need progress updates.  Right now the scanner
 	// completes the scan in milliseconds on my computer so progress updates is.
@@ -92,6 +95,7 @@ const (
 
 	// Listening events (user-specific).
 	EventProgressUpdated       EventType = "listening.progress_updated"
+	EventProgressDeleted       EventType = "listening.progress_deleted"
 	EventListeningEventCreated EventType = "listening.event_created"
 	EventReadingSessionUpdated EventType = "reading_session.updated"
 
@@ -150,6 +154,13 @@ type ScanCompleteEventData struct {
 	BooksAdded   int       `json:"books_added"`
 	BooksUpdated int       `json:"books_updated"`
 	BooksRemoved int       `json:"books_removed"`
+}
+
+// LibraryAccessModeChangedEventData is the data payload for library access mode change events.
+// Clients should refresh their book lists when receiving this event.
+type LibraryAccessModeChangedEventData struct {
+	LibraryID  string `json:"library_id"`
+	AccessMode string `json:"access_mode"` // "open" or "restricted"
 }
 
 // HeartbeatEventData is the data payload for heartbeat events.
@@ -306,6 +317,20 @@ func NewScanCompleteEvent(libraryID string, added, updated, removed int) Event {
 			BooksAdded:   added,
 			BooksUpdated: updated,
 			BooksRemoved: removed,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewLibraryAccessModeChangedEvent creates a library.access_mode_changed event.
+// This event is broadcast to all users so they can refresh their book lists
+// as book visibility may have changed.
+func NewLibraryAccessModeChangedEvent(libraryID, accessMode string) Event {
+	return Event{
+		Type: EventLibraryAccessModeChanged,
+		Data: LibraryAccessModeChangedEventData{
+			LibraryID:  libraryID,
+			AccessMode: accessMode,
 		},
 		Timestamp: time.Now(),
 	}
@@ -674,17 +699,34 @@ type ProgressUpdatedEventData struct {
 }
 
 // NewProgressUpdatedEvent creates a listening.progress_updated event for a specific user.
-func NewProgressUpdatedEvent(userID string, progress *domain.PlaybackProgress) Event {
+// bookDurationMs is used to compute progress percentage on-demand.
+func NewProgressUpdatedEvent(userID string, progress *domain.PlaybackState, bookDurationMs int64) Event {
 	return Event{
 		Type: EventProgressUpdated,
 		Data: ProgressUpdatedEventData{
 			BookID:            progress.BookID,
 			CurrentPositionMs: progress.CurrentPositionMs,
-			Progress:          progress.Progress,
+			Progress:          progress.ComputeProgress(bookDurationMs),
 			TotalListenTimeMs: progress.TotalListenTimeMs,
 			IsFinished:        progress.IsFinished,
 			LastPlayedAt:      progress.LastPlayedAt,
 		},
+		UserID:    userID, // Only send to this user
+		Timestamp: time.Now(),
+	}
+}
+
+// ProgressDeletedEventData is the data payload for listening.progress_deleted events.
+type ProgressDeletedEventData struct {
+	BookID string `json:"book_id"`
+}
+
+// NewProgressDeletedEvent creates a listening.progress_deleted event for a specific user.
+// Used when progress is discarded (DNF/start over).
+func NewProgressDeletedEvent(userID, bookID string) Event {
+	return Event{
+		Type:      EventProgressDeleted,
+		Data:      ProgressDeletedEventData{BookID: bookID},
 		UserID:    userID, // Only send to this user
 		Timestamp: time.Now(),
 	}

@@ -82,7 +82,7 @@ func TestListeningEvent_WallDurationMs(t *testing.T) {
 	}
 }
 
-func TestNewPlaybackProgress_FromFirstEvent(t *testing.T) {
+func TestNewPlaybackState_FromFirstEvent(t *testing.T) {
 	event := &ListeningEvent{
 		UserID:          "user-123",
 		BookID:          "book-456",
@@ -96,13 +96,13 @@ func TestNewPlaybackProgress_FromFirstEvent(t *testing.T) {
 
 	bookDurationMs := int64(3600000) // 1 hour book
 
-	progress := NewPlaybackProgress(event, bookDurationMs)
+	progress := NewPlaybackState(event, bookDurationMs)
 
 	require.NotNil(t, progress)
 	assert.Equal(t, "user-123", progress.UserID)
 	assert.Equal(t, "book-456", progress.BookID)
 	assert.Equal(t, int64(1800000), progress.CurrentPositionMs)
-	assert.Equal(t, 0.5, progress.Progress) // 30min / 60min = 50%
+	assert.Equal(t, 0.5, progress.ComputeProgress(bookDurationMs)) // 30min / 60min = 50%
 	assert.False(t, progress.IsFinished)
 	assert.Nil(t, progress.FinishedAt)
 	assert.Equal(t, event.StartedAt, progress.StartedAt)
@@ -110,18 +110,19 @@ func TestNewPlaybackProgress_FromFirstEvent(t *testing.T) {
 	assert.Equal(t, int64(1800000), progress.TotalListenTimeMs)
 }
 
-func TestProgressID(t *testing.T) {
-	id := ProgressID("user-123", "book-456")
+func TestStateID(t *testing.T) {
+	id := StateID("user-123", "book-456")
 	assert.Equal(t, "user-123:book-456", id)
 }
 
-func TestPlaybackProgress_UpdateFromEvent(t *testing.T) {
+func TestPlaybackState_UpdateFromEvent(t *testing.T) {
+	bookDurationMs := int64(3600000) // 1 hour book
+
 	// Initial progress at 30 min
-	progress := &PlaybackProgress{
+	progress := &PlaybackState{
 		UserID:            "user-123",
 		BookID:            "book-456",
 		CurrentPositionMs: 1800000,
-		Progress:          0.5,
 		StartedAt:         time.Date(2025, 1, 1, 10, 0, 0, 0, time.UTC),
 		LastPlayedAt:      time.Date(2025, 1, 1, 10, 30, 0, 0, time.UTC),
 		TotalListenTimeMs: 1800000,
@@ -136,12 +137,10 @@ func TestPlaybackProgress_UpdateFromEvent(t *testing.T) {
 		DurationMs:      900000, // 15 min of content
 	}
 
-	bookDurationMs := int64(3600000) // 1 hour book
-
 	progress.UpdateFromEvent(event, bookDurationMs)
 
 	assert.Equal(t, int64(2700000), progress.CurrentPositionMs)
-	assert.Equal(t, 0.75, progress.Progress) // 45min / 60min
+	assert.Equal(t, 0.75, progress.ComputeProgress(bookDurationMs)) // 45min / 60min
 	assert.Equal(t, event.EndedAt, progress.LastPlayedAt)
 	assert.Equal(t, int64(2700000), progress.TotalListenTimeMs) // 30 + 15 min
 	assert.False(t, progress.IsFinished)
@@ -149,13 +148,14 @@ func TestPlaybackProgress_UpdateFromEvent(t *testing.T) {
 	assert.Equal(t, time.Date(2025, 1, 1, 10, 0, 0, 0, time.UTC), progress.StartedAt)
 }
 
-func TestPlaybackProgress_UpdateFromEvent_Rewind(t *testing.T) {
+func TestPlaybackState_UpdateFromEvent_Rewind(t *testing.T) {
+	bookDurationMs := int64(3600000)
+
 	// Progress at 45 min
-	progress := &PlaybackProgress{
+	progress := &PlaybackState{
 		UserID:            "user-123",
 		BookID:            "book-456",
 		CurrentPositionMs: 2700000,
-		Progress:          0.75,
 		TotalListenTimeMs: 2700000,
 	}
 
@@ -167,18 +167,16 @@ func TestPlaybackProgress_UpdateFromEvent_Rewind(t *testing.T) {
 		EndedAt:         time.Now(),
 	}
 
-	bookDurationMs := int64(3600000)
-
 	progress.UpdateFromEvent(event, bookDurationMs)
 
 	// Position should NOT go backwards - keep the furthest point
 	assert.Equal(t, int64(2700000), progress.CurrentPositionMs)
-	assert.Equal(t, 0.75, progress.Progress)
+	assert.Equal(t, 0.75, progress.ComputeProgress(bookDurationMs))
 	// But total listen time DOES accumulate (they listened to content)
 	assert.Equal(t, int64(3000000), progress.TotalListenTimeMs) // 45 + 5 min
 }
 
-func TestPlaybackProgress_DetectsCompletion(t *testing.T) {
+func TestPlaybackState_DetectsCompletion(t *testing.T) {
 	bookDurationMs := int64(3600000) // 1 hour
 
 	tests := []struct {
@@ -224,13 +222,39 @@ func TestPlaybackProgress_DetectsCompletion(t *testing.T) {
 				EndedAt:       time.Now(),
 			}
 
-			progress := NewPlaybackProgress(event, bookDurationMs)
+			progress := NewPlaybackState(event, bookDurationMs)
 
 			assert.Equal(t, tt.wantFinished, progress.IsFinished)
 			if tt.wantFinished {
 				assert.NotNil(t, progress.FinishedAt)
 			} else {
 				assert.Nil(t, progress.FinishedAt)
+			}
+		})
+	}
+}
+
+func TestPlaybackState_ComputeProgress(t *testing.T) {
+	cases := []struct {
+		name       string
+		positionMs int64
+		durationMs int64
+		want       float64
+	}{
+		{"zero position", 0, 100000, 0.0},
+		{"halfway", 50000, 100000, 0.5},
+		{"complete", 100000, 100000, 1.0},
+		{"past end", 110000, 100000, 1.0},
+		{"zero duration", 50000, 0, 0.0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			state := PlaybackState{
+				CurrentPositionMs: tc.positionMs,
+			}
+			got := state.ComputeProgress(tc.durationMs)
+			if got != tc.want {
+				t.Errorf("ComputeProgress(%d) = %f, want %f", tc.durationMs, got, tc.want)
 			}
 		})
 	}

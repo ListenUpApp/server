@@ -383,9 +383,9 @@ func TestGetUserStats_BooksStartedAndFinished(t *testing.T) {
 	)
 	require.NoError(t, testStore.CreateListeningEvent(ctx, event1))
 
-	// Create progress for book 1
-	progress1 := domain.NewPlaybackProgress(event1, 3600000)
-	require.NoError(t, testStore.UpsertProgress(ctx, progress1))
+	// Create state for book 1
+	progress1 := domain.NewPlaybackState(event1, 3600000)
+	require.NoError(t, testStore.UpsertState(ctx, progress1))
 
 	// Book 2: Just started
 	event2 := domain.NewListeningEvent(
@@ -402,8 +402,8 @@ func TestGetUserStats_BooksStartedAndFinished(t *testing.T) {
 	)
 	require.NoError(t, testStore.CreateListeningEvent(ctx, event2))
 
-	progress2 := domain.NewPlaybackProgress(event2, 3600000)
-	require.NoError(t, testStore.UpsertProgress(ctx, progress2))
+	progress2 := domain.NewPlaybackState(event2, 3600000)
+	require.NoError(t, testStore.UpsertState(ctx, progress2))
 
 	stats, err := svc.GetUserStats(ctx, userID, domain.StatsPeriodWeek)
 	require.NoError(t, err)

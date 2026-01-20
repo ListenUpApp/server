@@ -25,9 +25,20 @@ func NewCollectionService(store *store.Store, logger *slog.Logger) *CollectionSe
 	}
 }
 
+// CreateCollectionOptions contains optional parameters for collection creation.
+type CreateCollectionOptions struct {
+	IsGlobalAccess bool // When shared, grants access to ALL books (admin only)
+}
+
 // CreateCollection creates a new collection for the user.
 // The user becomes the owner and has full write access.
 func (s *CollectionService) CreateCollection(ctx context.Context, userID, libraryID, name string) (*domain.Collection, error) {
+	return s.CreateCollectionWithOptions(ctx, userID, libraryID, name, CreateCollectionOptions{})
+}
+
+// CreateCollectionWithOptions creates a new collection with optional settings.
+// Only admins can create global access collections.
+func (s *CollectionService) CreateCollectionWithOptions(ctx context.Context, userID, libraryID, name string, opts CreateCollectionOptions) (*domain.Collection, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -37,6 +48,17 @@ func (s *CollectionService) CreateCollection(ctx context.Context, userID, librar
 		return nil, fmt.Errorf("get library: %w", err)
 	}
 
+	// Only admins can create global access collections
+	if opts.IsGlobalAccess {
+		user, err := s.store.GetUser(ctx, userID)
+		if err != nil {
+			return nil, fmt.Errorf("get user: %w", err)
+		}
+		if !user.IsAdmin() {
+			return nil, fmt.Errorf("only admins can create global access collections")
+		}
+	}
+
 	// Generate collection ID
 	collectionID, err := id.Generate("coll")
 	if err != nil {
@@ -44,12 +66,13 @@ func (s *CollectionService) CreateCollection(ctx context.Context, userID, librar
 	}
 
 	collection := &domain.Collection{
-		ID:        collectionID,
-		LibraryID: libraryID,
-		OwnerID:   userID,
-		Name:      name,
-		BookIDs:   []string{},
-		IsInbox:   false,
+		ID:             collectionID,
+		LibraryID:      libraryID,
+		OwnerID:        userID,
+		Name:           name,
+		BookIDs:        []string{},
+		IsInbox:        false,
+		IsGlobalAccess: opts.IsGlobalAccess,
 	}
 
 	if err := s.store.CreateCollection(ctx, collection); err != nil {
@@ -61,6 +84,7 @@ func (s *CollectionService) CreateCollection(ctx context.Context, userID, librar
 		"library_id", libraryID,
 		"owner_id", userID,
 		"name", name,
+		"is_global_access", opts.IsGlobalAccess,
 	)
 
 	return collection, nil

@@ -37,6 +37,21 @@ func setupTestReadingSession(t *testing.T) (*ReadingSessionService, *store.Store
 	return svc, testStore, cleanup
 }
 
+func createTestBookForSession(t *testing.T, s *store.Store, bookID string, durationMs int64) {
+	t.Helper()
+	ctx := context.Background()
+
+	book := &domain.Book{
+		Syncable: domain.Syncable{
+			ID: bookID,
+		},
+		Title:         "Test Book " + bookID,
+		TotalDuration: durationMs,
+	}
+	book.InitTimestamps()
+	require.NoError(t, s.CreateBook(ctx, book))
+}
+
 func TestEnsureActiveSession_CreateNew(t *testing.T) {
 	svc, _, cleanup := setupTestReadingSession(t)
 	defer cleanup()
@@ -162,18 +177,21 @@ func TestAbandonSession(t *testing.T) {
 
 	ctx := context.Background()
 
+	// Create book first (1 hour duration)
+	createTestBookForSession(t, s, "book-1", 3600000)
+
 	// Create session and some progress
 	session, err := svc.EnsureActiveSession(ctx, "user-1", "book-1")
 	require.NoError(t, err)
 
-	// Create progress in store
-	progress := &domain.PlaybackProgress{
+	// Create progress in store (CurrentPositionMs = 45% of 60 minutes = 27 minutes)
+	progress := &domain.PlaybackState{
 		UserID:            "user-1",
 		BookID:            "book-1",
-		Progress:          0.45,
+		CurrentPositionMs: 1620000, // 27 minutes = 45% of 60 min
 		TotalListenTimeMs: 1800000, // 30 minutes
 	}
-	err = s.UpsertProgress(ctx, progress)
+	err = s.UpsertState(ctx, progress)
 	require.NoError(t, err)
 
 	// Abandon session

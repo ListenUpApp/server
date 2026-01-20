@@ -294,17 +294,25 @@ func (s *ReadingSessionService) AbandonSession(ctx context.Context, userID, book
 
 // abandonSessionInternal abandons a specific session instance.
 func (s *ReadingSessionService) abandonSessionInternal(ctx context.Context, session *domain.BookReadingSession) error {
-	// Get current progress from store
-	progress, err := s.store.GetProgress(ctx, session.UserID, session.BookID)
+	// Get book for duration (no access check - if user has a session, they had access)
+	// If book doesn't exist (e.g., deleted), we still want to abandon the session
+	var bookDurationMs int64
+	book, err := s.store.GetBookNoAccessCheck(ctx, session.BookID)
+	if err == nil && book != nil {
+		bookDurationMs = book.TotalDuration
+	}
+
+	// Get current state from store
+	progress, err := s.store.GetState(ctx, session.UserID, session.BookID)
 	if err != nil && !errors.Is(err, store.ErrProgressNotFound) {
-		return fmt.Errorf("get progress: %w", err)
+		return fmt.Errorf("get state: %w", err)
 	}
 
 	// Calculate final values
 	var finalProgress float64
 	var listenTimeMs int64
 	if progress != nil {
-		finalProgress = progress.Progress
+		finalProgress = progress.ComputeProgress(bookDurationMs)
 		listenTimeMs = progress.TotalListenTimeMs
 	}
 
@@ -359,6 +367,13 @@ func (s *ReadingSessionService) GetBookReaders(ctx context.Context, bookID, view
 		response.TotalReaders++
 	}
 
+	// Get book duration for progress calculation
+	book, err := s.store.GetBookNoAccessCheck(ctx, bookID)
+	var bookDurationMs int64
+	if err == nil && book != nil {
+		bookDurationMs = book.TotalDuration
+	}
+
 	// Build reader summaries for other users
 	for userID, sessions := range sessionsByUser {
 		// Get user info
@@ -377,7 +392,22 @@ func (s *ReadingSessionService) GetBookReaders(ctx context.Context, bookID, view
 			profile = p
 		}
 
-		summary := buildReaderSummary(user, profile, sessions)
+		// Get current progress from PlaybackState if user is actively reading
+		var currentProgress float64
+		hasActiveSession := false
+		for _, session := range sessions {
+			if session.IsActive() {
+				hasActiveSession = true
+				break
+			}
+		}
+		if hasActiveSession && bookDurationMs > 0 {
+			if state, err := s.store.GetState(ctx, userID, bookID); err == nil && state != nil {
+				currentProgress = state.ComputeProgress(bookDurationMs)
+			}
+		}
+
+		summary := buildReaderSummary(user, profile, sessions, currentProgress)
 		response.OtherReaders = append(response.OtherReaders, summary)
 
 		// Count completions
@@ -393,9 +423,9 @@ func (s *ReadingSessionService) GetBookReaders(ctx context.Context, bookID, view
 		}
 	}
 
-	// Sort other readers by most recent activity
+	// Sort other readers by most recent activity (last read date descending)
 	slices.SortFunc(response.OtherReaders, func(a, b ReaderSummary) int {
-		return b.StartedAt.Compare(a.StartedAt)
+		return b.LastActivityAt.Compare(a.LastActivityAt)
 	})
 
 	// Apply limit if specified
@@ -484,6 +514,7 @@ type ReaderSummary struct {
 	CurrentProgress    float64    `json:"current_progress,omitempty"`
 	StartedAt          time.Time  `json:"started_at"`
 	FinishedAt         *time.Time `json:"finished_at,omitempty"`
+	LastActivityAt     time.Time  `json:"last_activity_at"` // Most recent of StartedAt or FinishedAt
 	CompletionCount    int        `json:"completion_count"`
 }
 
@@ -532,8 +563,9 @@ func buildSessionSummaries(sessions []*domain.BookReadingSession) []SessionSumma
 	return summaries
 }
 
-// buildReaderSummary creates a reader summary from user, profile, and their sessions.
-func buildReaderSummary(user *domain.User, profile *domain.UserProfile, sessions []*domain.BookReadingSession) ReaderSummary {
+// buildReaderSummary creates a reader summary from user, profile, their sessions, and current progress.
+// currentProgress is the real-time progress from PlaybackState (0.0-1.0), calculated by the caller.
+func buildReaderSummary(user *domain.User, profile *domain.UserProfile, sessions []*domain.BookReadingSession, currentProgress float64) ReaderSummary {
 	// Extract avatar info from profile (defaults to auto if no profile)
 	avatarType := string(domain.AvatarTypeAuto)
 	avatarValue := ""
@@ -570,6 +602,12 @@ func buildReaderSummary(user *domain.User, profile *domain.UserProfile, sessions
 		}
 	}
 
+	// Compute last activity: use FinishedAt if available, otherwise StartedAt
+	lastActivity := mostRecentSession.StartedAt
+	if mostRecentSession.FinishedAt != nil && mostRecentSession.FinishedAt.After(lastActivity) {
+		lastActivity = *mostRecentSession.FinishedAt
+	}
+
 	summary := ReaderSummary{
 		UserID:             user.ID,
 		DisplayName:        user.Name(),
@@ -579,12 +617,9 @@ func buildReaderSummary(user *domain.User, profile *domain.UserProfile, sessions
 		IsCurrentlyReading: activeSession != nil,
 		StartedAt:          mostRecentSession.StartedAt,
 		FinishedAt:         mostRecentSession.FinishedAt,
+		LastActivityAt:     lastActivity,
 		CompletionCount:    completionCount,
-	}
-
-	// If currently reading, get current progress from active session
-	if activeSession != nil {
-		summary.CurrentProgress = activeSession.FinalProgress
+		CurrentProgress:    currentProgress, // Use the real-time progress from PlaybackState
 	}
 
 	return summary

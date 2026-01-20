@@ -2,6 +2,13 @@ package domain
 
 import "time"
 
+// Event source constants
+const (
+	EventSourcePlayback = "playback" // Normal listening activity
+	EventSourceImport   = "import"   // Imported from external system
+	EventSourceManual   = "manual"   // Manual user action
+)
+
 // ListeningEvent is the atomic, immutable record of listening activity.
 // Events are append-only - everything else derives from them.
 type ListeningEvent struct {
@@ -17,18 +24,22 @@ type ListeningEvent struct {
 	PlaybackSpeed float32 `json:"playback_speed"`
 	DeviceID      string  `json:"device_id"`
 	DeviceName    string  `json:"device_name,omitempty"`
+	Source        string  `json:"source"` // playback, import, or manual
 
 	DurationMs int64     `json:"duration_ms"`
 	CreatedAt  time.Time `json:"created_at"`
 }
 
-// PlaybackProgress is a materialized view over ListeningEvents.
+// PlaybackState is a materialized view over ListeningEvents.
 // Contains ONLY event-derived data. Fully rebuildable from events.
-type PlaybackProgress struct {
+//
+// Note: Progress is computed on-demand via ComputeProgress(bookDurationMs).
+// TotalListenTimeMs should be computed by summing event durations when accuracy matters,
+// but is cached here for performance in non-critical paths.
+type PlaybackState struct {
 	UserID            string     `json:"user_id"`
 	BookID            string     `json:"book_id"`
 	CurrentPositionMs int64      `json:"current_position_ms"`
-	Progress          float64    `json:"progress"` // 0.0 - 1.0
 	IsFinished        bool       `json:"is_finished"`
 	FinishedAt        *time.Time `json:"finished_at,omitempty"`
 	StartedAt         time.Time  `json:"started_at"`
@@ -37,14 +48,14 @@ type PlaybackProgress struct {
 	UpdatedAt         time.Time  `json:"updated_at"`
 }
 
-// ProgressID generates composite key: "userID:bookID".
-func ProgressID(userID, bookID string) string {
+// StateID generates composite key: "userID:bookID".
+func StateID(userID, bookID string) string {
 	return userID + ":" + bookID
 }
 
-// NewPlaybackProgress creates progress from the first listening event.
-func NewPlaybackProgress(event *ListeningEvent, bookDurationMs int64) *PlaybackProgress {
-	progress := &PlaybackProgress{
+// NewPlaybackState creates state from the first listening event.
+func NewPlaybackState(event *ListeningEvent, bookDurationMs int64) *PlaybackState {
+	state := &PlaybackState{
 		UserID:            event.UserID,
 		BookID:            event.BookID,
 		CurrentPositionMs: event.EndPositionMs,
@@ -54,55 +65,59 @@ func NewPlaybackProgress(event *ListeningEvent, bookDurationMs int64) *PlaybackP
 		UpdatedAt:         time.Now(),
 	}
 
-	// Calculate progress percentage
-	if bookDurationMs > 0 {
-		progress.Progress = float64(progress.CurrentPositionMs) / float64(bookDurationMs)
-	}
-
 	// Check completion (99% threshold)
-	progress.checkCompletion(bookDurationMs)
+	state.checkCompletion(bookDurationMs)
 
-	return progress
+	return state
 }
 
-// UpdateFromEvent updates progress with a new listening event.
+// UpdateFromEvent updates state with a new listening event.
 // Position only advances forward (rewinds don't move position back).
 // Total listen time always accumulates.
-func (p *PlaybackProgress) UpdateFromEvent(event *ListeningEvent, bookDurationMs int64) {
+func (s *PlaybackState) UpdateFromEvent(event *ListeningEvent, bookDurationMs int64) {
 	// Always accumulate total listen time
-	p.TotalListenTimeMs += event.DurationMs
+	s.TotalListenTimeMs += event.DurationMs
 
 	// Only advance position forward (rewinds don't reset progress)
-	if event.EndPositionMs > p.CurrentPositionMs {
-		p.CurrentPositionMs = event.EndPositionMs
+	if event.EndPositionMs > s.CurrentPositionMs {
+		s.CurrentPositionMs = event.EndPositionMs
 	}
 
 	// Update last played time
-	p.LastPlayedAt = event.EndedAt
-
-	// Recalculate progress percentage
-	if bookDurationMs > 0 {
-		p.Progress = float64(p.CurrentPositionMs) / float64(bookDurationMs)
-	}
+	s.LastPlayedAt = event.EndedAt
 
 	// Check completion
-	p.checkCompletion(bookDurationMs)
+	s.checkCompletion(bookDurationMs)
 
-	p.UpdatedAt = time.Now()
+	s.UpdatedAt = time.Now()
 }
 
 // checkCompletion marks the book as finished if position >= 99% of duration.
-func (p *PlaybackProgress) checkCompletion(bookDurationMs int64) {
+func (s *PlaybackState) checkCompletion(bookDurationMs int64) {
 	if bookDurationMs <= 0 {
 		return
 	}
 
 	threshold := float64(bookDurationMs) * 0.99
-	if float64(p.CurrentPositionMs) >= threshold {
-		p.IsFinished = true
+	if float64(s.CurrentPositionMs) >= threshold {
+		s.IsFinished = true
 		now := time.Now()
-		p.FinishedAt = &now
+		s.FinishedAt = &now
 	}
+}
+
+// ComputeProgress returns the computed progress as a fraction (0.0 to 1.0).
+// This is the authoritative way to calculate progress from position and duration.
+// Returns 0.0 if bookDurationMs is 0, and caps at 1.0 for positions beyond duration.
+func (s *PlaybackState) ComputeProgress(bookDurationMs int64) float64 {
+	if bookDurationMs <= 0 {
+		return 0.0
+	}
+	progress := float64(s.CurrentPositionMs) / float64(bookDurationMs)
+	if progress > 1.0 {
+		return 1.0
+	}
+	return progress
 }
 
 // WallDurationMs returns the actual elapsed time (wall clock).
@@ -134,6 +149,7 @@ func NewListeningEvent(
 		PlaybackSpeed:   playbackSpeed,
 		DeviceID:        deviceID,
 		DeviceName:      deviceName,
+		Source:          EventSourcePlayback, // Default to playback
 		DurationMs:      endPositionMs - startPositionMs,
 		CreatedAt:       time.Now(),
 	}

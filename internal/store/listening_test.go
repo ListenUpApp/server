@@ -191,11 +191,10 @@ func TestProgressCRUD(t *testing.T) {
 
 	ctx := context.Background()
 
-	progress := &domain.PlaybackProgress{
+	progress := &domain.PlaybackState{
 		UserID:            "user-123",
 		BookID:            "book-456",
 		CurrentPositionMs: 1800000,
-		Progress:          0.5,
 		TotalListenTimeMs: 1800000,
 		StartedAt:         time.Now(),
 		LastPlayedAt:      time.Now(),
@@ -203,34 +202,33 @@ func TestProgressCRUD(t *testing.T) {
 	}
 
 	// Create
-	err := s.UpsertProgress(ctx, progress)
+	err := s.UpsertState(ctx, progress)
 	require.NoError(t, err)
 
 	// Read
-	retrieved, err := s.GetProgress(ctx, "user-123", "book-456")
+	retrieved, err := s.GetState(ctx, "user-123", "book-456")
 	require.NoError(t, err)
 	assert.Equal(t, progress.CurrentPositionMs, retrieved.CurrentPositionMs)
-	assert.Equal(t, progress.Progress, retrieved.Progress)
+	assert.Equal(t, 0.5, retrieved.ComputeProgress(3600000)) // 30min / 60min
 
 	// Update
 	progress.CurrentPositionMs = 2700000
-	progress.Progress = 0.75
-	err = s.UpsertProgress(ctx, progress)
+	err = s.UpsertState(ctx, progress)
 	require.NoError(t, err)
 
-	retrieved, err = s.GetProgress(ctx, "user-123", "book-456")
+	retrieved, err = s.GetState(ctx, "user-123", "book-456")
 	require.NoError(t, err)
 	assert.Equal(t, int64(2700000), retrieved.CurrentPositionMs)
 
 	// Delete
-	err = s.DeleteProgress(ctx, "user-123", "book-456")
+	err = s.DeleteState(ctx, "user-123", "book-456")
 	require.NoError(t, err)
 
-	_, err = s.GetProgress(ctx, "user-123", "book-456")
+	_, err = s.GetState(ctx, "user-123", "book-456")
 	assert.ErrorIs(t, err, store.ErrProgressNotFound)
 }
 
-func TestGetProgressForUser(t *testing.T) {
+func TestGetStateForUser(t *testing.T) {
 	s, cleanup := setupTestListeningStore(t)
 	defer cleanup()
 
@@ -238,24 +236,24 @@ func TestGetProgressForUser(t *testing.T) {
 
 	// Create progress for multiple books
 	for i, bookID := range []string{"book-1", "book-2", "book-3"} {
-		progress := &domain.PlaybackProgress{
+		progress := &domain.PlaybackState{
 			UserID:            "user-123",
 			BookID:            bookID,
 			CurrentPositionMs: int64(i * 1000),
 			UpdatedAt:         time.Now(),
 		}
-		require.NoError(t, s.UpsertProgress(ctx, progress))
+		require.NoError(t, s.UpsertState(ctx, progress))
 	}
 
-	// Also create progress for another user
-	require.NoError(t, s.UpsertProgress(ctx, &domain.PlaybackProgress{
+	// Also create state for another user
+	require.NoError(t, s.UpsertState(ctx, &domain.PlaybackState{
 		UserID:    "user-other",
 		BookID:    "book-1",
 		UpdatedAt: time.Now(),
 	}))
 
-	// Get user-123's progress
-	allProgress, err := s.GetProgressForUser(ctx, "user-123")
+	// Get user-123's state
+	allProgress, err := s.GetStateForUser(ctx, "user-123")
 	require.NoError(t, err)
 	assert.Len(t, allProgress, 3)
 }
@@ -268,30 +266,31 @@ func TestGetContinueListening_FiltersCorrectly(t *testing.T) {
 	now := time.Now()
 
 	// Create various progress states
+	// currentPositionMs used instead of progress percentage (position > 0 = has progress)
 	progressData := []struct {
-		bookID       string
-		progress     float64
-		isFinished   bool
-		lastPlayed   time.Time
-		hideFromCont bool
+		bookID            string
+		currentPositionMs int64
+		isFinished        bool
+		lastPlayed        time.Time
+		hideFromCont      bool
 	}{
-		{"book-active-1", 0.5, false, now.Add(-1 * time.Hour), false},    // Should include
-		{"book-active-2", 0.3, false, now.Add(-2 * time.Hour), false},    // Should include
-		{"book-finished", 1.0, true, now.Add(-30 * time.Minute), false},  // Exclude: finished
-		{"book-hidden", 0.6, false, now.Add(-10 * time.Minute), true},    // Exclude: hidden
-		{"book-not-started", 0.0, false, now.Add(-3 * time.Hour), false}, // Exclude: no progress
+		{"book-active-1", 1800000, false, now.Add(-1 * time.Hour), false},   // Should include (50%)
+		{"book-active-2", 1080000, false, now.Add(-2 * time.Hour), false},   // Should include (30%)
+		{"book-finished", 3600000, true, now.Add(-30 * time.Minute), false}, // Exclude: finished
+		{"book-hidden", 2160000, false, now.Add(-10 * time.Minute), true},   // Exclude: hidden
+		{"book-not-started", 0, false, now.Add(-3 * time.Hour), false},      // Exclude: no progress
 	}
 
 	for _, pd := range progressData {
-		progress := &domain.PlaybackProgress{
-			UserID:       "user-123",
-			BookID:       pd.bookID,
-			Progress:     pd.progress,
-			IsFinished:   pd.isFinished,
-			LastPlayedAt: pd.lastPlayed,
-			UpdatedAt:    now,
+		progress := &domain.PlaybackState{
+			UserID:            "user-123",
+			BookID:            pd.bookID,
+			CurrentPositionMs: pd.currentPositionMs,
+			IsFinished:        pd.isFinished,
+			LastPlayedAt:      pd.lastPlayed,
+			UpdatedAt:         now,
 		}
-		require.NoError(t, s.UpsertProgress(ctx, progress))
+		require.NoError(t, s.UpsertState(ctx, progress))
 
 		if pd.hideFromCont {
 			prefs := &domain.BookPreferences{
@@ -325,18 +324,77 @@ func TestGetContinueListening_RespectsLimit(t *testing.T) {
 
 	// Create 5 active books
 	for i := 1; i <= 5; i++ {
-		progress := &domain.PlaybackProgress{
-			UserID:       "user-123",
-			BookID:       fmt.Sprintf("book-%d", i),
-			Progress:     0.5,
-			LastPlayedAt: now.Add(time.Duration(-i) * time.Hour),
-			UpdatedAt:    now,
+		progress := &domain.PlaybackState{
+			UserID:            "user-123",
+			BookID:            fmt.Sprintf("book-%d", i),
+			CurrentPositionMs: 1800000, // 50% of 1 hour book
+			LastPlayedAt:      now.Add(time.Duration(-i) * time.Hour),
+			UpdatedAt:         now,
 		}
-		require.NoError(t, s.UpsertProgress(ctx, progress))
+		require.NoError(t, s.UpsertState(ctx, progress))
 	}
 
 	// Get with limit of 3
 	results, err := s.GetContinueListening(ctx, "user-123", 3)
 	require.NoError(t, err)
 	assert.Len(t, results, 3)
+}
+
+// TestGetContinueListening_IncludesPositionWithoutPercentage tests that books with
+// CurrentPositionMs > 0 are included in Continue Listening, regardless of stored progress.
+// Progress is now computed on-demand from position and book duration.
+func TestGetContinueListening_IncludesPositionWithoutPercentage(t *testing.T) {
+	s, cleanup := setupTestListeningStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	now := time.Now()
+
+	// Create progress entries with different states
+	progressData := []struct {
+		bookID            string
+		currentPositionMs int64
+		expectIncluded    bool
+	}{
+		// Has position - should be included
+		{"book-normal", 1800000, true},
+		// Has smaller position - should be included
+		{"book-abs-import", 900000, true},
+		// No position - should be excluded
+		{"book-not-started", 0, false},
+	}
+
+	for _, pd := range progressData {
+		progress := &domain.PlaybackState{
+			UserID:            "user-123",
+			BookID:            pd.bookID,
+			CurrentPositionMs: pd.currentPositionMs,
+			LastPlayedAt:      now,
+			UpdatedAt:         now,
+		}
+		require.NoError(t, s.UpsertState(ctx, progress))
+	}
+
+	// Get continue listening
+	results, err := s.GetContinueListening(ctx, "user-123", 10)
+	require.NoError(t, err)
+
+	// Build map for easier assertion
+	resultBooks := make(map[string]bool)
+	for _, r := range results {
+		resultBooks[r.BookID] = true
+	}
+
+	// Verify each book is included or excluded as expected
+	for _, pd := range progressData {
+		if pd.expectIncluded {
+			assert.True(t, resultBooks[pd.bookID],
+				"book %s should be included (position=%d)",
+				pd.bookID, pd.currentPositionMs)
+		} else {
+			assert.False(t, resultBooks[pd.bookID],
+				"book %s should be excluded (position=%d)",
+				pd.bookID, pd.currentPositionMs)
+		}
+	}
 }

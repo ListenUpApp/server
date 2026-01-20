@@ -31,7 +31,7 @@ func TestNewService(t *testing.T) {
 		service := NewService(logger)
 
 		require.NotNil(t, service)
-		assert.Nil(t, service.server, "server should be nil before Start")
+		assert.False(t, service.Running(), "service should not be running before Start")
 	})
 }
 
@@ -42,7 +42,7 @@ func TestServiceStop(t *testing.T) {
 
 		// Should not panic
 		service.Stop()
-		assert.Nil(t, service.server)
+		assert.False(t, service.Running())
 	})
 
 	t.Run("stop can be called multiple times", func(t *testing.T) {
@@ -57,8 +57,8 @@ func TestServiceStop(t *testing.T) {
 }
 
 func TestServiceStart(t *testing.T) {
-	// Note: These tests may fail in environments without multicast support
-	// (e.g., Docker containers, CI without network access)
+	// Note: These tests require avahi-daemon to be running.
+	// They will be skipped in environments without D-Bus/avahi.
 
 	t.Run("start with valid instance succeeds", func(t *testing.T) {
 		var buf bytes.Buffer
@@ -72,14 +72,14 @@ func TestServiceStart(t *testing.T) {
 
 		err := service.Start(instance, 8080)
 
-		// mDNS may fail in some environments (Docker, CI)
-		// We check that if it succeeds, the server is set
+		// mDNS may fail in some environments (Docker, CI, no avahi)
 		if err == nil {
-			assert.NotNil(t, service.server)
+			assert.True(t, service.Running())
 			assert.Contains(t, buf.String(), "mDNS advertisement started")
 
 			// Cleanup
 			service.Stop()
+			assert.False(t, service.Running())
 		} else {
 			t.Logf("mDNS start failed (expected in some environments): %v", err)
 		}
@@ -99,15 +99,14 @@ func TestServiceStart(t *testing.T) {
 		err := service.Start(instance, 8080)
 
 		if err == nil {
-			// The TXT records are built internally, but we verify the call succeeded
-			assert.NotNil(t, service.server)
+			assert.True(t, service.Running())
 			service.Stop()
 		} else {
 			t.Logf("mDNS start failed (expected in some environments): %v", err)
 		}
 	})
 
-	t.Run("start can restart existing server", func(t *testing.T) {
+	t.Run("start can restart existing service", func(t *testing.T) {
 		var buf bytes.Buffer
 		logger := slog.New(slog.NewTextHandler(&buf, nil))
 		service := NewService(logger)
@@ -123,10 +122,10 @@ func TestServiceStart(t *testing.T) {
 			t.Skipf("mDNS not available in this environment: %v", err1)
 		}
 
-		// Second start (should restart)
+		// Second start (should cleanly restart)
 		err2 := service.Start(instance, 8081)
 		require.NoError(t, err2)
-		assert.NotNil(t, service.server)
+		assert.True(t, service.Running())
 
 		service.Stop()
 	})
@@ -151,11 +150,11 @@ func TestServiceLifecycle(t *testing.T) {
 		if err != nil {
 			t.Skipf("mDNS not available: %v", err)
 		}
-		assert.NotNil(t, service.server)
+		assert.True(t, service.Running())
 
 		// Stop
 		service.Stop()
-		assert.Nil(t, service.server)
+		assert.False(t, service.Running())
 		assert.Contains(t, buf.String(), "mDNS advertisement stopped")
 	})
 }
@@ -189,6 +188,6 @@ func TestServiceConcurrency(t *testing.T) {
 			<-done
 		}
 
-		assert.Nil(t, service.server)
+		assert.False(t, service.Running())
 	})
 }

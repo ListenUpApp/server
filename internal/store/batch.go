@@ -18,6 +18,10 @@ type BatchWriter struct {
 	maxSize   int
 	count     int
 	autoFlush bool
+
+	// pendingBooks tracks books created in this batch for search indexing after flush.
+	// We index after DB commit to ensure consistency.
+	pendingBooks []*domain.Book
 }
 
 // NewBatchWriter creates a new batch writer that will auto-flush when maxSize is reached.
@@ -79,6 +83,9 @@ func (b *BatchWriter) CreateBook(ctx context.Context, book *domain.Book) error {
 
 	b.count++
 
+	// Track book for search indexing after flush.
+	b.pendingBooks = append(b.pendingBooks, book)
+
 	// Auto-flush if batch is full.
 	if b.autoFlush && b.count >= b.maxSize {
 		if err := b.Flush(ctx); err != nil {
@@ -89,7 +96,7 @@ func (b *BatchWriter) CreateBook(ctx context.Context, book *domain.Book) error {
 	return nil
 }
 
-// Flush commits all pending writes in the batch.
+// Flush commits all pending writes in the batch and triggers search indexing.
 func (b *BatchWriter) Flush(ctx context.Context) error {
 	if b.count == 0 {
 		return nil // Nothing to flush
@@ -105,9 +112,32 @@ func (b *BatchWriter) Flush(ctx context.Context) error {
 		)
 	}
 
+	// Index books for search asynchronously after DB commit.
+	// This ensures search index stays consistent with the database.
+	if b.store.searchIndexer != nil && len(b.pendingBooks) > 0 {
+		booksToIndex := b.pendingBooks
+		go func() {
+			for _, book := range booksToIndex {
+				if err := b.store.searchIndexer.IndexBook(ctx, book); err != nil {
+					if b.store.logger != nil {
+						b.store.logger.Warn("failed to index book for search",
+							slog.String("book_id", book.ID),
+							slog.Any("error", err))
+					}
+				}
+			}
+			if b.store.logger != nil {
+				b.store.logger.LogAttrs(ctx, slog.LevelInfo, "batch search indexing complete",
+					slog.Int("count", len(booksToIndex)),
+				)
+			}
+		}()
+	}
+
 	// Reset for next batch.
 	b.count = 0
 	b.batch = b.store.db.NewWriteBatch()
+	b.pendingBooks = nil
 
 	return nil
 }
@@ -116,6 +146,7 @@ func (b *BatchWriter) Flush(ctx context.Context) error {
 func (b *BatchWriter) Cancel() {
 	b.batch.Cancel()
 	b.count = 0
+	b.pendingBooks = nil
 }
 
 // Count returns the number of operations in the current batch.
