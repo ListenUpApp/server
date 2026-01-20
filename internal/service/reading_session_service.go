@@ -423,9 +423,9 @@ func (s *ReadingSessionService) GetBookReaders(ctx context.Context, bookID, view
 		}
 	}
 
-	// Sort other readers by most recent activity
+	// Sort other readers by most recent activity (last read date descending)
 	slices.SortFunc(response.OtherReaders, func(a, b ReaderSummary) int {
-		return b.StartedAt.Compare(a.StartedAt)
+		return b.LastActivityAt.Compare(a.LastActivityAt)
 	})
 
 	// Apply limit if specified
@@ -514,6 +514,7 @@ type ReaderSummary struct {
 	CurrentProgress    float64    `json:"current_progress,omitempty"`
 	StartedAt          time.Time  `json:"started_at"`
 	FinishedAt         *time.Time `json:"finished_at,omitempty"`
+	LastActivityAt     time.Time  `json:"last_activity_at"` // Most recent of StartedAt or FinishedAt
 	CompletionCount    int        `json:"completion_count"`
 }
 
@@ -601,6 +602,12 @@ func buildReaderSummary(user *domain.User, profile *domain.UserProfile, sessions
 		}
 	}
 
+	// Compute last activity: use FinishedAt if available, otherwise StartedAt
+	lastActivity := mostRecentSession.StartedAt
+	if mostRecentSession.FinishedAt != nil && mostRecentSession.FinishedAt.After(lastActivity) {
+		lastActivity = *mostRecentSession.FinishedAt
+	}
+
 	summary := ReaderSummary{
 		UserID:             user.ID,
 		DisplayName:        user.Name(),
@@ -610,6 +617,7 @@ func buildReaderSummary(user *domain.User, profile *domain.UserProfile, sessions
 		IsCurrentlyReading: activeSession != nil,
 		StartedAt:          mostRecentSession.StartedAt,
 		FinishedAt:         mostRecentSession.FinishedAt,
+		LastActivityAt:     lastActivity,
 		CompletionCount:    completionCount,
 		CurrentProgress:    currentProgress, // Use the real-time progress from PlaybackState
 	}
