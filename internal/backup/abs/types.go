@@ -188,11 +188,12 @@ func DefaultImportOptions() ImportOptions {
 // ImportResult contains the results of executing an ABS import.
 type ImportResult struct {
 	// What was imported
-	SessionsImported  int `json:"sessions_imported"`
-	SessionsSkipped   int `json:"sessions_skipped"`
-	ProgressImported  int `json:"progress_imported"`
-	ProgressSkipped   int `json:"progress_skipped"`
-	EventsCreated     int `json:"events_created"` // Total ListeningEvents created
+	SessionsImported        int `json:"sessions_imported"`
+	SessionsSkipped         int `json:"sessions_skipped"`
+	ProgressImported        int `json:"progress_imported"`
+	ProgressSkipped         int `json:"progress_skipped"`
+	EventsCreated           int `json:"events_created"`            // Total ListeningEvents created
+	ReadingSessionsCreated  int `json:"reading_sessions_created"`  // BookReadingSession records for readers section
 
 	// Users whose progress was affected (for rebuild)
 	AffectedUserIDs []string `json:"affected_user_ids"`

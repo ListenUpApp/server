@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/id"
 	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
@@ -97,7 +98,14 @@ func (im *Importer) Import(
 		}
 	}
 
-	// 3. Record affected users
+	// 3. Create reading sessions from progress data (for "readers" section)
+	if opts.ImportProgress {
+		if err := im.createReadingSessions(ctx, backup, userMap, bookMap, result); err != nil {
+			return result, fmt.Errorf("create reading sessions: %w", err)
+		}
+	}
+
+	// 4. Record affected users
 	for userID := range affectedUsers {
 		result.AffectedUserIDs = append(result.AffectedUserIDs, userID)
 	}
@@ -110,6 +118,7 @@ func (im *Importer) Import(
 		"progress_imported", result.ProgressImported,
 		"progress_skipped", result.ProgressSkipped,
 		"events_created", result.EventsCreated,
+		"reading_sessions_created", result.ReadingSessionsCreated,
 		"affected_users", len(result.AffectedUserIDs),
 		"duration", result.Duration,
 	)
@@ -283,6 +292,121 @@ func (im *Importer) importProgress(
 	}
 
 	return nil
+}
+
+// createReadingSessions creates BookReadingSession records from ABS MediaProgress.
+// This populates the "readers" section showing who has read what books.
+func (im *Importer) createReadingSessions(
+	ctx context.Context,
+	backup *Backup,
+	userMap, bookMap map[string]string,
+	result *ImportResult,
+) error {
+	for _, user := range backup.ImportableUsers() {
+		listenUpUserID, userOK := userMap[user.ID]
+		if !userOK {
+			continue
+		}
+
+		for _, progress := range user.Progress {
+			if !progress.IsBook() {
+				continue
+			}
+
+			listenUpBookID, bookOK := bookMap[progress.LibraryItemID]
+			if !bookOK {
+				continue
+			}
+
+			// Generate session ID
+			sessionID, err := id.Generate("rsession")
+			if err != nil {
+				im.logger.Warn("failed to generate session ID",
+					"user_id", listenUpUserID,
+					"book_id", listenUpBookID,
+					"error", err)
+				continue
+			}
+
+			// Create the reading session
+			session := im.convertProgressToSession(sessionID, listenUpUserID, listenUpBookID, &progress)
+
+			// Store the session
+			if err := im.store.CreateReadingSession(ctx, session); err != nil {
+				im.logger.Warn("failed to create reading session",
+					"session_id", sessionID,
+					"user_id", listenUpUserID,
+					"book_id", listenUpBookID,
+					"error", err)
+				continue
+			}
+
+			result.ReadingSessionsCreated++
+
+			im.logger.Debug("created reading session from ABS progress",
+				"session_id", sessionID,
+				"user_id", listenUpUserID,
+				"book_id", listenUpBookID,
+				"is_finished", progress.IsFinished,
+				"progress", progress.Progress)
+
+			// Emit SSE event so clients can see the new session
+			if im.events != nil {
+				im.events.Emit(sse.NewReadingSessionUpdatedEvent(session))
+			}
+		}
+	}
+
+	im.logger.Info("created reading sessions from ABS progress",
+		"sessions_created", result.ReadingSessionsCreated)
+
+	return nil
+}
+
+// convertProgressToSession converts ABS MediaProgress to a BookReadingSession.
+func (im *Importer) convertProgressToSession(
+	sessionID, userID, bookID string,
+	progress *MediaProgress,
+) *domain.BookReadingSession {
+	now := time.Now()
+
+	// Use ABS timestamps, falling back to now if not available
+	startedAt := now
+	if progress.StartedAt > 0 {
+		startedAt = time.UnixMilli(progress.StartedAt)
+	}
+
+	// Calculate estimated listen time from progress and duration
+	var listenTimeMs int64
+	if progress.Duration > 0 {
+		listenTimeMs = int64(progress.Progress * progress.Duration * 1000)
+	}
+
+	session := &domain.BookReadingSession{
+		ID:            sessionID,
+		UserID:        userID,
+		BookID:        bookID,
+		StartedAt:     startedAt,
+		FinishedAt:    nil,
+		IsCompleted:   progress.IsFinished,
+		FinalProgress: progress.Progress,
+		ListenTimeMs:  listenTimeMs,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+
+	// If finished, set the FinishedAt timestamp
+	if progress.IsFinished {
+		if progress.FinishedAt > 0 {
+			finishedAt := time.UnixMilli(progress.FinishedAt)
+			session.FinishedAt = &finishedAt
+		} else {
+			// Book is marked finished but no timestamp - use now
+			session.FinishedAt = &now
+		}
+	}
+
+	return session
 }
 
 // RebuildProgressForUsers rebuilds PlaybackProgress for affected users.

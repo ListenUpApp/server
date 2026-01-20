@@ -367,6 +367,13 @@ func (s *ReadingSessionService) GetBookReaders(ctx context.Context, bookID, view
 		response.TotalReaders++
 	}
 
+	// Get book duration for progress calculation
+	book, err := s.store.GetBookNoAccessCheck(ctx, bookID)
+	var bookDurationMs int64
+	if err == nil && book != nil {
+		bookDurationMs = book.TotalDuration
+	}
+
 	// Build reader summaries for other users
 	for userID, sessions := range sessionsByUser {
 		// Get user info
@@ -385,7 +392,22 @@ func (s *ReadingSessionService) GetBookReaders(ctx context.Context, bookID, view
 			profile = p
 		}
 
-		summary := buildReaderSummary(user, profile, sessions)
+		// Get current progress from PlaybackState if user is actively reading
+		var currentProgress float64
+		hasActiveSession := false
+		for _, session := range sessions {
+			if session.IsActive() {
+				hasActiveSession = true
+				break
+			}
+		}
+		if hasActiveSession && bookDurationMs > 0 {
+			if state, err := s.store.GetState(ctx, userID, bookID); err == nil && state != nil {
+				currentProgress = state.ComputeProgress(bookDurationMs)
+			}
+		}
+
+		summary := buildReaderSummary(user, profile, sessions, currentProgress)
 		response.OtherReaders = append(response.OtherReaders, summary)
 
 		// Count completions
@@ -540,8 +562,9 @@ func buildSessionSummaries(sessions []*domain.BookReadingSession) []SessionSumma
 	return summaries
 }
 
-// buildReaderSummary creates a reader summary from user, profile, and their sessions.
-func buildReaderSummary(user *domain.User, profile *domain.UserProfile, sessions []*domain.BookReadingSession) ReaderSummary {
+// buildReaderSummary creates a reader summary from user, profile, their sessions, and current progress.
+// currentProgress is the real-time progress from PlaybackState (0.0-1.0), calculated by the caller.
+func buildReaderSummary(user *domain.User, profile *domain.UserProfile, sessions []*domain.BookReadingSession, currentProgress float64) ReaderSummary {
 	// Extract avatar info from profile (defaults to auto if no profile)
 	avatarType := string(domain.AvatarTypeAuto)
 	avatarValue := ""
@@ -588,11 +611,7 @@ func buildReaderSummary(user *domain.User, profile *domain.UserProfile, sessions
 		StartedAt:          mostRecentSession.StartedAt,
 		FinishedAt:         mostRecentSession.FinishedAt,
 		CompletionCount:    completionCount,
-	}
-
-	// If currently reading, get current progress from active session
-	if activeSession != nil {
-		summary.CurrentProgress = activeSession.FinalProgress
+		CurrentProgress:    currentProgress, // Use the real-time progress from PlaybackState
 	}
 
 	return summary

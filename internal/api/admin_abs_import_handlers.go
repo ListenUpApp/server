@@ -357,13 +357,15 @@ type ImportABSSessionsInput struct {
 
 type ImportABSSessionsOutput struct {
 	Body struct {
-		SessionsImported     int    `json:"sessions_imported" doc:"Sessions successfully imported"`
-		SessionsFailed       int    `json:"sessions_failed" doc:"Sessions that failed to import"`
-		EventsCreated        int    `json:"events_created" doc:"Listening events created"`
-		ProgressRebuilt      int    `json:"progress_rebuilt" doc:"User+book progress records rebuilt"`
-		ProgressFailed       int    `json:"progress_failed" doc:"Progress rebuilds that failed"`
-		ABSProgressUnmatched int    `json:"abs_progress_unmatched" doc:"Books where ABS progress could not be matched (finished status may be incorrect)"`
-		Duration             string `json:"duration" doc:"Import duration"`
+		SessionsImported       int    `json:"sessions_imported" doc:"Sessions successfully imported"`
+		SessionsFailed         int    `json:"sessions_failed" doc:"Sessions that failed to import"`
+		EventsCreated          int    `json:"events_created" doc:"Listening events created"`
+		ProgressRebuilt        int    `json:"progress_rebuilt" doc:"User+book progress records rebuilt"`
+		ProgressFailed         int    `json:"progress_failed" doc:"Progress rebuilds that failed"`
+		ABSProgressUnmatched   int    `json:"abs_progress_unmatched" doc:"Books where ABS progress could not be matched (finished status may be incorrect)"`
+		ReadingSessionsCreated int    `json:"reading_sessions_created" doc:"BookReadingSession records created for readers section"`
+		ReadingSessionsSkipped int    `json:"reading_sessions_skipped" doc:"Sessions skipped (already existed)"`
+		Duration               string `json:"duration" doc:"Import duration"`
 	}
 }
 
@@ -1003,21 +1005,25 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 	if len(readySessions) == 0 {
 		return &ImportABSSessionsOutput{
 			Body: struct {
-				SessionsImported     int    `json:"sessions_imported" doc:"Sessions successfully imported"`
-				SessionsFailed       int    `json:"sessions_failed" doc:"Sessions that failed to import"`
-				EventsCreated        int    `json:"events_created" doc:"Listening events created"`
-				ProgressRebuilt      int    `json:"progress_rebuilt" doc:"User+book progress records rebuilt"`
-				ProgressFailed       int    `json:"progress_failed" doc:"Progress rebuilds that failed"`
-				ABSProgressUnmatched int    `json:"abs_progress_unmatched" doc:"Books where ABS progress could not be matched (finished status may be incorrect)"`
-				Duration             string `json:"duration" doc:"Import duration"`
+				SessionsImported       int    `json:"sessions_imported" doc:"Sessions successfully imported"`
+				SessionsFailed         int    `json:"sessions_failed" doc:"Sessions that failed to import"`
+				EventsCreated          int    `json:"events_created" doc:"Listening events created"`
+				ProgressRebuilt        int    `json:"progress_rebuilt" doc:"User+book progress records rebuilt"`
+				ProgressFailed         int    `json:"progress_failed" doc:"Progress rebuilds that failed"`
+				ABSProgressUnmatched   int    `json:"abs_progress_unmatched" doc:"Books where ABS progress could not be matched (finished status may be incorrect)"`
+				ReadingSessionsCreated int    `json:"reading_sessions_created" doc:"BookReadingSession records created for readers section"`
+				ReadingSessionsSkipped int    `json:"reading_sessions_skipped" doc:"Sessions skipped (already existed)"`
+				Duration               string `json:"duration" doc:"Import duration"`
 			}{
-				SessionsImported:     0,
-				SessionsFailed:       0,
-				EventsCreated:        0,
-				ProgressRebuilt:      0,
-				ProgressFailed:       0,
-				ABSProgressUnmatched: 0,
-				Duration:             time.Since(start).String(),
+				SessionsImported:       0,
+				SessionsFailed:         0,
+				EventsCreated:          0,
+				ProgressRebuilt:        0,
+				ProgressFailed:         0,
+				ABSProgressUnmatched:   0,
+				ReadingSessionsCreated: 0,
+				ReadingSessionsSkipped: 0,
+				Duration:               time.Since(start).String(),
 			},
 		}, nil
 	}
@@ -1328,26 +1334,137 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 			slog.Int("skipped_has_progress", progressSkippedHasProgress))
 	}
 
+	// Create BookReadingSession records from ABS progress (populates the "Readers" section)
+	// This is a separate pass to ensure sessions are created for all user+book combinations
+	// that have progress, regardless of whether the progress was created in this import or existed before.
+	readingSessionsCreated := 0
+	readingSessionsSkipped := 0
+	for _, u := range users {
+		if u.ListenUpID == nil {
+			continue
+		}
+		listenUpUserID := *u.ListenUpID
+
+		// Get all MediaProgress entries stored for this user
+		allProgress, err := s.store.ListABSImportProgressForUser(ctx, input.ID, u.ABSUserID)
+		if err != nil {
+			continue
+		}
+
+		for _, absProgress := range allProgress {
+			// Find the ListenUp book ID
+			var listenUpBookID string
+			absBook, err := s.store.GetABSImportBook(ctx, input.ID, absProgress.ABSMediaID)
+			if err == nil && absBook != nil && absBook.ListenUpID != nil {
+				listenUpBookID = *absBook.ListenUpID
+			} else if bookID, ok := bookMap[absProgress.ABSMediaID]; ok {
+				listenUpBookID = bookID
+			} else {
+				continue // Can't create session without book mapping
+			}
+
+			// Check if user already has a session for this book
+			existingSessions, err := s.store.GetUserBookSessions(ctx, listenUpUserID, listenUpBookID)
+			if err == nil && len(existingSessions) > 0 {
+				readingSessionsSkipped++
+				continue // Already has a reading session
+			}
+
+			// Generate session ID
+			sessionID, err := id.Generate("rsession")
+			if err != nil {
+				s.logger.Warn("failed to generate reading session ID",
+					slog.String("user_id", listenUpUserID),
+					slog.String("book_id", listenUpBookID),
+					slog.String("error", err.Error()))
+				continue
+			}
+
+			// Determine timestamps (use LastUpdate as best approximation for started time)
+			now := time.Now()
+			startedAt := absProgress.LastUpdate
+			if startedAt.IsZero() {
+				startedAt = now
+			}
+
+			// Calculate estimated listen time from progress
+			var listenTimeMs int64
+			if absProgress.Duration > 0 {
+				listenTimeMs = int64(absProgress.Progress * float64(absProgress.Duration))
+			}
+
+			// Create the reading session
+			session := &domain.BookReadingSession{
+				ID:            sessionID,
+				UserID:        listenUpUserID,
+				BookID:        listenUpBookID,
+				StartedAt:     startedAt,
+				FinishedAt:    nil,
+				IsCompleted:   absProgress.IsFinished,
+				FinalProgress: absProgress.Progress,
+				ListenTimeMs:  listenTimeMs,
+				CreatedAt:     now,
+				UpdatedAt:     now,
+			}
+
+			// If finished, set the FinishedAt timestamp
+			if absProgress.IsFinished {
+				if absProgress.FinishedAt != nil {
+					session.FinishedAt = absProgress.FinishedAt
+				} else {
+					session.FinishedAt = &now
+				}
+			}
+
+			// Store the session
+			if err := s.store.CreateReadingSession(ctx, session); err != nil {
+				s.logger.Warn("failed to create reading session",
+					slog.String("session_id", sessionID),
+					slog.String("user_id", listenUpUserID),
+					slog.String("book_id", listenUpBookID),
+					slog.String("error", err.Error()))
+				continue
+			}
+
+			readingSessionsCreated++
+			s.logger.Debug("created reading session from ABS progress",
+				slog.String("session_id", sessionID),
+				slog.String("user_id", listenUpUserID),
+				slog.String("book_id", listenUpBookID),
+				slog.Bool("is_finished", absProgress.IsFinished),
+				slog.Float64("progress", absProgress.Progress))
+		}
+	}
+	if readingSessionsCreated > 0 || readingSessionsSkipped > 0 {
+		s.logger.Info("created reading sessions from ABS progress",
+			slog.Int("created", readingSessionsCreated),
+			slog.Int("skipped_existing", readingSessionsSkipped))
+	}
+
 	// Update import stats
 	s.updateImportStats(ctx, input.ID)
 
 	return &ImportABSSessionsOutput{
 		Body: struct {
-			SessionsImported      int    `json:"sessions_imported" doc:"Sessions successfully imported"`
-			SessionsFailed        int    `json:"sessions_failed" doc:"Sessions that failed to import"`
-			EventsCreated         int    `json:"events_created" doc:"Listening events created"`
-			ProgressRebuilt       int    `json:"progress_rebuilt" doc:"User+book progress records rebuilt"`
-			ProgressFailed        int    `json:"progress_failed" doc:"Progress rebuilds that failed"`
-			ABSProgressUnmatched  int    `json:"abs_progress_unmatched" doc:"Books where ABS progress could not be matched (finished status may be incorrect)"`
-			Duration              string `json:"duration" doc:"Import duration"`
+			SessionsImported        int    `json:"sessions_imported" doc:"Sessions successfully imported"`
+			SessionsFailed          int    `json:"sessions_failed" doc:"Sessions that failed to import"`
+			EventsCreated           int    `json:"events_created" doc:"Listening events created"`
+			ProgressRebuilt         int    `json:"progress_rebuilt" doc:"User+book progress records rebuilt"`
+			ProgressFailed          int    `json:"progress_failed" doc:"Progress rebuilds that failed"`
+			ABSProgressUnmatched    int    `json:"abs_progress_unmatched" doc:"Books where ABS progress could not be matched (finished status may be incorrect)"`
+			ReadingSessionsCreated  int    `json:"reading_sessions_created" doc:"BookReadingSession records created for readers section"`
+			ReadingSessionsSkipped  int    `json:"reading_sessions_skipped" doc:"Sessions skipped (already existed)"`
+			Duration                string `json:"duration" doc:"Import duration"`
 		}{
-			SessionsImported:     sessionsImported,
-			SessionsFailed:       sessionsFailed,
-			EventsCreated:        eventsCreated,
-			ProgressRebuilt:      progressRebuilt,
-			ProgressFailed:       progressFailed,
-			ABSProgressUnmatched: progressUnmatchedABS,
-			Duration:             time.Since(start).String(),
+			SessionsImported:        sessionsImported,
+			SessionsFailed:          sessionsFailed,
+			EventsCreated:           eventsCreated,
+			ProgressRebuilt:         progressRebuilt,
+			ProgressFailed:          progressFailed,
+			ABSProgressUnmatched:    progressUnmatchedABS,
+			ReadingSessionsCreated:  readingSessionsCreated,
+			ReadingSessionsSkipped:  readingSessionsSkipped,
+			Duration:                time.Since(start).String(),
 		},
 	}, nil
 }

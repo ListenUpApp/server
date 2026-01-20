@@ -64,21 +64,25 @@ func TestImportABSSessionsOutput_HasFailureFields(t *testing.T) {
 	// Create a response with failure counts
 	output := ImportABSSessionsOutput{
 		Body: struct {
-			SessionsImported     int    `json:"sessions_imported" doc:"Sessions successfully imported"`
-			SessionsFailed       int    `json:"sessions_failed" doc:"Sessions that failed to import"`
-			EventsCreated        int    `json:"events_created" doc:"Listening events created"`
-			ProgressRebuilt      int    `json:"progress_rebuilt" doc:"User+book progress records rebuilt"`
-			ProgressFailed       int    `json:"progress_failed" doc:"Progress rebuilds that failed"`
-			ABSProgressUnmatched int    `json:"abs_progress_unmatched" doc:"Books where ABS progress could not be matched (finished status may be incorrect)"`
-			Duration             string `json:"duration" doc:"Import duration"`
+			SessionsImported       int    `json:"sessions_imported" doc:"Sessions successfully imported"`
+			SessionsFailed         int    `json:"sessions_failed" doc:"Sessions that failed to import"`
+			EventsCreated          int    `json:"events_created" doc:"Listening events created"`
+			ProgressRebuilt        int    `json:"progress_rebuilt" doc:"User+book progress records rebuilt"`
+			ProgressFailed         int    `json:"progress_failed" doc:"Progress rebuilds that failed"`
+			ABSProgressUnmatched   int    `json:"abs_progress_unmatched" doc:"Books where ABS progress could not be matched (finished status may be incorrect)"`
+			ReadingSessionsCreated int    `json:"reading_sessions_created" doc:"BookReadingSession records created for readers section"`
+			ReadingSessionsSkipped int    `json:"reading_sessions_skipped" doc:"Sessions skipped (already existed)"`
+			Duration               string `json:"duration" doc:"Import duration"`
 		}{
-			SessionsImported:     10,
-			SessionsFailed:       2, // 2 sessions failed to import
-			EventsCreated:        10,
-			ProgressRebuilt:      8,
-			ProgressFailed:       2, // 2 progress rebuilds failed
-			ABSProgressUnmatched: 3, // 3 books couldn't match ABS progress
-			Duration:             "1.5s",
+			SessionsImported:       10,
+			SessionsFailed:         2, // 2 sessions failed to import
+			EventsCreated:          10,
+			ProgressRebuilt:        8,
+			ProgressFailed:         2, // 2 progress rebuilds failed
+			ABSProgressUnmatched:   3, // 3 books couldn't match ABS progress
+			ReadingSessionsCreated: 5, // 5 reading sessions created
+			ReadingSessionsSkipped: 2, // 2 already existed
+			Duration:               "1.5s",
 		},
 	}
 
