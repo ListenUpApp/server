@@ -533,7 +533,7 @@ func (s *ListeningService) GetBookStats(ctx context.Context, bookID string) (*Bo
 
 // MarkComplete marks a book as finished regardless of current position.
 // This allows users to mark a book as complete manually (e.g., DNF at 90%).
-func (s *ListeningService) MarkComplete(ctx context.Context, userID, bookID string, finishedAt *time.Time) (*domain.PlaybackState, error) {
+func (s *ListeningService) MarkComplete(ctx context.Context, userID, bookID string, startedAt, finishedAt *time.Time) (*domain.PlaybackState, error) {
 	// Get book for duration (no access check - if user is marking complete, they had access)
 	book, err := s.store.GetBookNoAccessCheck(ctx, bookID)
 	if err != nil {
@@ -552,19 +552,26 @@ func (s *ListeningService) MarkComplete(ctx context.Context, userID, bookID stri
 
 	if state == nil {
 		// Create new state if none exists
+		startedAtValue := now
+		if startedAt != nil {
+			startedAtValue = *startedAt
+		}
 		state = &domain.PlaybackState{
 			UserID:            userID,
 			BookID:            bookID,
 			CurrentPositionMs: 0,
 			IsFinished:        true,
 			FinishedAt:        finishedAt,
-			StartedAt:         now,
+			StartedAt:         startedAtValue,
 			LastPlayedAt:      now,
 			UpdatedAt:         now,
 		}
 	} else {
 		state.IsFinished = true
 		state.FinishedAt = finishedAt
+		if startedAt != nil {
+			state.StartedAt = *startedAt
+		}
 		state.UpdatedAt = now
 	}
 

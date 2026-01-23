@@ -221,6 +221,7 @@ type ResetProgressInput struct {
 
 // MarkCompleteRequest contains the request body for marking a book complete.
 type MarkCompleteRequest struct {
+	StartedAt  *string `json:"started_at,omitempty" doc:"When started reading (ISO 8601). Defaults to now if no prior state."`
 	FinishedAt *string `json:"finished_at,omitempty" doc:"When finished (ISO 8601). Defaults to now."`
 }
 
@@ -310,6 +311,7 @@ type ProgressSyncItem struct {
 	BookID            string  `json:"book_id" doc:"Book ID"`
 	CurrentPositionMs int64   `json:"current_position_ms" doc:"Current position in ms"`
 	IsFinished        bool    `json:"is_finished" doc:"Whether finished"`
+	StartedAt         *string `json:"started_at,omitempty" doc:"When started (ISO 8601)"`
 	FinishedAt        *string `json:"finished_at,omitempty" doc:"When finished (ISO 8601)"`
 	LastPlayedAt      string  `json:"last_played_at" doc:"Last played (ISO 8601)"`
 	UpdatedAt         string  `json:"updated_at" doc:"Last update (ISO 8601)"`
@@ -522,6 +524,16 @@ func (s *Server) handleMarkComplete(ctx context.Context, input *MarkCompleteInpu
 		return nil, err
 	}
 
+	// Parse optional started_at timestamp
+	var startedAt *time.Time
+	if input.Body.StartedAt != nil && *input.Body.StartedAt != "" {
+		parsed, err := time.Parse(time.RFC3339, *input.Body.StartedAt)
+		if err != nil {
+			return nil, huma.Error400BadRequest("invalid started_at format, expected RFC3339")
+		}
+		startedAt = &parsed
+	}
+
 	// Parse optional finished_at timestamp
 	var finishedAt *time.Time
 	if input.Body.FinishedAt != nil && *input.Body.FinishedAt != "" {
@@ -532,7 +544,7 @@ func (s *Server) handleMarkComplete(ctx context.Context, input *MarkCompleteInpu
 		finishedAt = &parsed
 	}
 
-	state, err := s.services.Listening.MarkComplete(ctx, userID, input.ID, finishedAt)
+	state, err := s.services.Listening.MarkComplete(ctx, userID, input.ID, startedAt, finishedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -661,6 +673,10 @@ func (s *Server) handleGetAllProgress(ctx context.Context, input *GetAllProgress
 			IsFinished:        p.IsFinished,
 			LastPlayedAt:      p.LastPlayedAt.Format(time.RFC3339),
 			UpdatedAt:         p.UpdatedAt.Format(time.RFC3339),
+		}
+		if !p.StartedAt.IsZero() {
+			startedAt := p.StartedAt.Format(time.RFC3339)
+			item.StartedAt = &startedAt
 		}
 		if p.FinishedAt != nil {
 			finishedAt := p.FinishedAt.Format(time.RFC3339)

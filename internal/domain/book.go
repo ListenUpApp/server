@@ -20,6 +20,7 @@ type Book struct {
 	CoverImage    *ImageFileInfo    `json:"cover_image,omitempty"`
 	ISBN          string            `json:"isbn,omitempty"`
 	Title         string            `json:"title"`
+	SortTitle     string            `json:"sort_title,omitempty"`
 	Subtitle      string            `json:"subtitle,omitempty"`
 	Path          string            `json:"path"`
 	Description   string            `json:"description,omitempty"`

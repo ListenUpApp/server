@@ -108,6 +108,7 @@ type ListBooksInput struct {
 type BookResponse struct {
 	ID           string                    `json:"id" doc:"Book ID"`
 	Title        string                    `json:"title" doc:"Book title"`
+	SortTitle    string                    `json:"sort_title,omitempty" doc:"Title used for sorting"`
 	Subtitle     string                    `json:"subtitle,omitempty" doc:"Book subtitle"`
 	Description  string                    `json:"description,omitempty" doc:"Book description"`
 	Publisher    string                    `json:"publisher,omitempty" doc:"Publisher name"`
@@ -176,6 +177,7 @@ type BookOutput struct {
 // UpdateBookRequest is the request body for updating a book.
 type UpdateBookRequest struct {
 	Title       *string    `json:"title,omitempty" validate:"omitempty,min=1,max=500" doc:"Book title"`
+	SortTitle   *string    `json:"sort_title,omitempty" validate:"omitempty,max=500" doc:"Title used for sorting"`
 	Subtitle    *string    `json:"subtitle,omitempty" validate:"omitempty,max=500" doc:"Book subtitle"`
 	Description *string    `json:"description,omitempty" validate:"omitempty,max=10000" doc:"Book description"`
 	Publisher   *string    `json:"publisher,omitempty" validate:"omitempty,max=200" doc:"Publisher name"`
@@ -390,6 +392,9 @@ func (s *Server) handleUpdateBook(ctx context.Context, input *UpdateBookInput) (
 	if input.Body.Title != nil {
 		book.Title = *input.Body.Title
 	}
+	if input.Body.SortTitle != nil {
+		book.SortTitle = *input.Body.SortTitle
+	}
 	if input.Body.Subtitle != nil {
 		book.Subtitle = *input.Body.Subtitle
 	}
@@ -571,6 +576,7 @@ func mapEnrichedBookResponse(b *dto.Book) BookResponse {
 	return BookResponse{
 		ID:           b.ID,
 		Title:        b.Title,
+		SortTitle:    b.SortTitle,
 		Subtitle:     b.Subtitle,
 		Description:  b.Description,
 		Publisher:    b.Publisher,

@@ -64,6 +64,16 @@ func (s *Server) registerSyncRoutes() {
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleGetSyncActiveSessions)
 
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getSyncReadingSessions",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/sync/reading-sessions",
+		Summary:     "Get all reading sessions for sync",
+		Description: "Returns all book reading sessions with reader summaries for offline-first book detail pages",
+		Tags:        []string{"Sync"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetSyncReadingSessions)
+
 	// SSE endpoint (handled via chi directly, not huma)
 	s.router.Get("/api/v1/sync/events", s.sseHandler.ServeHTTP)
 }
@@ -454,6 +464,147 @@ func (s *Server) handleGetSyncActiveSessions(ctx context.Context, _ *GetSyncActi
 	return &SyncActiveSessionsOutput{
 		Body: SyncActiveSessionsResponse{
 			Sessions: resp,
+		},
+	}, nil
+}
+
+// === Reading Sessions Sync ===
+
+// GetSyncReadingSessionsInput contains parameters for getting reading sessions.
+type GetSyncReadingSessionsInput struct {
+	Authorization string `header:"Authorization"`
+}
+
+// SyncReadingSessionReaderResponse contains a reader summary for a specific book.
+type SyncReadingSessionReaderResponse struct {
+	BookID             string     `json:"book_id" doc:"Book ID"`
+	UserID             string     `json:"user_id" doc:"User ID"`
+	DisplayName        string     `json:"display_name" doc:"User display name"`
+	AvatarType         string     `json:"avatar_type" doc:"Avatar type (auto or image)"`
+	AvatarValue        string     `json:"avatar_value,omitempty" doc:"Avatar image path for image type"`
+	AvatarColor        string     `json:"avatar_color" doc:"Generated avatar color hex"`
+	IsCurrentlyReading bool       `json:"is_currently_reading" doc:"Whether user is actively reading"`
+	CurrentProgress    float64    `json:"current_progress" doc:"Reading progress 0.0-1.0"`
+	StartedAt          time.Time  `json:"started_at" doc:"When user first started"`
+	FinishedAt         *time.Time `json:"finished_at,omitempty" doc:"When user last finished"`
+	LastActivityAt     time.Time  `json:"last_activity_at" doc:"Most recent activity timestamp"`
+	CompletionCount    int        `json:"completion_count" doc:"Number of times completed"`
+}
+
+// SyncReadingSessionsResponse contains all reading sessions for sync.
+type SyncReadingSessionsResponse struct {
+	Readers []SyncReadingSessionReaderResponse `json:"readers" doc:"All book reader summaries"`
+}
+
+// SyncReadingSessionsOutput wraps the reading sessions response for Huma.
+type SyncReadingSessionsOutput struct {
+	Body SyncReadingSessionsResponse
+}
+
+func (s *Server) handleGetSyncReadingSessions(ctx context.Context, _ *GetSyncReadingSessionsInput) (*SyncReadingSessionsOutput, error) {
+	if _, err := GetUserID(ctx); err != nil {
+		return nil, err
+	}
+
+	// Get all sessions grouped by book
+	allSessions := make(map[string][]*domain.BookReadingSession)
+	for session, err := range s.store.ListAllSessions(ctx) {
+		if err != nil {
+			return nil, err
+		}
+		allSessions[session.BookID] = append(allSessions[session.BookID], session)
+	}
+
+	// Collect unique user IDs for batch fetching
+	userIDSet := make(map[string]bool)
+	for _, sessions := range allSessions {
+		for _, session := range sessions {
+			userIDSet[session.UserID] = true
+		}
+	}
+	userIDs := make([]string, 0, len(userIDSet))
+	for id := range userIDSet {
+		userIDs = append(userIDs, id)
+	}
+
+	// Batch fetch users and profiles
+	users, err := s.store.GetUsersByIDs(ctx, userIDs)
+	if err != nil {
+		return nil, err
+	}
+	userMap := make(map[string]*domain.User, len(users))
+	for _, user := range users {
+		userMap[user.ID] = user
+	}
+
+	profiles, err := s.store.GetUserProfilesByIDs(ctx, userIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build reader summaries per book per user
+	var resp []SyncReadingSessionReaderResponse
+	for bookID, sessions := range allSessions {
+		// Group sessions by user within this book
+		sessionsByUser := make(map[string][]*domain.BookReadingSession)
+		for _, session := range sessions {
+			sessionsByUser[session.UserID] = append(sessionsByUser[session.UserID], session)
+		}
+
+		for userID, userSessions := range sessionsByUser {
+			user, ok := userMap[userID]
+			if !ok {
+				continue
+			}
+
+			profile, ok := profiles[userID]
+			if !ok {
+				profile = &domain.UserProfile{AvatarType: domain.AvatarTypeAuto}
+			}
+
+			// Build summary from sessions
+			var mostRecent *domain.BookReadingSession
+			var isCurrentlyReading bool
+			completionCount := 0
+
+			for _, session := range userSessions {
+				if mostRecent == nil || session.StartedAt.After(mostRecent.StartedAt) {
+					mostRecent = session
+				}
+				if session.IsActive() {
+					isCurrentlyReading = true
+				}
+				if session.IsCompleted {
+					completionCount++
+				}
+			}
+
+			lastActivity := mostRecent.StartedAt
+			if mostRecent.FinishedAt != nil && mostRecent.FinishedAt.After(lastActivity) {
+				lastActivity = *mostRecent.FinishedAt
+			}
+
+			entry := SyncReadingSessionReaderResponse{
+				BookID:             bookID,
+				UserID:             userID,
+				DisplayName:        user.DisplayName,
+				AvatarType:         string(profile.AvatarType),
+				AvatarValue:        profile.AvatarValue,
+				AvatarColor:        color.ForUser(userID),
+				IsCurrentlyReading: isCurrentlyReading,
+				StartedAt:          mostRecent.StartedAt,
+				FinishedAt:         mostRecent.FinishedAt,
+				LastActivityAt:     lastActivity,
+				CompletionCount:    completionCount,
+			}
+
+			resp = append(resp, entry)
+		}
+	}
+
+	return &SyncReadingSessionsOutput{
+		Body: SyncReadingSessionsResponse{
+			Readers: resp,
 		},
 	}, nil
 }
