@@ -519,6 +519,13 @@ func (s *Server) handleApproveUser(ctx context.Context, input *ApproveUserInput)
 		return nil, err
 	}
 
+	// Record user joined activity
+	if s.services.Activity != nil {
+		if err := s.services.Activity.RecordUserJoined(ctx, input.ID); err != nil {
+			s.logger.Error("failed to record user joined activity", "user_id", input.ID, "error", err)
+		}
+	}
+
 	return &AdminUserOutput{Body: mapAdminUserResponse(user)}, nil
 }
 

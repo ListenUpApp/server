@@ -29,6 +29,9 @@ const (
 	// Shows duration listened (e.g., "John listened to 16 minutes of Book Title").
 	// Only recorded for sessions >= MinListeningSessionMinutes to avoid spam.
 	ActivityListeningSession ActivityType = "listening_session"
+
+	// ActivityUserJoined is recorded when a new user is approved to join the server.
+	ActivityUserJoined ActivityType = "user_joined"
 )
 
 // MinListeningSessionMs is the minimum duration in milliseconds for a listening session

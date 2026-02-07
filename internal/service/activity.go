@@ -346,6 +346,44 @@ func (s *ActivityService) RecordListeningSession(ctx context.Context, userID, bo
 	return nil
 }
 
+
+// RecordUserJoined creates an activity when a new user is approved to join the server.
+func (s *ActivityService) RecordUserJoined(ctx context.Context, userID string) error {
+	user, err := s.store.GetUser(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("get user: %w", err)
+	}
+
+	activityID, err := id.Generate("act")
+	if err != nil {
+		return fmt.Errorf("generate activity ID: %w", err)
+	}
+
+	avatarType, avatarValue := s.getUserAvatarInfo(ctx, userID)
+
+	activity := &domain.Activity{
+		ID:              activityID,
+		UserID:          userID,
+		Type:            domain.ActivityUserJoined,
+		CreatedAt:       time.Now(),
+		UserDisplayName: user.Name(),
+		UserAvatarColor: color.ForUser(userID),
+		UserAvatarType:  avatarType,
+		UserAvatarValue: avatarValue,
+	}
+
+	if err := s.store.CreateActivity(ctx, activity); err != nil {
+		return fmt.Errorf("create activity: %w", err)
+	}
+
+	s.broadcastActivity(activity)
+
+	s.logger.Info("user joined activity recorded",
+		"user_id", userID,
+	)
+
+	return nil
+}
 // GetFeed retrieves the global activity feed with ACL filtering.
 // Only returns activities for books the viewing user can access.
 func (s *ActivityService) GetFeed(ctx context.Context, viewingUserID string, limit int, before *time.Time) ([]*domain.Activity, error) {
