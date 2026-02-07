@@ -164,28 +164,44 @@ func (s *BookService) TriggerScan(ctx context.Context, libraryID string, opts sc
 		"scan_paths", len(library.ScanPaths),
 	)
 
-	// For now, scan the first path.
-	// TODO: Support scanning multiple paths and aggregating results
-	scanPath := library.ScanPaths[0]
-
 	// Set library ID in options for event emission.
 	opts.LibraryID = libraryID
 
-	result, err := s.scanner.Scan(ctx, scanPath, opts)
-	if err != nil {
-		return nil, fmt.Errorf("scan failed: %w", err)
+	// Scan all paths and aggregate results.
+	aggregated := &scanner.ScanResult{
+		StartedAt: time.Now(),
 	}
+
+	for _, scanPath := range library.ScanPaths {
+		s.logger.Info("scanning path", "library_id", libraryID, "path", scanPath)
+
+		result, err := s.scanner.Scan(ctx, scanPath, opts)
+		if err != nil {
+			s.logger.Error("scan failed for path", "path", scanPath, "error", err)
+			aggregated.Errors++
+			continue
+		}
+
+		aggregated.Added += result.Added
+		aggregated.Updated += result.Updated
+		aggregated.Removed += result.Removed
+		aggregated.Unchanged += result.Unchanged
+		aggregated.Errors += result.Errors
+	}
+
+	aggregated.CompletedAt = time.Now()
 
 	s.logger.Info("scan complete",
 		"library_id", libraryID,
-		"added", result.Added,
-		"updated", result.Updated,
-		"unchanged", result.Unchanged,
-		"errors", result.Errors,
-		"duration", result.CompletedAt.Sub(result.StartedAt),
+		"paths_scanned", len(library.ScanPaths),
+		"added", aggregated.Added,
+		"updated", aggregated.Updated,
+		"unchanged", aggregated.Unchanged,
+		"errors", aggregated.Errors,
+		"duration", aggregated.CompletedAt.Sub(aggregated.StartedAt),
 	)
 
-	return result, nil
+	return aggregated, nil
 }
 
 // ScanFolder scans a specific folder and returns the book data without saving.
