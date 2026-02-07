@@ -132,6 +132,18 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 
 	handler := api.NewServer(storeHandle.Store, services, storage, sseHandler, sseHandle.Manager, registrationBroadcaster, backupSvc, restoreSvc, log.Logger)
 
+	// Wire mDNS refresh callback for when instance settings change
+	mdnsHandle := do.MustInvoke[*MDNSServiceHandle](i)
+	if mdnsHandle.Service != nil && mdnsHandle.started {
+		port := 8080
+		fmt.Sscanf(cfg.Server.Port, "%d", &port)
+		handler.SetOnInstanceUpdated(func(instance *domain.Instance) {
+			if err := mdnsHandle.Service.Refresh(instance, port); err != nil {
+				log.Warn("Failed to refresh mDNS after instance update", "error", err)
+			}
+		})
+	}
+
 	srv := &http.Server{
 		Addr:         ":" + cfg.Server.Port,
 		Handler:      handler,

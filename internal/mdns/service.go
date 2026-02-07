@@ -178,3 +178,22 @@ func (s *Service) Running() bool {
 	defer s.mu.Unlock()
 	return s.entryGroup != nil
 }
+
+// Refresh restarts the mDNS advertisement with updated instance data.
+// This is used when instance settings (like RemoteURL) change at runtime.
+// If mDNS is not currently running, this is a no-op.
+func (s *Service) Refresh(instance *domain.Instance, port int) error {
+	s.mu.Lock()
+	wasRunning := s.entryGroup != nil
+	if wasRunning {
+		s.stopLocked()
+	}
+	s.mu.Unlock()
+
+	if !wasRunning {
+		return nil
+	}
+
+	s.logger.Info("Refreshing mDNS advertisement", "remote_url", instance.RemoteURL)
+	return s.Start(instance, port)
+}
