@@ -18,7 +18,7 @@ require (
 	github.com/holoplot/go-avahi v1.0.1
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/samber/do/v2 v2.0.0
-	github.com/simonhull/audiometa v0.8.0
+	github.com/simonhull/audiometa v0.9.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.46.0
 	golang.org/x/image v0.34.0
