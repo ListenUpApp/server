@@ -125,7 +125,25 @@ func (s *Scanner) Scan(ctx context.Context, folderPath string, opts ScanOptions)
 		s.eventEmitter.Emit(sse.NewScanStartedEvent(opts.LibraryID))
 	}
 
-	tracker := NewProgressTracker(opts.OnProgress)
+	progressCallback := opts.OnProgress
+	if opts.LibraryID != "" {
+		origCallback := progressCallback
+		progressCallback = func(p *Progress) {
+			if origCallback != nil {
+				origCallback(p)
+			}
+			s.eventEmitter.Emit(sse.NewScanProgressEvent(
+				opts.LibraryID,
+				string(p.Phase),
+				p.Current,
+				p.Total,
+				p.Added,
+				p.Updated,
+				p.Removed,
+			))
+		}
+	}
+	tracker := NewProgressTracker(progressCallback)
 	defer tracker.Close() // Ensure cleanup of background goroutine
 
 	// Get initial progress snapshot

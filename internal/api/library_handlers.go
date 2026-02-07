@@ -65,7 +65,7 @@ func (s *Server) registerLibraryRoutes() {
 	huma.Register(s.api, huma.Operation{
 		OperationID: "removeScanPath",
 		Method:      http.MethodDelete,
-		Path:        "/api/v1/libraries/{id}/scan-paths",
+		Path:        "/api/v1/libraries/{id}/scan-paths/{path}",
 		Summary:     "Remove scan path",
 		Description: "Removes a scan path from a library. Admin only.",
 		Tags:        []string{"Libraries"},
@@ -418,6 +418,13 @@ type ScanPathRequest struct {
 	Path string `json:"path" validate:"required" doc:"Absolute filesystem path"`
 }
 
+// RemoveScanPathInput wraps the request for removing a scan path via path param.
+type RemoveScanPathInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Library ID"`
+	Path          string `path:"path" doc:"URL-encoded absolute filesystem path to remove"`
+}
+
 // TriggerScanInput wraps the request for triggering a manual scan.
 type TriggerScanInput struct {
 	Authorization string `header:"Authorization"`
@@ -483,7 +490,7 @@ func (s *Server) handleAddScanPath(ctx context.Context, input *ScanPathInput) (*
 	}, nil
 }
 
-func (s *Server) handleRemoveScanPath(ctx context.Context, input *ScanPathInput) (*LibraryOutput, error) {
+func (s *Server) handleRemoveScanPath(ctx context.Context, input *RemoveScanPathInput) (*LibraryOutput, error) {
 	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -497,7 +504,7 @@ func (s *Server) handleRemoveScanPath(ctx context.Context, input *ScanPathInput)
 		return nil, huma.Error400BadRequest("cannot remove the last scan path")
 	}
 
-	cleanPath := filepath.Clean(input.Body.Path)
+	cleanPath := filepath.Clean(input.Path)
 	lib.RemoveScanPath(cleanPath)
 	lib.UpdatedAt = time.Now()
 
@@ -527,6 +534,11 @@ func (s *Server) handleTriggerScan(ctx context.Context, input *TriggerScanInput)
 	// Verify library exists
 	if _, err := s.store.GetLibrary(ctx, input.ID); err != nil {
 		return nil, err
+	}
+
+	// Prevent concurrent scans
+	if s.sseManager.IsScanning() {
+		return nil, huma.Error409Conflict("a scan is already in progress")
 	}
 
 	s.sseManager.SetScanning(true)

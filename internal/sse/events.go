@@ -28,13 +28,12 @@ const (
 	EventScanStarted EventType = "library.scan_started"
 	// EventScanComplete represents a library scan completion event.
 	EventScanComplete EventType = "library.scan_completed"
+	// EventScanProgress represents a library scan progress update.
+	EventScanProgress EventType = "library.scan_progress"
 	// EventLibraryAccessModeChanged represents a library access mode change.
 	// Broadcast to all users so they can refresh their book lists.
 	EventLibraryAccessModeChanged EventType = "library.access_mode_changed"
 
-	// TODO: See if we actually need progress updates.  Right now the scanner
-	// completes the scan in milliseconds on my computer so progress updates is.
-	// overkill.  However we should re-evaluate once we've tested more in other settings.
 
 	// EventHeartbeat represents a connection keepalive event.
 	EventHeartbeat EventType = "heartbeat"
@@ -154,6 +153,18 @@ type ScanCompleteEventData struct {
 	BooksAdded   int       `json:"books_added"`
 	BooksUpdated int       `json:"books_updated"`
 	BooksRemoved int       `json:"books_removed"`
+}
+
+
+// ScanProgressEventData is the data payload for scan progress events.
+type ScanProgressEventData struct {
+	LibraryID string `json:"library_id"`
+	Phase     string `json:"phase"`
+	Current   int    `json:"current"`
+	Total     int    `json:"total"`
+	Added     int    `json:"added"`
+	Updated   int    `json:"updated"`
+	Removed   int    `json:"removed"`
 }
 
 // LibraryAccessModeChangedEventData is the data payload for library access mode change events.
@@ -317,6 +328,24 @@ func NewScanCompleteEvent(libraryID string, added, updated, removed int) Event {
 			BooksAdded:   added,
 			BooksUpdated: updated,
 			BooksRemoved: removed,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+
+// NewScanProgressEvent creates a library.scan_progress event.
+func NewScanProgressEvent(libraryID, phase string, current, total, added, updated, removed int) Event {
+	return Event{
+		Type: EventScanProgress,
+		Data: ScanProgressEventData{
+			LibraryID: libraryID,
+			Phase:     phase,
+			Current:   current,
+			Total:     total,
+			Added:     added,
+			Updated:   updated,
+			Removed:   removed,
 		},
 		Timestamp: time.Now(),
 	}
