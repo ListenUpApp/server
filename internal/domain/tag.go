@@ -19,7 +19,7 @@ func (t *Tag) Touch() {
 }
 
 // BookTag represents the many-to-many relationship between books and tags.
-// Unlike lenses, this is book-level (not user-scoped) — all users see the same tags on a book.
+// Unlike shelves, this is book-level (not user-scoped) — all users see the same tags on a book.
 type BookTag struct {
 	BookID    string    `json:"book_id"`
 	TagID     string    `json:"tag_id"`

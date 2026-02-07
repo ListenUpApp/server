@@ -114,11 +114,11 @@ type RecentBookResponse struct {
 	FinishedAt *string `json:"finished_at,omitempty" doc:"When the book was finished (RFC3339)"`
 }
 
-// LensSummaryResponse contains minimal lens info for profile display.
-type LensSummaryResponse struct {
-	ID        string `json:"id" doc:"Lens ID"`
-	Name      string `json:"name" doc:"Lens name"`
-	BookCount int    `json:"book_count" doc:"Number of books in the lens"`
+// ShelfSummaryResponse contains minimal shelf info for profile display.
+type ShelfSummaryResponse struct {
+	ID        string `json:"id" doc:"Shelf ID"`
+	Name      string `json:"name" doc:"Shelf name"`
+	BookCount int    `json:"book_count" doc:"Number of books in the shelf"`
 }
 
 // FullProfileResponse contains a complete profile for viewing.
@@ -135,7 +135,7 @@ type FullProfileResponse struct {
 	LongestStreak     int                   `json:"longest_streak" doc:"Longest listening streak in days"`
 	IsOwnProfile      bool                  `json:"is_own_profile" doc:"Whether viewing own profile"`
 	RecentBooks       []RecentBookResponse  `json:"recent_books" doc:"Recently finished books"`
-	PublicLenses      []LensSummaryResponse `json:"public_lenses" doc:"User's public lenses"`
+	PublicShelves      []ShelfSummaryResponse `json:"public_shelves" doc:"User's public shelves"`
 }
 
 // FullProfileOutput wraps the full profile response for Huma.
@@ -293,7 +293,7 @@ func (s *Server) handleGetUserProfile(ctx context.Context, input *GetUserProfile
 		LongestStreak:     fullProfile.LongestStreak,
 		IsOwnProfile:      fullProfile.IsOwnProfile,
 		RecentBooks:       make([]RecentBookResponse, 0, len(fullProfile.RecentBooks)),
-		PublicLenses:      make([]LensSummaryResponse, 0, len(fullProfile.PublicLenses)),
+		PublicShelves:      make([]ShelfSummaryResponse, 0, len(fullProfile.PublicShelves)),
 	}
 
 	for _, book := range fullProfile.RecentBooks {
@@ -310,11 +310,11 @@ func (s *Server) handleGetUserProfile(ctx context.Context, input *GetUserProfile
 		resp.RecentBooks = append(resp.RecentBooks, rb)
 	}
 
-	for _, lens := range fullProfile.PublicLenses {
-		resp.PublicLenses = append(resp.PublicLenses, LensSummaryResponse{
-			ID:        lens.ID,
-			Name:      lens.Name,
-			BookCount: lens.BookCount,
+	for _, shelf := range fullProfile.PublicShelves {
+		resp.PublicShelves = append(resp.PublicShelves, ShelfSummaryResponse{
+			ID:        shelf.ID,
+			Name:      shelf.Name,
+			BookCount: shelf.BookCount,
 		})
 	}
 

@@ -35,7 +35,7 @@ type EntityCounts struct {
 	Tags             int `json:"tags"`
 	Collections      int `json:"collections"`
 	CollectionShares int `json:"collection_shares"`
-	Lenses           int `json:"lenses"`
+	Shelves           int `json:"shelves"`
 	Activities       int `json:"activities"`
 	ListeningEvents  int `json:"listening_events"`
 	ReadingSessions  int `json:"reading_sessions"`

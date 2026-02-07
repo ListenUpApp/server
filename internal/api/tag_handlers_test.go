@@ -85,14 +85,14 @@ func setupTagTestServer(t *testing.T) *tagTestServer {
 	authService := service.NewAuthService(st, tokenService, sessionService, instanceService, logger)
 	syncService := service.NewSyncService(st, logger)
 	tagService := service.NewTagService(st, sseManager, nil, logger) // nil search for tests
-	lensService := service.NewLensService(st, sseManager, logger)
+	shelfService := service.NewShelfService(st, sseManager, logger)
 
 	services := &Services{
 		Instance: instanceService,
 		Auth:     authService,
 		Sync:     syncService,
 		Tag:      tagService,
-		Lens:     lensService,
+		Shelf:     shelfService,
 	}
 
 	router := chi.NewRouter()

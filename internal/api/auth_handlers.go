@@ -248,14 +248,14 @@ func (s *Server) handleSetup(ctx context.Context, input *SetupInput) (*AuthOutpu
 		return nil, err
 	}
 
-	// Create default "To Read" lens for the root user (best effort)
+	// Create default "To Read" shelf for the root user (best effort)
 	if resp.User != nil {
-		if err := s.services.Lens.CreateDefaultLens(ctx, resp.User.ID); err != nil {
-			s.logger.Warn("Failed to create default lens for root user",
+		if err := s.services.Shelf.CreateDefaultShelf(ctx, resp.User.ID); err != nil {
+			s.logger.Warn("Failed to create default shelf for root user",
 				"user_id", resp.User.ID,
 				"error", err,
 			)
-			// Non-fatal: root user can create lenses manually
+			// Non-fatal: root user can create shelves manually
 		}
 	}
 

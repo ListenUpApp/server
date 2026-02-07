@@ -156,7 +156,7 @@ func (s *Server) registerRoutes() {
 	s.registerContributorRoutes()
 	s.registerCollectionRoutes()
 	s.registerShareRoutes()
-	s.registerLensRoutes()
+	s.registerShelfRoutes()
 	s.registerLibraryRoutes()
 	s.registerSyncRoutes()
 	s.registerListeningRoutes()

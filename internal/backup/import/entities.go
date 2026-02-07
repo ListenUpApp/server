@@ -709,35 +709,35 @@ func (i *Importer) importCollectionShares(ctx context.Context, zr *zip.ReadClose
 	return
 }
 
-func (i *Importer) importLenses(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
-	rc, err := stream.OpenFile(zr, "entities/lenses.jsonl")
+func (i *Importer) importShelves(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
+	rc, err := stream.OpenFile(zr, "entities/shelves.jsonl")
 	if err != nil {
 		if err == stream.ErrFileNotFound {
 			return 0, 0, nil
 		}
-		errs = append(errs, RestoreError{EntityType: "lenses", Error: err.Error()})
+		errs = append(errs, RestoreError{EntityType: "shelves", Error: err.Error()})
 		return
 	}
 
-	reader := stream.NewReader[domain.Lens](rc)
+	reader := stream.NewReader[domain.Shelf](rc)
 
-	for lens, err := range reader.All() {
+	for shelf, err := range reader.All() {
 		if err != nil {
 			errs = append(errs, RestoreError{
-				EntityType: "lenses",
+				EntityType: "shelves",
 				Error:      fmt.Sprintf("parse error: %v", err),
 			})
 			continue
 		}
 
-		// Lens doesn't have soft-delete
+		// Shelf doesn't have soft-delete
 
 		if opts.DryRun {
 			imported++
 			continue
 		}
 
-		existing, _ := i.store.GetLens(ctx, lens.ID)
+		existing, _ := i.store.GetShelf(ctx, shelf.ID)
 		if existing != nil {
 			if opts.Mode == RestoreModeMerge {
 				switch opts.MergeStrategy {
@@ -745,16 +745,16 @@ func (i *Importer) importLenses(ctx context.Context, zr *zip.ReadCloser, opts Re
 					skipped++
 					continue
 				case MergeNewest:
-					if !lens.UpdatedAt.After(existing.UpdatedAt) {
+					if !shelf.UpdatedAt.After(existing.UpdatedAt) {
 						skipped++
 						continue
 					}
 				}
 			}
-			if err := i.store.UpdateLens(ctx, &lens); err != nil {
+			if err := i.store.UpdateShelf(ctx, &shelf); err != nil {
 				errs = append(errs, RestoreError{
-					EntityType: "lenses",
-					EntityID:   lens.ID,
+					EntityType: "shelves",
+					EntityID:   shelf.ID,
 					Error:      err.Error(),
 				})
 				continue
@@ -763,10 +763,10 @@ func (i *Importer) importLenses(ctx context.Context, zr *zip.ReadCloser, opts Re
 			continue
 		}
 
-		if err := i.store.CreateLens(ctx, &lens); err != nil {
+		if err := i.store.CreateShelf(ctx, &shelf); err != nil {
 			errs = append(errs, RestoreError{
-				EntityType: "lenses",
-				EntityID:   lens.ID,
+				EntityType: "shelves",
+				EntityID:   shelf.ID,
 				Error:      err.Error(),
 			})
 			continue

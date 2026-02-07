@@ -6,11 +6,11 @@ import (
 	"net/http"
 )
 
-// ErrLensNotFound is returned when a lens is not found in the store.
-var ErrLensNotFound = errors.New("lens not found")
+// ErrShelfNotFound is returned when a shelf is not found in the store.
+var ErrShelfNotFound = errors.New("shelf not found")
 
-// ErrDuplicateLens is returned when trying to create a lens that already exists.
-var ErrDuplicateLens = errors.New("lens already exists")
+// ErrDuplicateShelf is returned when trying to create a shelf that already exists.
+var ErrDuplicateShelf = errors.New("shelf already exists")
 
 // Error is a domain error with an HTTP status code.
 type Error struct {

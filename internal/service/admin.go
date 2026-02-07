@@ -18,16 +18,16 @@ type AdminService struct {
 	store                   *store.Store
 	logger                  *slog.Logger
 	registrationBroadcaster *sse.RegistrationBroadcaster
-	lensService             *LensService
+	shelfService             *ShelfService
 }
 
 // NewAdminService creates a new admin service.
-func NewAdminService(store *store.Store, logger *slog.Logger, registrationBroadcaster *sse.RegistrationBroadcaster, lensService *LensService) *AdminService {
+func NewAdminService(store *store.Store, logger *slog.Logger, registrationBroadcaster *sse.RegistrationBroadcaster, shelfService *ShelfService) *AdminService {
 	return &AdminService{
 		store:                   store,
 		logger:                  logger,
 		registrationBroadcaster: registrationBroadcaster,
-		lensService:             lensService,
+		shelfService:             shelfService,
 	}
 }
 
@@ -171,11 +171,11 @@ func (s *AdminService) DeleteUser(ctx context.Context, adminUserID, targetUserID
 		return fmt.Errorf("delete user: %w", err)
 	}
 
-	// Clean up user's lenses
-	if err := s.store.DeleteLensesForUser(ctx, targetUserID); err != nil {
+	// Clean up user's shelves
+	if err := s.store.DeleteShelvesForUser(ctx, targetUserID); err != nil {
 		// Log but don't fail - user is already deleted
 		if s.logger != nil {
-			s.logger.Warn("Failed to delete lenses for deleted user",
+			s.logger.Warn("Failed to delete shelves for deleted user",
 				"user_id", targetUserID,
 				"error", err,
 			)
@@ -254,16 +254,16 @@ func (s *AdminService) ApproveUser(ctx context.Context, adminUserID, targetUserI
 		s.registrationBroadcaster.NotifyApproved(targetUserID)
 	}
 
-	// Create default "To Read" lens for the newly approved user (best effort)
-	if s.lensService != nil {
-		if err := s.lensService.CreateDefaultLens(ctx, targetUserID); err != nil {
+	// Create default "To Read" shelf for the newly approved user (best effort)
+	if s.shelfService != nil {
+		if err := s.shelfService.CreateDefaultShelf(ctx, targetUserID); err != nil {
 			if s.logger != nil {
-				s.logger.Warn("Failed to create default lens for approved user",
+				s.logger.Warn("Failed to create default shelf for approved user",
 					"user_id", targetUserID,
 					"error", err,
 				)
 			}
-			// Non-fatal: user can still create lenses manually
+			// Non-fatal: user can still create shelves manually
 		}
 	}
 

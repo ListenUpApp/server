@@ -68,7 +68,7 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 	metadataHandle := do.MustInvoke[*MetadataServiceHandle](i)
 	chapterService := do.MustInvoke[*service.ChapterService](i)
 	coverService := do.MustInvoke[*service.CoverService](i)
-	lensService := do.MustInvoke[*service.LensService](i)
+	shelfService := do.MustInvoke[*service.ShelfService](i)
 	inboxService := do.MustInvoke[*service.InboxService](i)
 	settingsService := do.MustInvoke[*service.SettingsService](i)
 	readingSessionService := do.MustInvoke[*service.ReadingSessionService](i)
@@ -83,8 +83,8 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 	listeningService.SetMilestoneRecorder(activityService)
 	listeningService.SetStreakCalculator(socialService)
 
-	// Wire up activity recording to lens service
-	lensService.SetActivityRecorder(activityService)
+	// Wire up activity recording to shelf service
+	shelfService.SetActivityRecorder(activityService)
 
 	tokenVerifier := &sseTokenVerifier{authService: authService}
 	sseHandler := sse.NewHandler(sseHandle.Manager, log.Logger, tokenVerifier)
@@ -107,7 +107,7 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 		Metadata:       metadataHandle.MetadataService,
 		Chapter:        chapterService,
 		Cover:          coverService,
-		Lens:           lensService,
+		Shelf:           shelfService,
 		Inbox:          inboxService,
 		Settings:       settingsService,
 		Social:         socialService,

@@ -231,8 +231,8 @@ func (s *ActivityService) RecordListeningMilestone(ctx context.Context, userID s
 	return nil
 }
 
-// RecordLensCreated creates an activity when a user creates a lens.
-func (s *ActivityService) RecordLensCreated(ctx context.Context, userID string, lens *domain.Lens) error {
+// RecordShelfCreated creates an activity when a user creates a shelf.
+func (s *ActivityService) RecordShelfCreated(ctx context.Context, userID string, shelf *domain.Shelf) error {
 	user, err := s.store.GetUser(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("get user: %w", err)
@@ -248,14 +248,14 @@ func (s *ActivityService) RecordLensCreated(ctx context.Context, userID string, 
 	activity := &domain.Activity{
 		ID:              activityID,
 		UserID:          userID,
-		Type:            domain.ActivityLensCreated,
+		Type:            domain.ActivityShelfCreated,
 		CreatedAt:       time.Now(),
 		UserDisplayName: user.Name(),
 		UserAvatarColor: color.ForUser(userID),
 		UserAvatarType:  avatarType,
 		UserAvatarValue: avatarValue,
-		LensID:          lens.ID,
-		LensName:        lens.Name,
+		ShelfID:          shelf.ID,
+		ShelfName:        shelf.Name,
 	}
 
 	if err := s.store.CreateActivity(ctx, activity); err != nil {
@@ -264,10 +264,10 @@ func (s *ActivityService) RecordLensCreated(ctx context.Context, userID string, 
 
 	s.broadcastActivity(activity)
 
-	s.logger.Info("lens created activity recorded",
+	s.logger.Info("shelf created activity recorded",
 		"user_id", userID,
-		"lens_id", lens.ID,
-		"lens_name", lens.Name,
+		"shelf_id", shelf.ID,
+		"shelf_name", shelf.Name,
 	)
 
 	return nil

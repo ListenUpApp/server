@@ -391,7 +391,7 @@ func (s *Server) handleValidateBackup(ctx context.Context, input *ValidateBackup
 			"tags":              result.ExpectedCounts.Tags,
 			"collections":       result.ExpectedCounts.Collections,
 			"collection_shares": result.ExpectedCounts.CollectionShares,
-			"lenses":            result.ExpectedCounts.Lenses,
+			"shelves":            result.ExpectedCounts.Shelves,
 			"activities":        result.ExpectedCounts.Activities,
 			"listening_events":  result.ExpectedCounts.ListeningEvents,
 			"reading_sessions":  result.ExpectedCounts.ReadingSessions,

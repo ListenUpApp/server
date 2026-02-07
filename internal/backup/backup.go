@@ -95,7 +95,7 @@ func convertCounts(c export.EntityCounts) EntityCounts {
 		Tags:             c.Tags,
 		Collections:      c.Collections,
 		CollectionShares: c.CollectionShares,
-		Lenses:           c.Lenses,
+		Shelves:           c.Shelves,
 		Activities:       c.Activities,
 		ListeningEvents:  c.ListeningEvents,
 		ReadingSessions:  c.ReadingSessions,

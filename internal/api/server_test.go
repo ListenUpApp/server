@@ -83,7 +83,7 @@ func setupTestServer(t *testing.T) *testServer {
 	instanceService := service.NewInstanceService(st, logger, cfg)
 	authService := service.NewAuthService(st, tokenService, sessionService, instanceService, logger)
 	syncService := service.NewSyncService(st, logger)
-	lensService := service.NewLensService(st, sseManager, logger)
+	shelfService := service.NewShelfService(st, sseManager, logger)
 	inboxService := service.NewInboxService(st, enricher, sseManager, logger)
 	settingsService := service.NewSettingsService(st, inboxService, logger)
 
@@ -91,7 +91,7 @@ func setupTestServer(t *testing.T) *testServer {
 		Instance: instanceService,
 		Auth:     authService,
 		Sync:     syncService,
-		Lens:     lensService,
+		Shelf:     shelfService,
 		Settings: settingsService,
 		Inbox:    inboxService,
 	}

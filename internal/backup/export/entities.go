@@ -236,17 +236,17 @@ func exportCollectionShares(ctx context.Context, s *store.Store, zw *zip.Writer)
 	return w.Count(), nil
 }
 
-func exportLenses(ctx context.Context, s *store.Store, zw *zip.Writer) (int, error) {
-	w, err := stream.NewWriter(zw, "entities/lenses.jsonl")
+func exportShelves(ctx context.Context, s *store.Store, zw *zip.Writer) (int, error) {
+	w, err := stream.NewWriter(zw, "entities/shelves.jsonl")
 	if err != nil {
 		return 0, err
 	}
 
-	for lens, err := range s.StreamLenses(ctx) {
+	for shelf, err := range s.StreamShelves(ctx) {
 		if err != nil {
 			return w.Count(), err
 		}
-		if err := w.Write(lens); err != nil {
+		if err := w.Write(shelf); err != nil {
 			return w.Count(), err
 		}
 	}

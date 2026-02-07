@@ -22,8 +22,8 @@ const (
 	// ActivityListeningMilestone is recorded when a user crosses a listening hours milestone.
 	ActivityListeningMilestone ActivityType = "listening_milestone"
 
-	// ActivityLensCreated is recorded when a user creates a new lens.
-	ActivityLensCreated ActivityType = "lens_created"
+	// ActivityShelfCreated is recorded when a user creates a new shelf.
+	ActivityShelfCreated ActivityType = "shelf_created"
 
 	// ActivityListeningSession is recorded when a user completes a listening session.
 	// Shows duration listened (e.g., "John listened to 16 minutes of Book Title").
@@ -65,9 +65,9 @@ type Activity struct {
 	MilestoneValue int    `json:"milestone_value,omitempty"`
 	MilestoneUnit  string `json:"milestone_unit,omitempty"` // "days" or "hours"
 
-	// Lens activities (lens_created)
-	LensID   string `json:"lens_id,omitempty"`
-	LensName string `json:"lens_name,omitempty"`
+	// Shelf activities (shelf_created)
+	ShelfID   string `json:"shelf_id,omitempty"`
+	ShelfName string `json:"shelf_name,omitempty"`
 }
 
 // Milestone thresholds.

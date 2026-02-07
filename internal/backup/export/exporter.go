@@ -58,7 +58,7 @@ type EntityCounts struct {
 	Tags             int `json:"tags"`
 	Collections      int `json:"collections"`
 	CollectionShares int `json:"collection_shares"`
-	Lenses           int `json:"lenses"`
+	Shelves           int `json:"shelves"`
 	Activities       int `json:"activities"`
 	ListeningEvents  int `json:"listening_events"`
 	ReadingSessions  int `json:"reading_sessions"`
@@ -128,7 +128,7 @@ func (e *Exporter) Export(ctx context.Context, opts Options) (*Result, error) {
 		{"books", exportBooks, &counts.Books},
 		{"collections", exportCollections, &counts.Collections},
 		{"collection_shares", exportCollectionShares, &counts.CollectionShares},
-		{"lenses", exportLenses, &counts.Lenses},
+		{"shelves", exportShelves, &counts.Shelves},
 		{"activities", exportActivities, &counts.Activities},
 	}
 

@@ -10,7 +10,7 @@ import (
 // Books in no collection are visible to all users. Books in a collection are visible
 // only to users who own or have been granted access to that collection.
 // If a user wants to organize books (but not restrict access) they would
-// use a lens (once we get around to writing that logic).
+// use a shelf (once we get around to writing that logic).
 type Collection struct {
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
