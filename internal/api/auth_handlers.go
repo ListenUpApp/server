@@ -69,6 +69,8 @@ func (s *Server) registerAuthRoutes() {
 		Tags:        []string{"Authentication"},
 	}, s.handleCheckRegistrationStatus)
 
+	// NOTE: SSE endpoint registered directly on chi (not Huma) because Huma doesn't support SSE.
+	// Route: GET /api/v1/auth/registration-status/{user_id}/stream - SSE for registration approval status
 	// SSE endpoint for real-time registration status (handled via chi directly, not huma)
 	s.router.Get("/api/v1/auth/registration-status/{user_id}/stream", func(w http.ResponseWriter, r *http.Request) {
 		userID := chi.URLParam(r, "user_id")
@@ -305,6 +307,8 @@ func (s *Server) handleLogin(ctx context.Context, input *LoginInput) (*AuthOutpu
 			ClientVersion:   input.Body.DeviceInfo.ClientVersion,
 			ClientBuild:     input.Body.DeviceInfo.ClientBuild,
 			DeviceName:      input.Body.DeviceInfo.DeviceName,
+			BrowserName:     input.Body.DeviceInfo.BrowserName,
+			BrowserVersion:  input.Body.DeviceInfo.BrowserVersion,
 			DeviceModel:     input.Body.DeviceInfo.DeviceModel,
 		},
 		IPAddress: extractIP(input.XForwardedFor, input.XRealIP),
@@ -329,6 +333,8 @@ func (s *Server) handleRefresh(ctx context.Context, input *RefreshInput) (*AuthO
 			ClientVersion:   input.Body.DeviceInfo.ClientVersion,
 			ClientBuild:     input.Body.DeviceInfo.ClientBuild,
 			DeviceName:      input.Body.DeviceInfo.DeviceName,
+			BrowserName:     input.Body.DeviceInfo.BrowserName,
+			BrowserVersion:  input.Body.DeviceInfo.BrowserVersion,
 			DeviceModel:     input.Body.DeviceInfo.DeviceModel,
 		},
 		IPAddress: extractIP(input.XForwardedFor, input.XRealIP),
