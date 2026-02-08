@@ -197,7 +197,8 @@ type MergeSeriesInput struct {
 // === Handlers ===
 
 func (s *Server) handleListSeries(ctx context.Context, input *ListSeriesInput) (*ListSeriesOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	userID, err := GetUserID(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -214,7 +215,27 @@ func (s *Server) handleListSeries(ctx context.Context, input *ListSeriesInput) (
 		return nil, err
 	}
 
-	resp := MapSlice(result.Items, mapSeriesResponse)
+	// Filter series by user's accessible books
+	accessibleBookIDs, err := s.store.GetAccessibleBookIDSet(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	var filtered []*domain.Series
+	for _, ser := range result.Items {
+		bookIDs, err := s.store.GetBookIDsBySeries(ctx, ser.ID)
+		if err != nil {
+			continue
+		}
+		for _, bookID := range bookIDs {
+			if accessibleBookIDs[bookID] {
+				filtered = append(filtered, ser)
+				break
+			}
+		}
+	}
+
+	resp := MapSlice(filtered, mapSeriesResponse)
 
 	return &ListSeriesOutput{
 		Body: ListSeriesResponse{
@@ -255,13 +276,34 @@ func (s *Server) handleCreateSeries(ctx context.Context, input *CreateSeriesInpu
 }
 
 func (s *Server) handleGetSeries(ctx context.Context, input *GetSeriesInput) (*SeriesOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	userID, err := GetUserID(ctx)
+	if err != nil {
 		return nil, err
 	}
 
 	series, err := s.store.GetSeries(ctx, input.ID)
 	if err != nil {
 		return nil, err
+	}
+
+	// Verify user has access to at least one book in this series
+	accessibleBookIDs, err := s.store.GetAccessibleBookIDSet(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	bookIDs, err := s.store.GetBookIDsBySeries(ctx, input.ID)
+	if err != nil {
+		return nil, err
+	}
+	hasAccess := false
+	for _, bookID := range bookIDs {
+		if accessibleBookIDs[bookID] {
+			hasAccess = true
+			break
+		}
+	}
+	if !hasAccess {
+		return nil, huma.Error404NotFound("series not found")
 	}
 
 	return &SeriesOutput{Body: mapSeriesResponse(series)}, nil

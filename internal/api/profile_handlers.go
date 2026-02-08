@@ -322,6 +322,11 @@ func (s *Server) handleGetUserProfile(ctx context.Context, input *GetUserProfile
 }
 
 func (s *Server) handleServeAvatar(w http.ResponseWriter, r *http.Request) {
+	if _, err := GetUserID(r.Context()); err != nil {
+		http.Error(w, "Authentication required", http.StatusUnauthorized)
+		return
+	}
+
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		http.Error(w, "id required", http.StatusBadRequest)

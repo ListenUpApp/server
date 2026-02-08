@@ -300,7 +300,8 @@ type ApplyContributorMetadataInput struct {
 // === Handlers ===
 
 func (s *Server) handleListContributors(ctx context.Context, input *ListContributorsInput) (*ListContributorsOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	userID, err := GetUserID(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -317,7 +318,27 @@ func (s *Server) handleListContributors(ctx context.Context, input *ListContribu
 		return nil, err
 	}
 
-	resp := MapSlice(result.Items, mapContributorResponse)
+	// Filter contributors by user's accessible books
+	accessibleBookIDs, err := s.store.GetAccessibleBookIDSet(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	var filtered []*domain.Contributor
+	for _, c := range result.Items {
+		bookIDs, err := s.store.GetBookIDsByContributor(ctx, c.ID)
+		if err != nil {
+			continue
+		}
+		for _, bookID := range bookIDs {
+			if accessibleBookIDs[bookID] {
+				filtered = append(filtered, c)
+				break
+			}
+		}
+	}
+
+	resp := MapSlice(filtered, mapContributorResponse)
 
 	return &ListContributorsOutput{
 		Body: ListContributorsResponse{
@@ -361,13 +382,34 @@ func (s *Server) handleCreateContributor(ctx context.Context, input *CreateContr
 }
 
 func (s *Server) handleGetContributor(ctx context.Context, input *GetContributorInput) (*ContributorOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	userID, err := GetUserID(ctx)
+	if err != nil {
 		return nil, err
 	}
 
 	c, err := s.store.GetContributor(ctx, input.ID)
 	if err != nil {
 		return nil, err
+	}
+
+	// Verify user has access to at least one of this contributor's books
+	accessibleBookIDs, err := s.store.GetAccessibleBookIDSet(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	bookIDs, err := s.store.GetBookIDsByContributor(ctx, c.ID)
+	if err != nil {
+		return nil, err
+	}
+	hasAccess := false
+	for _, bookID := range bookIDs {
+		if accessibleBookIDs[bookID] {
+			hasAccess = true
+			break
+		}
+	}
+	if !hasAccess {
+		return nil, huma.Error404NotFound("contributor not found")
 	}
 
 	return &ContributorOutput{Body: mapContributorResponse(c)}, nil
