@@ -46,11 +46,17 @@ func NewSyncService(store *store.Store, logger *slog.Logger) *SyncService {
 // GetManifest returns the library manifest for sync.
 // This provides a high-level overview of the library state including.
 // the current checkpoint and counts of various entities.
-func (s *SyncService) GetManifest(ctx context.Context) (*ManifestResponse, error) {
-	// Get all book IDs (efficient - doesn't deserialize full books).
-	bookIDs, err := s.store.GetAllBookIDs(ctx)
+func (s *SyncService) GetManifest(ctx context.Context, userID string) (*ManifestResponse, error) {
+	// Get book IDs filtered by user access.
+	accessibleBooks, err := s.store.GetBooksForUser(ctx, userID)
 	if err != nil {
 		return nil, err
+	}
+
+	// Extract just the IDs from accessible books.
+	bookIDs := make([]string, len(accessibleBooks))
+	for i, b := range accessibleBooks {
+		bookIDs[i] = b.ID
 	}
 
 	// Get library checkpoint (ie. most recent UpdatedAt timestamp across all our entities).
@@ -249,19 +255,21 @@ func (s *SyncService) GetContributorsForSync(ctx context.Context, userID string,
 			return nil, err
 		}
 	} else {
-		// FULL SYNC: Get all contributors
-		// We use the existing list method which supports pagination
-		result, err := s.store.ListContributors(ctx, params)
+		// FULL SYNC: Get all contributors, then filter by user access
+		result, err := s.store.ListAllContributors(ctx)
 		if err != nil {
 			return nil, err
 		}
-
-		return &ContributorsResponse{
-			Contributors: result.Items,
-			NextCursor:   result.NextCursor,
-			HasMore:      result.HasMore,
-		}, nil
+		contributors = result
 	}
+
+	// Filter contributors to only those linked to books the user can access
+	accessibleBookIDs, err := s.store.GetAccessibleBookIDSet(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get accessible books: %w", err)
+	}
+	contributors = s.filterContributorsByAccessibleBooks(ctx, contributors, accessibleBookIDs)
+
 
 	// Apply manual pagination for delta sync results
 	total := len(contributors)
@@ -349,18 +357,21 @@ func (s *SyncService) GetSeriesForSync(ctx context.Context, userID string, param
 			return nil, err
 		}
 	} else {
-		// FULL SYNC: Get all series
-		result, err := s.store.ListSeries(ctx, params)
+		// FULL SYNC: Get all series, then filter by user access
+		result, err := s.store.ListAllSeries(ctx)
 		if err != nil {
 			return nil, err
 		}
-
-		return &SeriesResponse{
-			Series:     result.Items,
-			NextCursor: result.NextCursor,
-			HasMore:    result.HasMore,
-		}, nil
+		seriesList = result
 	}
+
+	// Filter series to only those linked to books the user can access
+	accessibleBookIDs, err := s.store.GetAccessibleBookIDSet(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get accessible books: %w", err)
+	}
+	seriesList = s.filterSeriesByAccessibleBooks(ctx, seriesList, accessibleBookIDs)
+
 
 	// Apply manual pagination for delta sync results
 	total := len(seriesList)
@@ -411,4 +422,42 @@ func (s *SyncService) GetSeriesForSync(ctx context.Context, userID string, param
 	)
 
 	return response, nil
+}
+
+// filterContributorsByAccessibleBooks filters contributors to only those linked
+// to at least one book the user can access.
+func (s *SyncService) filterContributorsByAccessibleBooks(ctx context.Context, contributors []*domain.Contributor, accessibleBookIDs map[string]bool) []*domain.Contributor {
+	filtered := make([]*domain.Contributor, 0, len(contributors))
+	for _, c := range contributors {
+		bookIDs, err := s.store.GetBookIDsByContributor(ctx, c.ID)
+		if err != nil {
+			continue
+		}
+		for _, bookID := range bookIDs {
+			if accessibleBookIDs[bookID] {
+				filtered = append(filtered, c)
+				break
+			}
+		}
+	}
+	return filtered
+}
+
+// filterSeriesByAccessibleBooks filters series to only those linked
+// to at least one book the user can access.
+func (s *SyncService) filterSeriesByAccessibleBooks(ctx context.Context, seriesList []*domain.Series, accessibleBookIDs map[string]bool) []*domain.Series {
+	filtered := make([]*domain.Series, 0, len(seriesList))
+	for _, ser := range seriesList {
+		bookIDs, err := s.store.GetBookIDsBySeries(ctx, ser.ID)
+		if err != nil {
+			continue
+		}
+		for _, bookID := range bookIDs {
+			if accessibleBookIDs[bookID] {
+				filtered = append(filtered, ser)
+				break
+			}
+		}
+	}
+	return filtered
 }

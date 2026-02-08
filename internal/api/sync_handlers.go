@@ -189,11 +189,12 @@ type SyncSeriesOutput struct {
 // === Handlers ===
 
 func (s *Server) handleGetSyncManifest(ctx context.Context, _ *GetSyncManifestInput) (*SyncManifestOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	userID, err := GetUserID(ctx)
+	if err != nil {
 		return nil, err
 	}
 
-	manifest, err := s.services.Sync.GetManifest(ctx)
+	manifest, err := s.services.Sync.GetManifest(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -389,14 +390,29 @@ type SyncActiveSessionsOutput struct {
 }
 
 func (s *Server) handleGetSyncActiveSessions(ctx context.Context, _ *GetSyncActiveSessionsInput) (*SyncActiveSessionsOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
-		return nil, err
-	}
-
-	activeSessions, err := s.store.GetAllActiveSessions(ctx)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
+
+	allSessions, err := s.store.GetAllActiveSessions(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter sessions to only include books the user can access
+	activeSessions := make([]*domain.BookReadingSession, 0, len(allSessions))
+	for _, session := range allSessions {
+		canAccess, err := s.store.CanUserAccessBook(ctx, userID, session.BookID)
+		if err != nil {
+			continue // Skip sessions we can't verify access for
+		}
+		if canAccess {
+			activeSessions = append(activeSessions, session)
+		}
+	}
+
+
 
 	// Collect unique user IDs for batch fetching
 	userIDSet := make(map[string]bool, len(activeSessions))

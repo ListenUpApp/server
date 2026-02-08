@@ -470,6 +470,11 @@ func (s *Server) handleSetBookSeries(ctx context.Context, input *SetSeriesInput)
 		return nil, err
 	}
 
+	// Verify user access BEFORE modifying the book
+	if _, err := s.store.GetBook(ctx, input.ID, userID); err != nil {
+		return nil, err
+	}
+
 	// Convert to store input format
 	seriesInputs := make([]store.SeriesInput, len(input.Body.Series))
 	for i, s := range input.Body.Series {
@@ -481,11 +486,6 @@ func (s *Server) handleSetBookSeries(ctx context.Context, input *SetSeriesInput)
 
 	book, err := s.store.SetBookSeries(ctx, input.ID, seriesInputs)
 	if err != nil {
-		return nil, err
-	}
-
-	// Verify user access
-	if _, err := s.store.GetBook(ctx, input.ID, userID); err != nil {
 		return nil, err
 	}
 
