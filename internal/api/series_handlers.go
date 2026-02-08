@@ -226,7 +226,7 @@ func (s *Server) handleListSeries(ctx context.Context, input *ListSeriesInput) (
 }
 
 func (s *Server) handleCreateSeries(ctx context.Context, input *CreateSeriesInput) (*SeriesOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -268,7 +268,7 @@ func (s *Server) handleGetSeries(ctx context.Context, input *GetSeriesInput) (*S
 }
 
 func (s *Server) handleUpdateSeries(ctx context.Context, input *UpdateSeriesInput) (*SeriesOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -297,7 +297,7 @@ func (s *Server) handleUpdateSeries(ctx context.Context, input *UpdateSeriesInpu
 }
 
 func (s *Server) handleDeleteSeries(ctx context.Context, input *DeleteSeriesInput) (*MessageOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -351,7 +351,7 @@ func (s *Server) handleGetSeriesBooks(ctx context.Context, input *GetSeriesBooks
 }
 
 func (s *Server) handleMergeSeries(ctx context.Context, _ *MergeSeriesInput) (*SeriesOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 

@@ -116,7 +116,7 @@ func (s *Server) registerContributorRoutes() {
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleApplyContributorMetadata)
 
-	// Direct chi route for contributor image serving (no auth required)
+	// Direct chi route for contributor image serving (auth checked in handler)
 	s.router.Get("/api/v1/contributors/{id}/image", s.handleServeContributorImage)
 }
 
@@ -329,7 +329,7 @@ func (s *Server) handleListContributors(ctx context.Context, input *ListContribu
 }
 
 func (s *Server) handleCreateContributor(ctx context.Context, input *CreateContributorInput) (*ContributorOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -374,7 +374,7 @@ func (s *Server) handleGetContributor(ctx context.Context, input *GetContributor
 }
 
 func (s *Server) handleUpdateContributor(ctx context.Context, input *UpdateContributorInput) (*ContributorOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -411,7 +411,7 @@ func (s *Server) handleUpdateContributor(ctx context.Context, input *UpdateContr
 }
 
 func (s *Server) handleDeleteContributor(ctx context.Context, input *DeleteContributorInput) (*MessageOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -468,7 +468,7 @@ func (s *Server) handleGetContributorBooks(ctx context.Context, input *GetContri
 }
 
 func (s *Server) handleMergeContributors(ctx context.Context, input *MergeContributorsInput) (*ContributorOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -481,7 +481,7 @@ func (s *Server) handleMergeContributors(ctx context.Context, input *MergeContri
 }
 
 func (s *Server) handleUnmergeContributor(ctx context.Context, input *UnmergeContributorInput) (*ContributorOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -521,7 +521,7 @@ func (s *Server) handleSearchContributors(ctx context.Context, input *SearchCont
 }
 
 func (s *Server) handleApplyContributorMetadata(ctx context.Context, input *ApplyContributorMetadataInput) (*ContributorOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -636,6 +636,11 @@ func (s *Server) downloadContributorImage(ctx context.Context, contributorID, im
 }
 
 func (s *Server) handleServeContributorImage(w http.ResponseWriter, r *http.Request) {
+	if _, err := GetUserID(r.Context()); err != nil {
+		http.Error(w, "Authentication required", http.StatusUnauthorized)
+		return
+	}
+
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		http.Error(w, "id required", http.StatusBadRequest)

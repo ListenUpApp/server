@@ -304,7 +304,7 @@ func (s *Server) handleListGenres(ctx context.Context, _ *ListGenresInput) (*Lis
 }
 
 func (s *Server) handleCreateGenre(ctx context.Context, input *CreateGenreInput) (*GenreOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -335,7 +335,7 @@ func (s *Server) handleGetGenre(ctx context.Context, input *GetGenreInput) (*Gen
 }
 
 func (s *Server) handleUpdateGenre(ctx context.Context, input *UpdateGenreInput) (*GenreOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -353,7 +353,7 @@ func (s *Server) handleUpdateGenre(ctx context.Context, input *UpdateGenreInput)
 }
 
 func (s *Server) handleDeleteGenre(ctx context.Context, input *DeleteGenreInput) (*MessageOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -406,7 +406,7 @@ func (s *Server) handleGetGenreBooks(ctx context.Context, input *GetGenreBooksIn
 }
 
 func (s *Server) handleMoveGenre(ctx context.Context, input *MoveGenreInput) (*GenreOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -419,7 +419,7 @@ func (s *Server) handleMoveGenre(ctx context.Context, input *MoveGenreInput) (*G
 }
 
 func (s *Server) handleMergeGenres(ctx context.Context, input *MergeGenresInput) (*MessageOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -434,7 +434,7 @@ func (s *Server) handleMergeGenres(ctx context.Context, input *MergeGenresInput)
 }
 
 func (s *Server) handleListUnmappedGenres(ctx context.Context, _ *ListUnmappedGenresInput) (*ListUnmappedGenresOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -456,7 +456,7 @@ func (s *Server) handleListUnmappedGenres(ctx context.Context, _ *ListUnmappedGe
 }
 
 func (s *Server) handleMapUnmappedGenre(ctx context.Context, input *MapUnmappedGenreInput) (*MessageOutput, error) {
-	userID, err := GetUserID(ctx)
+	userID, err := s.RequireAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
