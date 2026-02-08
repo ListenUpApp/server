@@ -70,6 +70,20 @@ func ProvideStore(i do.Injector) (*StoreHandle, error) {
 
 	log.Info("Database initialized", "path", dbPath)
 
+	// Wire up book access filtering for SSE broadcasts.
+	// Activity and session events are filtered per-client based on book ACLs.
+	sseHandle.SetBookAccessChecker(func(ctx context.Context, userID, bookID string) bool {
+		canAccess, err := db.CanUserAccessBook(ctx, userID, bookID)
+		if err != nil {
+			log.Warn("SSE book access check failed, denying",
+				"user_id", userID,
+				"book_id", bookID,
+				"error", err)
+			return false
+		}
+		return canAccess
+	})
+
 	return &StoreHandle{Store: db}, nil
 }
 

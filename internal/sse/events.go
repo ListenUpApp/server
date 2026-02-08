@@ -124,6 +124,7 @@ type Event struct {
 	// Empty string means "broadcast to all" (backwards compatible).
 	UserID       string `json:"-"` // Filter to specific user (not sent to client)
 	CollectionID string `json:"-"` // Filter to specific collection (not sent to client)
+	BookID       string `json:"-"` // Filter by book access (not sent to client)
 }
 
 // BookEventData is the data payload for book events.
@@ -809,7 +810,8 @@ type ReadingSessionUpdatedEventData struct {
 // Broadcast to all users so book readers lists can update.
 func NewReadingSessionUpdatedEvent(session *domain.BookReadingSession) Event {
 	return Event{
-		Type: EventReadingSessionUpdated,
+		Type:   EventReadingSessionUpdated,
+		BookID: session.BookID,
 		Data: ReadingSessionUpdatedEventData{
 			SessionID:    session.ID,
 			BookID:       session.BookID,
@@ -849,7 +851,8 @@ type ActivityEventData struct {
 // Broadcast to all users for real-time activity feed updates.
 func NewActivityEvent(activity *domain.Activity) Event {
 	return Event{
-		Type: EventActivityCreated,
+		Type:   EventActivityCreated,
+		BookID: activity.BookID,
 		Data: ActivityEventData{
 			ID:              activity.ID,
 			UserID:          activity.UserID,
@@ -913,7 +916,8 @@ type SessionEndedEventData struct {
 // Broadcast to all users so they can see who's currently listening.
 func NewSessionStartedEvent(sessionID, userID, bookID string, startedAt time.Time) Event {
 	return Event{
-		Type: EventSessionStarted,
+		Type:   EventSessionStarted,
+		BookID: bookID,
 		Data: SessionStartedEventData{
 			SessionID: sessionID,
 			UserID:    userID,
