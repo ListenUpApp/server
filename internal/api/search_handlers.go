@@ -83,7 +83,8 @@ type SearchOutput struct {
 // === Handlers ===
 
 func (s *Server) handleSearch(ctx context.Context, input *SearchInput) (*SearchOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	userID, err := GetUserID(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -154,9 +155,17 @@ func (s *Server) handleSearch(ctx context.Context, input *SearchInput) (*SearchO
 		Hits:   make([]SearchHitResult, 0, len(result.Hits)),
 	}
 
-	// Convert search hits to response format
+	// Convert search hits to response format, filtering by ACL
 	for i := range result.Hits {
 		hit := &result.Hits[i]
+
+		// For book results, verify user has access
+		if hit.Type == search.DocTypeBook {
+			if canAccess, err := s.store.CanUserAccessBook(ctx, userID, hit.ID); err != nil || !canAccess {
+				continue
+			}
+		}
+
 		respHit := SearchHitResult{
 			ID:         hit.ID,
 			Type:       string(hit.Type),
@@ -172,6 +181,9 @@ func (s *Server) handleSearch(ctx context.Context, input *SearchInput) (*SearchO
 		}
 		resp.Hits = append(resp.Hits, respHit)
 	}
+
+	// Update total to reflect filtered count
+	resp.Total = int64(len(resp.Hits))
 
 	return &SearchOutput{Body: resp}, nil
 }

@@ -232,6 +232,17 @@ func (s *Server) handleServeCover(w http.ResponseWriter, r *http.Request) {
 		id = id[:len(id)-4]
 	}
 
+	// Auth + ACL: verify the user can access this book
+	userID, err := GetUserID(r.Context())
+	if err != nil {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	if canAccess, err := s.store.CanUserAccessBook(r.Context(), userID, id); err != nil || !canAccess {
+		http.Error(w, "cover not found", http.StatusNotFound)
+		return
+	}
+
 	data, err := s.storage.Covers.Get(id)
 	if err != nil {
 		http.Error(w, "cover not found", http.StatusNotFound)
@@ -250,6 +261,17 @@ func (s *Server) handleServeCoverByBookID(w http.ResponseWriter, r *http.Request
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		http.Error(w, "id required", http.StatusBadRequest)
+		return
+	}
+
+	// Auth + ACL: verify the user can access this book
+	userID, err := GetUserID(r.Context())
+	if err != nil {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	if canAccess, err := s.store.CanUserAccessBook(r.Context(), userID, id); err != nil || !canAccess {
+		http.Error(w, "cover not found", http.StatusNotFound)
 		return
 	}
 
@@ -280,10 +302,26 @@ func (s *Server) handleServeCoverBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Auth + ACL: verify the user is authenticated
+	userID, err := GetUserID(r.Context())
+	if err != nil {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+
 	// Limit to 100 covers per request
 	if len(ids) > 100 {
 		ids = ids[:100]
 	}
+
+	// Filter to only books the user can access
+	accessibleIDs := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if canAccess, err := s.store.CanUserAccessBook(r.Context(), userID, id); err == nil && canAccess {
+			accessibleIDs = append(accessibleIDs, id)
+		}
+	}
+	ids = accessibleIDs
 
 	w.Header().Set("Content-Type", "application/x-tar")
 	w.Header().Set("Cache-Control", "no-cache")

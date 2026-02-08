@@ -738,7 +738,13 @@ func (s *Server) handleGetUserStats(ctx context.Context, input *GetUserStatsInpu
 }
 
 func (s *Server) handleGetBookStats(ctx context.Context, input *GetBookStatsInput) (*BookStatsOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	userID, err := GetUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Verify user can access this book
+	if _, err := s.store.GetBook(ctx, input.ID, userID); err != nil {
 		return nil, err
 	}
 
