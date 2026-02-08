@@ -423,7 +423,8 @@ func (s *Server) handleDeleteContributor(ctx context.Context, input *DeleteContr
 }
 
 func (s *Server) handleGetContributorBooks(ctx context.Context, input *GetContributorBooksInput) (*ContributorBooksOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	userID, err := GetUserID(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -432,8 +433,16 @@ func (s *Server) handleGetContributorBooks(ctx context.Context, input *GetContri
 		return nil, err
 	}
 
-	resp := make([]ContributorBookResponse, len(books))
-	for i, b := range books {
+	accessible, err := s.store.GetAccessibleBookIDSet(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp []ContributorBookResponse
+	for _, b := range books {
+		if !accessible[b.ID] {
+			continue
+		}
 		book := ContributorBookResponse{
 			ID:    b.ID,
 			Title: b.Title,
@@ -452,7 +461,7 @@ func (s *Server) handleGetContributorBooks(ctx context.Context, input *GetContri
 		if b.CoverImage != nil && b.CoverImage.Path != "" {
 			book.CoverPath = &b.CoverImage.Path
 		}
-		resp[i] = book
+		resp = append(resp, book)
 	}
 
 	return &ContributorBooksOutput{Body: ContributorBooksResponse{Books: resp}}, nil

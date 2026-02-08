@@ -380,7 +380,8 @@ func (s *Server) handleGetGenreChildren(ctx context.Context, input *GetGenreChil
 }
 
 func (s *Server) handleGetGenreBooks(ctx context.Context, input *GetGenreBooksInput) (*GenreBooksOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	userID, err := GetUserID(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -389,7 +390,19 @@ func (s *Server) handleGetGenreBooks(ctx context.Context, input *GetGenreBooksIn
 		return nil, err
 	}
 
-	return &GenreBooksOutput{Body: GenreBooksResponse{BookIDs: bookIDs}}, nil
+	accessible, err := s.store.GetAccessibleBookIDSet(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	filtered := make([]string, 0, len(bookIDs))
+	for _, id := range bookIDs {
+		if accessible[id] {
+			filtered = append(filtered, id)
+		}
+	}
+
+	return &GenreBooksOutput{Body: GenreBooksResponse{BookIDs: filtered}}, nil
 }
 
 func (s *Server) handleMoveGenre(ctx context.Context, input *MoveGenreInput) (*GenreOutput, error) {

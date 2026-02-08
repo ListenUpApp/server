@@ -309,7 +309,8 @@ func (s *Server) handleDeleteSeries(ctx context.Context, input *DeleteSeriesInpu
 }
 
 func (s *Server) handleGetSeriesBooks(ctx context.Context, input *GetSeriesBooksInput) (*SeriesBooksOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	userID, err := GetUserID(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -318,8 +319,16 @@ func (s *Server) handleGetSeriesBooks(ctx context.Context, input *GetSeriesBooks
 		return nil, err
 	}
 
-	resp := make([]SeriesBookResponse, len(books))
-	for i, b := range books {
+	accessible, err := s.store.GetAccessibleBookIDSet(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp []SeriesBookResponse
+	for _, b := range books {
+		if !accessible[b.ID] {
+			continue
+		}
 		book := SeriesBookResponse{
 			ID:    b.ID,
 			Title: b.Title,
@@ -335,7 +344,7 @@ func (s *Server) handleGetSeriesBooks(ctx context.Context, input *GetSeriesBooks
 		if b.CoverImage != nil && b.CoverImage.Path != "" {
 			book.CoverPath = &b.CoverImage.Path
 		}
-		resp[i] = book
+		resp = append(resp, book)
 	}
 
 	return &SeriesBooksOutput{Body: SeriesBooksResponse{Books: resp}}, nil
