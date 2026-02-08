@@ -12,6 +12,14 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// NOTE: Audio streaming routes are registered directly on chi (not Huma) because they
+// serve raw binary audio data with range request support. They do NOT appear in /openapi.json.
+// Routes:
+//   GET /api/v1/audio/{bookId}/{fileId} - Stream audio file
+//   GET /api/v1/books/{bookId}/audio/{fileId} - Stream audio file (alias)
+//   GET /api/v1/audio/{bookId}/{fileId}/transcode/{*} - Stream transcoded audio
+//   GET /api/v1/books/{bookId}/audio/{fileId}/transcode/{*} - Stream transcoded audio (alias)
+//
 // registerAudioRoutes sets up audio streaming routes.
 // These are handled directly by chi for performance (not huma).
 func (s *Server) registerAudioRoutes() {

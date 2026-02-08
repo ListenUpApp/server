@@ -116,6 +116,8 @@ func (s *Server) registerContributorRoutes() {
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleApplyContributorMetadata)
 
+	// NOTE: Contributor image serving is registered directly on chi (not Huma) because it serves raw image bytes.
+	// Route: GET /api/v1/contributors/{id}/image - Serve contributor image
 	// Direct chi route for contributor image serving (auth checked in handler)
 	s.router.Get("/api/v1/contributors/{id}/image", s.handleServeContributorImage)
 }

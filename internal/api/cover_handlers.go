@@ -54,6 +54,12 @@ func (s *Server) registerCoverRoutes() {
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleDeleteBookCover)
 
+	// NOTE: Cover/image serving routes are registered directly on chi (not Huma) because they
+	// serve raw image bytes. They do NOT appear in /openapi.json.
+	// Routes:
+	//   GET /covers/{path} - Serve cover image by path
+	//   GET /api/v1/covers/{id} - Serve cover image by ID
+	//   GET /api/v1/covers/batch - Batch cover serving
 	// Direct chi routes for cover streaming (used by mobile clients)
 	s.router.Get("/covers/{path}", s.handleServeCover)
 

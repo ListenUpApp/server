@@ -64,6 +64,8 @@ func (s *Server) registerSyncRoutes() {
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleGetSyncActiveSessions)
 
+	// NOTE: SSE endpoint registered directly on chi (not Huma) because Huma doesn't support SSE.
+	// Route: GET /api/v1/sync/events - Server-Sent Events for real-time sync notifications
 	// SSE endpoint (handled via chi directly, not huma)
 	s.router.Get("/api/v1/sync/events", s.sseHandler.ServeHTTP)
 }

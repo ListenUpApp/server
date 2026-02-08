@@ -58,6 +58,8 @@ func (s *Server) registerProfileRoutes() {
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleGetUserProfile)
 
+	// NOTE: Avatar serving is registered directly on chi (not Huma) because it serves raw image bytes.
+	// Route: GET /avatars/{id} - Serve user avatar image
 	// Avatar image serving (chi direct, not huma)
 	s.router.Get("/avatars/{id}", s.handleServeAvatar)
 }
