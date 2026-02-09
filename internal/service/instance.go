@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 	"log/slog"
+	"time"
 
 	"github.com/listenupapp/listenup-server/internal/config"
 	"github.com/listenupapp/listenup-server/internal/domain"

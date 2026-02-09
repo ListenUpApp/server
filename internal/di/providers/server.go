@@ -107,7 +107,7 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 		Metadata:       metadataHandle.MetadataService,
 		Chapter:        chapterService,
 		Cover:          coverService,
-		Shelf:           shelfService,
+		Shelf:          shelfService,
 		Inbox:          inboxService,
 		Settings:       settingsService,
 		Social:         socialService,

@@ -125,19 +125,19 @@ type ShelfSummaryResponse struct {
 
 // FullProfileResponse contains a complete profile for viewing.
 type FullProfileResponse struct {
-	UserID            string                `json:"user_id" doc:"User ID"`
-	DisplayName       string                `json:"display_name" doc:"User's display name"`
-	AvatarType        string                `json:"avatar_type" doc:"Avatar type (auto or image)"`
-	AvatarValue       string                `json:"avatar_value,omitempty" doc:"Avatar image path for image type"`
-	AvatarColor       string                `json:"avatar_color" doc:"Avatar color for auto type"`
-	Tagline           string                `json:"tagline,omitempty" doc:"User's tagline"`
-	TotalListenTimeMs int64                 `json:"total_listen_time_ms" doc:"Total listening time in milliseconds"`
-	BooksFinished     int                   `json:"books_finished" doc:"Number of books finished"`
-	CurrentStreak     int                   `json:"current_streak" doc:"Current listening streak in days"`
-	LongestStreak     int                   `json:"longest_streak" doc:"Longest listening streak in days"`
-	IsOwnProfile      bool                  `json:"is_own_profile" doc:"Whether viewing own profile"`
-	RecentBooks       []RecentBookResponse  `json:"recent_books" doc:"Recently finished books"`
-	PublicShelves      []ShelfSummaryResponse `json:"public_shelves" doc:"User's public shelves"`
+	UserID            string                 `json:"user_id" doc:"User ID"`
+	DisplayName       string                 `json:"display_name" doc:"User's display name"`
+	AvatarType        string                 `json:"avatar_type" doc:"Avatar type (auto or image)"`
+	AvatarValue       string                 `json:"avatar_value,omitempty" doc:"Avatar image path for image type"`
+	AvatarColor       string                 `json:"avatar_color" doc:"Avatar color for auto type"`
+	Tagline           string                 `json:"tagline,omitempty" doc:"User's tagline"`
+	TotalListenTimeMs int64                  `json:"total_listen_time_ms" doc:"Total listening time in milliseconds"`
+	BooksFinished     int                    `json:"books_finished" doc:"Number of books finished"`
+	CurrentStreak     int                    `json:"current_streak" doc:"Current listening streak in days"`
+	LongestStreak     int                    `json:"longest_streak" doc:"Longest listening streak in days"`
+	IsOwnProfile      bool                   `json:"is_own_profile" doc:"Whether viewing own profile"`
+	RecentBooks       []RecentBookResponse   `json:"recent_books" doc:"Recently finished books"`
+	PublicShelves     []ShelfSummaryResponse `json:"public_shelves" doc:"User's public shelves"`
 }
 
 // FullProfileOutput wraps the full profile response for Huma.
@@ -295,7 +295,7 @@ func (s *Server) handleGetUserProfile(ctx context.Context, input *GetUserProfile
 		LongestStreak:     fullProfile.LongestStreak,
 		IsOwnProfile:      fullProfile.IsOwnProfile,
 		RecentBooks:       make([]RecentBookResponse, 0, len(fullProfile.RecentBooks)),
-		PublicShelves:      make([]ShelfSummaryResponse, 0, len(fullProfile.PublicShelves)),
+		PublicShelves:     make([]ShelfSummaryResponse, 0, len(fullProfile.PublicShelves)),
 	}
 
 	for _, book := range fullProfile.RecentBooks {

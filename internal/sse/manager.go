@@ -28,7 +28,7 @@ type BookAccessChecker func(ctx context.Context, userID, bookID string) bool
 
 // Manager manages SSE connections and broadcasts events.
 type Manager struct {
-	checkBookAccess BookAccessChecker
+	checkBookAccess   BookAccessChecker
 	clients           map[string]*Client
 	events            chan Event
 	logger            *slog.Logger

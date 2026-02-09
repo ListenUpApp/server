@@ -245,8 +245,8 @@ type FullUserProfile struct {
 	LongestStreak     int   `json:"longest_streak"`
 
 	// Recent activity (filtered by viewer's ACL)
-	RecentBooks  []RecentBookSummary `json:"recent_books"`
-	PublicShelves []ShelfSummary       `json:"public_shelves"`
+	RecentBooks   []RecentBookSummary `json:"recent_books"`
+	PublicShelves []ShelfSummary      `json:"public_shelves"`
 
 	// Meta
 	IsOwnProfile bool `json:"is_own_profile"`
@@ -319,7 +319,7 @@ func (s *ProfileService) GetFullProfile(ctx context.Context, profileUserID, view
 		CurrentStreak:     stats.CurrentStreakDays,
 		LongestStreak:     stats.LongestStreakDays,
 		RecentBooks:       recentBooks,
-		PublicShelves:      shelves,
+		PublicShelves:     shelves,
 		IsOwnProfile:      profileUserID == viewingUserID,
 	}, nil
 }

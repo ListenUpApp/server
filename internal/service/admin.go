@@ -18,7 +18,7 @@ type AdminService struct {
 	store                   *store.Store
 	logger                  *slog.Logger
 	registrationBroadcaster *sse.RegistrationBroadcaster
-	shelfService             *ShelfService
+	shelfService            *ShelfService
 }
 
 // NewAdminService creates a new admin service.
@@ -27,7 +27,7 @@ func NewAdminService(store *store.Store, logger *slog.Logger, registrationBroadc
 		store:                   store,
 		logger:                  logger,
 		registrationBroadcaster: registrationBroadcaster,
-		shelfService:             shelfService,
+		shelfService:            shelfService,
 	}
 }
 

@@ -108,14 +108,14 @@ type ShelfOwnerResponse struct {
 
 // ShelfResponse contains shelf data in API responses.
 type ShelfResponse struct {
-	ID            string            `json:"id" doc:"Shelf ID"`
-	Name          string            `json:"name" doc:"Shelf name"`
-	Description   string            `json:"description" doc:"Shelf description"`
+	ID            string             `json:"id" doc:"Shelf ID"`
+	Name          string             `json:"name" doc:"Shelf name"`
+	Description   string             `json:"description" doc:"Shelf description"`
 	Owner         ShelfOwnerResponse `json:"owner" doc:"Shelf owner"`
-	BookCount     int               `json:"book_count" doc:"Number of books in shelf"`
-	TotalDuration int64             `json:"total_duration" doc:"Total duration in seconds"`
-	CreatedAt     time.Time         `json:"created_at" doc:"Creation time"`
-	UpdatedAt     time.Time         `json:"updated_at" doc:"Last update time"`
+	BookCount     int                `json:"book_count" doc:"Number of books in shelf"`
+	TotalDuration int64              `json:"total_duration" doc:"Total duration in seconds"`
+	CreatedAt     time.Time          `json:"created_at" doc:"Creation time"`
+	UpdatedAt     time.Time          `json:"updated_at" doc:"Last update time"`
 }
 
 // ListShelvesResponse contains a list of shelves.
@@ -162,15 +162,15 @@ type ShelfBookResponse struct {
 
 // ShelfDetailResponse contains shelf data with books.
 type ShelfDetailResponse struct {
-	ID            string             `json:"id" doc:"Shelf ID"`
-	Name          string             `json:"name" doc:"Shelf name"`
-	Description   string             `json:"description" doc:"Shelf description"`
+	ID            string              `json:"id" doc:"Shelf ID"`
+	Name          string              `json:"name" doc:"Shelf name"`
+	Description   string              `json:"description" doc:"Shelf description"`
 	Owner         ShelfOwnerResponse  `json:"owner" doc:"Shelf owner"`
-	BookCount     int                `json:"book_count" doc:"Number of accessible books"`
-	TotalDuration int64              `json:"total_duration" doc:"Total duration of accessible books"`
+	BookCount     int                 `json:"book_count" doc:"Number of accessible books"`
+	TotalDuration int64               `json:"total_duration" doc:"Total duration of accessible books"`
 	Books         []ShelfBookResponse `json:"books" doc:"Books in shelf"`
-	CreatedAt     time.Time          `json:"created_at" doc:"Creation time"`
-	UpdatedAt     time.Time          `json:"updated_at" doc:"Last update time"`
+	CreatedAt     time.Time           `json:"created_at" doc:"Creation time"`
+	UpdatedAt     time.Time           `json:"updated_at" doc:"Last update time"`
 }
 
 // ShelfDetailOutput wraps the shelf detail response for Huma.
@@ -223,7 +223,7 @@ type DiscoverShelvesInput struct {
 
 // UserShelvesResponse contains a user's shelves for discovery.
 type UserShelvesResponse struct {
-	User   ShelfOwnerResponse `json:"user" doc:"User who owns the shelves"`
+	User    ShelfOwnerResponse `json:"user" doc:"User who owns the shelves"`
 	Shelves []ShelfResponse    `json:"shelves" doc:"Shelves owned by this user"`
 }
 
@@ -289,7 +289,7 @@ func (s *Server) handleListDiscoverShelves(ctx context.Context, _ *DiscoverShelv
 		}
 
 		users = append(users, UserShelvesResponse{
-			User:   s.mapShelfOwner(owner),
+			User:    s.mapShelfOwner(owner),
 			Shelves: shelfResponses,
 		})
 	}

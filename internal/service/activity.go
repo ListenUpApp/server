@@ -254,8 +254,8 @@ func (s *ActivityService) RecordShelfCreated(ctx context.Context, userID string,
 		UserAvatarColor: color.ForUser(userID),
 		UserAvatarType:  avatarType,
 		UserAvatarValue: avatarValue,
-		ShelfID:          shelf.ID,
-		ShelfName:        shelf.Name,
+		ShelfID:         shelf.ID,
+		ShelfName:       shelf.Name,
 	}
 
 	if err := s.store.CreateActivity(ctx, activity); err != nil {
@@ -346,7 +346,6 @@ func (s *ActivityService) RecordListeningSession(ctx context.Context, userID, bo
 	return nil
 }
 
-
 // RecordUserJoined creates an activity when a new user is approved to join the server.
 func (s *ActivityService) RecordUserJoined(ctx context.Context, userID string) error {
 	user, err := s.store.GetUser(ctx, userID)
@@ -384,6 +383,7 @@ func (s *ActivityService) RecordUserJoined(ctx context.Context, userID string) e
 
 	return nil
 }
+
 // GetFeed retrieves the global activity feed with ACL filtering.
 // Only returns activities for books the viewing user can access.
 func (s *ActivityService) GetFeed(ctx context.Context, viewingUserID string, limit int, before *time.Time) ([]*domain.Activity, error) {

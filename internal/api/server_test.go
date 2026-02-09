@@ -91,7 +91,7 @@ func setupTestServer(t *testing.T) *testServer {
 		Instance: instanceService,
 		Auth:     authService,
 		Sync:     syncService,
-		Shelf:     shelfService,
+		Shelf:    shelfService,
 		Settings: settingsService,
 		Inbox:    inboxService,
 	}

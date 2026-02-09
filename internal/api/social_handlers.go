@@ -529,8 +529,8 @@ func (s *Server) handleGetActivityFeed(ctx context.Context, input *GetActivityFe
 			IsReread:        a.IsReread,
 			MilestoneValue:  a.MilestoneValue,
 			MilestoneUnit:   a.MilestoneUnit,
-			ShelfID:          a.ShelfID,
-			ShelfName:        a.ShelfName,
+			ShelfID:         a.ShelfID,
+			ShelfName:       a.ShelfName,
 		}
 	}
 

@@ -414,8 +414,6 @@ func (s *Server) handleGetSyncActiveSessions(ctx context.Context, _ *GetSyncActi
 		}
 	}
 
-
-
 	// Collect unique user IDs for batch fetching
 	userIDSet := make(map[string]bool, len(activeSessions))
 	for _, session := range activeSessions {

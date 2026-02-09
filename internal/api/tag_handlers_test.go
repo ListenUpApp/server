@@ -92,7 +92,7 @@ func setupTagTestServer(t *testing.T) *tagTestServer {
 		Auth:     authService,
 		Sync:     syncService,
 		Tag:      tagService,
-		Shelf:     shelfService,
+		Shelf:    shelfService,
 	}
 
 	router := chi.NewRouter()

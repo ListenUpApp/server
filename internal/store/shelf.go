@@ -12,9 +12,9 @@ import (
 
 // Key prefixes for shelf storage (NOTE: actual key strings use legacy "shelf" prefix for backward compatibility).
 const (
-	shelfPrefix        = "shelf:"             // Storage key uses legacy "shelf:" prefix for backward compatibility
+	shelfPrefix          = "shelf:"             // Storage key uses legacy "shelf:" prefix for backward compatibility
 	shelvesByOwnerPrefix = "idx:shelves:owner:" // Storage key uses legacy "shelves" prefix for backward compatibility
-	bookShelfPrefix    = "idx:books:shelves:" // Storage key uses legacy "shelves" prefix for backward compatibility
+	bookShelfPrefix      = "idx:books:shelves:" // Storage key uses legacy "shelves" prefix for backward compatibility
 )
 
 // CreateShelf creates a new shelf in the store.

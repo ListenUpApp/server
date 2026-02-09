@@ -34,7 +34,6 @@ const (
 	// Broadcast to all users so they can refresh their book lists.
 	EventLibraryAccessModeChanged EventType = "library.access_mode_changed"
 
-
 	// EventHeartbeat represents a connection keepalive event.
 	EventHeartbeat EventType = "heartbeat"
 
@@ -156,7 +155,6 @@ type ScanCompleteEventData struct {
 	BooksRemoved int       `json:"books_removed"`
 }
 
-
 // ScanProgressEventData is the data payload for scan progress events.
 type ScanProgressEventData struct {
 	LibraryID string `json:"library_id"`
@@ -268,7 +266,7 @@ type ShelfDeletedEventData struct {
 
 // ShelfBookEventData is the data payload for shelf book add/remove events.
 type ShelfBookEventData struct {
-	ShelfID    string    `json:"shelf_id"`
+	ShelfID   string    `json:"shelf_id"`
 	OwnerID   string    `json:"owner_id"`
 	BookID    string    `json:"book_id"`
 	BookCount int       `json:"book_count"`
@@ -333,7 +331,6 @@ func NewScanCompleteEvent(libraryID string, added, updated, removed int) Event {
 		Timestamp: time.Now(),
 	}
 }
-
 
 // NewScanProgressEvent creates a library.scan_progress event.
 func NewScanProgressEvent(libraryID, phase string, current, total, added, updated, removed int) Event {
@@ -603,7 +600,7 @@ func NewShelfBookAddedEvent(shelf *domain.Shelf, bookID string) Event {
 	return Event{
 		Type: EventShelfBookAdded,
 		Data: ShelfBookEventData{
-			ShelfID:    shelf.ID,
+			ShelfID:   shelf.ID,
 			OwnerID:   shelf.OwnerID,
 			BookID:    bookID,
 			BookCount: len(shelf.BookIDs),
@@ -618,7 +615,7 @@ func NewShelfBookRemovedEvent(shelf *domain.Shelf, bookID string) Event {
 	return Event{
 		Type: EventShelfBookRemoved,
 		Data: ShelfBookEventData{
-			ShelfID:    shelf.ID,
+			ShelfID:   shelf.ID,
 			OwnerID:   shelf.OwnerID,
 			BookID:    bookID,
 			BookCount: len(shelf.BookIDs),
@@ -843,8 +840,8 @@ type ActivityEventData struct {
 	DurationMs      int64     `json:"duration_ms,omitempty"` // For listening_session activities
 	MilestoneValue  int       `json:"milestone_value,omitempty"`
 	MilestoneUnit   string    `json:"milestone_unit,omitempty"`
-	ShelfID          string    `json:"shelf_id,omitempty"`
-	ShelfName        string    `json:"shelf_name,omitempty"`
+	ShelfID         string    `json:"shelf_id,omitempty"`
+	ShelfName       string    `json:"shelf_name,omitempty"`
 }
 
 // NewActivityEvent creates an activity.created event.
@@ -870,8 +867,8 @@ func NewActivityEvent(activity *domain.Activity) Event {
 			DurationMs:      activity.DurationMs,
 			MilestoneValue:  activity.MilestoneValue,
 			MilestoneUnit:   activity.MilestoneUnit,
-			ShelfID:          activity.ShelfID,
-			ShelfName:        activity.ShelfName,
+			ShelfID:         activity.ShelfID,
+			ShelfName:       activity.ShelfName,
 		},
 		Timestamp: time.Now(),
 	}

@@ -270,7 +270,6 @@ func (s *SyncService) GetContributorsForSync(ctx context.Context, userID string,
 	}
 	contributors = s.filterContributorsByAccessibleBooks(ctx, contributors, accessibleBookIDs)
 
-
 	// Apply manual pagination for delta sync results
 	total := len(contributors)
 	startIdx := 0
@@ -371,7 +370,6 @@ func (s *SyncService) GetSeriesForSync(ctx context.Context, userID string, param
 		return nil, fmt.Errorf("get accessible books: %w", err)
 	}
 	seriesList = s.filterSeriesByAccessibleBooks(ctx, seriesList, accessibleBookIDs)
-
 
 	// Apply manual pagination for delta sync results
 	total := len(seriesList)
