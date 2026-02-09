@@ -1,0 +1,123 @@
+# ListenUp Server
+
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](https://hub.docker.com)
+
+A self-hosted audiobook server. Scan your library, enrich metadata, transcode audio, and stream to any client — no external database required.
+
+## Features
+
+- **Zero-dependency storage** — BadgerDB embedded key-value store, no Postgres/MySQL/SQLite to manage
+- **Full-text search** — Bleve search engine, also embedded
+- **Audio transcoding** — Librempeg (FFmpeg fork) with Dolby AC-4 and xHE-AAC support, automatic caching
+- **Metadata enrichment** — Pulls from Audible, Google Books, Open Library, and Hardcover
+- **Library scanning** — File watcher for automatic detection of new audiobooks
+- **OpenAPI-first** — Huma v2 generates a full OpenAPI spec (177 operations)
+- **Auth** — PASETO v4 tokens (access + refresh), collection-based access control
+- **Real-time events** — SSE for live updates
+- **Network discovery** — mDNS/Zeroconf so clients find your server automatically
+- **Social** — User profiles, avatars, sharing links
+- **Migration** — Import directly from Audiobookshelf
+- **Backup/restore** — Built-in
+
+## Quick Start
+
+```bash
+docker run -d \
+  --name listenup \
+  -p 8080:8080 \
+  -v /path/to/audiobooks:/data/audiobooks \
+  -v /path/to/metadata:/data/metadata \
+  -e AUTH_ACCESS_TOKEN_KEY=your-secret-key-here \
+  ghcr.io/listenupapp/server:latest
+```
+
+Health check: `GET http://localhost:8080/health`
+
+## Configuration
+
+All configuration via environment variables, `.env` file, or CLI flags.
+
+| Variable | Default | Description |
+|---|---|---|
+| `ENV` | `production` | Environment (`development`, `production`) |
+| `LOG_LEVEL` | `info` | Log level (`debug`, `info`, `warn`, `error`) |
+| `SERVER_PORT` | `8080` | HTTP port |
+| `SERVER_NAME` | — | Server display name |
+| `SERVER_LOCAL_URL` | — | Local URL for the server |
+| `SERVER_REMOTE_URL` | — | Public URL (for sharing links) |
+| `SERVER_READ_TIMEOUT` | — | HTTP read timeout |
+| `SERVER_WRITE_TIMEOUT` | — | HTTP write timeout |
+| `SERVER_IDLE_TIMEOUT` | — | HTTP idle timeout |
+| `SERVER_ADVERTISE_MDNS` | — | Enable mDNS/Zeroconf discovery |
+| `AUDIOBOOK_PATH` | `/data/audiobooks` | Path to your audiobook library |
+| `METADATA_PATH` | `/data/metadata` | Path for metadata storage |
+| `AUTH_ACCESS_TOKEN_KEY` | — | **Required.** Secret key for PASETO tokens |
+| `AUTH_ACCESS_TOKEN_DURATION` | — | Access token lifetime |
+| `AUTH_REFRESH_TOKEN_DURATION` | — | Refresh token lifetime |
+| `TRANSCODE_ENABLED` | — | Enable audio transcoding |
+| `TRANSCODE_CACHE_PATH` | `/data/cache/transcode` | Transcode cache directory |
+| `TRANSCODE_MAX_CONCURRENT` | — | Max concurrent transcode jobs |
+| `FFMPEG_PATH` | `/usr/local/bin/ffmpeg` | Path to ffmpeg binary |
+
+## Architecture
+
+```
+listenup/server
+├── cmd/                    # CLI entrypoints
+│   ├── api/                # Main server
+│   ├── seed/               # Database seeding
+│   ├── dbinspect/          # Database inspection
+│   └── ...                 # Diagnostic & migration tools
+└── internal/
+    ├── api/                # HTTP handlers (Huma v2 + chi v5)
+    ├── auth/               # PASETO v4 token management
+    ├── backup/             # Backup & restore
+    ├── config/             # Configuration loading
+    ├── domain/             # Core domain types
+    ├── media/              # Audio processing & transcoding
+    ├── metadata/           # External metadata providers
+    ├── scanner/            # Library scanning
+    ├── search/             # Bleve full-text search
+    ├── service/            # Business logic
+    ├── sse/                # Server-sent events
+    ├── store/              # BadgerDB persistence
+    └── watcher/            # File system watcher
+```
+
+**Key tech choices:**
+- **Router:** chi v5 — lightweight, stdlib-compatible
+- **API framework:** Huma v2 — auto-generates OpenAPI spec from Go types
+- **Storage:** BadgerDB — embedded LSM-tree KV store, no server process needed
+- **Auth:** PASETO v4 — modern alternative to JWT, no algorithm confusion attacks
+- **DI:** samber/do v2 — compile-time-safe dependency injection
+- **Transcoding:** Librempeg — FFmpeg fork with extended codec support
+
+### Docker Build
+
+Multi-stage build: compiles Librempeg from source → builds the Go binary → copies into a slim Debian runtime. The final image includes only the server binary and ffmpeg.
+
+## Development
+
+```bash
+# Clone
+git clone https://github.com/ListenUpApp/server.git
+cd server
+
+# Run (requires Go 1.25+ and ffmpeg)
+go run ./cmd/api
+
+# Other tools
+go run ./cmd/seed          # Seed test data
+go run ./cmd/dbinspect     # Inspect database contents
+go run ./cmd/diag          # Run diagnostics
+```
+
+### API Documentation
+
+The OpenAPI spec is auto-generated by Huma at runtime. Once the server is running, the spec is available at the standard Huma documentation endpoints. There are 177 OpenAPI operations plus 14 additional chi-only routes for audio streaming, cover images, avatars, and SSE.
+
+## License
+
+[AGPL-3.0](LICENSE)

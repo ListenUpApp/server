@@ -58,6 +58,8 @@ func (s *Server) registerProfileRoutes() {
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleGetUserProfile)
 
+	// NOTE: Avatar serving is registered directly on chi (not Huma) because it serves raw image bytes.
+	// Route: GET /avatars/{id} - Serve user avatar image
 	// Avatar image serving (chi direct, not huma)
 	s.router.Get("/avatars/{id}", s.handleServeAvatar)
 }
@@ -114,28 +116,28 @@ type RecentBookResponse struct {
 	FinishedAt *string `json:"finished_at,omitempty" doc:"When the book was finished (RFC3339)"`
 }
 
-// LensSummaryResponse contains minimal lens info for profile display.
-type LensSummaryResponse struct {
-	ID        string `json:"id" doc:"Lens ID"`
-	Name      string `json:"name" doc:"Lens name"`
-	BookCount int    `json:"book_count" doc:"Number of books in the lens"`
+// ShelfSummaryResponse contains minimal shelf info for profile display.
+type ShelfSummaryResponse struct {
+	ID        string `json:"id" doc:"Shelf ID"`
+	Name      string `json:"name" doc:"Shelf name"`
+	BookCount int    `json:"book_count" doc:"Number of books in the shelf"`
 }
 
 // FullProfileResponse contains a complete profile for viewing.
 type FullProfileResponse struct {
-	UserID            string                `json:"user_id" doc:"User ID"`
-	DisplayName       string                `json:"display_name" doc:"User's display name"`
-	AvatarType        string                `json:"avatar_type" doc:"Avatar type (auto or image)"`
-	AvatarValue       string                `json:"avatar_value,omitempty" doc:"Avatar image path for image type"`
-	AvatarColor       string                `json:"avatar_color" doc:"Avatar color for auto type"`
-	Tagline           string                `json:"tagline,omitempty" doc:"User's tagline"`
-	TotalListenTimeMs int64                 `json:"total_listen_time_ms" doc:"Total listening time in milliseconds"`
-	BooksFinished     int                   `json:"books_finished" doc:"Number of books finished"`
-	CurrentStreak     int                   `json:"current_streak" doc:"Current listening streak in days"`
-	LongestStreak     int                   `json:"longest_streak" doc:"Longest listening streak in days"`
-	IsOwnProfile      bool                  `json:"is_own_profile" doc:"Whether viewing own profile"`
-	RecentBooks       []RecentBookResponse  `json:"recent_books" doc:"Recently finished books"`
-	PublicLenses      []LensSummaryResponse `json:"public_lenses" doc:"User's public lenses"`
+	UserID            string                 `json:"user_id" doc:"User ID"`
+	DisplayName       string                 `json:"display_name" doc:"User's display name"`
+	AvatarType        string                 `json:"avatar_type" doc:"Avatar type (auto or image)"`
+	AvatarValue       string                 `json:"avatar_value,omitempty" doc:"Avatar image path for image type"`
+	AvatarColor       string                 `json:"avatar_color" doc:"Avatar color for auto type"`
+	Tagline           string                 `json:"tagline,omitempty" doc:"User's tagline"`
+	TotalListenTimeMs int64                  `json:"total_listen_time_ms" doc:"Total listening time in milliseconds"`
+	BooksFinished     int                    `json:"books_finished" doc:"Number of books finished"`
+	CurrentStreak     int                    `json:"current_streak" doc:"Current listening streak in days"`
+	LongestStreak     int                    `json:"longest_streak" doc:"Longest listening streak in days"`
+	IsOwnProfile      bool                   `json:"is_own_profile" doc:"Whether viewing own profile"`
+	RecentBooks       []RecentBookResponse   `json:"recent_books" doc:"Recently finished books"`
+	PublicShelves     []ShelfSummaryResponse `json:"public_shelves" doc:"User's public shelves"`
 }
 
 // FullProfileOutput wraps the full profile response for Huma.
@@ -293,7 +295,7 @@ func (s *Server) handleGetUserProfile(ctx context.Context, input *GetUserProfile
 		LongestStreak:     fullProfile.LongestStreak,
 		IsOwnProfile:      fullProfile.IsOwnProfile,
 		RecentBooks:       make([]RecentBookResponse, 0, len(fullProfile.RecentBooks)),
-		PublicLenses:      make([]LensSummaryResponse, 0, len(fullProfile.PublicLenses)),
+		PublicShelves:     make([]ShelfSummaryResponse, 0, len(fullProfile.PublicShelves)),
 	}
 
 	for _, book := range fullProfile.RecentBooks {
@@ -310,11 +312,11 @@ func (s *Server) handleGetUserProfile(ctx context.Context, input *GetUserProfile
 		resp.RecentBooks = append(resp.RecentBooks, rb)
 	}
 
-	for _, lens := range fullProfile.PublicLenses {
-		resp.PublicLenses = append(resp.PublicLenses, LensSummaryResponse{
-			ID:        lens.ID,
-			Name:      lens.Name,
-			BookCount: lens.BookCount,
+	for _, shelf := range fullProfile.PublicShelves {
+		resp.PublicShelves = append(resp.PublicShelves, ShelfSummaryResponse{
+			ID:        shelf.ID,
+			Name:      shelf.Name,
+			BookCount: shelf.BookCount,
 		})
 	}
 
@@ -322,6 +324,11 @@ func (s *Server) handleGetUserProfile(ctx context.Context, input *GetUserProfile
 }
 
 func (s *Server) handleServeAvatar(w http.ResponseWriter, r *http.Request) {
+	if _, err := GetUserID(r.Context()); err != nil {
+		http.Error(w, "Authentication required", http.StatusUnauthorized)
+		return
+	}
+
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		http.Error(w, "id required", http.StatusBadRequest)

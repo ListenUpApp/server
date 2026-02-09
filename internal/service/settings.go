@@ -33,6 +33,7 @@ func (s *SettingsService) GetServerSettings(ctx context.Context) (*domain.Server
 
 // SettingsUpdate contains fields that can be updated.
 type SettingsUpdate struct {
+	Name         *string
 	InboxEnabled *bool
 }
 
@@ -79,6 +80,9 @@ func (s *SettingsService) UpdateServerSettings(ctx context.Context, update *Sett
 	}
 
 	// Apply updates
+	if update.Name != nil {
+		current.Name = *update.Name
+	}
 	if update.InboxEnabled != nil {
 		current.InboxEnabled = *update.InboxEnabled
 	}
@@ -89,6 +93,7 @@ func (s *SettingsService) UpdateServerSettings(ctx context.Context, update *Sett
 	}
 
 	s.logger.Info("server settings updated",
+		"name", current.Name,
 		"inbox_enabled", current.InboxEnabled,
 	)
 

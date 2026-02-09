@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/listenupapp/listenup-server/internal/backup"
+	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
@@ -31,6 +32,13 @@ type Server struct {
 	authRateLimiter           *RateLimiter
 	backupService             *backup.BackupService
 	restoreService            *backup.RestoreService
+	onInstanceUpdated         func(*domain.Instance)
+}
+
+// SetOnInstanceUpdated registers a callback invoked when instance settings change.
+// Used to refresh mDNS advertisements.
+func (s *Server) SetOnInstanceUpdated(fn func(*domain.Instance)) {
+	s.onInstanceUpdated = fn
 }
 
 // NewServer creates a new HTTP server with all routes configured.
@@ -156,7 +164,7 @@ func (s *Server) registerRoutes() {
 	s.registerContributorRoutes()
 	s.registerCollectionRoutes()
 	s.registerShareRoutes()
-	s.registerLensRoutes()
+	s.registerShelfRoutes()
 	s.registerLibraryRoutes()
 	s.registerSyncRoutes()
 	s.registerListeningRoutes()

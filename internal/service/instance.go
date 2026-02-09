@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/listenupapp/listenup-server/internal/config"
 	"github.com/listenupapp/listenup-server/internal/domain"
@@ -142,4 +143,41 @@ func (s *InstanceService) SetOpenRegistration(ctx context.Context, enabled bool)
 	}
 
 	return nil
+}
+
+// InstanceUpdate contains optional fields for updating instance settings.
+type InstanceUpdate struct {
+	Name      *string
+	RemoteURL *string
+}
+
+// UpdateInstanceSettings updates mutable instance fields.
+// Only non-nil fields are applied. Returns the updated instance.
+func (s *InstanceService) UpdateInstanceSettings(ctx context.Context, update *InstanceUpdate) (*domain.Instance, error) {
+	instance, err := s.GetInstance(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get instance: %w", err)
+	}
+
+	if update.Name != nil {
+		instance.Name = *update.Name
+	}
+	if update.RemoteURL != nil {
+		instance.RemoteURL = *update.RemoteURL
+	}
+	instance.UpdatedAt = time.Now()
+
+	if err := s.store.UpdateInstance(ctx, instance); err != nil {
+		return nil, fmt.Errorf("failed to update instance: %w", err)
+	}
+
+	if s.logger != nil {
+		s.logger.Info("Instance settings updated",
+			"instance_id", instance.ID,
+			"name", instance.Name,
+			"remote_url", instance.RemoteURL,
+		)
+	}
+
+	return instance, nil
 }

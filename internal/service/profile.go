@@ -245,8 +245,8 @@ type FullUserProfile struct {
 	LongestStreak     int   `json:"longest_streak"`
 
 	// Recent activity (filtered by viewer's ACL)
-	RecentBooks  []RecentBookSummary `json:"recent_books"`
-	PublicLenses []LensSummary       `json:"public_lenses"`
+	RecentBooks   []RecentBookSummary `json:"recent_books"`
+	PublicShelves []ShelfSummary      `json:"public_shelves"`
 
 	// Meta
 	IsOwnProfile bool `json:"is_own_profile"`
@@ -261,8 +261,8 @@ type RecentBookSummary struct {
 	FinishedAt *time.Time `json:"finished_at,omitempty"`
 }
 
-// LensSummary contains minimal lens info for profile display.
-type LensSummary struct {
+// ShelfSummary contains minimal shelf info for profile display.
+type ShelfSummary struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
 	BookCount int    `json:"book_count"`
@@ -300,11 +300,11 @@ func (s *ProfileService) GetFullProfile(ctx context.Context, profileUserID, view
 		recentBooks = []RecentBookSummary{}
 	}
 
-	// Get public lenses
-	lenses, err := s.getPublicLenses(ctx, profileUserID)
+	// Get public shelves
+	shelves, err := s.getPublicShelves(ctx, profileUserID)
 	if err != nil {
-		s.logger.Warn("failed to get lenses", "error", err)
-		lenses = []LensSummary{}
+		s.logger.Warn("failed to get shelves", "error", err)
+		shelves = []ShelfSummary{}
 	}
 
 	return &FullUserProfile{
@@ -319,7 +319,7 @@ func (s *ProfileService) GetFullProfile(ctx context.Context, profileUserID, view
 		CurrentStreak:     stats.CurrentStreakDays,
 		LongestStreak:     stats.LongestStreakDays,
 		RecentBooks:       recentBooks,
-		PublicLenses:      lenses,
+		PublicShelves:     shelves,
 		IsOwnProfile:      profileUserID == viewingUserID,
 	}, nil
 }
@@ -380,20 +380,20 @@ func (s *ProfileService) getRecentBooksFiltered(ctx context.Context, profileUser
 	return result, nil
 }
 
-// getPublicLenses returns a user's lenses.
-// Note: Currently returns all lenses for the user. A future IsPublic field could enable filtering.
-func (s *ProfileService) getPublicLenses(ctx context.Context, userID string) ([]LensSummary, error) {
-	lenses, err := s.store.ListLensesByOwner(ctx, userID)
+// getPublicShelves returns a user's shelves.
+// Note: Currently returns all shelves for the user. A future IsPublic field could enable filtering.
+func (s *ProfileService) getPublicShelves(ctx context.Context, userID string) ([]ShelfSummary, error) {
+	shelves, err := s.store.ListShelvesByOwner(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	result := make([]LensSummary, 0, len(lenses))
-	for _, lens := range lenses {
-		result = append(result, LensSummary{
-			ID:        lens.ID,
-			Name:      lens.Name,
-			BookCount: len(lens.BookIDs),
+	result := make([]ShelfSummary, 0, len(shelves))
+	for _, shelf := range shelves {
+		result = append(result, ShelfSummary{
+			ID:        shelf.ID,
+			Name:      shelf.Name,
+			BookCount: len(shelf.BookIDs),
 		})
 	}
 

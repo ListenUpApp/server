@@ -53,6 +53,36 @@ func (s *Server) registerLibraryRoutes() {
 	}, s.handleGetLibraryStatus)
 
 	huma.Register(s.api, huma.Operation{
+		OperationID: "addScanPath",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/libraries/{id}/scan-paths",
+		Summary:     "Add scan path",
+		Description: "Adds a scan path to a library. Admin only.",
+		Tags:        []string{"Libraries"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleAddScanPath)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "removeScanPath",
+		Method:      http.MethodDelete,
+		Path:        "/api/v1/libraries/{id}/scan-paths/{path}",
+		Summary:     "Remove scan path",
+		Description: "Removes a scan path from a library. Admin only.",
+		Tags:        []string{"Libraries"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleRemoveScanPath)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "triggerScan",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/libraries/{id}/scan",
+		Summary:     "Trigger library scan",
+		Description: "Triggers a manual library rescan. Admin only.",
+		Tags:        []string{"Libraries"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleTriggerScan)
+
+	huma.Register(s.api, huma.Operation{
 		OperationID: "setupLibrary",
 		Method:      http.MethodPost,
 		Path:        "/api/v1/library/setup",
@@ -371,5 +401,159 @@ func (s *Server) handleSetupLibrary(ctx context.Context, input *SetupLibraryInpu
 			CreatedAt:  library.CreatedAt,
 			UpdatedAt:  library.UpdatedAt,
 		},
+	}, nil
+}
+
+// === Scan Path Management DTOs ===
+
+// ScanPathInput wraps the request for adding/removing scan paths.
+type ScanPathInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Library ID"`
+	Body          ScanPathRequest
+}
+
+// ScanPathRequest is the body for adding or removing a scan path.
+type ScanPathRequest struct {
+	Path string `json:"path" validate:"required" doc:"Absolute filesystem path"`
+}
+
+// RemoveScanPathInput wraps the request for removing a scan path via path param.
+type RemoveScanPathInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Library ID"`
+	Path          string `path:"path" doc:"URL-encoded absolute filesystem path to remove"`
+}
+
+// TriggerScanInput wraps the request for triggering a manual scan.
+type TriggerScanInput struct {
+	Authorization string `header:"Authorization"`
+	ID            string `path:"id" doc:"Library ID"`
+}
+
+// TriggerScanResponse indicates a scan was started.
+type TriggerScanResponse struct {
+	Message string `json:"message" doc:"Status message"`
+}
+
+// TriggerScanOutput wraps the response for Huma.
+type TriggerScanOutput struct {
+	Body TriggerScanResponse
+}
+
+// === Scan Path Handlers ===
+
+func (s *Server) handleAddScanPath(ctx context.Context, input *ScanPathInput) (*LibraryOutput, error) {
+	if _, err := s.RequireAdmin(ctx); err != nil {
+		return nil, err
+	}
+
+	cleanPath := filepath.Clean(input.Body.Path)
+	if !filepath.IsAbs(cleanPath) {
+		return nil, huma.Error400BadRequest("path must be absolute")
+	}
+
+	info, err := os.Stat(cleanPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, huma.Error400BadRequest("path does not exist: " + cleanPath)
+		}
+		return nil, huma.Error400BadRequest("cannot access path: " + cleanPath)
+	}
+	if !info.IsDir() {
+		return nil, huma.Error400BadRequest("path is not a directory: " + cleanPath)
+	}
+
+	lib, err := s.store.GetLibrary(ctx, input.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	lib.AddScanPath(cleanPath)
+	lib.UpdatedAt = time.Now()
+
+	if err := s.store.UpdateLibrary(ctx, lib); err != nil {
+		return nil, huma.Error500InternalServerError("failed to update library")
+	}
+
+	return &LibraryOutput{
+		Body: LibraryResponse{
+			ID:         lib.ID,
+			Name:       lib.Name,
+			OwnerID:    lib.OwnerID,
+			ScanPaths:  lib.ScanPaths,
+			SkipInbox:  lib.SkipInbox,
+			AccessMode: string(lib.GetAccessMode()),
+			CreatedAt:  lib.CreatedAt,
+			UpdatedAt:  lib.UpdatedAt,
+		},
+	}, nil
+}
+
+func (s *Server) handleRemoveScanPath(ctx context.Context, input *RemoveScanPathInput) (*LibraryOutput, error) {
+	if _, err := s.RequireAdmin(ctx); err != nil {
+		return nil, err
+	}
+
+	lib, err := s.store.GetLibrary(ctx, input.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(lib.ScanPaths) <= 1 {
+		return nil, huma.Error400BadRequest("cannot remove the last scan path")
+	}
+
+	cleanPath := filepath.Clean(input.Path)
+	lib.RemoveScanPath(cleanPath)
+	lib.UpdatedAt = time.Now()
+
+	if err := s.store.UpdateLibrary(ctx, lib); err != nil {
+		return nil, huma.Error500InternalServerError("failed to update library")
+	}
+
+	return &LibraryOutput{
+		Body: LibraryResponse{
+			ID:         lib.ID,
+			Name:       lib.Name,
+			OwnerID:    lib.OwnerID,
+			ScanPaths:  lib.ScanPaths,
+			SkipInbox:  lib.SkipInbox,
+			AccessMode: string(lib.GetAccessMode()),
+			CreatedAt:  lib.CreatedAt,
+			UpdatedAt:  lib.UpdatedAt,
+		},
+	}, nil
+}
+
+func (s *Server) handleTriggerScan(ctx context.Context, input *TriggerScanInput) (*TriggerScanOutput, error) {
+	if _, err := s.RequireAdmin(ctx); err != nil {
+		return nil, err
+	}
+
+	// Verify library exists
+	if _, err := s.store.GetLibrary(ctx, input.ID); err != nil {
+		return nil, err
+	}
+
+	// Prevent concurrent scans
+	if s.sseManager.IsScanning() {
+		return nil, huma.Error409Conflict("a scan is already in progress")
+	}
+
+	s.sseManager.SetScanning(true)
+
+	go func() {
+		defer s.sseManager.SetScanning(false)
+
+		if s.services != nil && s.services.Book != nil {
+			if _, err := s.services.Book.TriggerScan(context.Background(), input.ID, scanner.ScanOptions{}); err != nil {
+				s.logger.Error("manual scan failed", "library_id", input.ID, "error", err)
+			}
+		}
+	}()
+
+	return &TriggerScanOutput{
+		Body: TriggerScanResponse{Message: "Scan started"},
 	}, nil
 }

@@ -152,7 +152,7 @@ func (i *Importer) importEntities(ctx context.Context, zr *zip.ReadCloser, opts 
 		{"books", i.importBooks},
 		{"collections", i.importCollections},
 		{"collection_shares", i.importCollectionShares},
-		{"lenses", i.importLenses},
+		{"shelves", i.importShelves},
 		{"activities", i.importActivities},
 	}
 

@@ -93,7 +93,7 @@ func TestGetManifest_WithMultipleBooks(t *testing.T) {
 	require.NoError(t, testStore.CreateBook(ctx, book3))
 
 	// Get manifest.
-	manifest, err := syncService.GetManifest(ctx)
+	manifest, err := syncService.GetManifest(ctx, "test-user")
 	require.NoError(t, err)
 	require.NotNil(t, manifest)
 
@@ -124,7 +124,7 @@ func TestGetManifest_EmptyLibrary(t *testing.T) {
 
 	ctx := context.Background()
 
-	manifest, err := syncService.GetManifest(ctx)
+	manifest, err := syncService.GetManifest(ctx, "test-user")
 	require.NoError(t, err)
 	require.NotNil(t, manifest)
 
@@ -151,7 +151,7 @@ func TestGetManifest_SingleBook(t *testing.T) {
 	book := createSyncTestBook("book-solo", bookTime)
 	require.NoError(t, testStore.CreateBook(ctx, book))
 
-	manifest, err := syncService.GetManifest(ctx)
+	manifest, err := syncService.GetManifest(ctx, "test-user")
 	require.NoError(t, err)
 	require.NotNil(t, manifest)
 
@@ -184,7 +184,7 @@ func TestGetManifest_CheckpointOrdering(t *testing.T) {
 	require.NoError(t, testStore.CreateBook(ctx, newestBook))
 	require.NoError(t, testStore.CreateBook(ctx, oldBook))
 
-	manifest, err := syncService.GetManifest(ctx)
+	manifest, err := syncService.GetManifest(ctx, "test-user")
 	require.NoError(t, err)
 
 	// Verify checkpoint is from the newest book, not insertion order.
@@ -219,7 +219,7 @@ func TestManifestResponse_Structure(t *testing.T) {
 	book := createSyncTestBook("book-001", now)
 	require.NoError(t, testStore.CreateBook(ctx, book))
 
-	manifest, err := syncService.GetManifest(ctx)
+	manifest, err := syncService.GetManifest(ctx, "test-user")
 	require.NoError(t, err)
 
 	// Verify all fields are populated.

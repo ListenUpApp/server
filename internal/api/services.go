@@ -25,7 +25,7 @@ type Services struct {
 	Metadata       *service.MetadataService       // Audible metadata fetching
 	Chapter        *service.ChapterService        // Chapter name alignment
 	Cover          *service.CoverService          // Multi-source cover search and download
-	Lens           *service.LensService           // Personal curation lenses
+	Shelf          *service.ShelfService          // Personal curation shelves
 	Inbox          *service.InboxService          // Inbox staging workflow
 	Settings       *service.SettingsService       // Server-wide settings
 	Social         *service.SocialService         // Social features (leaderboards)

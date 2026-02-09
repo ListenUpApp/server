@@ -34,8 +34,9 @@ func (s *Server) registerAdminSettingsRoutes() {
 
 // ServerSettingsResponse is the API response for server settings.
 type ServerSettingsResponse struct {
-	InboxEnabled bool `json:"inbox_enabled" doc:"Whether inbox workflow is enabled"`
-	InboxCount   int  `json:"inbox_count" doc:"Number of books currently in inbox"`
+	ServerName   string `json:"server_name" doc:"Display name for the server"`
+	InboxEnabled bool   `json:"inbox_enabled" doc:"Whether inbox workflow is enabled"`
+	InboxCount   int    `json:"inbox_count" doc:"Number of books currently in inbox"`
 }
 
 // GetServerSettingsInput is the Huma input for getting server settings.
@@ -50,7 +51,8 @@ type GetServerSettingsOutput struct {
 
 // UpdateServerSettingsRequest is the request body for updating settings.
 type UpdateServerSettingsRequest struct {
-	InboxEnabled *bool `json:"inbox_enabled,omitempty" doc:"Enable or disable inbox workflow"`
+	ServerName   *string `json:"server_name,omitempty" doc:"Display name for the server"`
+	InboxEnabled *bool   `json:"inbox_enabled,omitempty" doc:"Enable or disable inbox workflow"`
 }
 
 // UpdateServerSettingsInput is the Huma input for updating server settings.
@@ -85,6 +87,7 @@ func (s *Server) handleGetServerSettings(ctx context.Context, _ *GetServerSettin
 
 	return &GetServerSettingsOutput{
 		Body: ServerSettingsResponse{
+			ServerName:   settings.GetDisplayName(),
 			InboxEnabled: settings.InboxEnabled,
 			InboxCount:   inboxCount,
 		},
@@ -98,6 +101,7 @@ func (s *Server) handleUpdateServerSettings(ctx context.Context, input *UpdateSe
 	}
 
 	settings, err := s.services.Settings.UpdateServerSettings(ctx, &service.SettingsUpdate{
+		Name:         input.Body.ServerName,
 		InboxEnabled: input.Body.InboxEnabled,
 	})
 	if err != nil {
@@ -112,6 +116,7 @@ func (s *Server) handleUpdateServerSettings(ctx context.Context, input *UpdateSe
 
 	return &UpdateServerSettingsOutput{
 		Body: ServerSettingsResponse{
+			ServerName:   settings.GetDisplayName(),
 			InboxEnabled: settings.InboxEnabled,
 			InboxCount:   inboxCount,
 		},

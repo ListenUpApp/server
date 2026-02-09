@@ -30,9 +30,9 @@ func (s *Store) StreamCollections(ctx context.Context) iter.Seq2[*domain.Collect
 	return streamEntities[domain.Collection](s.db, ctx, collectionPrefix)
 }
 
-// StreamLenses returns an iterator over all lenses.
-func (s *Store) StreamLenses(ctx context.Context) iter.Seq2[*domain.Lens, error] {
-	return streamEntities[domain.Lens](s.db, ctx, lensPrefix)
+// StreamShelves returns an iterator over all shelves.
+func (s *Store) StreamShelves(ctx context.Context) iter.Seq2[*domain.Shelf, error] {
+	return streamEntities[domain.Shelf](s.db, ctx, shelfPrefix)
 }
 
 // StreamActivities returns an iterator over all activities.
@@ -113,7 +113,7 @@ func (s *Store) ClearAllData(ctx context.Context) error {
 		tagPrefix,
 		collectionPrefix,
 		"share:",
-		lensPrefix,
+		shelfPrefix,
 		activityPrefix,
 		listeningEventPrefix,
 		"session:",

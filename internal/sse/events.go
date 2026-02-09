@@ -28,13 +28,11 @@ const (
 	EventScanStarted EventType = "library.scan_started"
 	// EventScanComplete represents a library scan completion event.
 	EventScanComplete EventType = "library.scan_completed"
+	// EventScanProgress represents a library scan progress update.
+	EventScanProgress EventType = "library.scan_progress"
 	// EventLibraryAccessModeChanged represents a library access mode change.
 	// Broadcast to all users so they can refresh their book lists.
 	EventLibraryAccessModeChanged EventType = "library.access_mode_changed"
-
-	// TODO: See if we actually need progress updates.  Right now the scanner
-	// completes the scan in milliseconds on my computer so progress updates is.
-	// overkill.  However we should re-evaluate once we've tested more in other settings.
 
 	// EventHeartbeat represents a connection keepalive event.
 	EventHeartbeat EventType = "heartbeat"
@@ -77,12 +75,12 @@ const (
 	EventCollectionBookAdded   EventType = "collection.book_added"
 	EventCollectionBookRemoved EventType = "collection.book_removed"
 
-	// Lens events (broadcast to all).
-	EventLensCreated     EventType = "lens.created"
-	EventLensUpdated     EventType = "lens.updated"
-	EventLensDeleted     EventType = "lens.deleted"
-	EventLensBookAdded   EventType = "lens.book_added"
-	EventLensBookRemoved EventType = "lens.book_removed"
+	// Shelf events (broadcast to all).
+	EventShelfCreated     EventType = "shelf.created"
+	EventShelfUpdated     EventType = "shelf.updated"
+	EventShelfDeleted     EventType = "shelf.deleted"
+	EventShelfBookAdded   EventType = "shelf.book_added"
+	EventShelfBookRemoved EventType = "shelf.book_removed"
 
 	// Tag events (broadcast to all).
 	EventTagCreated     EventType = "tag.created"
@@ -125,6 +123,7 @@ type Event struct {
 	// Empty string means "broadcast to all" (backwards compatible).
 	UserID       string `json:"-"` // Filter to specific user (not sent to client)
 	CollectionID string `json:"-"` // Filter to specific collection (not sent to client)
+	BookID       string `json:"-"` // Filter by book access (not sent to client)
 }
 
 // BookEventData is the data payload for book events.
@@ -154,6 +153,17 @@ type ScanCompleteEventData struct {
 	BooksAdded   int       `json:"books_added"`
 	BooksUpdated int       `json:"books_updated"`
 	BooksRemoved int       `json:"books_removed"`
+}
+
+// ScanProgressEventData is the data payload for scan progress events.
+type ScanProgressEventData struct {
+	LibraryID string `json:"library_id"`
+	Phase     string `json:"phase"`
+	Current   int    `json:"current"`
+	Total     int    `json:"total"`
+	Added     int    `json:"added"`
+	Updated   int    `json:"updated"`
+	Removed   int    `json:"removed"`
 }
 
 // LibraryAccessModeChangedEventData is the data payload for library access mode change events.
@@ -234,8 +244,8 @@ type CollectionBookEventData struct {
 	BookID         string `json:"book_id"`
 }
 
-// LensEventData is the data payload for lens CRUD events.
-type LensEventData struct {
+// ShelfEventData is the data payload for shelf CRUD events.
+type ShelfEventData struct {
 	ID               string    `json:"id"`
 	OwnerID          string    `json:"owner_id"`
 	Name             string    `json:"name"`
@@ -247,16 +257,16 @@ type LensEventData struct {
 	UpdatedAt        time.Time `json:"updated_at,omitempty"`
 }
 
-// LensDeletedEventData is the data payload for lens delete events.
-type LensDeletedEventData struct {
+// ShelfDeletedEventData is the data payload for shelf delete events.
+type ShelfDeletedEventData struct {
 	ID        string    `json:"id"`
 	OwnerID   string    `json:"owner_id"`
 	DeletedAt time.Time `json:"deleted_at"`
 }
 
-// LensBookEventData is the data payload for lens book add/remove events.
-type LensBookEventData struct {
-	LensID    string    `json:"lens_id"`
+// ShelfBookEventData is the data payload for shelf book add/remove events.
+type ShelfBookEventData struct {
+	ShelfID   string    `json:"shelf_id"`
 	OwnerID   string    `json:"owner_id"`
 	BookID    string    `json:"book_id"`
 	BookCount int       `json:"book_count"`
@@ -317,6 +327,23 @@ func NewScanCompleteEvent(libraryID string, added, updated, removed int) Event {
 			BooksAdded:   added,
 			BooksUpdated: updated,
 			BooksRemoved: removed,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewScanProgressEvent creates a library.scan_progress event.
+func NewScanProgressEvent(libraryID, phase string, current, total, added, updated, removed int) Event {
+	return Event{
+		Type: EventScanProgress,
+		Data: ScanProgressEventData{
+			LibraryID: libraryID,
+			Phase:     phase,
+			Current:   current,
+			Total:     total,
+			Added:     added,
+			Updated:   updated,
+			Removed:   removed,
 		},
 		Timestamp: time.Now(),
 	}
@@ -519,48 +546,48 @@ func NewCollectionBookRemovedEvent(collectionID, collectionName, bookID string) 
 	}
 }
 
-// NewLensCreatedEvent creates a lens.created event.
-func NewLensCreatedEvent(lens *domain.Lens, ownerDisplayName, ownerAvatarColor string) Event {
+// NewShelfCreatedEvent creates a shelf.created event.
+func NewShelfCreatedEvent(shelf *domain.Shelf, ownerDisplayName, ownerAvatarColor string) Event {
 	return Event{
-		Type: EventLensCreated,
-		Data: LensEventData{
-			ID:               lens.ID,
-			OwnerID:          lens.OwnerID,
-			Name:             lens.Name,
-			Description:      lens.Description,
-			BookCount:        len(lens.BookIDs),
+		Type: EventShelfCreated,
+		Data: ShelfEventData{
+			ID:               shelf.ID,
+			OwnerID:          shelf.OwnerID,
+			Name:             shelf.Name,
+			Description:      shelf.Description,
+			BookCount:        len(shelf.BookIDs),
 			OwnerDisplayName: ownerDisplayName,
 			OwnerAvatarColor: ownerAvatarColor,
-			CreatedAt:        lens.CreatedAt,
+			CreatedAt:        shelf.CreatedAt,
 		},
 		Timestamp: time.Now(),
 	}
 }
 
-// NewLensUpdatedEvent creates a lens.updated event.
-func NewLensUpdatedEvent(lens *domain.Lens, ownerDisplayName, ownerAvatarColor string) Event {
+// NewShelfUpdatedEvent creates a shelf.updated event.
+func NewShelfUpdatedEvent(shelf *domain.Shelf, ownerDisplayName, ownerAvatarColor string) Event {
 	return Event{
-		Type: EventLensUpdated,
-		Data: LensEventData{
-			ID:               lens.ID,
-			OwnerID:          lens.OwnerID,
-			Name:             lens.Name,
-			Description:      lens.Description,
-			BookCount:        len(lens.BookIDs),
+		Type: EventShelfUpdated,
+		Data: ShelfEventData{
+			ID:               shelf.ID,
+			OwnerID:          shelf.OwnerID,
+			Name:             shelf.Name,
+			Description:      shelf.Description,
+			BookCount:        len(shelf.BookIDs),
 			OwnerDisplayName: ownerDisplayName,
 			OwnerAvatarColor: ownerAvatarColor,
-			UpdatedAt:        lens.UpdatedAt,
+			UpdatedAt:        shelf.UpdatedAt,
 		},
 		Timestamp: time.Now(),
 	}
 }
 
-// NewLensDeletedEvent creates a lens.deleted event.
-func NewLensDeletedEvent(lensID, ownerID string) Event {
+// NewShelfDeletedEvent creates a shelf.deleted event.
+func NewShelfDeletedEvent(shelfID, ownerID string) Event {
 	return Event{
-		Type: EventLensDeleted,
-		Data: LensDeletedEventData{
-			ID:        lensID,
+		Type: EventShelfDeleted,
+		Data: ShelfDeletedEventData{
+			ID:        shelfID,
 			OwnerID:   ownerID,
 			DeletedAt: time.Now(),
 		},
@@ -568,30 +595,30 @@ func NewLensDeletedEvent(lensID, ownerID string) Event {
 	}
 }
 
-// NewLensBookAddedEvent creates a lens.book_added event.
-func NewLensBookAddedEvent(lens *domain.Lens, bookID string) Event {
+// NewShelfBookAddedEvent creates a shelf.book_added event.
+func NewShelfBookAddedEvent(shelf *domain.Shelf, bookID string) Event {
 	return Event{
-		Type: EventLensBookAdded,
-		Data: LensBookEventData{
-			LensID:    lens.ID,
-			OwnerID:   lens.OwnerID,
+		Type: EventShelfBookAdded,
+		Data: ShelfBookEventData{
+			ShelfID:   shelf.ID,
+			OwnerID:   shelf.OwnerID,
 			BookID:    bookID,
-			BookCount: len(lens.BookIDs),
+			BookCount: len(shelf.BookIDs),
 			Timestamp: time.Now(),
 		},
 		Timestamp: time.Now(),
 	}
 }
 
-// NewLensBookRemovedEvent creates a lens.book_removed event.
-func NewLensBookRemovedEvent(lens *domain.Lens, bookID string) Event {
+// NewShelfBookRemovedEvent creates a shelf.book_removed event.
+func NewShelfBookRemovedEvent(shelf *domain.Shelf, bookID string) Event {
 	return Event{
-		Type: EventLensBookRemoved,
-		Data: LensBookEventData{
-			LensID:    lens.ID,
-			OwnerID:   lens.OwnerID,
+		Type: EventShelfBookRemoved,
+		Data: ShelfBookEventData{
+			ShelfID:   shelf.ID,
+			OwnerID:   shelf.OwnerID,
 			BookID:    bookID,
-			BookCount: len(lens.BookIDs),
+			BookCount: len(shelf.BookIDs),
 			Timestamp: time.Now(),
 		},
 		Timestamp: time.Now(),
@@ -780,7 +807,8 @@ type ReadingSessionUpdatedEventData struct {
 // Broadcast to all users so book readers lists can update.
 func NewReadingSessionUpdatedEvent(session *domain.BookReadingSession) Event {
 	return Event{
-		Type: EventReadingSessionUpdated,
+		Type:   EventReadingSessionUpdated,
+		BookID: session.BookID,
 		Data: ReadingSessionUpdatedEventData{
 			SessionID:    session.ID,
 			BookID:       session.BookID,
@@ -812,15 +840,16 @@ type ActivityEventData struct {
 	DurationMs      int64     `json:"duration_ms,omitempty"` // For listening_session activities
 	MilestoneValue  int       `json:"milestone_value,omitempty"`
 	MilestoneUnit   string    `json:"milestone_unit,omitempty"`
-	LensID          string    `json:"lens_id,omitempty"`
-	LensName        string    `json:"lens_name,omitempty"`
+	ShelfID         string    `json:"shelf_id,omitempty"`
+	ShelfName       string    `json:"shelf_name,omitempty"`
 }
 
 // NewActivityEvent creates an activity.created event.
 // Broadcast to all users for real-time activity feed updates.
 func NewActivityEvent(activity *domain.Activity) Event {
 	return Event{
-		Type: EventActivityCreated,
+		Type:   EventActivityCreated,
+		BookID: activity.BookID,
 		Data: ActivityEventData{
 			ID:              activity.ID,
 			UserID:          activity.UserID,
@@ -838,8 +867,8 @@ func NewActivityEvent(activity *domain.Activity) Event {
 			DurationMs:      activity.DurationMs,
 			MilestoneValue:  activity.MilestoneValue,
 			MilestoneUnit:   activity.MilestoneUnit,
-			LensID:          activity.LensID,
-			LensName:        activity.LensName,
+			ShelfID:         activity.ShelfID,
+			ShelfName:       activity.ShelfName,
 		},
 		Timestamp: time.Now(),
 	}
@@ -884,7 +913,8 @@ type SessionEndedEventData struct {
 // Broadcast to all users so they can see who's currently listening.
 func NewSessionStartedEvent(sessionID, userID, bookID string, startedAt time.Time) Event {
 	return Event{
-		Type: EventSessionStarted,
+		Type:   EventSessionStarted,
+		BookID: bookID,
 		Data: SessionStartedEventData{
 			SessionID: sessionID,
 			UserID:    userID,

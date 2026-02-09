@@ -197,7 +197,8 @@ type MergeSeriesInput struct {
 // === Handlers ===
 
 func (s *Server) handleListSeries(ctx context.Context, input *ListSeriesInput) (*ListSeriesOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	userID, err := GetUserID(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -214,7 +215,27 @@ func (s *Server) handleListSeries(ctx context.Context, input *ListSeriesInput) (
 		return nil, err
 	}
 
-	resp := MapSlice(result.Items, mapSeriesResponse)
+	// Filter series by user's accessible books
+	accessibleBookIDs, err := s.store.GetAccessibleBookIDSet(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	var filtered []*domain.Series
+	for _, ser := range result.Items {
+		bookIDs, err := s.store.GetBookIDsBySeries(ctx, ser.ID)
+		if err != nil {
+			continue
+		}
+		for _, bookID := range bookIDs {
+			if accessibleBookIDs[bookID] {
+				filtered = append(filtered, ser)
+				break
+			}
+		}
+	}
+
+	resp := MapSlice(filtered, mapSeriesResponse)
 
 	return &ListSeriesOutput{
 		Body: ListSeriesResponse{
@@ -226,7 +247,7 @@ func (s *Server) handleListSeries(ctx context.Context, input *ListSeriesInput) (
 }
 
 func (s *Server) handleCreateSeries(ctx context.Context, input *CreateSeriesInput) (*SeriesOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -255,7 +276,8 @@ func (s *Server) handleCreateSeries(ctx context.Context, input *CreateSeriesInpu
 }
 
 func (s *Server) handleGetSeries(ctx context.Context, input *GetSeriesInput) (*SeriesOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	userID, err := GetUserID(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -264,11 +286,31 @@ func (s *Server) handleGetSeries(ctx context.Context, input *GetSeriesInput) (*S
 		return nil, err
 	}
 
+	// Verify user has access to at least one book in this series
+	accessibleBookIDs, err := s.store.GetAccessibleBookIDSet(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	bookIDs, err := s.store.GetBookIDsBySeries(ctx, input.ID)
+	if err != nil {
+		return nil, err
+	}
+	hasAccess := false
+	for _, bookID := range bookIDs {
+		if accessibleBookIDs[bookID] {
+			hasAccess = true
+			break
+		}
+	}
+	if !hasAccess {
+		return nil, huma.Error404NotFound("series not found")
+	}
+
 	return &SeriesOutput{Body: mapSeriesResponse(series)}, nil
 }
 
 func (s *Server) handleUpdateSeries(ctx context.Context, input *UpdateSeriesInput) (*SeriesOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -297,7 +339,7 @@ func (s *Server) handleUpdateSeries(ctx context.Context, input *UpdateSeriesInpu
 }
 
 func (s *Server) handleDeleteSeries(ctx context.Context, input *DeleteSeriesInput) (*MessageOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -309,7 +351,8 @@ func (s *Server) handleDeleteSeries(ctx context.Context, input *DeleteSeriesInpu
 }
 
 func (s *Server) handleGetSeriesBooks(ctx context.Context, input *GetSeriesBooksInput) (*SeriesBooksOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	userID, err := GetUserID(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -318,8 +361,16 @@ func (s *Server) handleGetSeriesBooks(ctx context.Context, input *GetSeriesBooks
 		return nil, err
 	}
 
-	resp := make([]SeriesBookResponse, len(books))
-	for i, b := range books {
+	accessible, err := s.store.GetAccessibleBookIDSet(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp []SeriesBookResponse
+	for _, b := range books {
+		if !accessible[b.ID] {
+			continue
+		}
 		book := SeriesBookResponse{
 			ID:    b.ID,
 			Title: b.Title,
@@ -335,14 +386,14 @@ func (s *Server) handleGetSeriesBooks(ctx context.Context, input *GetSeriesBooks
 		if b.CoverImage != nil && b.CoverImage.Path != "" {
 			book.CoverPath = &b.CoverImage.Path
 		}
-		resp[i] = book
+		resp = append(resp, book)
 	}
 
 	return &SeriesBooksOutput{Body: SeriesBooksResponse{Books: resp}}, nil
 }
 
 func (s *Server) handleMergeSeries(ctx context.Context, _ *MergeSeriesInput) (*SeriesOutput, error) {
-	if _, err := GetUserID(ctx); err != nil {
+	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 

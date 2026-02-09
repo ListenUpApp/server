@@ -563,3 +563,18 @@ func (s *Store) GetBooksForUserUpdatedAfter(ctx context.Context, userID string, 
 
 	return accessibleBooks, nil
 }
+
+// GetAccessibleBookIDSet returns the set of book IDs the user can access.
+// This is a convenience wrapper around GetBooksForUser that returns just IDs
+// as a map for efficient lookups.
+func (s *Store) GetAccessibleBookIDSet(ctx context.Context, userID string) (map[string]bool, error) {
+	books, err := s.GetBooksForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	ids := make(map[string]bool, len(books))
+	for _, b := range books {
+		ids[b.ID] = true
+	}
+	return ids, nil
+}

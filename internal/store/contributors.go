@@ -1309,3 +1309,28 @@ func (s *Store) CountContributors(_ context.Context) (int, error) {
 
 	return count, nil
 }
+
+// GetBookIDsByContributor returns all book IDs linked to a contributor using the reverse index.
+func (s *Store) GetBookIDsByContributor(_ context.Context, contributorID string) ([]string, error) {
+	var bookIDs []string
+	prefix := []byte(bookByContributorPrefix + contributorID + ":")
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			key := it.Item().Key()
+			parts := strings.Split(string(key), ":")
+			if len(parts) >= 5 {
+				bookIDs = append(bookIDs, parts[4])
+			}
+		}
+		return nil
+	})
+
+	return bookIDs, err
+}

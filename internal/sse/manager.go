@@ -22,8 +22,13 @@ type Client struct {
 	IsAdmin bool
 }
 
+// BookAccessChecker checks if a user can access a book.
+// Returns true if the user can access the book, false otherwise.
+type BookAccessChecker func(ctx context.Context, userID, bookID string) bool
+
 // Manager manages SSE connections and broadcasts events.
 type Manager struct {
+	checkBookAccess   BookAccessChecker
 	clients           map[string]*Client
 	events            chan Event
 	logger            *slog.Logger
@@ -48,6 +53,11 @@ func NewManager(logger *slog.Logger) *Manager {
 		logger:            logger,
 		heartbeatInterval: 30 * time.Second,
 	}
+}
+
+// SetBookAccessChecker sets the function used to check book access during broadcast filtering.
+func (m *Manager) SetBookAccessChecker(fn BookAccessChecker) {
+	m.checkBookAccess = fn
 }
 
 // Start begins the event broadcasting loop.
@@ -168,6 +178,14 @@ func (m *Manager) broadcast(event Event) {
 		if event.UserID != "" && client.UserID != "" && event.UserID != client.UserID {
 			filtered++
 			continue
+		}
+
+		// Filter by book access — skip clients who can't access this book.
+		if event.BookID != "" && !client.IsAdmin && m.checkBookAccess != nil {
+			if client.UserID != "" && !m.checkBookAccess(context.Background(), client.UserID, event.BookID) {
+				filtered++
+				continue
+			}
 		}
 
 		// Non-blocking send (drop if client is slow/stuck).

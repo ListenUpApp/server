@@ -98,39 +98,41 @@ func TestGetUserStats_DailyAggregation(t *testing.T) {
 	// Create book
 	createTestBook(t, testStore, "book-1", 3600000)
 
-	// Create events on different days
+	// Create events on different days using a 30-day period to avoid
+	// timezone-sensitive week boundary issues. Events are placed 2 and 3
+	// days ago so they're safely within any period regardless of TZ.
 	now := time.Now()
-	today := time.Date(now.Year(), now.Month(), now.Day(), 12, 0, 0, 0, now.Location())
-	yesterday := today.AddDate(0, 0, -1)
+	day1 := time.Date(now.Year(), now.Month(), now.Day(), 12, 0, 0, 0, now.Location()).AddDate(0, 0, -2)
+	day2 := day1.AddDate(0, 0, -1)
 
-	// 30 minutes today
-	createTestEvent(t, testStore, userID, "book-1", 1800000, today)
-	// 15 minutes yesterday
-	createTestEvent(t, testStore, userID, "book-1", 900000, yesterday)
+	// 30 minutes on day1
+	createTestEvent(t, testStore, userID, "book-1", 1800000, day1)
+	// 15 minutes on day2
+	createTestEvent(t, testStore, userID, "book-1", 900000, day2)
 
-	stats, err := svc.GetUserStats(ctx, userID, domain.StatsPeriodWeek)
+	stats, err := svc.GetUserStats(ctx, userID, domain.StatsPeriodMonth)
 	require.NoError(t, err)
 
 	assert.Equal(t, int64(2700000), stats.TotalListenTimeMs) // 45 min total
 	assert.Len(t, stats.DailyListening, 2)
 
-	// Find today's entry
-	var todayEntry, yesterdayEntry *domain.DailyListening
+	// Find entries by day
+	var day1Entry, day2Entry *domain.DailyListening
 	for i := range stats.DailyListening {
 		d := &stats.DailyListening[i]
-		if d.Date.Day() == today.Day() {
-			todayEntry = d
+		if d.Date.Day() == day1.Day() {
+			day1Entry = d
 		}
-		if d.Date.Day() == yesterday.Day() {
-			yesterdayEntry = d
+		if d.Date.Day() == day2.Day() {
+			day2Entry = d
 		}
 	}
 
-	require.NotNil(t, todayEntry)
-	require.NotNil(t, yesterdayEntry)
-	assert.Equal(t, int64(1800000), todayEntry.ListenTimeMs)
-	assert.Equal(t, int64(900000), yesterdayEntry.ListenTimeMs)
-	assert.Equal(t, 1, todayEntry.BooksListened)
+	require.NotNil(t, day1Entry)
+	require.NotNil(t, day2Entry)
+	assert.Equal(t, int64(1800000), day1Entry.ListenTimeMs)
+	assert.Equal(t, int64(900000), day2Entry.ListenTimeMs)
+	assert.Equal(t, 1, day1Entry.BooksListened)
 }
 
 func TestGetUserStats_GenreBreakdown(t *testing.T) {

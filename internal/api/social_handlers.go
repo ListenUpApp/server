@@ -444,7 +444,7 @@ type GetActivityFeedInput struct {
 // ActivityResponse represents a single activity in API format.
 type ActivityResponse struct {
 	ID              string `json:"id" doc:"Activity ID"`
-	Type            string `json:"type" doc:"Activity type (started_book, finished_book, streak_milestone, listening_milestone, lens_created)"`
+	Type            string `json:"type" doc:"Activity type (started_book, finished_book, streak_milestone, listening_milestone, shelf_created)"`
 	CreatedAt       string `json:"created_at" doc:"When activity occurred (RFC3339)"`
 	UserID          string `json:"user_id" doc:"User who performed the activity"`
 	UserDisplayName string `json:"user_display_name" doc:"User display name"`
@@ -463,9 +463,9 @@ type ActivityResponse struct {
 	MilestoneValue int    `json:"milestone_value,omitempty" doc:"Milestone value (days or hours)"`
 	MilestoneUnit  string `json:"milestone_unit,omitempty" doc:"Milestone unit (days or hours)"`
 
-	// Lens activities
-	LensID   string `json:"lens_id,omitempty" doc:"Lens ID (for lens activities)"`
-	LensName string `json:"lens_name,omitempty" doc:"Lens name"`
+	// Shelf activities
+	ShelfID   string `json:"shelf_id,omitempty" doc:"Shelf ID (for shelf activities)"`
+	ShelfName string `json:"shelf_name,omitempty" doc:"Shelf name"`
 }
 
 // ActivityFeedResponse contains the activity feed data.
@@ -529,8 +529,8 @@ func (s *Server) handleGetActivityFeed(ctx context.Context, input *GetActivityFe
 			IsReread:        a.IsReread,
 			MilestoneValue:  a.MilestoneValue,
 			MilestoneUnit:   a.MilestoneUnit,
-			LensID:          a.LensID,
-			LensName:        a.LensName,
+			ShelfID:         a.ShelfID,
+			ShelfName:       a.ShelfName,
 		}
 	}
 

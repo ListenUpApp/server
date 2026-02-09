@@ -105,7 +105,7 @@ func isNotFoundError(err error) bool {
 		errors.Is(err, store.ErrTagNotFound) ||
 		errors.Is(err, store.ErrInviteNotFound) ||
 		errors.Is(err, store.ErrSessionNotFound) ||
-		errors.Is(err, store.ErrLensNotFound) ||
+		errors.Is(err, store.ErrShelfNotFound) ||
 		errors.Is(err, store.ErrLibraryNotFound) ||
 		errors.Is(err, store.ErrShareNotFound) ||
 		errors.Is(err, store.ErrServerNotFound)
