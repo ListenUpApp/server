@@ -12,7 +12,6 @@ func TestDefaultPermissions(t *testing.T) {
 	assert.True(t, perms.CanShare, "CanShare should default to true")
 }
 
-
 func TestUser_CanShare(t *testing.T) {
 	tests := []struct {
 		name        string

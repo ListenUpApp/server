@@ -42,8 +42,8 @@ type UserPermissions struct {
 // All permissions default to true - restrictions are opt-in.
 func DefaultPermissions() UserPermissions {
 	return UserPermissions{
-		CanShare:    true,
-		CanEdit:     true,
+		CanShare: true,
+		CanEdit:  true,
 	}
 }
 

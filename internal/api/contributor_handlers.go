@@ -147,6 +147,7 @@ type ContributorResponse struct {
 	CreatedAt     time.Time `json:"created_at" doc:"Creation time"`
 	UpdatedAt     time.Time `json:"updated_at" doc:"Last update time"`
 }
+
 // ListContributorsResponse contains a paginated list of contributors.
 type ListContributorsResponse struct {
 	Contributors []ContributorResponse `json:"contributors" doc:"List of contributors"`

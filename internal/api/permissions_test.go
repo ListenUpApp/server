@@ -222,8 +222,8 @@ func TestCanEdit_UpdateBook_Forbidden(t *testing.T) {
 
 	// Disable edit permission
 	ts.setPermissions(t, userID, domain.UserPermissions{
-		CanShare:    true,
-		CanEdit:     false,
+		CanShare: true,
+		CanEdit:  false,
 	})
 
 	resp := ts.api.Patch("/api/v1/books/book-1",
@@ -258,8 +258,8 @@ func TestCanEdit_SetBookContributors_Forbidden(t *testing.T) {
 	ts.createBook(t, "book-1", userID)
 
 	ts.setPermissions(t, userID, domain.UserPermissions{
-		CanShare:    true,
-		CanEdit:     false,
+		CanShare: true,
+		CanEdit:  false,
 	})
 
 	resp := ts.api.Put("/api/v1/books/book-1/contributors",
@@ -280,8 +280,8 @@ func TestCanEdit_SetBookSeries_Forbidden(t *testing.T) {
 	ts.createBook(t, "book-1", userID)
 
 	ts.setPermissions(t, userID, domain.UserPermissions{
-		CanShare:    true,
-		CanEdit:     false,
+		CanShare: true,
+		CanEdit:  false,
 	})
 
 	resp := ts.api.Put("/api/v1/books/book-1/series",
@@ -306,16 +306,16 @@ func TestCanShare_ShareCollection_Forbidden(t *testing.T) {
 		ID:        "coll-1",
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
-		Name:    "Test Collection",
-		OwnerID: userID,
+		Name:      "Test Collection",
+		OwnerID:   userID,
 	}
 	err := ts.store.CreateCollection(ctx, coll)
 	require.NoError(t, err)
 
 	// Disable share permission
 	ts.setPermissions(t, userID, domain.UserPermissions{
-		CanShare:    false,
-		CanEdit:     true,
+		CanShare: false,
+		CanEdit:  true,
 	})
 
 	resp := ts.api.Post("/api/v1/collections/coll-1/shares",
@@ -328,9 +328,6 @@ func TestCanShare_ShareCollection_Forbidden(t *testing.T) {
 
 	assert.Equal(t, http.StatusForbidden, resp.Code)
 }
-
-
-
 
 func TestDefaultPermissions_AllEnabled(t *testing.T) {
 	perms := domain.DefaultPermissions()

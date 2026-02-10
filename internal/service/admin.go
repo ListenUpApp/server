@@ -42,8 +42,8 @@ type UpdateUserRequest struct {
 
 // PermissionsUpdate contains optional permission updates.
 type PermissionsUpdate struct {
-	CanShare    *bool `json:"can_share,omitempty"`
-	CanEdit     *bool `json:"can_edit,omitempty"`
+	CanShare *bool `json:"can_share,omitempty"`
+	CanEdit  *bool `json:"can_edit,omitempty"`
 }
 
 // ListUsers returns all non-deleted users.
