@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/listenupapp/listenup-server/internal/domain"
 	domainerrors "github.com/listenupapp/listenup-server/internal/errors"
 	"github.com/listenupapp/listenup-server/internal/service"
 )
@@ -75,4 +76,35 @@ func (s *Server) RequireAdmin(ctx context.Context) (string, error) {
 	}
 
 	return userID, nil
+}
+
+// RequireUser returns the authenticated user from context, fetching from store.
+// Returns 401 if not authenticated, 401 if user not found.
+func (s *Server) RequireUser(ctx context.Context) (*domain.User, error) {
+	userID, err := GetUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := s.store.GetUser(ctx, userID)
+	if err != nil {
+		return nil, huma.Error401Unauthorized("User not found")
+	}
+
+	return user, nil
+}
+
+// RequireCanEdit validates the user is authenticated and has edit permission.
+// Returns the user ID if successful, error otherwise.
+func (s *Server) RequireCanEdit(ctx context.Context) (string, error) {
+	user, err := s.RequireUser(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	if !user.CanEdit() {
+		return "", domainerrors.Forbidden("Edit permission required")
+	}
+
+	return user.ID, nil
 }

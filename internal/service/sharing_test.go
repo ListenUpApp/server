@@ -63,8 +63,8 @@ func createTestUserWithPermissions(t *testing.T, s *store.Store, email string, c
 		DisplayName: "Test User",
 		IsRoot:      false,
 		Permissions: domain.UserPermissions{
-			CanShare:    canShare,
-			CanDownload: true,
+			CanShare: canShare,
+			CanEdit:  true,
 		},
 	}
 

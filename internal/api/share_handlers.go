@@ -8,6 +8,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/listenupapp/listenup-server/internal/domain"
+	domainerrors "github.com/listenupapp/listenup-server/internal/errors"
 	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
@@ -152,10 +153,15 @@ type ListSharedWithMeInput struct {
 // === Handlers ===
 
 func (s *Server) handleShareCollection(ctx context.Context, input *ShareCollectionInput) (*ShareOutput, error) {
-	userID, err := GetUserID(ctx)
+	user, err := s.RequireUser(ctx)
 	if err != nil {
 		return nil, err
 	}
+	if !user.CanShare() {
+		return nil, domainerrors.Forbidden("Share permission required")
+	}
+
+	userID := user.ID
 
 	var permission domain.SharePermission
 	switch input.Body.Permission {

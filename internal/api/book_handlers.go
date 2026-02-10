@@ -376,7 +376,7 @@ func (s *Server) handleGetBook(ctx context.Context, input *GetBookInput) (*BookO
 }
 
 func (s *Server) handleUpdateBook(ctx context.Context, input *UpdateBookInput) (*BookOutput, error) {
-	userID, err := GetUserID(ctx)
+	userID, err := s.RequireCanEdit(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -432,7 +432,7 @@ func (s *Server) handleUpdateBook(ctx context.Context, input *UpdateBookInput) (
 }
 
 func (s *Server) handleSetBookContributors(ctx context.Context, input *SetContributorsInput) (*BookOutput, error) {
-	userID, err := GetUserID(ctx)
+	userID, err := s.RequireCanEdit(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -469,7 +469,7 @@ func (s *Server) handleSetBookContributors(ctx context.Context, input *SetContri
 }
 
 func (s *Server) handleSetBookSeries(ctx context.Context, input *SetSeriesInput) (*BookOutput, error) {
-	userID, err := GetUserID(ctx)
+	userID, err := s.RequireCanEdit(ctx)
 	if err != nil {
 		return nil, err
 	}

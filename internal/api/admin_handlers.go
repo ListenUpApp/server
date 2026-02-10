@@ -203,8 +203,8 @@ type ListUsersInput struct {
 
 // UserPermissionsResponse contains user permission flags in API responses.
 type UserPermissionsResponse struct {
-	CanDownload bool `json:"can_download" doc:"Whether user can download content"`
-	CanShare    bool `json:"can_share" doc:"Whether user can share collections"`
+	CanShare bool `json:"can_share" doc:"Whether user can share collections"`
+	CanEdit  bool `json:"can_edit" doc:"Whether user can edit library metadata"`
 }
 
 // AdminUserResponse is the API response for a user in admin context.
@@ -248,8 +248,8 @@ type AdminUserOutput struct {
 
 // UpdatePermissionsRequest contains optional permission updates in requests.
 type UpdatePermissionsRequest struct {
-	CanDownload *bool `json:"can_download,omitempty" doc:"Whether user can download content"`
-	CanShare    *bool `json:"can_share,omitempty" doc:"Whether user can share collections"`
+	CanShare *bool `json:"can_share,omitempty" doc:"Whether user can share collections"`
+	CanEdit  *bool `json:"can_edit,omitempty" doc:"Whether user can edit library metadata"`
 }
 
 // UpdateAdminUserRequest is the request body for updating a user.
@@ -458,8 +458,8 @@ func (s *Server) handleUpdateAdminUser(ctx context.Context, input *UpdateAdminUs
 	var perms *service.PermissionsUpdate
 	if input.Body.Permissions != nil {
 		perms = &service.PermissionsUpdate{
-			CanDownload: input.Body.Permissions.CanDownload,
-			CanShare:    input.Body.Permissions.CanShare,
+			CanShare: input.Body.Permissions.CanShare,
+			CanEdit:  input.Body.Permissions.CanEdit,
 		}
 	}
 
@@ -631,8 +631,8 @@ func mapAdminUserResponse(u *domain.User) AdminUserResponse {
 		Status:      status,
 		IsRoot:      u.IsRoot,
 		Permissions: UserPermissionsResponse{
-			CanDownload: u.CanDownload(),
-			CanShare:    u.CanShare(),
+			CanShare: u.CanShare(),
+			CanEdit:  u.CanEdit(),
 		},
 		InvitedBy:   u.InvitedBy,
 		LastLoginAt: u.LastLoginAt,

@@ -26,24 +26,24 @@ const (
 // These control what actions a user can perform, not what content they can see.
 // Content visibility is controlled by Library.AccessMode and Collections.
 type UserPermissions struct {
-	// CanDownload allows downloading audio files for offline use.
-	// When false, user can only stream (useful for bandwidth/storage control).
-	// Default: true for all roles.
-	CanDownload bool `json:"can_download"`
-
 	// CanShare allows creating collection shares with other users.
 	// When false, user can receive shares but cannot grant them.
 	// Useful for child accounts who shouldn't redistribute content.
 	// Default: true for all roles.
 	CanShare bool `json:"can_share"`
+
+	// CanEdit allows editing library metadata (books, contributors, series).
+	// When false, user can only view content but not modify library data.
+	// Default: true for all roles.
+	CanEdit bool `json:"can_edit"`
 }
 
 // DefaultPermissions returns the default permissions for new users.
 // All permissions default to true - restrictions are opt-in.
 func DefaultPermissions() UserPermissions {
 	return UserPermissions{
-		CanDownload: true,
-		CanShare:    true,
+		CanShare: true,
+		CanEdit:  true,
 	}
 }
 
@@ -82,14 +82,14 @@ func (u *User) IsPending() bool {
 	return u.Status == UserStatusPending
 }
 
-// CanDownload returns true if the user is allowed to download content.
-func (u *User) CanDownload() bool {
-	return u.Permissions.CanDownload
-}
-
 // CanShare returns true if the user is allowed to share collections.
 func (u *User) CanShare() bool {
 	return u.Permissions.CanShare
+}
+
+// CanEdit returns true if the user is allowed to edit library metadata.
+func (u *User) CanEdit() bool {
+	return u.Permissions.CanEdit
 }
 
 // FullName returns the user's full name, composed from first and last names.
@@ -203,4 +203,13 @@ func (s *Session) ShortName() string {
 		return s.BrowserName
 	}
 	return s.Platform
+}
+
+// NormalizePermissions ensures legacy users (created before the permission system)
+// get default permissions. Zero-value permissions (all false) are treated as
+// "permissions not yet set" and upgraded to defaults.
+func (u *User) NormalizePermissions() {
+	if u.Permissions == (UserPermissions{}) {
+		u.Permissions = DefaultPermissions()
+	}
 }

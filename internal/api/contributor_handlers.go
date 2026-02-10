@@ -147,6 +147,7 @@ type ContributorResponse struct {
 	CreatedAt     time.Time `json:"created_at" doc:"Creation time"`
 	UpdatedAt     time.Time `json:"updated_at" doc:"Last update time"`
 }
+
 // ListContributorsResponse contains a paginated list of contributors.
 type ListContributorsResponse struct {
 	Contributors []ContributorResponse `json:"contributors" doc:"List of contributors"`
@@ -421,7 +422,7 @@ func (s *Server) handleGetContributor(ctx context.Context, input *GetContributor
 }
 
 func (s *Server) handleUpdateContributor(ctx context.Context, input *UpdateContributorInput) (*ContributorOutput, error) {
-	if _, err := s.RequireAdmin(ctx); err != nil {
+	if _, err := s.RequireCanEdit(ctx); err != nil {
 		return nil, err
 	}
 

@@ -97,6 +97,11 @@ func (s *Store) GetUser(_ context.Context, id string) (*domain.User, error) {
 		return nil, ErrUserNotFound
 	}
 
+	// Normalize permissions for legacy users created before permissions existed.
+	// Zero-value permissions (all false) means the user was created before the
+	// permission system — treat as all permitted (default).
+	user.NormalizePermissions()
+
 	return &user, nil
 }
 
@@ -226,6 +231,7 @@ func (s *Store) ListUsers(_ context.Context) ([]*domain.User, error) {
 					return nil
 				}
 
+				user.NormalizePermissions()
 				users = append(users, &user)
 				return nil
 			})
@@ -271,6 +277,7 @@ func (s *Store) ListPendingUsers(_ context.Context) ([]*domain.User, error) {
 					return nil
 				}
 
+				user.NormalizePermissions()
 				users = append(users, &user)
 				return nil
 			})
