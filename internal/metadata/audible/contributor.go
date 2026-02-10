@@ -71,20 +71,12 @@ func (c *Client) SearchContributors(ctx context.Context, region Region, name str
 }
 
 // doWebRequest executes an HTTP request to the Audible website with rate limiting.
-// Handles geo-redirects by detecting when Audible redirects to a different regional
-// domain and retrying the request with the correct URL.
-//
-//nolint:gocyclo,nestif,gocritic // Complex redirect handling is inherent to the Audible scraping logic
+// The webHTTP client follows redirects automatically (geo-redirects, name canonicalization, etc.)
+// with browser headers preserved across hops via CheckRedirect.
 func (c *Client) doWebRequest(ctx context.Context, region Region, fullURL string) ([]byte, error) {
 	// Wait for rate limit (shared with API requests)
 	if err := c.limiter.Wait(ctx, string(region)); err != nil {
 		return nil, fmt.Errorf("rate limit wait: %w", err)
-	}
-
-	// Parse the original URL to preserve path and query
-	originalURL, err := url.Parse(fullURL)
-	if err != nil {
-		return nil, fmt.Errorf("parse URL: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
@@ -115,81 +107,57 @@ func (c *Client) doWebRequest(ctx context.Context, region Region, fullURL string
 	}
 	defer resp.Body.Close()
 
+	finalURL := resp.Request.URL
 	c.logger.Debug("audible response",
 		"status", resp.StatusCode,
-		"location", resp.Header.Get("Location"),
+		"finalURL", finalURL.String(),
 	)
 
-	// Handle redirects: Audible may redirect for two reasons:
-	// 1. Geo-redirect: Different regional domain (e.g., audible.com -> audible.ca)
-	// 2. Normal redirect: Same host, different path (e.g., /author/x/ASIN -> /author/Name/ASIN)
-	if resp.StatusCode == http.StatusFound || resp.StatusCode == http.StatusMovedPermanently {
-		location := resp.Header.Get("Location")
-		if location != "" {
-			redirectURL, err := url.Parse(location)
-			if err == nil {
-				// Determine the actual redirect URL
-				var newURL url.URL
+	// Handle Audible geo-redirect landing pages.
+	// Audible sometimes redirects to the regional homepage with the original path
+	// encoded in the ipRedirectOriginalURL query parameter.
+	// e.g., audible.ca/?ref=...&ipRedirectOriginalURL=author%2Fx%2FB000AP9A6K
+	if redirectPath := finalURL.Query().Get("ipRedirectOriginalURL"); redirectPath != "" {
+		// Drain and close the homepage response
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
 
-				if redirectURL.Host == "" {
-					// Relative redirect (same host) - just follow it
-					newURL = url.URL{
-						Scheme:   "https",
-						Host:     originalURL.Host,
-						Path:     redirectURL.Path,
-						RawQuery: redirectURL.RawQuery,
-					}
-					c.logger.Debug("following redirect",
-						"from", fullURL,
-						"to", newURL.String(),
-					)
-				} else if redirectURL.Host != originalURL.Host {
-					// Geo-redirect - use new host but preserve original path/query
-					newURL = url.URL{
-						Scheme:   "https",
-						Host:     redirectURL.Host,
-						Path:     originalURL.Path,
-						RawQuery: originalURL.RawQuery,
-					}
-					c.logger.Debug("detected geo-redirect, retrying with detected region",
-						"from", originalURL.Host,
-						"to", redirectURL.Host,
-						"newURL", newURL.String(),
-					)
-				} else {
-					// Same host absolute redirect - just follow it
-					newURL = *redirectURL
-					c.logger.Debug("following redirect",
-						"from", fullURL,
-						"to", newURL.String(),
-					)
-				}
-
-				// Need to drain the response body before making new request
-				_, _ = io.Copy(io.Discard, resp.Body)
-				resp.Body.Close()
-
-				// Wait for rate limit again for the retry
-				if err := c.limiter.Wait(ctx, string(region)); err != nil {
-					return nil, fmt.Errorf("rate limit wait (retry): %w", err)
-				}
-
-				req2, err := http.NewRequestWithContext(ctx, http.MethodGet, newURL.String(), nil)
-				if err != nil {
-					return nil, fmt.Errorf("create retry request: %w", err)
-				}
-
-				req2.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-				req2.Header.Set("Accept-Language", "en-US,en;q=0.9")
-				req2.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-
-				resp, err = c.webHTTP.Do(req2)
-				if err != nil {
-					return nil, fmt.Errorf("execute retry request: %w", err)
-				}
-				defer resp.Body.Close()
-			}
+		// Build the correct URL on the regional domain
+		retryURL := &url.URL{
+			Scheme: "https",
+			Host:   finalURL.Host,
+			Path:   "/" + redirectPath,
 		}
+
+		c.logger.Debug("detected geo-redirect landing page, retrying with original path",
+			"host", finalURL.Host,
+			"path", redirectPath,
+			"retryURL", retryURL.String(),
+		)
+
+		// Wait for rate limit again
+		if err := c.limiter.Wait(ctx, string(region)); err != nil {
+			return nil, fmt.Errorf("rate limit wait (geo-retry): %w", err)
+		}
+
+		req2, err := http.NewRequestWithContext(ctx, http.MethodGet, retryURL.String(), nil)
+		if err != nil {
+			return nil, fmt.Errorf("create geo-retry request: %w", err)
+		}
+		req2.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+		req2.Header.Set("Accept-Language", "en-US,en;q=0.9")
+		req2.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
+		resp, err = c.webHTTP.Do(req2)
+		if err != nil {
+			return nil, fmt.Errorf("execute geo-retry request: %w", err)
+		}
+		defer resp.Body.Close()
+
+		c.logger.Debug("geo-retry response",
+			"status", resp.StatusCode,
+			"finalURL", resp.Request.URL.String(),
+		)
 	}
 
 	// Limit response size to 5MB

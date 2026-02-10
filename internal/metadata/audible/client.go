@@ -81,9 +81,16 @@ func New(logger *slog.Logger) *Client {
 			Transport: &http.Transport{
 				DisableCompression: true,
 			},
-			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-				// Don't follow redirects automatically - we handle them manually
-				return http.ErrUseLastResponse
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				// Allow up to 10 redirects (Go default) but preserve headers
+				if len(via) >= 10 {
+					return fmt.Errorf("too many redirects")
+				}
+				// Preserve browser headers across redirects
+				req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+				req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+				req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+				return nil
 			},
 		},
 		limiter: ratelimit.New(defaultRPS, defaultBurst),
