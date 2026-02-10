@@ -177,6 +177,7 @@ func (s *Server) registerRoutes() {
 	s.registerSearchRoutes()
 	s.registerCoverRoutes()
 	s.registerAudioRoutes()
+	s.registerBookShareRoutes()
 	s.registerWebRoutes()
 	s.registerFilesystemRoutes()
 }
