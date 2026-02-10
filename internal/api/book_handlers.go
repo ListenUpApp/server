@@ -183,6 +183,7 @@ type UpdateBookRequest struct {
 	Language    *string    `json:"language,omitempty" validate:"omitempty,max=10" doc:"Language code"`
 	ASIN        *string    `json:"asin,omitempty" validate:"omitempty,len=10" doc:"Amazon ASIN"`
 	ISBN        *string    `json:"isbn,omitempty" validate:"omitempty,max=17" doc:"ISBN"`
+	Abridged    *bool      `json:"abridged,omitempty" doc:"Whether this is an abridged version"`
 	CreatedAt   *time.Time `json:"created_at,omitempty" doc:"When the book was added to the library"`
 }
 
@@ -410,6 +411,9 @@ func (s *Server) handleUpdateBook(ctx context.Context, input *UpdateBookInput) (
 	}
 	if input.Body.ISBN != nil {
 		book.ISBN = *input.Body.ISBN
+	}
+	if input.Body.Abridged != nil {
+		book.Abridged = *input.Body.Abridged
 	}
 	if input.Body.CreatedAt != nil {
 		book.CreatedAt = *input.Body.CreatedAt
