@@ -9,27 +9,9 @@ import (
 func TestDefaultPermissions(t *testing.T) {
 	perms := DefaultPermissions()
 
-	assert.True(t, perms.CanDownload, "CanDownload should default to true")
 	assert.True(t, perms.CanShare, "CanShare should default to true")
 }
 
-func TestUser_CanDownload(t *testing.T) {
-	tests := []struct {
-		name        string
-		permissions UserPermissions
-		expected    bool
-	}{
-		{"true when allowed", UserPermissions{CanDownload: true}, true},
-		{"false when disallowed", UserPermissions{CanDownload: false}, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			user := &User{Permissions: tt.permissions}
-			assert.Equal(t, tt.expected, user.CanDownload())
-		})
-	}
-}
 
 func TestUser_CanShare(t *testing.T) {
 	tests := []struct {
@@ -54,6 +36,5 @@ func TestUserPermissions_ZeroValue(t *testing.T) {
 	// This ensures existing users without permissions set are safe by default
 	var perms UserPermissions
 
-	assert.False(t, perms.CanDownload, "zero value CanDownload should be false")
 	assert.False(t, perms.CanShare, "zero value CanShare should be false")
 }

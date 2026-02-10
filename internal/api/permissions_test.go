@@ -6,7 +6,6 @@ import (
 	"encoding/json/v2"
 	"log/slog"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -223,7 +222,6 @@ func TestCanEdit_UpdateBook_Forbidden(t *testing.T) {
 
 	// Disable edit permission
 	ts.setPermissions(t, userID, domain.UserPermissions{
-		CanDownload: true,
 		CanShare:    true,
 		CanEdit:     false,
 	})
@@ -260,7 +258,6 @@ func TestCanEdit_SetBookContributors_Forbidden(t *testing.T) {
 	ts.createBook(t, "book-1", userID)
 
 	ts.setPermissions(t, userID, domain.UserPermissions{
-		CanDownload: true,
 		CanShare:    true,
 		CanEdit:     false,
 	})
@@ -283,7 +280,6 @@ func TestCanEdit_SetBookSeries_Forbidden(t *testing.T) {
 	ts.createBook(t, "book-1", userID)
 
 	ts.setPermissions(t, userID, domain.UserPermissions{
-		CanDownload: true,
 		CanShare:    true,
 		CanEdit:     false,
 	})
@@ -318,7 +314,6 @@ func TestCanShare_ShareCollection_Forbidden(t *testing.T) {
 
 	// Disable share permission
 	ts.setPermissions(t, userID, domain.UserPermissions{
-		CanDownload: true,
 		CanShare:    false,
 		CanEdit:     true,
 	})
@@ -334,68 +329,11 @@ func TestCanShare_ShareCollection_Forbidden(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, resp.Code)
 }
 
-func TestCanDownload_StreamAudio_Forbidden(t *testing.T) {
-	ts := setupPermTestServer(t)
-	defer ts.cleanup()
 
-	token, userID := ts.createPermUser(t)
-	ts.createBook(t, "book-1", userID)
 
-	// Disable download permission
-	ts.setPermissions(t, userID, domain.UserPermissions{
-		CanDownload: false,
-		CanShare:    true,
-		CanEdit:     true,
-	})
-
-	// Test audio streaming endpoint directly (chi route, not huma)
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/audio/book-1/af-1?token="+token, nil)
-	w := httptest.NewRecorder()
-	ts.router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusForbidden, w.Code)
-}
-
-func TestCanDownload_StreamAudio_Allowed(t *testing.T) {
-	ts := setupPermTestServer(t)
-	defer ts.cleanup()
-
-	token, userID := ts.createPermUser(t)
-	ts.createBook(t, "book-1", userID)
-
-	// Download permission enabled (default)
-	// This will return 500 because the file doesn't exist on disk,
-	// but it should NOT return 403
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/audio/book-1/af-1?token="+token, nil)
-	w := httptest.NewRecorder()
-	ts.router.ServeHTTP(w, req)
-
-	assert.NotEqual(t, http.StatusForbidden, w.Code)
-}
-
-func TestCanDownload_TranscodedAudio_Forbidden(t *testing.T) {
-	ts := setupPermTestServer(t)
-	defer ts.cleanup()
-
-	token, userID := ts.createPermUser(t)
-	ts.createBook(t, "book-1", userID)
-
-	ts.setPermissions(t, userID, domain.UserPermissions{
-		CanDownload: false,
-		CanShare:    true,
-		CanEdit:     true,
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/audio/book-1/af-1/transcode/index.m3u8?token="+token, nil)
-	w := httptest.NewRecorder()
-	ts.router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusForbidden, w.Code)
-}
 
 func TestDefaultPermissions_AllEnabled(t *testing.T) {
 	perms := domain.DefaultPermissions()
-	assert.True(t, perms.CanDownload)
 	assert.True(t, perms.CanShare)
 	assert.True(t, perms.CanEdit)
 }

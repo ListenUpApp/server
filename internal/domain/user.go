@@ -26,11 +26,6 @@ const (
 // These control what actions a user can perform, not what content they can see.
 // Content visibility is controlled by Library.AccessMode and Collections.
 type UserPermissions struct {
-	// CanDownload allows downloading audio files for offline use.
-	// When false, user can only stream (useful for bandwidth/storage control).
-	// Default: true for all roles.
-	CanDownload bool `json:"can_download"`
-
 	// CanShare allows creating collection shares with other users.
 	// When false, user can receive shares but cannot grant them.
 	// Useful for child accounts who shouldn't redistribute content.
@@ -47,7 +42,6 @@ type UserPermissions struct {
 // All permissions default to true - restrictions are opt-in.
 func DefaultPermissions() UserPermissions {
 	return UserPermissions{
-		CanDownload: true,
 		CanShare:    true,
 		CanEdit:     true,
 	}
@@ -86,11 +80,6 @@ func (u *User) IsActive() bool {
 // IsPending returns true if the user is awaiting admin approval.
 func (u *User) IsPending() bool {
 	return u.Status == UserStatusPending
-}
-
-// CanDownload returns true if the user is allowed to download content.
-func (u *User) CanDownload() bool {
-	return u.Permissions.CanDownload
 }
 
 // CanShare returns true if the user is allowed to share collections.

@@ -42,7 +42,6 @@ type UpdateUserRequest struct {
 
 // PermissionsUpdate contains optional permission updates.
 type PermissionsUpdate struct {
-	CanDownload *bool `json:"can_download,omitempty"`
 	CanShare    *bool `json:"can_share,omitempty"`
 	CanEdit     *bool `json:"can_edit,omitempty"`
 }
@@ -110,9 +109,6 @@ func (s *AdminService) UpdateUser(ctx context.Context, adminUserID, targetUserID
 
 	// Update permissions if provided
 	if req.Permissions != nil {
-		if req.Permissions.CanDownload != nil {
-			user.Permissions.CanDownload = *req.Permissions.CanDownload
-		}
 		if req.Permissions.CanShare != nil {
 			user.Permissions.CanShare = *req.Permissions.CanShare
 		}
