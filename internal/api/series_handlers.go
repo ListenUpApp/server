@@ -310,7 +310,7 @@ func (s *Server) handleGetSeries(ctx context.Context, input *GetSeriesInput) (*S
 }
 
 func (s *Server) handleUpdateSeries(ctx context.Context, input *UpdateSeriesInput) (*SeriesOutput, error) {
-	if _, err := s.RequireAdmin(ctx); err != nil {
+	if _, err := s.RequireCanEdit(ctx); err != nil {
 		return nil, err
 	}
 

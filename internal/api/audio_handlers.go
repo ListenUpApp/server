@@ -63,6 +63,12 @@ func (s *Server) handleStreamAudio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check download permission
+	if !user.CanDownload() {
+		http.Error(w, "download permission required", http.StatusForbidden)
+		return
+	}
+
 	// Get book to verify access
 	book, err := s.store.GetBook(r.Context(), bookID, user.ID)
 	if err != nil {
@@ -202,6 +208,12 @@ func (s *Server) handleTranscodedAudio(w http.ResponseWriter, r *http.Request) {
 	user, _, err := s.services.Auth.VerifyAccessToken(r.Context(), token)
 	if err != nil {
 		http.Error(w, "invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	// Check download permission
+	if !user.CanDownload() {
+		http.Error(w, "download permission required", http.StatusForbidden)
 		return
 	}
 

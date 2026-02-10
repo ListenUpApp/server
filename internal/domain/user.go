@@ -36,6 +36,11 @@ type UserPermissions struct {
 	// Useful for child accounts who shouldn't redistribute content.
 	// Default: true for all roles.
 	CanShare bool `json:"can_share"`
+
+	// CanEdit allows editing library metadata (books, contributors, series).
+	// When false, user can only view content but not modify library data.
+	// Default: true for all roles.
+	CanEdit bool `json:"can_edit"`
 }
 
 // DefaultPermissions returns the default permissions for new users.
@@ -44,6 +49,7 @@ func DefaultPermissions() UserPermissions {
 	return UserPermissions{
 		CanDownload: true,
 		CanShare:    true,
+		CanEdit:     true,
 	}
 }
 
@@ -90,6 +96,11 @@ func (u *User) CanDownload() bool {
 // CanShare returns true if the user is allowed to share collections.
 func (u *User) CanShare() bool {
 	return u.Permissions.CanShare
+}
+
+// CanEdit returns true if the user is allowed to edit library metadata.
+func (u *User) CanEdit() bool {
+	return u.Permissions.CanEdit
 }
 
 // FullName returns the user's full name, composed from first and last names.
@@ -203,4 +214,13 @@ func (s *Session) ShortName() string {
 		return s.BrowserName
 	}
 	return s.Platform
+}
+
+// NormalizePermissions ensures legacy users (created before the permission system)
+// get default permissions. Zero-value permissions (all false) are treated as
+// "permissions not yet set" and upgraded to defaults.
+func (u *User) NormalizePermissions() {
+	if u.Permissions == (UserPermissions{}) {
+		u.Permissions = DefaultPermissions()
+	}
 }

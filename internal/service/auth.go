@@ -148,6 +148,7 @@ func (s *AuthService) Setup(ctx context.Context, req SetupRequest) (*AuthRespons
 		LastName:     req.LastName,
 		DisplayName:  req.FirstName + " " + req.LastName, // Auto-generate from names
 		LastLoginAt:  now,
+		Permissions:  domain.DefaultPermissions(),
 	}
 	user.InitTimestamps()
 
@@ -232,6 +233,7 @@ func (s *AuthService) Register(ctx context.Context, req RegisterRequest) (*Regis
 		FirstName:    req.FirstName,
 		LastName:     req.LastName,
 		DisplayName:  req.FirstName + " " + req.LastName,
+		Permissions:  domain.DefaultPermissions(),
 	}
 	user.InitTimestamps()
 

@@ -421,7 +421,7 @@ func (s *Server) handleGetContributor(ctx context.Context, input *GetContributor
 }
 
 func (s *Server) handleUpdateContributor(ctx context.Context, input *UpdateContributorInput) (*ContributorOutput, error) {
-	if _, err := s.RequireAdmin(ctx); err != nil {
+	if _, err := s.RequireCanEdit(ctx); err != nil {
 		return nil, err
 	}
 
