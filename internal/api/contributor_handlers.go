@@ -133,17 +133,20 @@ type ListContributorsInput struct {
 
 // ContributorResponse contains contributor data in API responses.
 type ContributorResponse struct {
-	ID          string    `json:"id" doc:"Contributor ID"`
-	Name        string    `json:"name" doc:"Contributor name"`
-	SortName    string    `json:"sort_name,omitempty" doc:"Sort name"`
-	Description string    `json:"description,omitempty" doc:"Description"`
-	ImageURL    string    `json:"image_url,omitempty" doc:"Image URL"`
-	Website     string    `json:"website,omitempty" doc:"Website URL"`
-	AudibleASIN string    `json:"audible_asin,omitempty" doc:"Audible ASIN"`
-	CreatedAt   time.Time `json:"created_at" doc:"Creation time"`
-	UpdatedAt   time.Time `json:"updated_at" doc:"Last update time"`
+	ID            string    `json:"id" doc:"Contributor ID"`
+	Name          string    `json:"name" doc:"Contributor name"`
+	SortName      string    `json:"sort_name,omitempty" doc:"Sort name"`
+	Description   string    `json:"description,omitempty" doc:"Description"`
+	ImageURL      string    `json:"image_url,omitempty" doc:"Image URL"`
+	ImageBlurHash string    `json:"image_blur_hash,omitempty" doc:"Image blur hash"`
+	Website       string    `json:"website,omitempty" doc:"Website URL"`
+	AudibleASIN   string    `json:"audible_asin,omitempty" doc:"Audible ASIN"`
+	Aliases       []string  `json:"aliases,omitempty" doc:"Known aliases/pen names"`
+	BirthDate     string    `json:"birth_date,omitempty" doc:"Birth date (ISO 8601)"`
+	DeathDate     string    `json:"death_date,omitempty" doc:"Death date (ISO 8601)"`
+	CreatedAt     time.Time `json:"created_at" doc:"Creation time"`
+	UpdatedAt     time.Time `json:"updated_at" doc:"Last update time"`
 }
-
 // ListContributorsResponse contains a paginated list of contributors.
 type ListContributorsResponse struct {
 	Contributors []ContributorResponse `json:"contributors" doc:"List of contributors"`
@@ -707,14 +710,18 @@ func (s *Server) handleServeContributorImage(w http.ResponseWriter, r *http.Requ
 
 func mapContributorResponse(c *domain.Contributor) ContributorResponse {
 	return ContributorResponse{
-		ID:          c.ID,
-		Name:        c.Name,
-		SortName:    c.SortName,
-		Description: c.Biography,
-		ImageURL:    c.ImageURL,
-		Website:     c.Website,
-		AudibleASIN: c.ASIN,
-		CreatedAt:   c.CreatedAt,
-		UpdatedAt:   c.UpdatedAt,
+		ID:            c.ID,
+		Name:          c.Name,
+		SortName:      c.SortName,
+		Description:   c.Biography,
+		ImageURL:      c.ImageURL,
+		ImageBlurHash: c.ImageBlurHash,
+		Website:       c.Website,
+		AudibleASIN:   c.ASIN,
+		Aliases:       c.Aliases,
+		BirthDate:     c.BirthDate,
+		DeathDate:     c.DeathDate,
+		CreatedAt:     c.CreatedAt,
+		UpdatedAt:     c.UpdatedAt,
 	}
 }
