@@ -1,0 +1,48 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Don't worry about getting the technical details perfect — we'll figure out where the issue lives during triage.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the bug. What did you expect vs what actually happened?
+      placeholder: "When I tap X, Y happens instead of Z..."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: How can we reproduce this?
+      placeholder: |
+        1. Go to...
+        2. Tap on...
+        3. See error
+    validations:
+      required: true
+  - type: checkboxes
+    id: platforms
+    attributes:
+      label: Which platform(s) are affected?
+      description: Check all that apply. If you're not sure, just check what you tested on.
+      options:
+        - label: Android
+        - label: iOS
+        - label: Desktop
+        - label: Not sure / All platforms
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: "Check Settings → About, or the version shown on the login screen"
+      placeholder: "v0.2.0"
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, logs, device info, or anything else that might help.

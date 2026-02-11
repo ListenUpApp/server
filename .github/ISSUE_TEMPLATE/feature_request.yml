@@ -1,0 +1,26 @@
+name: Feature Request
+description: Suggest an enhancement or new feature
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What would you like?
+      description: Describe the feature or improvement you'd like to see.
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Why?
+      description: What problem does this solve? How would it improve your experience?
+  - type: checkboxes
+    id: platforms
+    attributes:
+      label: Which platform(s) would this affect?
+      options:
+        - label: Android
+        - label: iOS
+        - label: Desktop
+        - label: Server/API
+        - label: All platforms
