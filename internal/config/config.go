@@ -107,7 +107,7 @@ func LoadConfig() (*Config, error) {
 	// Server flags
 	serverPort := flag.String("port", "", "Server port (default: 8080)")
 	readTimeout := flag.String("read-timeout", "", "HTTP read timeout (default: 15s)")
-	writeTimeout := flag.String("write-timeout", "", "HTTP write timeout (default: 15s)")
+	writeTimeout := flag.String("write-timeout", "", "HTTP write timeout (default: 0, disabled for streaming)")
 	idleTimeout := flag.String("idle-timeout", "", "HTTP idle timeout (default: 60s)")
 	advertiseMDNS := flag.String("advertise-mdns", "", "Advertise via mDNS/Zeroconf (default: true)")
 
@@ -188,7 +188,7 @@ func LoadConfig() (*Config, error) {
 	}
 	cfg.Server.ReadTimeout = readTimeoutDuration
 
-	writeTimeoutStr := getConfigValue(*writeTimeout, "SERVER_WRITE_TIMEOUT", "15s")
+	writeTimeoutStr := getConfigValue(*writeTimeout, "SERVER_WRITE_TIMEOUT", "0s")
 	writeTimeoutDuration, err := time.ParseDuration(writeTimeoutStr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid write timeout %q: %w", writeTimeoutStr, err)
