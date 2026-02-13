@@ -276,6 +276,11 @@ func TestStatusCodeBoundary(t *testing.T) {
 
 			JSON(w, tt.status, nil, logger)
 
+			// 1xx and 204 responses have no body per HTTP spec
+			if tt.status < 200 || tt.status == 204 {
+				return
+			}
+
 			var result Envelope
 			err := json.Unmarshal(w.Body.Bytes(), &result)
 			require.NoError(t, err)
