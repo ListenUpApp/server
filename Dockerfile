@@ -39,7 +39,7 @@ RUN ./configure \
     && make install
 
 # Build stage 2: Build Go application
-FROM golang:1.25-bookworm AS go-builder
+FROM golang:1.26-bookworm AS go-builder
 
 WORKDIR /app
 
