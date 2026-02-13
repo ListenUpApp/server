@@ -329,7 +329,7 @@ func TestListABSImportUsers_AllFilter(t *testing.T) {
 	// Create users - some mapped, some unmapped
 	users := []*domain.ABSImportUser{
 		{ImportID: "import_123", ABSUserID: "user_1", ABSUsername: "user1"},
-		{ImportID: "import_123", ABSUserID: "user_2", ABSUsername: "user2", ListenUpID: strPtr("lu_user_1")},
+		{ImportID: "import_123", ABSUserID: "user_2", ABSUsername: "user2", ListenUpID: new("lu_user_1")},
 		{ImportID: "import_123", ABSUserID: "user_3", ABSUsername: "user3"},
 	}
 
@@ -352,8 +352,8 @@ func TestListABSImportUsers_MappedFilter(t *testing.T) {
 
 	users := []*domain.ABSImportUser{
 		{ImportID: "import_123", ABSUserID: "user_1", ABSUsername: "user1"},
-		{ImportID: "import_123", ABSUserID: "user_2", ABSUsername: "user2", ListenUpID: strPtr("lu_user_1")},
-		{ImportID: "import_123", ABSUserID: "user_3", ABSUsername: "user3", ListenUpID: strPtr("lu_user_2")},
+		{ImportID: "import_123", ABSUserID: "user_2", ABSUsername: "user2", ListenUpID: new("lu_user_1")},
+		{ImportID: "import_123", ABSUserID: "user_3", ABSUsername: "user3", ListenUpID: new("lu_user_2")},
 	}
 
 	for _, u := range users {
@@ -379,7 +379,7 @@ func TestListABSImportUsers_UnmappedFilter(t *testing.T) {
 
 	users := []*domain.ABSImportUser{
 		{ImportID: "import_123", ABSUserID: "user_1", ABSUsername: "user1"},
-		{ImportID: "import_123", ABSUserID: "user_2", ABSUsername: "user2", ListenUpID: strPtr("lu_user_1")},
+		{ImportID: "import_123", ABSUserID: "user_2", ABSUsername: "user2", ListenUpID: new("lu_user_1")},
 		{ImportID: "import_123", ABSUserID: "user_3", ABSUsername: "user3"},
 	}
 
@@ -518,7 +518,7 @@ func TestListABSImportBooks_Filters(t *testing.T) {
 
 	books := []*domain.ABSImportBook{
 		{ImportID: "import_123", ABSMediaID: "book_1", ABSTitle: "Book 1"},
-		{ImportID: "import_123", ABSMediaID: "book_2", ABSTitle: "Book 2", ListenUpID: strPtr("lu_book_1")},
+		{ImportID: "import_123", ABSMediaID: "book_2", ABSTitle: "Book 2", ListenUpID: new("lu_book_1")},
 		{ImportID: "import_123", ABSMediaID: "book_3", ABSTitle: "Book 3"},
 	}
 
@@ -926,7 +926,7 @@ func TestFindABSImportProgressByListenUpBook(t *testing.T) {
 	book := &domain.ABSImportBook{
 		ImportID:   "import_123",
 		ABSMediaID: "abs-media-id-1",
-		ListenUpID: strPtr("listenup-book-1"),
+		ListenUpID: new("listenup-book-1"),
 	}
 	require.NoError(t, store.CreateABSImportBook(ctx, book))
 
@@ -977,7 +977,7 @@ func TestFindABSImportProgressByListenUpBook_DifferentABSMediaIDs(t *testing.T) 
 	book := &domain.ABSImportBook{
 		ImportID:   "import_123",
 		ABSMediaID: "session-media-id-A",
-		ListenUpID: strPtr("listenup-book-1"),
+		ListenUpID: new("listenup-book-1"),
 	}
 	require.NoError(t, store.CreateABSImportBook(ctx, book))
 
@@ -996,7 +996,7 @@ func TestFindABSImportProgressByListenUpBook_DifferentABSMediaIDs(t *testing.T) 
 	book2 := &domain.ABSImportBook{
 		ImportID:   "import_123",
 		ABSMediaID: "progress-media-id-B",
-		ListenUpID: strPtr("listenup-book-1"),
+		ListenUpID: new("listenup-book-1"),
 	}
 	require.NoError(t, store.CreateABSImportBook(ctx, book2))
 
@@ -1024,7 +1024,7 @@ func TestFindABSImportProgressByListenUpBook_NoMatchWhenIDsDiffer(t *testing.T) 
 	book := &domain.ABSImportBook{
 		ImportID:      "import_123",
 		ABSMediaID:    "book-media-id-X",
-		ListenUpID:    strPtr("listenup-book-1"),
+		ListenUpID:    new("listenup-book-1"),
 		ABSDurationMs: 3600000, // 1 hour in milliseconds
 	}
 	require.NoError(t, store.CreateABSImportBook(ctx, book))
@@ -1060,7 +1060,7 @@ func TestFindABSImportProgressByListenUpBook_DurationMismatch(t *testing.T) {
 	book := &domain.ABSImportBook{
 		ImportID:      "import_123",
 		ABSMediaID:    "book-media-id-X",
-		ListenUpID:    strPtr("listenup-book-1"),
+		ListenUpID:    new("listenup-book-1"),
 		ABSDurationMs: 3600000, // 1 hour
 	}
 	require.NoError(t, store.CreateABSImportBook(ctx, book))
@@ -1084,6 +1084,7 @@ func TestFindABSImportProgressByListenUpBook_DurationMismatch(t *testing.T) {
 
 // --- Helper ---
 
+//go:fix inline
 func strPtr(s string) *string {
-	return &s
+	return new(s)
 }

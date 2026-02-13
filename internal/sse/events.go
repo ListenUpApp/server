@@ -233,8 +233,8 @@ type CollectionEventData struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	BookCount int       `json:"book_count"`
-	CreatedAt time.Time `json:"created_at,omitempty"`
-	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // CollectionBookEventData is the data payload for collection book add/remove events.
@@ -253,8 +253,8 @@ type ShelfEventData struct {
 	BookCount        int       `json:"book_count"`
 	OwnerDisplayName string    `json:"owner_display_name"`
 	OwnerAvatarColor string    `json:"owner_avatar_color"`
-	CreatedAt        time.Time `json:"created_at,omitempty"`
-	UpdatedAt        time.Time `json:"updated_at,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 // ShelfDeletedEventData is the data payload for shelf delete events.

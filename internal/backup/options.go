@@ -89,7 +89,7 @@ type BackupInfo struct {
 	Path      string       `json:"path"`
 	Size      int64        `json:"size"`
 	CreatedAt time.Time    `json:"created_at"`
-	Counts    EntityCounts `json:"counts,omitempty"`
+	Counts    EntityCounts `json:"counts"`
 }
 
 // RestoreResult contains the outcome of a restore operation.

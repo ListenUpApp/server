@@ -24,13 +24,13 @@ func (i *Importer) importImages(ctx context.Context, zr *zip.ReadCloser) (int, e
 
 		// Determine destination path
 		var destPath string
-		if strings.HasPrefix(f.Name, "images/covers/") {
+		if after, ok := strings.CutPrefix(f.Name, "images/covers/"); ok {
 			// images/covers/{book_id}.ext -> {dataDir}/covers/{book_id}.ext
-			relPath := strings.TrimPrefix(f.Name, "images/covers/")
+			relPath := after
 			destPath = filepath.Join(i.dataDir, "covers", relPath)
-		} else if strings.HasPrefix(f.Name, "images/avatars/") {
+		} else if after, ok := strings.CutPrefix(f.Name, "images/avatars/"); ok {
 			// images/avatars/{user_id}.ext -> {dataDir}/avatars/{user_id}.ext
-			relPath := strings.TrimPrefix(f.Name, "images/avatars/")
+			relPath := after
 			destPath = filepath.Join(i.dataDir, "avatars", relPath)
 		} else {
 			continue

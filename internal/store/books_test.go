@@ -596,7 +596,7 @@ func TestCountBooks(t *testing.T) {
 	assert.Equal(t, 0, count)
 
 	// Add some books
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		book := &domain.Book{
 			Syncable: domain.Syncable{
 				ID:        fmt.Sprintf("book-%d", i),

@@ -57,7 +57,7 @@ type User struct {
 	Status       UserStatus      `json:"status,omitempty"`     // active or pending (empty = active for backward compat)
 	InvitedBy    string          `json:"invited_by,omitempty"` // User ID who invited this user
 	ApprovedBy   string          `json:"approved_by,omitempty"`
-	ApprovedAt   time.Time       `json:"approved_at,omitempty"`
+	ApprovedAt   time.Time       `json:"approved_at"`
 	DisplayName  string          `json:"display_name"`
 	FirstName    string          `json:"first_name"`
 	LastName     string          `json:"last_name"`

@@ -230,7 +230,7 @@ func parseLibraryItems(db *sql.DB, backup *Backup) error {
 
 		// Parse author names (comma-separated in ABS)
 		if authorNames != "" {
-			for _, name := range strings.Split(authorNames, ", ") {
+			for name := range strings.SplitSeq(authorNames, ", ") {
 				name = strings.TrimSpace(name)
 				if name != "" {
 					item.Media.Metadata.Authors = append(item.Media.Metadata.Authors, PersonRef{Name: name})
@@ -262,7 +262,7 @@ func parseNarratorsJSON(jsonStr string) []PersonRef {
 	jsonStr = strings.TrimSuffix(jsonStr, "]")
 
 	var narrators []PersonRef
-	for _, part := range strings.Split(jsonStr, ",") {
+	for part := range strings.SplitSeq(jsonStr, ",") {
 		name := strings.TrimSpace(part)
 		name = strings.Trim(name, `"`)
 		if name != "" {

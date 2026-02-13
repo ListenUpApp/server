@@ -219,7 +219,7 @@ type AdminUserResponse struct {
 	IsRoot      bool                    `json:"is_root" doc:"Is root user"`
 	Permissions UserPermissionsResponse `json:"permissions" doc:"User permissions"`
 	InvitedBy   string                  `json:"invited_by,omitempty" doc:"User ID who invited this user"`
-	LastLoginAt time.Time               `json:"last_login_at,omitempty" doc:"Last login timestamp"`
+	LastLoginAt time.Time               `json:"last_login_at" doc:"Last login timestamp"`
 	CreatedAt   time.Time               `json:"created_at" doc:"Creation time"`
 	UpdatedAt   time.Time               `json:"updated_at" doc:"Last update time"`
 }

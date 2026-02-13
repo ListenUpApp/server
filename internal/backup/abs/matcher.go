@@ -701,10 +701,7 @@ func stringSimilarity(a, b string) float64 {
 
 	// Simple Levenshtein-based similarity
 	distance := levenshteinDistance(a, b)
-	maxLen := len(a)
-	if len(b) > maxLen {
-		maxLen = len(b)
-	}
+	maxLen := max(len(b), len(a))
 
 	return 1.0 - float64(distance)/float64(maxLen)
 }
@@ -768,13 +765,6 @@ func abs(x int64) int64 {
 		return -x
 	}
 	return x
-}
-
-func max(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func min(a, b, c int) int {
