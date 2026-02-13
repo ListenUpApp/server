@@ -140,8 +140,6 @@ github.com/sebdah/goldie/v2 v2.8.0 h1:dZb9wR8q5++oplmEiJT+U/5KyotVD+HNGCAc5gNr8r
 github.com/sebdah/goldie/v2 v2.8.0/go.mod h1:oZ9fp0+se1eapSRjfYbsV/0Hqhbuu3bJVvKI/NNtssI=
 github.com/sergi/go-diff v1.4.0 h1:n/SP9D5ad1fORl+llWyN+D6qoUETXNZARKjyY2/KVCw=
 github.com/sergi/go-diff v1.4.0/go.mod h1:A0bzQcvG0E7Rwjx0REVgAGH58e96+X0MeOfepqsbeW4=
-github.com/simonhull/audiometa v0.8.0 h1:41l36iOy/IJiFyySyx6PkhdEO3ZLsTHI5rbWVbQ/rD8=
-github.com/simonhull/audiometa v0.8.0/go.mod h1:ripxkXnIjNT/7q/SAa/ZW4NhFaGRna8CZTeh4Ko72RY=
 github.com/simonhull/audiometa v0.9.0 h1:kBRFxQ+Nlts+7YqV0bh9VTG5BTb/2avBsiBAufJKkCc=
 github.com/simonhull/audiometa v0.9.0/go.mod h1:ripxkXnIjNT/7q/SAa/ZW4NhFaGRna8CZTeh4Ko72RY=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=

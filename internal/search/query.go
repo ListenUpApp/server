@@ -56,7 +56,7 @@ type SearchResult struct {
 	Total  uint64       `json:"total"`
 	TookMs int64        `json:"took_ms"`
 	Hits   []SearchHit  `json:"hits"`
-	Facets SearchFacets `json:"facets,omitempty"`
+	Facets SearchFacets `json:"facets"`
 }
 
 // SearchHit represents a single search result.

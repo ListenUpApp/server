@@ -3,6 +3,7 @@ package abs
 import (
 	"context"
 	"log/slog"
+	"maps"
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/store"
@@ -196,12 +197,8 @@ func BuildFinalMappings(analysis *AnalysisResult, adminMappings ImportOptions) (
 	bookMap = make(map[string]string)
 
 	// Start with admin-specified mappings (highest priority)
-	for absID, listenUpID := range adminMappings.UserMappings {
-		userMap[absID] = listenUpID
-	}
-	for absID, listenUpID := range adminMappings.BookMappings {
-		bookMap[absID] = listenUpID
-	}
+	maps.Copy(userMap, adminMappings.UserMappings)
+	maps.Copy(bookMap, adminMappings.BookMappings)
 
 	// Add auto-matched users that weren't overridden
 	for _, match := range analysis.UserMatches {

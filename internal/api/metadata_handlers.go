@@ -95,7 +95,7 @@ type MetadataSearchResultResponse struct {
 	Authors        []MetadataContributorResponse `json:"authors" doc:"Authors"`
 	Narrators      []MetadataContributorResponse `json:"narrators" doc:"Narrators"`
 	RuntimeMinutes int                           `json:"runtime_minutes" doc:"Duration in minutes"`
-	ReleaseDate    time.Time                     `json:"release_date,omitempty" doc:"Release date"`
+	ReleaseDate    time.Time                     `json:"release_date" doc:"Release date"`
 	CoverURL       string                        `json:"cover_url,omitempty" doc:"Cover image URL"`
 }
 
@@ -132,7 +132,7 @@ type MetadataBookResponse struct {
 	Authors        []MetadataContributorResponse `json:"authors" doc:"Authors"`
 	Narrators      []MetadataContributorResponse `json:"narrators" doc:"Narrators"`
 	Publisher      string                        `json:"publisher,omitempty" doc:"Publisher name"`
-	ReleaseDate    time.Time                     `json:"release_date,omitempty" doc:"Release date"`
+	ReleaseDate    time.Time                     `json:"release_date" doc:"Release date"`
 	RuntimeMinutes int                           `json:"runtime_minutes" doc:"Duration in minutes"`
 	Description    string                        `json:"description,omitempty" doc:"Book description"`
 	CoverURL       string                        `json:"cover_url,omitempty" doc:"Cover image URL"`
