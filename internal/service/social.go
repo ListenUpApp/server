@@ -119,46 +119,63 @@ func (s *SocialService) GetLeaderboard(
 	var communityTotalBooks int
 	var communityStreakSum int
 
-	for _, user := range users {
-		// Get events for user in period
-		events, err := s.store.GetEventsForUserInRange(ctx, user.ID, start, end)
+	// For all-time period, use pre-aggregated user_stats (O(1) per user instead of O(events))
+	var preAggregated map[string]*domain.UserStats
+	if isAllTime {
+		allStats, err := s.store.GetAllUserStats(ctx)
 		if err != nil {
-			s.logger.Debug("failed to get events for user", "user_id", user.ID, "error", err)
-			continue
-		}
-
-		// Calculate listening time (only count positive and reasonable durations)
-		// Max reasonable duration per event: 24 hours (longest audiobook listening session)
-		const maxReasonableDurationMs = 24 * 60 * 60 * 1000 // 24 hours
-		var totalTimeMs int64
-		booksSet := make(map[string]bool)
-		for _, e := range events {
-			if e.DurationMs > 0 && e.DurationMs <= maxReasonableDurationMs {
-				totalTimeMs += e.DurationMs
-			} else if e.DurationMs > maxReasonableDurationMs {
-				// Skip corrupted events (likely client bug with MaxInt64)
-				s.logger.Warn("Skipping event with corrupted duration",
-					"event_id", e.ID,
-					"user_id", user.ID,
-					"duration_ms", e.DurationMs,
-					"end_position_ms", e.EndPositionMs,
-				)
+			s.logger.Warn("failed to get pre-aggregated stats, falling back to events", "error", err)
+		} else {
+			preAggregated = make(map[string]*domain.UserStats, len(allStats))
+			for _, st := range allStats {
+				preAggregated[st.UserID] = st
 			}
-			booksSet[e.BookID] = true
 		}
+	}
 
-		// Get finished books count
-		finishedProgress, err := s.store.GetStateFinishedInRange(ctx, user.ID, start, end)
-		if err != nil {
-			s.logger.Debug("failed to get finished progress", "user_id", user.ID, "error", err)
+	for _, user := range users {
+		var totalTimeMs int64
+		var booksFinished int
+
+		if isAllTime && preAggregated != nil {
+			// Fast path: use pre-aggregated stats
+			if cached, ok := preAggregated[user.ID]; ok {
+				totalTimeMs = cached.TotalListenTimeMs
+				booksFinished = cached.TotalBooksFinished
+			}
+		} else {
+			// Period-specific: query events in range
+			events, err := s.store.GetEventsForUserInRange(ctx, user.ID, start, end)
+			if err != nil {
+				s.logger.Debug("failed to get events for user", "user_id", user.ID, "error", err)
+				continue
+			}
+
+			const maxReasonableDurationMs = 24 * 60 * 60 * 1000
+			for _, e := range events {
+				if e.DurationMs > 0 && e.DurationMs <= maxReasonableDurationMs {
+					totalTimeMs += e.DurationMs
+				} else if e.DurationMs > maxReasonableDurationMs {
+					s.logger.Warn("Skipping event with corrupted duration",
+						"event_id", e.ID,
+						"user_id", user.ID,
+						"duration_ms", e.DurationMs,
+						"end_position_ms", e.EndPositionMs,
+					)
+				}
+			}
+
+			finishedProgress, err := s.store.GetStateFinishedInRange(ctx, user.ID, start, end)
+			if err != nil {
+				s.logger.Debug("failed to get finished progress", "user_id", user.ID, "error", err)
+			}
+			booksFinished = len(finishedProgress)
 		}
-		booksFinished := len(finishedProgress)
 
 		// Calculate streak (always calculated as it's the current streak, not period-based)
 		streakDays := s.CalculateUserStreak(ctx, user.ID)
 
 		// Get avatar info from user profile
-		// Avatar color is always generated from user ID for consistency
 		avatarType := string(domain.AvatarTypeAuto)
 		avatarValue := ""
 		avatarColor := color.ForUser(user.ID)
@@ -171,7 +188,6 @@ func (s *SocialService) GetLeaderboard(
 		s.logger.Debug("User stats calculated",
 			"user_id", user.ID,
 			"display_name", user.DisplayName,
-			"events_count", len(events),
 			"time_ms", totalTimeMs,
 			"time_hours", float64(totalTimeMs)/3600000,
 			"books_finished", booksFinished,
@@ -188,10 +204,9 @@ func (s *SocialService) GetLeaderboard(
 			timeMs:        totalTimeMs,
 			booksCount:    booksFinished,
 			streakDays:    streakDays,
-			currentStreak: streakDays, // Current streak is always the same
+			currentStreak: streakDays,
 		}
 
-		// For all-time requests, the period stats ARE the all-time stats
 		if isAllTime {
 			stat.allTimeMs = totalTimeMs
 			stat.allBooks = booksFinished
@@ -199,7 +214,6 @@ func (s *SocialService) GetLeaderboard(
 
 		stats = append(stats, stat)
 
-		// Aggregate for community stats
 		communityTotalTimeMs += totalTimeMs
 		communityTotalBooks += booksFinished
 		communityStreakSum += streakDays
@@ -323,7 +337,22 @@ func (s *SocialService) GetLeaderboard(
 
 // CalculateUserStreak calculates the current streak for a user.
 // Exported for use by ListeningService for milestone tracking.
+// Optimized: checks pre-aggregated last_listened_date first for early exit.
 func (s *SocialService) CalculateUserStreak(ctx context.Context, userID string) int {
+	// Fast path: check if user has listened recently via pre-aggregated stats
+	cachedStats, err := s.store.GetUserStats(ctx, userID)
+	if err == nil && cachedStats != nil && cachedStats.LastListenedDate != "" {
+		loc := time.Local
+		now := time.Now().In(loc)
+		todayStr := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc).Format("2006-01-02")
+		yesterdayStr := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc).AddDate(0, 0, -1).Format("2006-01-02")
+
+		if cachedStats.LastListenedDate != todayStr && cachedStats.LastListenedDate != yesterdayStr {
+			// Haven't listened today or yesterday — streak is broken
+			return 0
+		}
+	}
+
 	events, err := s.store.GetEventsForUser(ctx, userID)
 	if err != nil {
 		s.logger.Debug("failed to fetch events for streak", "user_id", userID, "error", err)

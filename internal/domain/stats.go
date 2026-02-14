@@ -103,3 +103,15 @@ type UserStatsDetailed struct {
 	// Streak calendar: past 12 weeks (84 days)
 	StreakCalendar []StreakDay `json:"streak_calendar,omitempty"`
 }
+
+// UserStats represents pre-aggregated listening statistics for a user.
+// Stored in BadgerDB and updated incrementally on each listening event.
+type UserStats struct {
+	UserID             string    `json:"user_id"`
+	TotalListenTimeMs  int64     `json:"total_listen_time_ms"`
+	TotalBooksFinished int       `json:"total_books_finished"`
+	CurrentStreakDays  int       `json:"current_streak_days"`
+	LongestStreakDays  int       `json:"longest_streak_days"`
+	LastListenedDate   string    `json:"last_listened_date,omitempty"` // YYYY-MM-DD
+	UpdatedAt          time.Time `json:"updated_at"`
+}

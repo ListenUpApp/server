@@ -139,6 +139,9 @@ func Bootstrap(injector *do.RootScope) error {
 	// Trigger search reindex if needed
 	providers.TriggerSearchReindexIfNeeded(injector)
 
+	// Backfill pre-aggregated user stats if needed
+	providers.BackfillUserStatsIfNeeded(injector)
+
 	// Run initial scan if new library
 	bootstrap := do.MustInvoke[*providers.Bootstrap](injector)
 	if bootstrap.IsNewLibrary {

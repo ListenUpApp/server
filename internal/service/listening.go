@@ -102,6 +102,10 @@ func (s *ListeningService) RecordEvent(ctx context.Context, userID string, req R
 		// Idempotency check: if event already exists, return success
 		existing, err := s.store.GetListeningEvent(ctx, eventID)
 		if err == nil && existing != nil {
+			// Verify the existing event belongs to this user (H4: scope idempotency per user)
+			if existing.UserID != userID {
+				return nil, fmt.Errorf("event ID %s belongs to a different user", eventID)
+			}
 			// Event already exists - return it (idempotent)
 			s.logger.Debug("listening event already exists (idempotent)",
 				"event_id", eventID,
@@ -171,6 +175,13 @@ func (s *ListeningService) RecordEvent(ctx context.Context, userID string, req R
 		return nil, fmt.Errorf("store state: %w", err)
 	}
 
+	// Update pre-aggregated user stats atomically (ensure + increment + date in one txn)
+	loc := time.Local
+	dateStr := event.EndedAt.In(loc).Format("2006-01-02")
+	if err := s.updateUserStatsWithRetry(ctx, userID, event.DurationMs, dateStr); err != nil {
+		s.logger.Warn("failed to update user stats", "user_id", userID, "error", err)
+	}
+
 	// Track reading session (non-blocking - don't fail if session operations fail)
 	if _, err := s.readingSessionService.EnsureActiveSession(ctx, userID, req.BookID); err != nil {
 		s.logger.Warn("failed to ensure reading session", "error", err, "user_id", userID, "book_id", req.BookID)
@@ -184,6 +195,13 @@ func (s *ListeningService) RecordEvent(ctx context.Context, userID string, req R
 	if progress.IsFinished && !wasFinished {
 		if err := s.readingSessionService.CompleteSession(ctx, userID, req.BookID, progress.ComputeProgress(book.TotalDuration), progress.TotalListenTimeMs); err != nil {
 			s.logger.Warn("failed to complete session", "error", err, "user_id", userID, "book_id", req.BookID)
+		}
+	}
+
+	// If book just finished, increment books finished in user_stats
+	if progress.IsFinished && !wasFinished {
+		if err := s.incrementBooksFinishedWithRetry(ctx, userID, 1); err != nil {
+			s.logger.Warn("failed to increment books finished", "user_id", userID, "error", err)
 		}
 	}
 
@@ -293,12 +311,20 @@ func (s *ListeningService) GetContinueListening(ctx context.Context, userID stri
 		return nil, fmt.Errorf("get progress: %w", err)
 	}
 
-	// Enrich with book details
-	// Use GetBookNoAccessCheck because if a user has progress on a book,
-	// they should see it in continue listening regardless of current collection access
-	// (they had access when they listened to it)
+	// Get accessible book IDs to filter out books the user can no longer access
+	accessibleBookIDs, err := s.store.GetAccessibleBookIDSet(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get accessible books: %w", err)
+	}
+
+	// Enrich with book details, filtering to only accessible books
 	items := make([]*domain.ContinueListeningItem, 0, len(progressList))
 	for _, progress := range progressList {
+		// Skip books the user can no longer access (e.g., after unshare)
+		if !accessibleBookIDs[progress.BookID] {
+			continue
+		}
+
 		// Fetch book details without access check
 		book, err := s.store.GetBookNoAccessCheck(ctx, progress.BookID)
 		if err != nil {
@@ -550,6 +576,8 @@ func (s *ListeningService) MarkComplete(ctx context.Context, userID, bookID stri
 		finishedAt = &now
 	}
 
+	wasFinished := state != nil && state.IsFinished
+
 	if state == nil {
 		// Create new state if none exists
 		state = &domain.PlaybackState{
@@ -566,6 +594,13 @@ func (s *ListeningService) MarkComplete(ctx context.Context, userID, bookID stri
 		state.IsFinished = true
 		state.FinishedAt = finishedAt
 		state.UpdatedAt = now
+	}
+
+	// Increment books finished in user_stats if newly finished
+	if !wasFinished {
+		if err := s.incrementBooksFinishedWithRetry(ctx, userID, 1); err != nil {
+			s.logger.Warn("failed to increment books finished on mark complete", "user_id", userID, "error", err)
+		}
 	}
 
 	if err := s.store.UpsertState(ctx, state); err != nil {
@@ -596,6 +631,14 @@ func (s *ListeningService) DiscardProgress(ctx context.Context, userID, bookID s
 	if err := s.readingSessionService.AbandonSession(ctx, userID, bookID); err != nil {
 		s.logger.Warn("failed to abandon session on discard", "error", err, "user_id", userID, "book_id", bookID)
 		// Continue with discard even if abandon fails
+	}
+
+	// Check if book was finished (to decrement user_stats)
+	existingState, _ := s.store.GetState(ctx, userID, bookID)
+	if existingState != nil && existingState.IsFinished {
+		if err := s.incrementBooksFinishedWithRetry(ctx, userID, -1); err != nil {
+			s.logger.Warn("failed to decrement books finished on discard", "user_id", userID, "error", err)
+		}
 	}
 
 	// Delete state
@@ -638,6 +681,13 @@ func (s *ListeningService) RestartBook(ctx context.Context, userID, bookID strin
 
 	now := time.Now()
 
+	// Decrement books finished in user_stats if was finished
+	if state != nil && state.IsFinished {
+		if err := s.incrementBooksFinishedWithRetry(ctx, userID, -1); err != nil {
+			s.logger.Warn("failed to decrement books finished on restart", "user_id", userID, "error", err)
+		}
+	}
+
 	if state == nil {
 		state = &domain.PlaybackState{
 			UserID:    userID,
@@ -673,8 +723,36 @@ func (s *ListeningService) RestartBook(ctx context.Context, userID, bookID strin
 	return state, nil
 }
 
+
+// updateUserStatsWithRetry atomically updates user stats with retry on conflict.
+func (s *ListeningService) updateUserStatsWithRetry(ctx context.Context, userID string, deltaMs int64, lastListenedDate string) error {
+	var err error
+	for attempt := 0; attempt < 3; attempt++ {
+		err = s.store.UpdateUserStatsFromEvent(ctx, userID, deltaMs, lastListenedDate)
+		if err == nil {
+			return nil
+		}
+		s.logger.Debug("retrying user stats update", "user_id", userID, "attempt", attempt+1, "error", err)
+	}
+	return err
+}
+
+// incrementBooksFinishedWithRetry atomically increments books finished with retry on conflict.
+func (s *ListeningService) incrementBooksFinishedWithRetry(ctx context.Context, userID string, delta int) error {
+	var err error
+	for attempt := 0; attempt < 3; attempt++ {
+		err = s.store.IncrementBooksFinishedAtomic(ctx, userID, delta)
+		if err == nil {
+			return nil
+		}
+		s.logger.Debug("retrying books finished update", "user_id", userID, "attempt", attempt+1, "error", err)
+	}
+	return err
+}
+
 // broadcastUserStatsUpdate broadcasts updated all-time stats for a user.
 // Called after listening events to keep leaderboard caches fresh.
+// Uses pre-aggregated user_stats instead of scanning all events (O(1) vs O(n)).
 func (s *ListeningService) broadcastUserStatsUpdate(ctx context.Context, userID string) {
 	// Get user info
 	user, err := s.store.GetUser(ctx, userID)
@@ -692,34 +770,18 @@ func (s *ListeningService) broadcastUserStatsUpdate(ctx context.Context, userID 
 		avatarValue = profile.AvatarValue
 	}
 
-	// Calculate total listening time from all events
-	allEvents, err := s.store.GetEventsForUser(ctx, userID)
+	// Read from pre-aggregated user_stats (O(1) instead of loading all events)
+	stats, err := s.store.GetUserStats(ctx, userID)
 	if err != nil {
-		s.logger.Warn("failed to get events for stats broadcast", "user_id", userID, "error", err)
+		s.logger.Warn("failed to get user stats for broadcast", "user_id", userID, "error", err)
 		return
 	}
 
-	// Only count valid durations (same logic as leaderboard calculation)
-	const maxReasonableDurationMs = 24 * 60 * 60 * 1000 // 24 hours
 	var totalTimeMs int64
-	for _, e := range allEvents {
-		if e.DurationMs > 0 && e.DurationMs <= maxReasonableDurationMs {
-			totalTimeMs += e.DurationMs
-		}
-	}
-
-	// Get finished books count
-	allProgress, err := s.store.GetStateForUser(ctx, userID)
-	if err != nil {
-		s.logger.Warn("failed to get progress for stats broadcast", "user_id", userID, "error", err)
-		return
-	}
-
 	var totalBooks int
-	for _, p := range allProgress {
-		if p.IsFinished {
-			totalBooks++
-		}
+	if stats != nil {
+		totalTimeMs = stats.TotalListenTimeMs
+		totalBooks = stats.TotalBooksFinished
 	}
 
 	// Get current streak

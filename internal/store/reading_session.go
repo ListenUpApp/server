@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"time"
 	"slices"
 
 	"github.com/dgraph-io/badger/v4"
@@ -241,20 +242,67 @@ func (s *Store) GetUserBookSessions(ctx context.Context, userID, bookID string) 
 
 // GetAllActiveSessions returns all sessions that are currently active (no FinishedAt).
 // Used for "what others are reading" discovery feature.
+// Filters out sessions with no activity in the last 30 minutes to avoid ghost entries.
 func (s *Store) GetAllActiveSessions(ctx context.Context) ([]*domain.BookReadingSession, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
+	staleCutoff := time.Now().Add(-30 * time.Minute)
 	var activeSessions []*domain.BookReadingSession
 	for session, err := range s.ListAllSessions(ctx) {
 		if err != nil {
 			return nil, fmt.Errorf("listing sessions: %w", err)
 		}
-		if session.IsActive() {
+		if session.IsActive() && session.UpdatedAt.After(staleCutoff) {
 			activeSessions = append(activeSessions, session)
 		}
 	}
 
 	return activeSessions, nil
+}
+
+// CleanupStaleSessions ends sessions that have had no activity for the given maxAge.
+// It marks them as abandoned. Returns the number of sessions cleaned up.
+func (s *Store) CleanupStaleSessions(ctx context.Context, maxAge time.Duration) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+
+	cutoff := time.Now().Add(-maxAge)
+	var staleSessions []*domain.BookReadingSession
+
+	for session, err := range s.ListAllSessions(ctx) {
+		if err != nil {
+			return 0, fmt.Errorf("listing sessions: %w", err)
+		}
+		if session.IsActive() && session.UpdatedAt.Before(cutoff) {
+			staleSessions = append(staleSessions, session)
+		}
+	}
+
+	for _, session := range staleSessions {
+		now := time.Now()
+		session.FinishedAt = &now
+		session.UpdatedAt = now
+		if err := s.Sessions.Update(ctx, session.ID, session); err != nil {
+			if s.logger != nil {
+				s.logger.Warn("failed to cleanup stale session",
+					"session_id", session.ID,
+					"user_id", session.UserID,
+					"book_id", session.BookID,
+					"error", err)
+			}
+			continue
+		}
+		if s.logger != nil {
+			s.logger.Info("cleaned up stale session",
+				"session_id", session.ID,
+				"user_id", session.UserID,
+				"book_id", session.BookID,
+				"last_updated", session.UpdatedAt)
+		}
+	}
+
+	return len(staleSessions), nil
 }

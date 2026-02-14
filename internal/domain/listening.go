@@ -83,8 +83,10 @@ func (s *PlaybackState) UpdateFromEvent(event *ListeningEvent, bookDurationMs in
 		s.CurrentPositionMs = event.EndPositionMs
 	}
 
-	// Update last played time
-	s.LastPlayedAt = event.EndedAt
+	// Update last played time only if this event is newer (H5: ordering fix)
+	if event.EndedAt.After(s.LastPlayedAt) {
+		s.LastPlayedAt = event.EndedAt
+	}
 
 	// Check completion
 	s.checkCompletion(bookDurationMs)

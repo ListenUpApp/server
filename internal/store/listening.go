@@ -288,6 +288,104 @@ func (s *Store) DeleteState(ctx context.Context, userID, bookID string) error {
 	})
 }
 
+// DeleteEventsForBook deletes all listening events for a book across all users.
+// Used when a book is deleted to clean up orphaned data.
+func (s *Store) DeleteEventsForBook(ctx context.Context, bookID string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	// Get all events for this book
+	events, err := s.GetEventsForBook(ctx, bookID)
+	if err != nil {
+		return fmt.Errorf("get events for book: %w", err)
+	}
+
+	if len(events) == 0 {
+		return nil
+	}
+
+	return s.db.Update(func(txn *badger.Txn) error {
+		for _, event := range events {
+			// Delete event
+			if err := txn.Delete([]byte(listeningEventPrefix + event.ID)); err != nil {
+				return err
+			}
+			// Delete indexes
+			userKey := eventByUserPrefix + event.UserID + ":" + event.ID
+			if err := txn.Delete([]byte(userKey)); err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
+				return err
+			}
+			bookIdx := eventByBookPrefix + event.BookID + ":" + event.ID
+			if err := txn.Delete([]byte(bookIdx)); err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
+				return err
+			}
+			userBookKey := eventByUserBookPrefix + event.UserID + ":" + event.BookID + ":" + event.ID
+			if err := txn.Delete([]byte(userBookKey)); err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
+				return err
+			}
+			// Delete user time index
+			endedAtMs := event.EndedAt.UnixMilli()
+			userTimeKey := fmt.Sprintf("%s%s:%013d:%s", eventByUserTimePrefix, event.UserID, endedAtMs, event.ID)
+			if err := txn.Delete([]byte(userTimeKey)); err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// DeleteStateForBook deletes all playback state entries for a book across all users.
+// Used when a book is deleted to clean up orphaned data.
+func (s *Store) DeleteStateForBook(ctx context.Context, bookID string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	// Scan all progress entries and delete those matching the bookID
+	prefix := []byte(progressPrefix)
+	var keysToDelete [][]byte
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = prefix
+		opts.PrefetchValues = true
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+			var state domain.PlaybackState
+			if err := item.Value(func(val []byte) error {
+				return json.Unmarshal(val, &state)
+			}); err != nil {
+				continue
+			}
+			if state.BookID == bookID {
+				keysToDelete = append(keysToDelete, append([]byte{}, item.Key()...))
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("scan state for book: %w", err)
+	}
+
+	if len(keysToDelete) == 0 {
+		return nil
+	}
+
+	return s.db.Update(func(txn *badger.Txn) error {
+		for _, key := range keysToDelete {
+			if err := txn.Delete(key); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 // GetStateForUser retrieves all state records for a user.
 func (s *Store) GetStateForUser(ctx context.Context, userID string) ([]*domain.PlaybackState, error) {
 	if err := ctx.Err(); err != nil {

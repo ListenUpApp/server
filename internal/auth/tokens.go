@@ -3,6 +3,7 @@ package auth
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json/v2"
 	"fmt"
@@ -127,15 +128,11 @@ func (s *TokenService) GenerateRefreshToken() (string, error) {
 	return base64.URLEncoding.EncodeToString(b), nil
 }
 
-// HashRefreshToken creates a hash of the refresh token for database storage.
-// We store hashed tokens so database compromise doesn't leak valid tokens (that would be bad).
-// Uses hex encoding for simplicity (not trying to hide length, just prevent reuse).
+// HashRefreshToken creates a SHA-256 hash of the refresh token for database storage.
+// We store hashed tokens so database compromise doesn't leak valid tokens.
 func HashRefreshToken(token string) string {
-	decoded, err := base64.URLEncoding.DecodeString(token)
-	if err != nil {
-		return hex.EncodeToString([]byte(token))
-	}
-	return hex.EncodeToString(decoded)
+	h := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(h[:])
 }
 
 // AccessTokenDuration returns the configured access token lifetime.
