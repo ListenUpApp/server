@@ -863,7 +863,6 @@ func (s *Store) CountSeries(_ context.Context) (int, error) {
 	return count, nil
 }
 
-
 // GetSeriesBookIDMap returns a mapping of seriesID -> []bookID for all series.
 // This avoids N+1 queries when filtering series by accessible books.
 func (s *Store) GetSeriesBookIDMap(_ context.Context) (map[string][]string, error) {

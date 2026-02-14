@@ -1335,7 +1335,6 @@ func (s *Store) GetBookIDsByContributor(_ context.Context, contributorID string)
 	return bookIDs, err
 }
 
-
 // GetContributorBookIDMap returns a mapping of contributorID -> []bookID for all contributors.
 // This avoids N+1 queries when filtering contributors by accessible books.
 func (s *Store) GetContributorBookIDMap(_ context.Context) (map[string][]string, error) {

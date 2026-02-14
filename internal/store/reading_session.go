@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"iter"
-	"time"
 	"slices"
+	"time"
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/listenupapp/listenup-server/internal/domain"

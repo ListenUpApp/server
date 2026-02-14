@@ -220,7 +220,6 @@ func (s *Store) ListUserSessions(ctx context.Context, userID string) ([]*domain.
 	return sessions, nil
 }
 
-
 // DeleteAllUserSessions removes all sessions for a user.
 // Used when a password is changed to force re-authentication on all devices.
 func (s *Store) DeleteAllUserSessions(ctx context.Context, userID string) error {
