@@ -168,6 +168,10 @@ func ProvideSessionCleanupJob(i do.Injector) (*SessionCleanupJob, error) {
 			log.Info("Initial session cleanup completed", "deleted", count)
 		}
 
+		// Stale reading session cleanup ticker (every 15 minutes)
+		staleTicker := time.NewTicker(15 * time.Minute)
+		defer staleTicker.Stop()
+
 		for {
 			select {
 			case <-ticker.C:
@@ -175,6 +179,12 @@ func ProvideSessionCleanupJob(i do.Injector) (*SessionCleanupJob, error) {
 					log.Warn("Session cleanup failed", "error", err)
 				} else if count > 0 {
 					log.Info("Session cleanup completed", "deleted", count)
+				}
+			case <-staleTicker.C:
+				if count, err := storeHandle.CleanupStaleSessions(ctx, 30*time.Minute); err != nil {
+					log.Warn("Stale reading session cleanup failed", "error", err)
+				} else if count > 0 {
+					log.Info("Stale reading session cleanup completed", "cleaned", count)
 				}
 			case <-ctx.Done():
 				return

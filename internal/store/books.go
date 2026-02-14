@@ -568,6 +568,18 @@ func (s *Store) DeleteBook(ctx context.Context, id string) error {
 		}
 	}
 
+	// Clean up orphaned listening data for this book
+	if err := s.DeleteEventsForBook(ctx, id); err != nil {
+		if s.logger != nil {
+			s.logger.Warn("failed to delete events for book", "book_id", id, "error", err)
+		}
+	}
+	if err := s.DeleteStateForBook(ctx, id); err != nil {
+		if s.logger != nil {
+			s.logger.Warn("failed to delete state for book", "book_id", id, "error", err)
+		}
+	}
+
 	// Soft delete the book.
 	err = s.db.Update(func(txn *badger.Txn) error {
 		// Mark book as deleted (sets DeletedAt and updates UpdatedAt).

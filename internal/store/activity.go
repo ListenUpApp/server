@@ -93,8 +93,9 @@ func (s *Store) GetActivity(ctx context.Context, id string) (*domain.Activity, e
 
 // GetActivitiesFeed retrieves the global activity feed sorted by CreatedAt descending.
 // Use 'before' for cursor-based pagination (pass the CreatedAt of the last item from previous page).
+// beforeID enables deterministic pagination when multiple activities share the same timestamp.
 // Returns up to 'limit' activities.
-func (s *Store) GetActivitiesFeed(ctx context.Context, limit int, before *time.Time) ([]*domain.Activity, error) {
+func (s *Store) GetActivitiesFeed(ctx context.Context, limit int, before *time.Time, beforeID string) ([]*domain.Activity, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -129,16 +130,21 @@ func (s *Store) GetActivitiesFeed(ctx context.Context, limit int, before *time.T
 				continue
 			}
 
-			// Skip the exact 'before' item if we're paginating
+			// Skip items at or after the cursor position
 			if before != nil {
-				// The first item might be the cursor item itself if seek lands on it
-				// Since we want items strictly before, we need to check
 				activity, err := s.getActivityInTxn(txn, activityID)
 				if err != nil {
 					continue
 				}
-				if activity.CreatedAt.Equal(*before) || activity.CreatedAt.After(*before) {
+				// Skip activities strictly after the cursor timestamp
+				if activity.CreatedAt.After(*before) {
 					continue
+				}
+				// For activities at the exact cursor timestamp, use ID for deterministic ordering
+				if activity.CreatedAt.Equal(*before) {
+					if beforeID == "" || activity.ID >= beforeID {
+						continue
+					}
 				}
 				activities = append(activities, activity)
 			} else {

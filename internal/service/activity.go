@@ -386,11 +386,12 @@ func (s *ActivityService) RecordUserJoined(ctx context.Context, userID string) e
 
 // GetFeed retrieves the global activity feed with ACL filtering.
 // Only returns activities for books the viewing user can access.
-func (s *ActivityService) GetFeed(ctx context.Context, viewingUserID string, limit int, before *time.Time) ([]*domain.Activity, error) {
+// beforeID is optional — when provided with before, enables deterministic cursor pagination.
+func (s *ActivityService) GetFeed(ctx context.Context, viewingUserID string, limit int, before *time.Time, beforeID string) ([]*domain.Activity, error) {
 	// Overfetch to account for ACL filtering
 	overfetchLimit := max(limit*3, 30)
 
-	activities, err := s.store.GetActivitiesFeed(ctx, overfetchLimit, before)
+	activities, err := s.store.GetActivitiesFeed(ctx, overfetchLimit, before, beforeID)
 	if err != nil {
 		return nil, fmt.Errorf("fetching activities: %w", err)
 	}

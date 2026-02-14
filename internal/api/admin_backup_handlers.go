@@ -434,7 +434,17 @@ func (s *Server) handleRestore(ctx context.Context, input *RestoreInput) (*Resto
 	path := s.backupService.GetPath(input.Body.BackupID)
 	result, err := s.restoreService.Restore(ctx, path, opts)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("failed to restore backup", err)
+		s.logger.Error("backup restore failed", "error", err, "backup_id", input.Body.BackupID)
+		return nil, huma.Error500InternalServerError("backup restore failed")
+	}
+
+	// Invalidate pre-aggregated user stats after restore (they are now stale)
+	if !opts.DryRun {
+		if err := s.store.ClearAllUserStats(ctx); err != nil {
+			s.logger.Error("failed to clear user stats after restore", "error", err)
+		} else {
+			s.logger.Info("cleared user stats after restore, will rebuild lazily")
+		}
 	}
 
 	return &RestoreOutput{

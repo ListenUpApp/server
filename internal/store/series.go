@@ -862,3 +862,33 @@ func (s *Store) CountSeries(_ context.Context) (int, error) {
 
 	return count, nil
 }
+
+
+// GetSeriesBookIDMap returns a mapping of seriesID -> []bookID for all series.
+// This avoids N+1 queries when filtering series by accessible books.
+func (s *Store) GetSeriesBookIDMap(_ context.Context) (map[string][]string, error) {
+	result := make(map[string][]string)
+	prefix := []byte(bookBySeriesPrefix)
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			key := it.Item().Key()
+			// Key format: idx:books:series:{seriesID}:{bookID}
+			parts := strings.Split(string(key), ":")
+			if len(parts) >= 5 {
+				seriesID := parts[3]
+				bookID := parts[4]
+				result[seriesID] = append(result[seriesID], bookID)
+			}
+		}
+		return nil
+	})
+
+	return result, err
+}

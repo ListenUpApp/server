@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -438,7 +439,7 @@ func (s *Server) handleGetUserReadingHistory(ctx context.Context, input *GetUser
 type GetActivityFeedInput struct {
 	Authorization string `header:"Authorization"`
 	Limit         int    `query:"limit" default:"20" doc:"Max activities to return (max 50)"`
-	Before        string `query:"before" doc:"Pagination cursor (RFC3339 timestamp)"`
+	Before        string `query:"before" doc:"Pagination cursor (RFC3339 timestamp or timestamp|activity_id)"`
 }
 
 // ActivityResponse represents a single activity in API format.
@@ -495,17 +496,28 @@ func (s *Server) handleGetActivityFeed(ctx context.Context, input *GetActivityFe
 		limit = 50
 	}
 
-	// Parse 'before' cursor
+	// Parse 'before' cursor — supports both plain RFC3339 and composite "RFC3339|activity_id" format
 	var before *time.Time
+	var beforeID string
 	if input.Before != "" {
-		t, err := time.Parse(time.RFC3339, input.Before)
-		if err == nil {
-			before = &t
+		if parts := strings.SplitN(input.Before, "|", 2); len(parts) == 2 {
+			// Composite cursor: timestamp|activity_id
+			t, err := time.Parse(time.RFC3339, parts[0])
+			if err == nil {
+				before = &t
+				beforeID = parts[1]
+			}
+		} else {
+			// Legacy plain timestamp cursor
+			t, err := time.Parse(time.RFC3339, input.Before)
+			if err == nil {
+				before = &t
+			}
 		}
 	}
 
 	// Get activities from service
-	activities, err := s.services.Activity.GetFeed(ctx, userID, limit, before)
+	activities, err := s.services.Activity.GetFeed(ctx, userID, limit, before, beforeID)
 	if err != nil {
 		return nil, err
 	}
@@ -534,11 +546,12 @@ func (s *Server) handleGetActivityFeed(ctx context.Context, input *GetActivityFe
 		}
 	}
 
-	// Set pagination cursor if we have more
+	// Set pagination cursor using composite format (timestamp|activity_id) for deterministic pagination
 	var nextCursor *string
 	if len(activities) == limit && len(activities) > 0 {
-		lastTime := activities[len(activities)-1].CreatedAt.Format(time.RFC3339)
-		nextCursor = &lastTime
+		last := activities[len(activities)-1]
+		cursor := last.CreatedAt.Format(time.RFC3339) + "|" + last.ID
+		nextCursor = &cursor
 	}
 
 	return &GetActivityFeedOutput{

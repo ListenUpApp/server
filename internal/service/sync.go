@@ -424,14 +424,17 @@ func (s *SyncService) GetSeriesForSync(ctx context.Context, userID string, param
 
 // filterContributorsByAccessibleBooks filters contributors to only those linked
 // to at least one book the user can access.
+// Uses a single batch query instead of per-contributor queries to avoid N+1.
 func (s *SyncService) filterContributorsByAccessibleBooks(ctx context.Context, contributors []*domain.Contributor, accessibleBookIDs map[string]bool) []*domain.Contributor {
+	contributorBookMap, err := s.store.GetContributorBookIDMap(ctx)
+	if err != nil {
+		s.logger.Warn("failed to get contributor book map, falling back to unfiltered", "error", err)
+		return contributors
+	}
+
 	filtered := make([]*domain.Contributor, 0, len(contributors))
 	for _, c := range contributors {
-		bookIDs, err := s.store.GetBookIDsByContributor(ctx, c.ID)
-		if err != nil {
-			continue
-		}
-		for _, bookID := range bookIDs {
+		for _, bookID := range contributorBookMap[c.ID] {
 			if accessibleBookIDs[bookID] {
 				filtered = append(filtered, c)
 				break
@@ -443,14 +446,17 @@ func (s *SyncService) filterContributorsByAccessibleBooks(ctx context.Context, c
 
 // filterSeriesByAccessibleBooks filters series to only those linked
 // to at least one book the user can access.
+// Uses a single batch query instead of per-series queries to avoid N+1.
 func (s *SyncService) filterSeriesByAccessibleBooks(ctx context.Context, seriesList []*domain.Series, accessibleBookIDs map[string]bool) []*domain.Series {
+	seriesBookMap, err := s.store.GetSeriesBookIDMap(ctx)
+	if err != nil {
+		s.logger.Warn("failed to get series book map, falling back to unfiltered", "error", err)
+		return seriesList
+	}
+
 	filtered := make([]*domain.Series, 0, len(seriesList))
 	for _, ser := range seriesList {
-		bookIDs, err := s.store.GetBookIDsBySeries(ctx, ser.ID)
-		if err != nil {
-			continue
-		}
-		for _, bookID := range bookIDs {
+		for _, bookID := range seriesBookMap[ser.ID] {
 			if accessibleBookIDs[bookID] {
 				filtered = append(filtered, ser)
 				break

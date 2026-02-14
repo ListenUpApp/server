@@ -177,7 +177,7 @@ func (s *Server) handleShareCollection(ctx context.Context, input *ShareCollecti
 	}
 
 	// Emit book.created events to the shared user for all books in the collection
-	go s.emitBooksForShare(context.Background(), input.ID, input.Body.UserID, true)
+	go s.emitBooksForShare(context.WithoutCancel(ctx), input.ID, input.Body.UserID, true)
 
 	return &ShareOutput{Body: mapShareResponse(share)}, nil
 }
@@ -251,7 +251,7 @@ func (s *Server) handleDeleteShare(ctx context.Context, input *DeleteShareInput)
 	}
 
 	// Emit book.deleted events to the previously shared user for all books in the collection
-	go s.emitBooksForShare(context.Background(), share.CollectionID, share.SharedWithUserID, false)
+	go s.emitBooksForShare(context.WithoutCancel(ctx), share.CollectionID, share.SharedWithUserID, false)
 
 	return &MessageOutput{Body: MessageResponse{Message: "Share removed"}}, nil
 }

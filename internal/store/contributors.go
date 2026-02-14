@@ -1334,3 +1334,32 @@ func (s *Store) GetBookIDsByContributor(_ context.Context, contributorID string)
 
 	return bookIDs, err
 }
+
+
+// GetContributorBookIDMap returns a mapping of contributorID -> []bookID for all contributors.
+// This avoids N+1 queries when filtering contributors by accessible books.
+func (s *Store) GetContributorBookIDMap(_ context.Context) (map[string][]string, error) {
+	result := make(map[string][]string)
+	prefix := []byte(bookByContributorPrefix)
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			key := it.Item().Key()
+			parts := strings.Split(string(key), ":")
+			if len(parts) >= 5 {
+				contributorID := parts[3]
+				bookID := parts[4]
+				result[contributorID] = append(result[contributorID], bookID)
+			}
+		}
+		return nil
+	})
+
+	return result, err
+}
