@@ -103,7 +103,7 @@ func (s *StatsService) GetUserStats(
 		stats.TotalListenTimeMs += e.DurationMs
 
 		// Daily aggregation
-		dateKey := e.EndedAt.Format("2006-01-02")
+		dateKey := e.EndedAt.In(time.Local).Format("2006-01-02")
 		if dailyMap[dateKey] == nil {
 			dailyMap[dateKey] = &domain.DailyListening{
 				Date: time.Date(
@@ -298,7 +298,7 @@ func (s *StatsService) buildStreakCalendar(ctx context.Context, userID string, n
 	// Aggregate by day
 	dailyTime := make(map[string]int64)
 	for _, e := range events {
-		dateKey := e.EndedAt.Format("2006-01-02")
+		dateKey := e.EndedAt.In(time.Local).Format("2006-01-02")
 		dailyTime[dateKey] += e.DurationMs
 	}
 

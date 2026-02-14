@@ -220,6 +220,24 @@ func (s *Store) ListUserSessions(ctx context.Context, userID string) ([]*domain.
 	return sessions, nil
 }
 
+
+// DeleteAllUserSessions removes all sessions for a user.
+// Used when a password is changed to force re-authentication on all devices.
+func (s *Store) DeleteAllUserSessions(ctx context.Context, userID string) error {
+	sessions, err := s.ListUserSessions(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("list sessions for deletion: %w", err)
+	}
+
+	for _, session := range sessions {
+		if err := s.DeleteSession(ctx, session.ID); err != nil {
+			return fmt.Errorf("delete session %s: %w", session.ID, err)
+		}
+	}
+
+	return nil
+}
+
 // DeleteExpiredSessions removes all expired sessions (cleanup job).
 // This should be run periodically, like maybe on a daily basis.
 // Just want to figure out how I want to do that...

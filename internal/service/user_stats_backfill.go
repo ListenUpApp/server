@@ -128,18 +128,25 @@ func computeQualifyingDates(events []*domain.ListeningEvent, loc *time.Location)
 }
 
 // computeStreaks calculates current and longest streak from sorted qualifying dates.
+// Uses AddDate for DST-safe day arithmetic and map for O(1) lookups.
 func computeStreaks(qualifyingDates []string, loc *time.Location) (current, longest int) {
 	if len(qualifyingDates) == 0 {
 		return 0, 0
 	}
 
-	// Calculate longest streak
+	// Build set for O(1) lookup
+	dateSet := make(map[string]bool, len(qualifyingDates))
+	for _, d := range qualifyingDates {
+		dateSet[d] = true
+	}
+
+	// Calculate longest streak using AddDate (DST-safe)
 	streak := 1
 	longest = 1
 	for i := 1; i < len(qualifyingDates); i++ {
 		prev, _ := time.ParseInLocation("2006-01-02", qualifyingDates[i-1], loc)
-		curr, _ := time.ParseInLocation("2006-01-02", qualifyingDates[i], loc)
-		if curr.Sub(prev) == 24*time.Hour {
+		nextDay := prev.AddDate(0, 0, 1).Format("2006-01-02")
+		if qualifyingDates[i] == nextDay {
 			streak++
 			if streak > longest {
 				longest = streak
@@ -164,14 +171,7 @@ func computeStreaks(qualifyingDates []string, loc *time.Location) (current, long
 	checkDate = checkDate.AddDate(0, 0, -1)
 	for {
 		checkStr := checkDate.Format("2006-01-02")
-		found := false
-		for _, d := range qualifyingDates {
-			if d == checkStr {
-				found = true
-				break
-			}
-		}
-		if found {
+		if dateSet[checkStr] {
 			current++
 			checkDate = checkDate.AddDate(0, 0, -1)
 		} else {

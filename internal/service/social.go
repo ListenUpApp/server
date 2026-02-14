@@ -133,6 +133,17 @@ func (s *SocialService) GetLeaderboard(
 		}
 	}
 
+	// Batch fetch all user profiles (avoids N+1 per-user lookups)
+	allUserIDs := make([]string, len(users))
+	for i, u := range users {
+		allUserIDs[i] = u.ID
+	}
+	profilesByID, err := s.store.GetUserProfilesByIDs(ctx, allUserIDs)
+	if err != nil {
+		s.logger.Warn("failed to batch fetch profiles, falling back to per-user", "error", err)
+		profilesByID = make(map[string]*domain.UserProfile)
+	}
+
 	for _, user := range users {
 		var totalTimeMs int64
 		var booksFinished int
@@ -175,12 +186,11 @@ func (s *SocialService) GetLeaderboard(
 		// Calculate streak (always calculated as it's the current streak, not period-based)
 		streakDays := s.CalculateUserStreak(ctx, user.ID)
 
-		// Get avatar info from user profile
+		// Get avatar info from batch-fetched profiles
 		avatarType := string(domain.AvatarTypeAuto)
 		avatarValue := ""
 		avatarColor := color.ForUser(user.ID)
-		profile, err := s.store.GetUserProfile(ctx, user.ID)
-		if err == nil && profile != nil {
+		if profile, ok := profilesByID[user.ID]; ok && profile != nil {
 			avatarType = string(profile.AvatarType)
 			avatarValue = profile.AvatarValue
 		}
@@ -474,7 +484,7 @@ func (s *SocialService) GetCurrentlyListening(ctx context.Context, viewingUserID
 
 	// Log each active session for debugging
 	for i, sess := range activeSessions {
-		s.logger.Info("active session",
+		s.logger.Debug("active session",
 			"index", i,
 			"session_id", sess.ID,
 			"user_id", sess.UserID,
@@ -492,7 +502,7 @@ func (s *SocialService) GetCurrentlyListening(ctx context.Context, viewingUserID
 		accessibleBookIDs[book.ID] = true
 	}
 
-	s.logger.Info("GetCurrentlyListening ACL",
+	s.logger.Debug("GetCurrentlyListening ACL",
 		"accessible_books_count", len(accessibleBooks))
 
 	// Group sessions by book, excluding viewing user
@@ -507,16 +517,16 @@ func (s *SocialService) GetCurrentlyListening(ctx context.Context, viewingUserID
 		// Exclude viewing user's sessions
 		if session.UserID == viewingUserID {
 			excludedSelf++
-			s.logger.Info("excluding self session", "session_id", session.ID, "book_id", session.BookID)
+			s.logger.Debug("excluding self session", "session_id", session.ID, "book_id", session.BookID)
 			continue
 		}
 		// ACL filter
 		if !accessibleBookIDs[session.BookID] {
 			excludedACL++
-			s.logger.Info("excluding ACL session", "session_id", session.ID, "book_id", session.BookID, "user_id", session.UserID)
+			s.logger.Debug("excluding ACL session", "session_id", session.ID, "book_id", session.BookID, "user_id", session.UserID)
 			continue
 		}
-		s.logger.Info("including session", "session_id", session.ID, "book_id", session.BookID, "user_id", session.UserID)
+		s.logger.Debug("including session", "session_id", session.ID, "book_id", session.BookID, "user_id", session.UserID)
 
 		// Get or create entry
 		br, exists := bookReadersMap[session.BookID]

@@ -174,11 +174,22 @@ func (s *ProfileService) updateUserDetails(ctx context.Context, userID string, r
 
 		user.PasswordHash = newHash
 		userChanged = true
-		s.logger.Info("password changed", "user_id", userID)
+		s.logger.Info("password changed, invalidating all sessions", "user_id", userID)
+
+		// Invalidate all existing sessions to force re-authentication
+		if err := s.store.DeleteAllUserSessions(ctx, userID); err != nil {
+			s.logger.Error("failed to invalidate sessions after password change", "user_id", userID, "error", err)
+			// Don't fail the password change — sessions will expire naturally
+		}
 	}
 
 	// Save user if changed
 	if userChanged {
+		// Recalculate DisplayName if name fields changed
+		if req.FirstName != nil || req.LastName != nil {
+			user.DisplayName = user.FirstName + " " + user.LastName
+		}
+
 		if err := s.store.UpdateUser(ctx, user); err != nil {
 			return fmt.Errorf("save user: %w", err)
 		}

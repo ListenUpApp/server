@@ -326,7 +326,7 @@ func (s *Store) DeleteEventsForBook(ctx context.Context, bookID string) error {
 			}
 			// Delete user time index
 			endedAtMs := event.EndedAt.UnixMilli()
-			userTimeKey := fmt.Sprintf("%s%s:%013d:%s", eventByUserTimePrefix, event.UserID, endedAtMs, event.ID)
+			userTimeKey := fmt.Sprintf("%s%s:%020d:%s", eventByUserTimePrefix, event.UserID, endedAtMs, event.ID)
 			if err := txn.Delete([]byte(userTimeKey)); err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
 				return err
 			}
@@ -560,7 +560,7 @@ func (s *Store) GetContinueListening(ctx context.Context, userID string, limit i
 
 	// DEBUG: Log all progress entries and their finished status
 	if s.logger != nil {
-		s.logger.Info("GetContinueListening: fetched all progress",
+		s.logger.Debug("GetContinueListening: fetched all progress",
 			"user_id", userID,
 			"total_count", len(allProgress))
 	}
@@ -569,7 +569,7 @@ func (s *Store) GetContinueListening(ctx context.Context, userID string, limit i
 		if p.IsFinished {
 			finishedCount++
 			if s.logger != nil {
-				s.logger.Info("GetContinueListening: FINISHED book will be excluded",
+				s.logger.Debug("GetContinueListening: FINISHED book will be excluded",
 					"book_id", p.BookID,
 					"current_position_ms", p.CurrentPositionMs,
 					"is_finished", p.IsFinished)
@@ -577,7 +577,7 @@ func (s *Store) GetContinueListening(ctx context.Context, userID string, limit i
 		}
 	}
 	if s.logger != nil {
-		s.logger.Info("GetContinueListening: finished book count",
+		s.logger.Debug("GetContinueListening: finished book count",
 			"user_id", userID,
 			"finished_count", finishedCount,
 			"in_progress_count", len(allProgress)-finishedCount)
@@ -618,7 +618,7 @@ func (s *Store) GetContinueListening(ctx context.Context, userID string, limit i
 		result = append(result, p)
 	}
 	if s.logger != nil {
-		s.logger.Info("GetContinueListening: final result count",
+		s.logger.Debug("GetContinueListening: final result count",
 			"user_id", userID,
 			"result_count", len(result))
 	}

@@ -317,9 +317,17 @@ func (s *Server) emitBooksForShare(ctx context.Context, collectionID, userID str
 			event := sse.NewBookCreatedEvent(enrichedBook)
 			s.sseManager.EmitToUser(userID, event)
 		} else {
-			// For book.deleted, we just need the book ID
-			event := sse.NewBookDeletedEvent(bookID, time.Now())
-			s.sseManager.EmitToUser(userID, event)
+			// For book.deleted, only emit if user can no longer access the book
+			// (they may still have access through another collection or open mode)
+			canAccess, err := s.store.CanUserAccessBook(ctx, userID, bookID)
+			if err != nil {
+				s.logger.Error("failed to check book access for unshare", "book_id", bookID, "user_id", userID, "error", err)
+				continue
+			}
+			if !canAccess {
+				event := sse.NewBookDeletedEvent(bookID, time.Now())
+				s.sseManager.EmitToUser(userID, event)
+			}
 		}
 	}
 }
