@@ -106,7 +106,6 @@ func BackfillUserStats(ctx context.Context, st *store.Store, logger *slog.Logger
 	return nil
 }
 
-
 const backfillMinListenMsForStreak = 30 * 1000
 
 // computeQualifyingDates returns sorted dates where user listened >= threshold.

@@ -723,7 +723,6 @@ func (s *ListeningService) RestartBook(ctx context.Context, userID, bookID strin
 	return state, nil
 }
 
-
 // updateUserStatsWithRetry atomically updates user stats with retry on conflict.
 func (s *ListeningService) updateUserStatsWithRetry(ctx context.Context, userID string, deltaMs int64, lastListenedDate string) error {
 	var err error

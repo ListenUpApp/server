@@ -2,8 +2,8 @@ package auth
 
 import (
 	"crypto/rand"
-	"encoding/base64"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json/v2"
 	"fmt"
