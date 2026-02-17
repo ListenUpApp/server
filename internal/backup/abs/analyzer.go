@@ -13,9 +13,10 @@ import (
 // The analysis shows what can be automatically imported and what needs
 // admin attention before import.
 type Analyzer struct {
-	store   *store.Store
-	matcher *Matcher
-	logger  *slog.Logger
+	store    *store.Store
+	matcher  *Matcher
+	logger   *slog.Logger
+	progress ProgressCallback
 }
 
 // NewAnalyzer creates an analyzer with the given store and options.
@@ -27,6 +28,19 @@ func NewAnalyzer(s *store.Store, logger *slog.Logger, opts AnalysisOptions) *Ana
 		store:   s,
 		matcher: NewMatcher(s, logger, opts),
 		logger:  logger,
+	}
+}
+
+// WithProgress sets a progress callback on the analyzer.
+func (a *Analyzer) WithProgress(cb ProgressCallback) *Analyzer {
+	a.progress = cb
+	return a
+}
+
+// reportProgress calls the progress callback if set.
+func (a *Analyzer) reportProgress(phase AnalysisPhase, current, total int) {
+	if a.progress != nil {
+		a.progress(phase, current, total)
 	}
 }
 
@@ -46,21 +60,25 @@ func (a *Analyzer) Analyze(ctx context.Context, backup *Backup) (*AnalysisResult
 	}
 
 	// 1. Analyze users
+	a.reportProgress(PhaseMatchingUsers, 0, len(backup.ImportableUsers()))
 	userStart := time.Now()
 	a.analyzeUsers(ctx, backup, result)
 	a.logger.Info("analyzed users", "matched", result.UsersMatched, "pending", result.UsersPending, "duration", time.Since(userStart))
 
 	// 2. Analyze books (only books, not podcasts)
+	a.reportProgress(PhaseMatchingBooks, 0, len(backup.BookItems()))
 	bookStart := time.Now()
 	a.analyzeBooks(ctx, backup, result)
 	a.logger.Info("analyzed books", "matched", result.BooksMatched, "pending", result.BooksPending, "duration", time.Since(bookStart))
 
 	// 3. Analyze sessions (what can be imported)
+	a.reportProgress(PhaseMatchingSessions, 0, len(backup.BookSessions()))
 	sessionStart := time.Now()
 	a.analyzeSessions(ctx, backup, result)
 	a.logger.Info("analyzed sessions", "ready", result.SessionsReady, "pending", result.SessionsPending, "duration", time.Since(sessionStart))
 
 	// 4. Analyze progress records
+	a.reportProgress(PhaseMatchingProgress, 0, 0)
 	progressStart := time.Now()
 	a.analyzeProgress(ctx, backup, result)
 	a.logger.Info("analyzed progress", "ready", result.ProgressReady, "pending", result.ProgressPending, "duration", time.Since(progressStart))
@@ -110,8 +128,9 @@ func (a *Analyzer) analyzeBooks(ctx context.Context, backup *Backup, result *Ana
 			result.BooksPending++
 		}
 
-		// Log progress every 100 books
-		if (i+1)%100 == 0 {
+		// Report progress every 50 books
+		if (i+1)%50 == 0 || i+1 == len(bookItems) {
+			a.reportProgress(PhaseMatchingBooks, i+1, len(bookItems))
 			a.logger.Info("book matching progress", "processed", i+1, "total", len(bookItems))
 		}
 	}
