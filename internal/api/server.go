@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/listenupapp/listenup-server/internal/backup"
+	"github.com/listenupapp/listenup-server/internal/backup/abs"
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
@@ -32,6 +33,7 @@ type Server struct {
 	authRateLimiter           *RateLimiter
 	backupService             *backup.BackupService
 	restoreService            *backup.RestoreService
+	analysisTracker           *abs.AnalysisTracker
 	onInstanceUpdated         func(*domain.Instance)
 }
 
@@ -96,6 +98,7 @@ func NewServer(
 		authRateLimiter:           NewRateLimiter(20, time.Minute, 10),
 		backupService:             backupSvc,
 		restoreService:            restoreSvc,
+		analysisTracker:           abs.NewAnalysisTracker(),
 	}
 
 	s.registerRoutes()

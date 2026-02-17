@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/google/uuid"
 	"github.com/listenupapp/listenup-server/internal/backup/abs"
 )
 
@@ -37,6 +38,26 @@ func (s *Server) registerAdminABSRoutes() {
 		Tags:        []string{"Admin", "ABS Import"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleImportABSBackup)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "analyzeABSBackupAsync",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/admin/abs/analyze/async",
+		Summary:     "Start async ABS backup analysis",
+		Description: "Starts analysis in the background and returns an analysis ID for polling progress (admin only)",
+		Tags:        []string{"Admin", "ABS Import"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleAnalyzeABSBackupAsync)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getAnalysisStatus",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/admin/abs/analyze/{analysisId}/status",
+		Summary:     "Get analysis progress",
+		Description: "Returns the current progress and result of an async analysis (admin only)",
+		Tags:        []string{"Admin", "ABS Import"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetAnalysisStatus)
 }
 
 // === DTOs ===
@@ -133,6 +154,34 @@ type AnalyzeABSOutput struct {
 	Body AnalyzeABSResponse
 }
 
+// AsyncAnalyzeOutput is the response for starting an async analysis.
+type AsyncAnalyzeOutput struct {
+	Body struct {
+		AnalysisID string `json:"analysis_id" doc:"Unique ID for polling progress"`
+	}
+}
+
+// AnalysisStatusInput is the input for getting analysis status.
+type AnalysisStatusInput struct {
+	Authorization string `header:"Authorization"`
+	AnalysisID    string `path:"analysisId" doc:"Analysis ID from async analyze endpoint"`
+}
+
+// AnalysisStatusResponse is the body of the status response.
+type AnalysisStatusResponse struct {
+	Status  string              `json:"status" doc:"running, completed, or failed"`
+	Phase   string              `json:"phase" doc:"Current phase: parsing, matching_users, matching_books, matching_sessions, matching_progress, done"`
+	Current int                 `json:"current" doc:"Current item in phase"`
+	Total   int                 `json:"total" doc:"Total items in phase"`
+	Result  *AnalyzeABSResponse `json:"result,omitempty" doc:"Analysis result when completed"`
+	Error   string              `json:"error,omitempty" doc:"Error message if failed"`
+}
+
+// AnalysisStatusOutput wraps the status response.
+type AnalysisStatusOutput struct {
+	Body AnalysisStatusResponse
+}
+
 // ImportABSRequest is the request body for importing from an ABS backup.
 type ImportABSRequest struct {
 	BackupPath      string            `json:"backup_path" doc:"Path to .audiobookshelf backup file"`
@@ -223,10 +272,16 @@ func (s *Server) handleAnalyzeABSBackup(ctx context.Context, input *AnalyzeABSIn
 	}
 
 	// Convert to API response
+	resp := s.buildAnalyzeResponse(result, backup.Summary())
+	return &AnalyzeABSOutput{Body: resp}, nil
+}
+
+// buildAnalyzeResponse converts an analysis result to the API response type.
+func (s *Server) buildAnalyzeResponse(result *abs.AnalysisResult, backupSummary string) AnalyzeABSResponse {
 	resp := AnalyzeABSResponse{
 		BackupPath:      result.BackupPath,
 		AnalyzedAt:      result.AnalyzedAt.Format(time.RFC3339),
-		Summary:         backup.Summary(),
+		Summary:         backupSummary,
 		TotalUsers:      result.TotalUsers,
 		TotalBooks:      result.TotalBooks,
 		TotalSessions:   result.TotalSessions,
@@ -252,13 +307,13 @@ func (s *Server) handleAnalyzeABSBackup(ctx context.Context, input *AnalyzeABSIn
 			Confidence:  m.Confidence.String(),
 			MatchReason: m.MatchReason,
 		}
-		for _, s := range m.Suggestions {
+		for _, sg := range m.Suggestions {
 			resp.UserMatches[i].Suggestions = append(resp.UserMatches[i].Suggestions, ABSUserSuggestion{
-				UserID:      s.UserID,
-				Email:       s.Email,
-				DisplayName: s.DisplayName,
-				Score:       s.Score,
-				Reason:      s.Reason,
+				UserID:      sg.UserID,
+				Email:       sg.Email,
+				DisplayName: sg.DisplayName,
+				Score:       sg.Score,
+				Reason:      sg.Reason,
 			})
 		}
 	}
@@ -275,19 +330,120 @@ func (s *Server) handleAnalyzeABSBackup(ctx context.Context, input *AnalyzeABSIn
 			Confidence:  m.Confidence.String(),
 			MatchReason: m.MatchReason,
 		}
-		for _, s := range m.Suggestions {
+		for _, sg := range m.Suggestions {
 			resp.BookMatches[i].Suggestions = append(resp.BookMatches[i].Suggestions, ABSBookSuggestion{
-				BookID:     s.BookID,
-				Title:      s.Title,
-				Author:     s.Author,
-				DurationMs: s.DurationMs,
-				Score:      s.Score,
-				Reason:     s.Reason,
+				BookID:     sg.BookID,
+				Title:      sg.Title,
+				Author:     sg.Author,
+				DurationMs: sg.DurationMs,
+				Score:      sg.Score,
+				Reason:     sg.Reason,
 			})
 		}
 	}
 
-	return &AnalyzeABSOutput{Body: resp}, nil
+	return resp
+}
+
+func (s *Server) handleAnalyzeABSBackupAsync(ctx context.Context, input *AnalyzeABSInput) (*AsyncAnalyzeOutput, error) {
+	_, err := s.RequireAdmin(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate backup path
+	if input.Body.BackupPath == "" {
+		return nil, huma.Error400BadRequest("backup_path is required")
+	}
+
+	// Check file exists
+	if _, err := os.Stat(input.Body.BackupPath); os.IsNotExist(err) {
+		return nil, huma.Error400BadRequest("backup file not found: " + input.Body.BackupPath)
+	}
+
+	// Build analysis options
+	opts := abs.AnalysisOptions{
+		UserMappings:    input.Body.UserMappings,
+		BookMappings:    input.Body.BookMappings,
+		MatchByEmail:    input.Body.MatchByEmail,
+		MatchByPath:     input.Body.MatchByPath,
+		FuzzyMatchBooks: input.Body.FuzzyMatchBooks,
+		FuzzyThreshold:  input.Body.FuzzyThreshold,
+	}
+	if opts.UserMappings == nil {
+		opts.UserMappings = make(map[string]string)
+	}
+	if opts.BookMappings == nil {
+		opts.BookMappings = make(map[string]string)
+	}
+	if opts.FuzzyThreshold == 0 {
+		opts.FuzzyThreshold = 0.85
+	}
+
+	analysisID := uuid.New().String()
+	progress := s.analysisTracker.Start(analysisID)
+
+	go func() {
+		// Parse the backup
+		backup, err := abs.Parse(input.Body.BackupPath)
+		if err != nil {
+			progress.Fail("failed to parse ABS backup: " + err.Error())
+			return
+		}
+
+		// Create analyzer with progress callback
+		analyzer := abs.NewAnalyzer(s.store, s.logger, opts)
+		analyzer.WithProgress(func(phase abs.AnalysisPhase, current, total int) {
+			progress.Update(phase, current, total)
+		})
+
+		// Run analysis (use background context since the HTTP request context will be cancelled)
+		result, err := analyzer.Analyze(context.Background(), backup)
+		if err != nil {
+			progress.Fail("analysis failed: " + err.Error())
+			return
+		}
+
+		// Convert to API response and store
+		resp := s.buildAnalyzeResponse(result, backup.Summary())
+		progress.Complete(resp)
+	}()
+
+	out := &AsyncAnalyzeOutput{}
+	out.Body.AnalysisID = analysisID
+	return out, nil
+}
+
+func (s *Server) handleGetAnalysisStatus(ctx context.Context, input *AnalysisStatusInput) (*AnalysisStatusOutput, error) {
+	_, err := s.RequireAdmin(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	progress := s.analysisTracker.Get(input.AnalysisID)
+	if progress == nil {
+		return nil, huma.Error404NotFound("analysis not found")
+	}
+
+	snap := progress.Snapshot()
+
+	out := &AnalysisStatusOutput{
+		Body: AnalysisStatusResponse{
+			Status:  string(snap.Status),
+			Phase:   string(snap.Phase),
+			Current: snap.Current,
+			Total:   snap.Total,
+			Error:   snap.Error,
+		},
+	}
+
+	if snap.Status == abs.StatusCompleted {
+		if resp, ok := snap.Result.(AnalyzeABSResponse); ok {
+			out.Body.Result = &resp
+		}
+	}
+
+	return out, nil
 }
 
 func (s *Server) handleImportABSBackup(ctx context.Context, input *ImportABSInput) (*ImportABSOutput, error) {
