@@ -10,6 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func strPtr(s string) *string {
+	return &s
+}
+
 // TestRebuildProgressFromEvents_ErrorHandling verifies that rebuildProgressFromEvents
 // correctly handles various error conditions and uses errors.Is() instead of string comparison.
 // This is a REGRESSION TEST for the bug where all progress rebuilds silently failed because
@@ -55,6 +59,90 @@ func TestRebuildProgressFromEvents_UsesErrorsIs(t *testing.T) {
 	// The buggy code would have treated ALL errors as "not progress not found"
 	// because the string never matched, causing the function to fail on EVERY call
 	// This is why all 100+ progress rebuilds failed with user_book_pairs=0
+}
+
+// TestABSImportBookResponse_DisplayFields verifies that when a book is mapped,
+// the response includes listenup_title and listenup_author display fields.
+func TestABSImportBookResponse_DisplayFields(t *testing.T) {
+	// When mapped, display fields should be populated
+	title := "The Great Gatsby"
+	author := "F. Scott Fitzgerald"
+	book := &domain.ABSImportBook{
+		ImportID:       "import_123",
+		ABSMediaID:     "book_1",
+		ABSTitle:       "gatsby.m4b",
+		ABSAuthor:      "Fitzgerald",
+		ListenUpID:     strPtr("lu_book_1"),
+		ListenUpTitle:  &title,
+		ListenUpAuthor: &author,
+		Confidence:     "strong",
+	}
+
+	resp := toABSImportBookResponse(book)
+	assert.Equal(t, "lu_book_1", resp.ListenUpID)
+	assert.Equal(t, "The Great Gatsby", resp.ListenUpTitle)
+	assert.Equal(t, "F. Scott Fitzgerald", resp.ListenUpAuthor)
+	assert.True(t, resp.IsMapped)
+}
+
+// TestABSImportBookResponse_DisplayFieldsClearedOnUnmap verifies that when a book
+// mapping is cleared, the display fields are also cleared.
+func TestABSImportBookResponse_DisplayFieldsClearedOnUnmap(t *testing.T) {
+	book := &domain.ABSImportBook{
+		ImportID:       "import_123",
+		ABSMediaID:     "book_1",
+		ABSTitle:       "gatsby.m4b",
+		ListenUpID:     nil,
+		ListenUpTitle:  nil,
+		ListenUpAuthor: nil,
+	}
+
+	resp := toABSImportBookResponse(book)
+	assert.Empty(t, resp.ListenUpID)
+	assert.Empty(t, resp.ListenUpTitle)
+	assert.Empty(t, resp.ListenUpAuthor)
+	assert.False(t, resp.IsMapped)
+}
+
+// TestABSImportUserResponse_DisplayFields verifies that when a user is mapped,
+// the response includes listenup_email and listenup_display_name.
+func TestABSImportUserResponse_DisplayFields(t *testing.T) {
+	email := "gatsby@example.com"
+	displayName := "Jay Gatsby"
+	user := &domain.ABSImportUser{
+		ImportID:            "import_123",
+		ABSUserID:           "user_1",
+		ABSUsername:         "jgatsby",
+		ListenUpID:          strPtr("lu_user_1"),
+		ListenUpEmail:       &email,
+		ListenUpDisplayName: &displayName,
+		Confidence:          "strong",
+	}
+
+	resp := toABSImportUserResponse(user)
+	assert.Equal(t, "lu_user_1", resp.ListenUpID)
+	assert.Equal(t, "gatsby@example.com", resp.ListenUpEmail)
+	assert.Equal(t, "Jay Gatsby", resp.ListenUpDisplayName)
+	assert.True(t, resp.IsMapped)
+}
+
+// TestABSImportUserResponse_DisplayFieldsClearedOnUnmap verifies that when a user
+// mapping is cleared, the display fields are also cleared.
+func TestABSImportUserResponse_DisplayFieldsClearedOnUnmap(t *testing.T) {
+	user := &domain.ABSImportUser{
+		ImportID:            "import_123",
+		ABSUserID:           "user_1",
+		ABSUsername:         "jgatsby",
+		ListenUpID:          nil,
+		ListenUpEmail:       nil,
+		ListenUpDisplayName: nil,
+	}
+
+	resp := toABSImportUserResponse(user)
+	assert.Empty(t, resp.ListenUpID)
+	assert.Empty(t, resp.ListenUpEmail)
+	assert.Empty(t, resp.ListenUpDisplayName)
+	assert.False(t, resp.IsMapped)
 }
 
 // TestImportABSSessionsOutput_HasFailureFields verifies that the response struct

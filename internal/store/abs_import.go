@@ -315,7 +315,7 @@ func (s *Store) ListABSImportUsers(_ context.Context, importID string, filter do
 }
 
 // UpdateABSImportUserMapping updates the mapping for an ABS import user.
-func (s *Store) UpdateABSImportUserMapping(ctx context.Context, importID, absUserID string, listenUpID *string) error {
+func (s *Store) UpdateABSImportUserMapping(ctx context.Context, importID, absUserID string, listenUpID *string, listenUpEmail *string, listenUpDisplayName *string) error {
 	user, err := s.GetABSImportUser(ctx, importID, absUserID)
 	if err != nil {
 		return err
@@ -323,6 +323,8 @@ func (s *Store) UpdateABSImportUserMapping(ctx context.Context, importID, absUse
 
 	wasMapped := user.IsMapped()
 	user.ListenUpID = listenUpID
+	user.ListenUpEmail = listenUpEmail
+	user.ListenUpDisplayName = listenUpDisplayName
 	if listenUpID != nil {
 		now := time.Now()
 		user.MappedAt = &now
@@ -452,7 +454,7 @@ func (s *Store) ListABSImportBooks(_ context.Context, importID string, filter do
 }
 
 // UpdateABSImportBookMapping updates the mapping for an ABS import book.
-func (s *Store) UpdateABSImportBookMapping(ctx context.Context, importID, absMediaID string, listenUpID *string) error {
+func (s *Store) UpdateABSImportBookMapping(ctx context.Context, importID, absMediaID string, listenUpID *string, listenUpTitle *string, listenUpAuthor *string) error {
 	book, err := s.GetABSImportBook(ctx, importID, absMediaID)
 	if err != nil {
 		return err
@@ -460,6 +462,8 @@ func (s *Store) UpdateABSImportBookMapping(ctx context.Context, importID, absMed
 
 	wasMapped := book.IsMapped()
 	book.ListenUpID = listenUpID
+	book.ListenUpTitle = listenUpTitle
+	book.ListenUpAuthor = listenUpAuthor
 	if listenUpID != nil {
 		now := time.Now()
 		book.MappedAt = &now
