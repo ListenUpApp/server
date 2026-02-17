@@ -50,8 +50,10 @@ type ABSImportUser struct {
 	ABSEmail    string `json:"abs_email"`
 
 	// Mapping to ListenUp user
-	ListenUpID *string    `json:"listenup_id,omitempty"`
-	MappedAt   *time.Time `json:"mapped_at,omitempty"`
+	ListenUpID          *string    `json:"listenup_id,omitempty"`
+	ListenUpEmail       *string    `json:"listenup_email,omitempty"`        // Resolved display info
+	ListenUpDisplayName *string    `json:"listenup_display_name,omitempty"` // Resolved display info
+	MappedAt            *time.Time `json:"mapped_at,omitempty"`
 
 	// Stats for display (helps admin decide on mappings)
 	SessionCount  int   `json:"session_count"`
@@ -79,8 +81,10 @@ type ABSImportBook struct {
 	ABSISBN       string `json:"abs_isbn,omitempty"`
 
 	// Mapping to ListenUp book
-	ListenUpID *string    `json:"listenup_id,omitempty"`
-	MappedAt   *time.Time `json:"mapped_at,omitempty"`
+	ListenUpID     *string    `json:"listenup_id,omitempty"`
+	ListenUpTitle  *string    `json:"listenup_title,omitempty"`  // Resolved display info
+	ListenUpAuthor *string    `json:"listenup_author,omitempty"` // Resolved display info
+	MappedAt       *time.Time `json:"mapped_at,omitempty"`
 
 	// Stats for display
 	SessionCount int `json:"session_count"`

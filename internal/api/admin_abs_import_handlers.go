@@ -228,8 +228,10 @@ type ABSImportUserResponse struct {
 	ABSUserID     string   `json:"abs_user_id" doc:"ABS user ID"`
 	ABSUsername   string   `json:"abs_username" doc:"ABS username"`
 	ABSEmail      string   `json:"abs_email,omitempty" doc:"ABS email"`
-	ListenUpID    string   `json:"listenup_id,omitempty" doc:"Mapped ListenUp user ID"`
-	SessionCount  int      `json:"session_count" doc:"Number of sessions for this user"`
+	ListenUpID          string   `json:"listenup_id,omitempty" doc:"Mapped ListenUp user ID"`
+	ListenUpEmail       string   `json:"listenup_email,omitempty" doc:"Mapped ListenUp user email"`
+	ListenUpDisplayName string   `json:"listenup_display_name,omitempty" doc:"Mapped ListenUp user display name"`
+	SessionCount        int      `json:"session_count" doc:"Number of sessions for this user"`
 	TotalListenMs int64    `json:"total_listen_ms" doc:"Total listening time in milliseconds"`
 	Confidence    string   `json:"confidence" doc:"Match confidence"`
 	MatchReason   string   `json:"match_reason,omitempty" doc:"Why matched"`
@@ -279,8 +281,10 @@ type ABSImportBookResponse struct {
 	ABSTitle      string   `json:"abs_title" doc:"ABS book title"`
 	ABSAuthor     string   `json:"abs_author,omitempty" doc:"ABS author"`
 	ABSDurationMs int64    `json:"abs_duration_ms" doc:"ABS duration in milliseconds"`
-	ListenUpID    string   `json:"listenup_id,omitempty" doc:"Mapped ListenUp book ID"`
-	SessionCount  int      `json:"session_count" doc:"Number of sessions for this book"`
+	ListenUpID     string   `json:"listenup_id,omitempty" doc:"Mapped ListenUp book ID"`
+	ListenUpTitle  string   `json:"listenup_title,omitempty" doc:"Mapped ListenUp book title"`
+	ListenUpAuthor string   `json:"listenup_author,omitempty" doc:"Mapped ListenUp book author (first contributor)"`
+	SessionCount   int      `json:"session_count" doc:"Number of sessions for this book"`
 	Confidence    string   `json:"confidence" doc:"Match confidence"`
 	MatchReason   string   `json:"match_reason,omitempty" doc:"Why matched"`
 	Suggestions   []string `json:"suggestions,omitempty" doc:"Suggested ListenUp book IDs"`
@@ -793,12 +797,21 @@ func (s *Server) handleMapABSImportUser(ctx context.Context, input *MapABSImport
 	}
 
 	// Verify ListenUp user exists
-	_, err = s.store.GetUser(ctx, input.Body.ListenUpID)
+	luUser, err := s.store.GetUser(ctx, input.Body.ListenUpID)
 	if err != nil {
 		return nil, huma.Error400BadRequest("ListenUp user not found")
 	}
 
-	if err := s.store.UpdateABSImportUserMapping(ctx, input.ID, input.ABSUserID, &input.Body.ListenUpID); err != nil {
+	// Resolve display info for the mapped user
+	var luEmail, luDisplayName *string
+	if luUser.Email != "" {
+		luEmail = &luUser.Email
+	}
+	if luUser.DisplayName != "" {
+		luDisplayName = &luUser.DisplayName
+	}
+
+	if err := s.store.UpdateABSImportUserMapping(ctx, input.ID, input.ABSUserID, &input.Body.ListenUpID, luEmail, luDisplayName); err != nil {
 		return nil, huma.Error500InternalServerError("failed to update mapping", err)
 	}
 
@@ -826,7 +839,7 @@ func (s *Server) handleClearABSImportUserMapping(ctx context.Context, input *Cle
 		return nil, err
 	}
 
-	if err := s.store.UpdateABSImportUserMapping(ctx, input.ID, input.ABSUserID, nil); err != nil {
+	if err := s.store.UpdateABSImportUserMapping(ctx, input.ID, input.ABSUserID, nil, nil, nil); err != nil {
 		return nil, huma.Error500InternalServerError("failed to clear mapping", err)
 	}
 
@@ -884,12 +897,19 @@ func (s *Server) handleMapABSImportBook(ctx context.Context, input *MapABSImport
 	}
 
 	// Verify ListenUp book exists (pass empty userID for admin access)
-	_, err = s.store.GetBook(ctx, input.Body.ListenUpID, "")
+	luBook, err := s.store.GetBook(ctx, input.Body.ListenUpID, "")
 	if err != nil {
 		return nil, huma.Error400BadRequest("ListenUp book not found")
 	}
 
-	if err := s.store.UpdateABSImportBookMapping(ctx, input.ID, input.ABSMediaID, &input.Body.ListenUpID); err != nil {
+	// Resolve display info for the mapped book
+	var luTitle *string
+	if luBook.Title != "" {
+		luTitle = &luBook.Title
+	}
+	luAuthor := (*string)(nil) // Contributors are separate entities; author display TBD
+
+	if err := s.store.UpdateABSImportBookMapping(ctx, input.ID, input.ABSMediaID, &input.Body.ListenUpID, luTitle, luAuthor); err != nil {
 		return nil, huma.Error500InternalServerError("failed to update mapping", err)
 	}
 
@@ -917,7 +937,7 @@ func (s *Server) handleClearABSImportBookMapping(ctx context.Context, input *Cle
 		return nil, err
 	}
 
-	if err := s.store.UpdateABSImportBookMapping(ctx, input.ID, input.ABSMediaID, nil); err != nil {
+	if err := s.store.UpdateABSImportBookMapping(ctx, input.ID, input.ABSMediaID, nil, nil, nil); err != nil {
 		return nil, huma.Error500InternalServerError("failed to clear mapping", err)
 	}
 
@@ -1576,6 +1596,12 @@ func toABSImportUserResponse(u *domain.ABSImportUser) ABSImportUserResponse {
 	if u.ListenUpID != nil {
 		resp.ListenUpID = *u.ListenUpID
 	}
+	if u.ListenUpEmail != nil {
+		resp.ListenUpEmail = *u.ListenUpEmail
+	}
+	if u.ListenUpDisplayName != nil {
+		resp.ListenUpDisplayName = *u.ListenUpDisplayName
+	}
 	return resp
 }
 
@@ -1593,6 +1619,12 @@ func toABSImportBookResponse(b *domain.ABSImportBook) ABSImportBookResponse {
 	}
 	if b.ListenUpID != nil {
 		resp.ListenUpID = *b.ListenUpID
+	}
+	if b.ListenUpTitle != nil {
+		resp.ListenUpTitle = *b.ListenUpTitle
+	}
+	if b.ListenUpAuthor != nil {
+		resp.ListenUpAuthor = *b.ListenUpAuthor
 	}
 	return resp
 }

@@ -417,7 +417,9 @@ func TestUpdateABSImportUserMapping_MapUser(t *testing.T) {
 
 	// Map user
 	listenUpID := "lu_user_1"
-	err = store.UpdateABSImportUserMapping(ctx, "import_123", "user_1", &listenUpID)
+	email := "user@example.com"
+	displayName := "Test User"
+	err = store.UpdateABSImportUserMapping(ctx, "import_123", "user_1", &listenUpID, &email, &displayName)
 	require.NoError(t, err)
 
 	// Verify mapping
@@ -425,6 +427,8 @@ func TestUpdateABSImportUserMapping_MapUser(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, updated.IsMapped())
 	assert.Equal(t, listenUpID, *updated.ListenUpID)
+	assert.Equal(t, email, *updated.ListenUpEmail)
+	assert.Equal(t, displayName, *updated.ListenUpDisplayName)
 	assert.NotNil(t, updated.MappedAt)
 }
 
@@ -447,7 +451,7 @@ func TestUpdateABSImportUserMapping_ClearMapping(t *testing.T) {
 	require.NoError(t, err)
 
 	// Clear mapping
-	err = store.UpdateABSImportUserMapping(ctx, "import_123", "user_1", nil)
+	err = store.UpdateABSImportUserMapping(ctx, "import_123", "user_1", nil, nil, nil)
 	require.NoError(t, err)
 
 	// Verify mapping cleared
@@ -455,6 +459,8 @@ func TestUpdateABSImportUserMapping_ClearMapping(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, updated.IsMapped())
 	assert.Nil(t, updated.ListenUpID)
+	assert.Nil(t, updated.ListenUpEmail)
+	assert.Nil(t, updated.ListenUpDisplayName)
 	assert.Nil(t, updated.MappedAt)
 }
 
@@ -465,7 +471,7 @@ func TestUpdateABSImportUserMapping_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	listenUpID := "lu_user_1"
-	err := store.UpdateABSImportUserMapping(ctx, "import_123", "nonexistent", &listenUpID)
+	err := store.UpdateABSImportUserMapping(ctx, "import_123", "nonexistent", &listenUpID, nil, nil)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrABSImportUserNotFound)
 }
@@ -563,7 +569,9 @@ func TestUpdateABSImportBookMapping(t *testing.T) {
 
 	// Map book
 	listenUpID := "lu_book_1"
-	err = store.UpdateABSImportBookMapping(ctx, "import_123", "book_1", &listenUpID)
+	title := "The Great Book"
+	author := "Jane Author"
+	err = store.UpdateABSImportBookMapping(ctx, "import_123", "book_1", &listenUpID, &title, &author)
 	require.NoError(t, err)
 
 	// Verify mapping
@@ -571,6 +579,44 @@ func TestUpdateABSImportBookMapping(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, updated.IsMapped())
 	assert.Equal(t, listenUpID, *updated.ListenUpID)
+	assert.Equal(t, title, *updated.ListenUpTitle)
+	assert.Equal(t, author, *updated.ListenUpAuthor)
+}
+
+func TestUpdateABSImportBookMapping_ClearMapping(t *testing.T) {
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	now := time.Now()
+	listenUpID := "lu_book_1"
+	title := "Great Book"
+	author := "Great Author"
+	book := &domain.ABSImportBook{
+		ImportID:       "import_123",
+		ABSMediaID:     "book_1",
+		ABSTitle:       "Test Book",
+		ListenUpID:     &listenUpID,
+		ListenUpTitle:  &title,
+		ListenUpAuthor: &author,
+		MappedAt:       &now,
+	}
+	err := store.CreateABSImportBook(ctx, book)
+	require.NoError(t, err)
+
+	// Clear mapping
+	err = store.UpdateABSImportBookMapping(ctx, "import_123", "book_1", nil, nil, nil)
+	require.NoError(t, err)
+
+	// Verify mapping and display info cleared
+	updated, err := store.GetABSImportBook(ctx, "import_123", "book_1")
+	require.NoError(t, err)
+	assert.False(t, updated.IsMapped())
+	assert.Nil(t, updated.ListenUpID)
+	assert.Nil(t, updated.ListenUpTitle)
+	assert.Nil(t, updated.ListenUpAuthor)
+	assert.Nil(t, updated.MappedAt)
 }
 
 // --- ABSImportSession Tests ---
@@ -768,7 +814,7 @@ func TestRecalculateSessionStatuses_UserMapped(t *testing.T) {
 
 	// Map user
 	listenUpUserID := "lu_user_1"
-	err = store.UpdateABSImportUserMapping(ctx, "import_123", "user_1", &listenUpUserID)
+	err = store.UpdateABSImportUserMapping(ctx, "import_123", "user_1", &listenUpUserID, nil, nil)
 	require.NoError(t, err)
 
 	// Recalculate - should move to pending_book
