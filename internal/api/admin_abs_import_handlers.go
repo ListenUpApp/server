@@ -225,18 +225,18 @@ type ListABSImportUsersInput struct {
 }
 
 type ABSImportUserResponse struct {
-	ABSUserID     string   `json:"abs_user_id" doc:"ABS user ID"`
-	ABSUsername   string   `json:"abs_username" doc:"ABS username"`
-	ABSEmail      string   `json:"abs_email,omitempty" doc:"ABS email"`
+	ABSUserID           string   `json:"abs_user_id" doc:"ABS user ID"`
+	ABSUsername         string   `json:"abs_username" doc:"ABS username"`
+	ABSEmail            string   `json:"abs_email,omitempty" doc:"ABS email"`
 	ListenUpID          string   `json:"listenup_id,omitempty" doc:"Mapped ListenUp user ID"`
 	ListenUpEmail       string   `json:"listenup_email,omitempty" doc:"Mapped ListenUp user email"`
 	ListenUpDisplayName string   `json:"listenup_display_name,omitempty" doc:"Mapped ListenUp user display name"`
 	SessionCount        int      `json:"session_count" doc:"Number of sessions for this user"`
-	TotalListenMs int64    `json:"total_listen_ms" doc:"Total listening time in milliseconds"`
-	Confidence    string   `json:"confidence" doc:"Match confidence"`
-	MatchReason   string   `json:"match_reason,omitempty" doc:"Why matched"`
-	Suggestions   []string `json:"suggestions,omitempty" doc:"Suggested ListenUp user IDs"`
-	IsMapped      bool     `json:"is_mapped" doc:"Whether this user is mapped"`
+	TotalListenMs       int64    `json:"total_listen_ms" doc:"Total listening time in milliseconds"`
+	Confidence          string   `json:"confidence" doc:"Match confidence"`
+	MatchReason         string   `json:"match_reason,omitempty" doc:"Why matched"`
+	Suggestions         []string `json:"suggestions,omitempty" doc:"Suggested ListenUp user IDs"`
+	IsMapped            bool     `json:"is_mapped" doc:"Whether this user is mapped"`
 }
 
 type ListABSImportUsersOutput struct {
@@ -277,18 +277,18 @@ type ListABSImportBooksInput struct {
 }
 
 type ABSImportBookResponse struct {
-	ABSMediaID    string   `json:"abs_media_id" doc:"ABS media ID"`
-	ABSTitle      string   `json:"abs_title" doc:"ABS book title"`
-	ABSAuthor     string   `json:"abs_author,omitempty" doc:"ABS author"`
-	ABSDurationMs int64    `json:"abs_duration_ms" doc:"ABS duration in milliseconds"`
+	ABSMediaID     string   `json:"abs_media_id" doc:"ABS media ID"`
+	ABSTitle       string   `json:"abs_title" doc:"ABS book title"`
+	ABSAuthor      string   `json:"abs_author,omitempty" doc:"ABS author"`
+	ABSDurationMs  int64    `json:"abs_duration_ms" doc:"ABS duration in milliseconds"`
 	ListenUpID     string   `json:"listenup_id,omitempty" doc:"Mapped ListenUp book ID"`
 	ListenUpTitle  string   `json:"listenup_title,omitempty" doc:"Mapped ListenUp book title"`
 	ListenUpAuthor string   `json:"listenup_author,omitempty" doc:"Mapped ListenUp book author (first contributor)"`
 	SessionCount   int      `json:"session_count" doc:"Number of sessions for this book"`
-	Confidence    string   `json:"confidence" doc:"Match confidence"`
-	MatchReason   string   `json:"match_reason,omitempty" doc:"Why matched"`
-	Suggestions   []string `json:"suggestions,omitempty" doc:"Suggested ListenUp book IDs"`
-	IsMapped      bool     `json:"is_mapped" doc:"Whether this book is mapped"`
+	Confidence     string   `json:"confidence" doc:"Match confidence"`
+	MatchReason    string   `json:"match_reason,omitempty" doc:"Why matched"`
+	Suggestions    []string `json:"suggestions,omitempty" doc:"Suggested ListenUp book IDs"`
+	IsMapped       bool     `json:"is_mapped" doc:"Whether this book is mapped"`
 }
 
 type ListABSImportBooksOutput struct {
