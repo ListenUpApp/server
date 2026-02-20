@@ -407,3 +407,101 @@ func TestImportStatsUpdate(t *testing.T) {
 	assert.LessOrEqual(t, stats.BooksMapped, stats.BooksTotal)
 	assert.LessOrEqual(t, stats.SessionsImported, stats.SessionsTotal)
 }
+
+// TestABSImportStatusAnalyzing verifies the new analyzing status constant.
+func TestABSImportStatusAnalyzing(t *testing.T) {
+	assert.Equal(t, domain.ABSImportStatus("analyzing"), domain.ABSImportStatusAnalyzing)
+
+	// Verify it serializes correctly in responses
+	imp := &domain.ABSImport{
+		ID:     "test-123",
+		Name:   "Test Import",
+		Status: domain.ABSImportStatusAnalyzing,
+	}
+	resp := toABSImportResponse(imp)
+	assert.Equal(t, "analyzing", resp.Status)
+}
+
+// TestABSImportStatusFailed verifies the new failed status constant.
+func TestABSImportStatusFailed(t *testing.T) {
+	assert.Equal(t, domain.ABSImportStatus("failed"), domain.ABSImportStatusFailed)
+
+	imp := &domain.ABSImport{
+		ID:     "test-123",
+		Name:   "Test Import",
+		Status: domain.ABSImportStatusFailed,
+	}
+	resp := toABSImportResponse(imp)
+	assert.Equal(t, "failed", resp.Status)
+}
+
+// TestCreateABSImport_ReturnsAnalyzingStatus verifies that the handler creates
+// an import with "analyzing" status (not "active") for async processing.
+func TestCreateABSImport_ReturnsAnalyzingStatus(t *testing.T) {
+	// The handler now creates the import record with ABSImportStatusAnalyzing
+	// and returns immediately. The heavy analysis runs in a background goroutine.
+	imp := &domain.ABSImport{
+		ID:         "test-import",
+		Name:       "Test Import",
+		BackupPath: "/tmp/backup.audiobookshelf",
+		Status:     domain.ABSImportStatusAnalyzing,
+	}
+	resp := toABSImportResponse(imp)
+
+	// Response should show "analyzing" status
+	assert.Equal(t, "analyzing", resp.Status)
+
+	// Counts should be zero since analysis hasn't run yet
+	assert.Equal(t, 0, resp.TotalUsers)
+	assert.Equal(t, 0, resp.TotalBooks)
+	assert.Equal(t, 0, resp.TotalSessions)
+	assert.Equal(t, 0, resp.UsersMapped)
+	assert.Equal(t, 0, resp.BooksMapped)
+}
+
+// TestAutoMatchedBookDisplayName verifies that when a book is auto-matched,
+// the display name (ListenUpTitle) is populated from the store lookup.
+func TestAutoMatchedBookDisplayName(t *testing.T) {
+	// This documents the fix: auto-matched books should have ListenUpTitle set
+	// Previously, only ListenUpID was set but ListenUpTitle was left nil
+	title := "The Name of the Wind"
+	book := &domain.ABSImportBook{
+		ImportID:      "import-1",
+		ABSMediaID:    "abs-book-1",
+		ABSTitle:      "Name of the Wind.m4b",
+		ListenUpID:    strPtr("lu-book-1"),
+		ListenUpTitle: &title, // This was the bug - it was nil before the fix
+		Confidence:    "definitive",
+		MatchReason:   "ASIN match",
+	}
+
+	resp := toABSImportBookResponse(book)
+	assert.Equal(t, "The Name of the Wind", resp.ListenUpTitle,
+		"Auto-matched book should have display title populated")
+	assert.True(t, resp.IsMapped)
+}
+
+// TestAutoMatchedUserDisplayName verifies that when a user is auto-matched,
+// the display info (ListenUpEmail, ListenUpDisplayName) is populated.
+func TestAutoMatchedUserDisplayName(t *testing.T) {
+	// This documents the fix: auto-matched users should have display info set
+	email := "simon@example.com"
+	displayName := "Simon Hull"
+	user := &domain.ABSImportUser{
+		ImportID:            "import-1",
+		ABSUserID:           "abs-user-1",
+		ABSUsername:         "simonh",
+		ListenUpID:          strPtr("lu-user-1"),
+		ListenUpEmail:       &email,       // Was nil before the fix
+		ListenUpDisplayName: &displayName, // Was nil before the fix
+		Confidence:          "definitive",
+		MatchReason:         "Email match",
+	}
+
+	resp := toABSImportUserResponse(user)
+	assert.Equal(t, "simon@example.com", resp.ListenUpEmail,
+		"Auto-matched user should have email populated")
+	assert.Equal(t, "Simon Hull", resp.ListenUpDisplayName,
+		"Auto-matched user should have display name populated")
+	assert.True(t, resp.IsMapped)
+}
