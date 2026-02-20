@@ -815,8 +815,8 @@ func (s *Server) handleMapABSImportUser(ctx context.Context, input *MapABSImport
 		return nil, huma.Error500InternalServerError("failed to update mapping", err)
 	}
 
-	// Recalculate session statuses
-	if err := s.store.RecalculateSessionStatuses(ctx, input.ID); err != nil {
+	// Recalculate session statuses for affected user only
+	if err := s.store.RecalculateSessionStatusesForUser(ctx, input.ID, input.ABSUserID); err != nil {
 		s.logger.Error("failed to recalculate sessions", slog.String("error", err.Error()))
 	}
 
@@ -843,8 +843,8 @@ func (s *Server) handleClearABSImportUserMapping(ctx context.Context, input *Cle
 		return nil, huma.Error500InternalServerError("failed to clear mapping", err)
 	}
 
-	// Recalculate session statuses
-	if err := s.store.RecalculateSessionStatuses(ctx, input.ID); err != nil {
+	// Recalculate session statuses for affected user only
+	if err := s.store.RecalculateSessionStatusesForUser(ctx, input.ID, input.ABSUserID); err != nil {
 		s.logger.Error("failed to recalculate sessions", slog.String("error", err.Error()))
 	}
 
@@ -913,8 +913,8 @@ func (s *Server) handleMapABSImportBook(ctx context.Context, input *MapABSImport
 		return nil, huma.Error500InternalServerError("failed to update mapping", err)
 	}
 
-	// Recalculate session statuses
-	if err := s.store.RecalculateSessionStatuses(ctx, input.ID); err != nil {
+	// Recalculate session statuses for affected book only
+	if err := s.store.RecalculateSessionStatusesForBook(ctx, input.ID, input.ABSMediaID); err != nil {
 		s.logger.Error("failed to recalculate sessions", slog.String("error", err.Error()))
 	}
 
@@ -941,8 +941,8 @@ func (s *Server) handleClearABSImportBookMapping(ctx context.Context, input *Cle
 		return nil, huma.Error500InternalServerError("failed to clear mapping", err)
 	}
 
-	// Recalculate session statuses
-	if err := s.store.RecalculateSessionStatuses(ctx, input.ID); err != nil {
+	// Recalculate session statuses for affected book only
+	if err := s.store.RecalculateSessionStatusesForBook(ctx, input.ID, input.ABSMediaID); err != nil {
 		s.logger.Error("failed to recalculate sessions", slog.String("error", err.Error()))
 	}
 

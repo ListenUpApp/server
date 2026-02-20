@@ -799,6 +799,134 @@ func (s *Store) RecalculateSessionStatuses(ctx context.Context, importID string)
 	return nil
 }
 
+// RecalculateSessionStatusesForBook updates session statuses for sessions matching a specific book.
+// Use this instead of RecalculateSessionStatuses when only a single book mapping changed.
+func (s *Store) RecalculateSessionStatusesForBook(ctx context.Context, importID, absMediaID string) error {
+	users, err := s.ListABSImportUsers(ctx, importID, domain.MappingFilterAll)
+	if err != nil {
+		return fmt.Errorf("list users: %w", err)
+	}
+
+	book, err := s.GetABSImportBook(ctx, importID, absMediaID)
+	if err != nil {
+		return fmt.Errorf("get book %s: %w", absMediaID, err)
+	}
+
+	userMapped := make(map[string]bool)
+	for _, u := range users {
+		userMapped[u.ABSUserID] = u.IsMapped()
+	}
+	bookOK := book.IsMapped()
+
+	sessions, err := s.ListABSImportSessions(ctx, importID, domain.SessionFilterAll)
+	if err != nil {
+		return fmt.Errorf("list sessions: %w", err)
+	}
+
+	updated := 0
+	for _, session := range sessions {
+		if session.ABSMediaID != absMediaID {
+			continue
+		}
+		if session.Status == domain.SessionStatusImported || session.Status == domain.SessionStatusSkipped {
+			continue
+		}
+
+		userOK := userMapped[session.ABSUserID]
+
+		var newStatus domain.SessionImportStatus
+		switch {
+		case userOK && bookOK:
+			newStatus = domain.SessionStatusReady
+		case !userOK:
+			newStatus = domain.SessionStatusPendingUser
+		default:
+			newStatus = domain.SessionStatusPendingBook
+		}
+
+		if session.Status != newStatus {
+			if err := s.UpdateABSImportSessionStatus(ctx, importID, session.ABSSessionID, newStatus); err != nil {
+				return fmt.Errorf("update session %s: %w", session.ABSSessionID, err)
+			}
+			updated++
+		}
+	}
+
+	if s.logger != nil {
+		s.logger.Info("RecalculateSessionStatusesForBook: done",
+			slog.String("abs_media_id", absMediaID),
+			slog.Bool("book_mapped", bookOK),
+			slog.Int("sessions_updated", updated),
+		)
+	}
+
+	return nil
+}
+
+// RecalculateSessionStatusesForUser updates session statuses for sessions matching a specific user.
+// Use this instead of RecalculateSessionStatuses when only a single user mapping changed.
+func (s *Store) RecalculateSessionStatusesForUser(ctx context.Context, importID, absUserID string) error {
+	books, err := s.ListABSImportBooks(ctx, importID, domain.MappingFilterAll)
+	if err != nil {
+		return fmt.Errorf("list books: %w", err)
+	}
+
+	user, err := s.GetABSImportUser(ctx, importID, absUserID)
+	if err != nil {
+		return fmt.Errorf("get user %s: %w", absUserID, err)
+	}
+
+	bookMapped := make(map[string]bool)
+	for _, b := range books {
+		bookMapped[b.ABSMediaID] = b.IsMapped()
+	}
+	userOK := user.IsMapped()
+
+	sessions, err := s.ListABSImportSessions(ctx, importID, domain.SessionFilterAll)
+	if err != nil {
+		return fmt.Errorf("list sessions: %w", err)
+	}
+
+	updated := 0
+	for _, session := range sessions {
+		if session.ABSUserID != absUserID {
+			continue
+		}
+		if session.Status == domain.SessionStatusImported || session.Status == domain.SessionStatusSkipped {
+			continue
+		}
+
+		bookOK := bookMapped[session.ABSMediaID]
+
+		var newStatus domain.SessionImportStatus
+		switch {
+		case userOK && bookOK:
+			newStatus = domain.SessionStatusReady
+		case !userOK:
+			newStatus = domain.SessionStatusPendingUser
+		default:
+			newStatus = domain.SessionStatusPendingBook
+		}
+
+		if session.Status != newStatus {
+			if err := s.UpdateABSImportSessionStatus(ctx, importID, session.ABSSessionID, newStatus); err != nil {
+				return fmt.Errorf("update session %s: %w", session.ABSSessionID, err)
+			}
+			updated++
+		}
+	}
+
+	if s.logger != nil {
+		s.logger.Info("RecalculateSessionStatusesForUser: done",
+			slog.String("abs_user_id", absUserID),
+			slog.Bool("user_mapped", userOK),
+			slog.Int("sessions_updated", updated),
+		)
+	}
+
+	return nil
+}
+
 // GetABSImportStats recalculates and returns current stats for an import.
 func (s *Store) GetABSImportStats(ctx context.Context, importID string) (mapped, unmapped, ready, imported int, err error) {
 	users, err := s.ListABSImportUsers(ctx, importID, domain.MappingFilterAll)
