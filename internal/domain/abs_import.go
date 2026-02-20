@@ -9,6 +9,8 @@ const (
 	ABSImportStatusActive    ABSImportStatus = "active"
 	ABSImportStatusCompleted ABSImportStatus = "completed"
 	ABSImportStatusArchived  ABSImportStatus = "archived"
+	ABSImportStatusAnalyzing ABSImportStatus = "analyzing"
+	ABSImportStatusFailed    ABSImportStatus = "failed"
 )
 
 // SessionImportStatus represents the import state of an individual session.

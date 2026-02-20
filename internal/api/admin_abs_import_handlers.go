@@ -402,10 +402,58 @@ func (s *Server) handleCreateABSImport(ctx context.Context, input *CreateABSImpo
 		return nil, huma.Error400BadRequest("backup file not found")
 	}
 
+	// Create import record immediately with "analyzing" status and return
+	now := time.Now()
+	name := input.Body.Name
+	if name == "" {
+		name = "ABS Import " + now.Format("2006-01-02")
+	}
+
+	imp := &domain.ABSImport{
+		ID:         uuid.New().String(),
+		Name:       name,
+		BackupPath: input.Body.BackupPath,
+		Status:     domain.ABSImportStatusAnalyzing,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	}
+
+	if err := s.store.CreateABSImport(ctx, imp); err != nil {
+		return nil, huma.Error500InternalServerError("failed to create import", err)
+	}
+
+	// Launch background analysis
+	go s.runImportAnalysis(imp.ID, input.Body.BackupPath)
+
+	return &CreateABSImportOutput{
+		Body: toABSImportResponse(imp),
+	}, nil
+}
+
+func (s *Server) runImportAnalysis(importID, backupPath string) {
+	bgCtx := context.Background()
+
+	setFailed := func(err error) {
+		s.logger.Error("import analysis failed",
+			slog.String("import_id", importID),
+			slog.String("error", err.Error()))
+		imp, getErr := s.store.GetABSImport(bgCtx, importID)
+		if getErr != nil {
+			s.logger.Error("failed to get import for status update", slog.String("error", getErr.Error()))
+			return
+		}
+		imp.Status = domain.ABSImportStatusFailed
+		imp.UpdatedAt = time.Now()
+		if updateErr := s.store.UpdateABSImport(bgCtx, imp); updateErr != nil {
+			s.logger.Error("failed to update import status to failed", slog.String("error", updateErr.Error()))
+		}
+	}
+
 	// Parse the backup
-	backup, err := abs.Parse(input.Body.BackupPath)
+	backup, err := abs.Parse(backupPath)
 	if err != nil {
-		return nil, huma.Error400BadRequest("failed to parse ABS backup: " + err.Error())
+		setFailed(fmt.Errorf("failed to parse ABS backup: %w", err))
+		return
 	}
 
 	// Run initial analysis to get matches
@@ -418,39 +466,17 @@ func (s *Server) handleCreateABSImport(ctx context.Context, input *CreateABSImpo
 		BookMappings:    make(map[string]string),
 	}
 	analyzer := abs.NewAnalyzer(s.store, s.logger, opts)
-	analysis, err := analyzer.Analyze(ctx, backup)
+	analysis, err := analyzer.Analyze(bgCtx, backup)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("analysis failed", err)
-	}
-
-	// Create the persistent import
-	now := time.Now()
-	name := input.Body.Name
-	if name == "" {
-		name = "ABS Import " + now.Format("2006-01-02")
-	}
-
-	imp := &domain.ABSImport{
-		ID:            uuid.New().String(),
-		Name:          name,
-		BackupPath:    input.Body.BackupPath,
-		Status:        domain.ABSImportStatusActive,
-		CreatedAt:     now,
-		UpdatedAt:     now,
-		TotalUsers:    analysis.TotalUsers,
-		TotalBooks:    analysis.TotalBooks,
-		TotalSessions: analysis.TotalSessions,
-	}
-
-	if err := s.store.CreateABSImport(ctx, imp); err != nil {
-		return nil, huma.Error500InternalServerError("failed to create import", err)
+		setFailed(fmt.Errorf("analysis failed: %w", err))
+		return
 	}
 
 	// Store all parsed users with analysis results
 	usersMapped := 0
 	for _, um := range analysis.UserMatches {
 		user := &domain.ABSImportUser{
-			ImportID:      imp.ID,
+			ImportID:      importID,
 			ABSUserID:     um.ABSUser.ID,
 			ABSUsername:   um.ABSUser.Username,
 			ABSEmail:      um.ABSUser.Email,
@@ -468,21 +494,36 @@ func (s *Server) handleCreateABSImport(ctx context.Context, input *CreateABSImpo
 			now := time.Now()
 			user.MappedAt = &now
 			wasAutoMapped = true
+
+			// Resolve display info for auto-matched user
+			luUser, err := s.store.GetUser(bgCtx, um.ListenUpID)
+			if err == nil {
+				if luUser.Email != "" {
+					user.ListenUpEmail = &luUser.Email
+				}
+				if luUser.DisplayName != "" {
+					user.ListenUpDisplayName = &luUser.DisplayName
+				}
+			} else {
+				s.logger.Warn("failed to resolve display info for auto-matched user",
+					slog.String("listenup_id", um.ListenUpID),
+					slog.String("error", err.Error()))
+			}
 		}
 
-		if err := s.store.CreateABSImportUser(ctx, user); err != nil {
+		if err := s.store.CreateABSImportUser(bgCtx, user); err != nil {
 			s.logger.Error("failed to store import user",
 				slog.String("abs_user_id", um.ABSUser.ID),
 				slog.String("error", err.Error()))
-			continue // Skip counting if store failed
+			continue
 		}
 
-		// Store user's media progress entries (for finished status tracking)
+		// Store user's media progress entries
 		progressStored := 0
 		finishedStored := 0
 		for _, mp := range um.ABSUser.Progress {
 			if !mp.IsBook() {
-				continue // Skip podcasts
+				continue
 			}
 			if mp.LibraryItemID == "" {
 				s.logger.Warn("skipping media progress with empty library item ID",
@@ -491,35 +532,29 @@ func (s *Server) handleCreateABSImport(ctx context.Context, input *CreateABSImpo
 				continue
 			}
 			progress := &domain.ABSImportProgress{
-				ImportID:    imp.ID,
+				ImportID:    importID,
 				ABSUserID:   um.ABSUser.ID,
-				ABSMediaID:  mp.LibraryItemID, // This is books.id, same as LibraryItem.MediaID
+				ABSMediaID:  mp.LibraryItemID,
 				CurrentTime: int64(mp.CurrentTime * 1000),
 				Duration:    int64(mp.Duration * 1000),
 				Progress:    mp.Progress,
 				IsFinished:  mp.IsFinished,
 				LastUpdate:  mp.LastUpdateTime(),
-				Status:      domain.SessionStatusPendingBook, // Will be updated when book is mapped
+				Status:      domain.SessionStatusPendingBook,
 			}
 			if mp.FinishedAt > 0 {
 				finishedAt := time.UnixMilli(mp.FinishedAt)
 				progress.FinishedAt = &finishedAt
 			}
-			if err := s.store.CreateABSImportProgress(ctx, progress); err != nil {
+			if err := s.store.CreateABSImportProgress(bgCtx, progress); err != nil {
 				s.logger.Error("failed to store import progress",
 					slog.String("abs_user_id", um.ABSUser.ID),
 					slog.String("abs_media_id", mp.LibraryItemID),
 					slog.String("error", err.Error()))
-				// Continue - progress storage failure is not critical
 			} else {
 				progressStored++
 				if mp.IsFinished {
 					finishedStored++
-					s.logger.Debug("stored FINISHED progress entry",
-						slog.String("abs_user_id", um.ABSUser.ID),
-						slog.String("abs_media_id", mp.LibraryItemID),
-						slog.Int64("duration_ms", progress.Duration),
-						slog.Int64("current_time_ms", progress.CurrentTime))
 				}
 			}
 		}
@@ -529,7 +564,6 @@ func (s *Server) handleCreateABSImport(ctx context.Context, input *CreateABSImpo
 			slog.Int("progress_stored", progressStored),
 			slog.Int("finished_stored", finishedStored))
 
-		// Only count after successful store
 		if wasAutoMapped {
 			usersMapped++
 		}
@@ -539,7 +573,7 @@ func (s *Server) handleCreateABSImport(ctx context.Context, input *CreateABSImpo
 	booksMapped := 0
 	for _, bm := range analysis.BookMatches {
 		book := &domain.ABSImportBook{
-			ImportID:      imp.ID,
+			ImportID:      importID,
 			ABSMediaID:    bm.ABSItem.MediaID,
 			ABSTitle:      bm.ABSItem.Media.Metadata.Title,
 			ABSAuthor:     bm.ABSItem.Media.Metadata.PrimaryAuthor(),
@@ -552,81 +586,59 @@ func (s *Server) handleCreateABSImport(ctx context.Context, input *CreateABSImpo
 			Suggestions:   extractBookSuggestionIDs(bm.Suggestions),
 		}
 
-		// Apply auto-match if confidence is strong enough
 		wasAutoMapped := false
 		if bm.Confidence.ShouldAutoImport() && bm.ListenUpID != "" {
 			book.ListenUpID = &bm.ListenUpID
 			now := time.Now()
 			book.MappedAt = &now
 			wasAutoMapped = true
+
+			// Resolve display info for auto-matched book
+			luBook, err := s.store.GetBook(bgCtx, bm.ListenUpID, "")
+			if err == nil {
+				if luBook.Title != "" {
+					book.ListenUpTitle = &luBook.Title
+				}
+			} else {
+				s.logger.Warn("failed to resolve display info for auto-matched book",
+					slog.String("listenup_id", bm.ListenUpID),
+					slog.String("error", err.Error()))
+			}
 		}
 
-		if err := s.store.CreateABSImportBook(ctx, book); err != nil {
+		if err := s.store.CreateABSImportBook(bgCtx, book); err != nil {
 			s.logger.Error("failed to store import book",
 				slog.String("abs_media_id", bm.ABSItem.MediaID),
 				slog.String("title", bm.ABSItem.Media.Metadata.Title),
 				slog.String("error", err.Error()))
-			continue // Skip counting if store failed
+			continue
 		}
-		listenUpIDStr := ""
-		if book.ListenUpID != nil {
-			listenUpIDStr = *book.ListenUpID
-		}
-		s.logger.Debug("stored ABS import book",
-			slog.String("abs_media_id", bm.ABSItem.MediaID),
-			slog.String("abs_title", book.ABSTitle),
-			slog.Bool("auto_mapped", wasAutoMapped),
-			slog.String("listenup_id", listenUpIDStr))
 
-		// Only count after successful store
 		if wasAutoMapped {
 			booksMapped++
 		}
 	}
 
-	// DIAGNOSTIC: Log book mapping summary
 	s.logger.Info("import creation: book mapping summary",
 		slog.Int("total_books_in_abs", len(analysis.BookMatches)),
 		slog.Int("auto_mapped_to_listenup", booksMapped),
 		slog.Int("unmapped_books", len(analysis.BookMatches)-booksMapped))
 
-	// Build a lookup from book MediaID (what sessions use) to the stored ABSMediaID
-	// This handles potential discrepancies between session.LibraryItemID and book ABSMediaID
-	bookMediaIDLookup := make(map[string]string) // session's mediaID -> book's ABSMediaID
+	// Build book media ID lookup for session normalization
+	bookMediaIDLookup := make(map[string]string)
 	for _, bm := range analysis.BookMatches {
-		// The book's ABSMediaID is bm.ABSItem.MediaID
-		// Sessions might reference this as their LibraryItemID
 		bookMediaIDLookup[bm.ABSItem.MediaID] = bm.ABSItem.MediaID
-		// Also map the libraryItem's ID (li.id) to the book's mediaID in case sessions use li.id
 		if bm.ABSItem.ID != "" && bm.ABSItem.ID != bm.ABSItem.MediaID {
 			bookMediaIDLookup[bm.ABSItem.ID] = bm.ABSItem.MediaID
 		}
 	}
 
-	s.logger.Info("built book media ID lookup for session normalization",
-		slog.Int("lookup_entries", len(bookMediaIDLookup)),
-		slog.Int("book_count", len(analysis.BookMatches)),
-	)
-
-	// Store all sessions with initial status
+	// Store all sessions
 	sessionsStored := 0
 	sessionsNormalized := 0
 	sessionsUnmatched := 0
 	unmatchedSample := make([]string, 0, 5)
-	for i, session := range backup.Sessions {
-		// DEBUG: Log first 5 sessions to trace position values
-		if i < 5 {
-			s.logger.Debug("storing ABS import session",
-				slog.String("session_id", session.ID),
-				slog.String("title", session.DisplayTitle),
-				slog.Float64("startTime_sec", session.StartTime),
-				slog.Float64("currentTime_sec", session.CurrentTime),
-				slog.Int64("start_position_ms", session.StartPositionMs()),
-				slog.Int64("end_position_ms", session.EndPositionMs()),
-			)
-		}
-
-		// Try to normalize the session's ABSMediaID to match a book's ABSMediaID
+	for _, session := range backup.Sessions {
 		absMediaID := session.LibraryItemID
 		if normalizedID, found := bookMediaIDLookup[absMediaID]; found {
 			if normalizedID != absMediaID {
@@ -641,72 +653,71 @@ func (s *Server) handleCreateABSImport(ctx context.Context, input *CreateABSImpo
 		}
 
 		sess := &domain.ABSImportSession{
-			ImportID:      imp.ID,
+			ImportID:      importID,
 			ABSSessionID:  session.ID,
 			ABSUserID:     session.UserID,
-			ABSMediaID:    absMediaID, // Normalized to match book's ABSMediaID
+			ABSMediaID:    absMediaID,
 			StartTime:     session.StartedAtTime(),
 			Duration:      session.DurationMs(),
 			StartPosition: session.StartPositionMs(),
 			EndPosition:   session.EndPositionMs(),
-			Status:        domain.SessionStatusPendingUser, // Will be recalculated
+			Status:        domain.SessionStatusPendingUser,
 		}
 
-		if err := s.store.CreateABSImportSession(ctx, sess); err != nil {
+		if err := s.store.CreateABSImportSession(bgCtx, sess); err != nil {
 			s.logger.Error("failed to store import session",
 				slog.String("session_id", session.ID),
 				slog.String("user_id", session.UserID),
 				slog.String("error", err.Error()))
-			continue // Session won't be available for import
+			continue
 		}
 		sessionsStored++
 	}
 
-	// Log session normalization stats
 	if sessionsUnmatched > 0 {
-		s.logger.Warn("sessions with unmatched ABSMediaID - these won't be ready for import",
+		s.logger.Warn("sessions with unmatched ABSMediaID",
 			slog.Int("unmatched_count", sessionsUnmatched),
 			slog.Int("total_sessions", len(backup.Sessions)),
-			slog.Any("unmatched_sample", unmatchedSample),
-		)
-	}
-	if sessionsNormalized > 0 {
-		s.logger.Info("sessions with normalized ABSMediaID",
-			slog.Int("normalized_count", sessionsNormalized),
-		)
+			slog.Any("unmatched_sample", unmatchedSample))
 	}
 
-	// Log if any sessions failed to store
-	if sessionsStored < len(backup.Sessions) {
-		s.logger.Warn("some sessions failed to store",
-			slog.Int("stored", sessionsStored),
-			slog.Int("total", len(backup.Sessions)))
-	}
-
-	// Recalculate session statuses based on mappings
-	if err := s.store.RecalculateSessionStatuses(ctx, imp.ID); err != nil {
+	// Recalculate session statuses
+	if err := s.store.RecalculateSessionStatuses(bgCtx, importID); err != nil {
 		s.logger.Error("failed to recalculate session statuses",
-			slog.String("import_id", imp.ID),
+			slog.String("import_id", importID),
 			slog.String("error", err.Error()))
-		// Continue - statuses will be wrong but data is stored
 	}
 
-	// Update import with mapped counts
+	// Update import to active with counts
+	imp, err := s.store.GetABSImport(bgCtx, importID)
+	if err != nil {
+		setFailed(fmt.Errorf("failed to get import for final update: %w", err))
+		return
+	}
+	imp.Status = domain.ABSImportStatusActive
+	imp.TotalUsers = analysis.TotalUsers
+	imp.TotalBooks = analysis.TotalBooks
+	imp.TotalSessions = analysis.TotalSessions
 	imp.UsersMapped = usersMapped
 	imp.BooksMapped = booksMapped
-	if err := s.store.UpdateABSImport(ctx, imp); err != nil {
-		s.logger.Error("failed to update import counts",
-			slog.String("import_id", imp.ID),
-			slog.Int("users_mapped", usersMapped),
-			slog.Int("books_mapped", booksMapped),
+	imp.UpdatedAt = time.Now()
+	if err := s.store.UpdateABSImport(bgCtx, imp); err != nil {
+		s.logger.Error("failed to update import to active",
+			slog.String("import_id", importID),
 			slog.String("error", err.Error()))
-		// Continue - counts may be wrong in DB but response will be correct
+		return
 	}
 
-	return &CreateABSImportOutput{
-		Body: toABSImportResponse(imp),
-	}, nil
+	s.logger.Info("import analysis completed",
+		slog.String("import_id", importID),
+		slog.Int("total_users", analysis.TotalUsers),
+		slog.Int("total_books", analysis.TotalBooks),
+		slog.Int("total_sessions", analysis.TotalSessions),
+		slog.Int("users_mapped", usersMapped),
+		slog.Int("books_mapped", booksMapped),
+		slog.Int("sessions_stored", sessionsStored))
 }
+
 
 func (s *Server) handleListABSImports(ctx context.Context, input *ListABSImportsInput) (*ListABSImportsOutput, error) {
 	_, err := s.RequireAdmin(ctx)
