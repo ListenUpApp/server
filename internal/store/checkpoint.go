@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json/v2"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
@@ -16,25 +15,19 @@ import (
 // repeated full table scans without noticeably delaying sync detection.
 const checkpointTTL = 10 * time.Second
 
-var (
-	checkpointCacheMu  sync.Mutex
-	checkpointCache    time.Time
-	checkpointCachedAt time.Time
-)
-
 // GetLibraryCheckpoint returns the most recent UpdatedAt timestamp
 // across ALL entities (books, contributors, series). This represents when the library was last changed.
 //
 // Results are cached for checkpointTTL to prevent repeated full table scans
 // when the sync endpoint is polled frequently.
 func (s *Store) GetLibraryCheckpoint(_ context.Context) (time.Time, error) {
-	checkpointCacheMu.Lock()
-	if !checkpointCachedAt.IsZero() && time.Since(checkpointCachedAt) < checkpointTTL {
-		cached := checkpointCache
-		checkpointCacheMu.Unlock()
+	s.checkpointMu.Lock()
+	if !s.checkpointCachedAt.IsZero() && time.Since(s.checkpointCachedAt) < checkpointTTL {
+		cached := s.checkpointCache
+		s.checkpointMu.Unlock()
 		return cached, nil
 	}
-	checkpointCacheMu.Unlock()
+	s.checkpointMu.Unlock()
 
 	var latest time.Time
 
@@ -79,10 +72,10 @@ func (s *Store) GetLibraryCheckpoint(_ context.Context) (time.Time, error) {
 	}
 
 	// Update cache
-	checkpointCacheMu.Lock()
-	checkpointCache = latest
-	checkpointCachedAt = time.Now()
-	checkpointCacheMu.Unlock()
+	s.checkpointMu.Lock()
+	s.checkpointCache = latest
+	s.checkpointCachedAt = time.Now()
+	s.checkpointMu.Unlock()
 
 	return latest, nil
 }
@@ -92,9 +85,9 @@ func (s *Store) GetLibraryCheckpoint(_ context.Context) (time.Time, error) {
 // the next sync picks up the change within checkpointTTL.
 // TODO: Replace with a dedicated sys:checkpoint key as part of the SQLite migration.
 func (s *Store) InvalidateCheckpointCache() {
-	checkpointCacheMu.Lock()
-	checkpointCachedAt = time.Time{}
-	checkpointCacheMu.Unlock()
+	s.checkpointMu.Lock()
+	s.checkpointCachedAt = time.Time{}
+	s.checkpointMu.Unlock()
 }
 
 // checkEntityTimestamp iterates entities with a given prefix and updates latest timestamp.
