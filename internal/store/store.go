@@ -142,7 +142,6 @@ func New(path string, logger *slog.Logger, emitter EventEmitter) (*Store, error)
 	// Worst case on crash: lose ~30s of playback progress. Acceptable tradeoff.
 	opts.SyncWrites = false
 	opts.CompactL0OnClose = true // Compact L0 tables on close for faster startup
-	opts.NumCompactors = 1       // Cap at 1 (default 2) so compaction doesn't starve HTTP handlers on NAS
 
 	db, err := badger.Open(opts)
 	if err != nil {
