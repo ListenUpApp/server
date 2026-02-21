@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/listenupapp/listenup-server/internal/domain"
@@ -127,15 +128,21 @@ type Store struct {
 	Users            *Entity[domain.User]
 	CollectionShares *Entity[domain.CollectionShare]
 	Sessions         *Entity[domain.BookReadingSession]
+
+	// done signals background goroutines to stop on Close.
+	done chan struct{}
 }
 
 // New creates a new Store instance with the given database path and event emitter.
 // The emitter is required and used to broadcast store changes via SSE.
 func New(path string, logger *slog.Logger, emitter EventEmitter) (*Store, error) {
 	opts := badger.DefaultOptions(path)
-	opts.Logger = nil            // Disable Badger's internal logging
-	opts.SyncWrites = true       // Ensure writes are synced to disk to prevent corruption on crashes
+	opts.Logger = nil // Disable Badger's internal logging
+	// SyncWrites=false: removes per-write fsync that was catastrophic on NAS storage.
+	// Worst case on crash: lose ~30s of playback progress. Acceptable tradeoff.
+	opts.SyncWrites = false
 	opts.CompactL0OnClose = true // Compact L0 tables on close for faster startup
+	opts.NumCompactors = 1       // Cap at 1 (default 2) so compaction doesn't starve HTTP handlers on NAS
 
 	db, err := badger.Open(opts)
 	if err != nil {
@@ -146,7 +153,12 @@ func New(path string, logger *slog.Logger, emitter EventEmitter) (*Store, error)
 		db:           db,
 		logger:       logger,
 		eventEmitter: emitter,
+		done:         make(chan struct{}),
 	}
+
+	// Schedule value log GC every 5 minutes to prevent compaction storms.
+	// Without this, Badger accumulates garbage indefinitely until it explodes at 100%+ CPU.
+	go store.runValueLogGC()
 
 	// Initialize enricher for SSE event denormalization.
 	// Store implements dto.Store interface (GetContributorsByIDs, GetSeries).
@@ -169,7 +181,37 @@ func (s *Store) Close() error {
 	if s.logger != nil {
 		s.logger.Info("Closing database connection")
 	}
+	close(s.done) // Signal background goroutines to stop
 	return s.db.Close()
+}
+
+// runValueLogGC runs Badger's value log garbage collector on a schedule.
+// Without periodic GC, Badger accumulates stale versions of overwritten keys
+// (e.g. position saves) until the value log is enormous and triggers a
+// compaction storm that saturates CPU. Run every 5 minutes with a 0.7 discard
+// ratio — reclaims space aggressively without being too noisy.
+func (s *Store) runValueLogGC() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.done:
+			return
+		case <-ticker.C:
+			// RunValueLogGC returns ErrNoRewrite when there's nothing to GC.
+			// That's fine — loop until no more rewrites are needed.
+			for {
+				err := s.db.RunValueLogGC(0.7)
+				if err != nil {
+					break // ErrNoRewrite or closed
+				}
+				if s.logger != nil {
+					s.logger.Debug("Badger value log GC completed a rewrite pass")
+				}
+			}
+		}
+	}
 }
 
 // SetSearchIndexer sets the search indexer for keeping search in sync.
