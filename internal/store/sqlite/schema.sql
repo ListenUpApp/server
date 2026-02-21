@@ -165,3 +165,178 @@ CREATE TABLE IF NOT EXISTS book_series (
     sequence    TEXT,
     PRIMARY KEY (book_id, series_id)
 );
+
+-- Phase 2 tables
+
+CREATE TABLE IF NOT EXISTS genres (
+    id          TEXT PRIMARY KEY,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL,
+    deleted_at  TEXT,
+    name        TEXT NOT NULL,
+    slug        TEXT NOT NULL UNIQUE,
+    description TEXT,
+    parent_id   TEXT REFERENCES genres(id),
+    path        TEXT NOT NULL,
+    depth       INTEGER NOT NULL DEFAULT 0,
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    color       TEXT,
+    icon        TEXT,
+    is_system   INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS book_genres (
+    book_id     TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+    genre_id    TEXT NOT NULL REFERENCES genres(id),
+    PRIMARY KEY (book_id, genre_id)
+);
+CREATE INDEX IF NOT EXISTS idx_book_genres_genre ON book_genres(genre_id);
+
+CREATE TABLE IF NOT EXISTS tags (
+    id          TEXT PRIMARY KEY,
+    slug        TEXT NOT NULL UNIQUE,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS book_tags (
+    book_id     TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+    tag_id      TEXT NOT NULL REFERENCES tags(id),
+    created_at  TEXT NOT NULL,
+    PRIMARY KEY (book_id, tag_id)
+);
+CREATE INDEX IF NOT EXISTS idx_book_tags_tag ON book_tags(tag_id);
+
+CREATE TABLE IF NOT EXISTS collections (
+    id                TEXT PRIMARY KEY,
+    created_at        TEXT NOT NULL,
+    updated_at        TEXT NOT NULL,
+    library_id        TEXT NOT NULL REFERENCES libraries(id),
+    owner_id          TEXT NOT NULL REFERENCES users(id),
+    name              TEXT NOT NULL,
+    is_inbox          INTEGER NOT NULL DEFAULT 0,
+    is_global_access  INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS collection_books (
+    collection_id TEXT NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+    book_id       TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+    PRIMARY KEY (collection_id, book_id)
+);
+CREATE INDEX IF NOT EXISTS idx_collection_books_book ON collection_books(book_id);
+
+CREATE TABLE IF NOT EXISTS collection_shares (
+    id                    TEXT PRIMARY KEY,
+    created_at            TEXT NOT NULL,
+    updated_at            TEXT NOT NULL,
+    deleted_at            TEXT,
+    collection_id         TEXT NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+    shared_with_user_id   TEXT NOT NULL REFERENCES users(id),
+    shared_by_user_id     TEXT NOT NULL REFERENCES users(id),
+    permission            TEXT NOT NULL DEFAULT 'read'
+);
+CREATE INDEX IF NOT EXISTS idx_collection_shares_user ON collection_shares(shared_with_user_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_collection_shares_collection ON collection_shares(collection_id) WHERE deleted_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS shelves (
+    id          TEXT PRIMARY KEY,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL,
+    owner_id    TEXT NOT NULL REFERENCES users(id),
+    name        TEXT NOT NULL,
+    description TEXT,
+    color       TEXT,
+    icon        TEXT
+);
+
+CREATE TABLE IF NOT EXISTS shelf_books (
+    shelf_id    TEXT NOT NULL REFERENCES shelves(id) ON DELETE CASCADE,
+    book_id     TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+    sort_order  INTEGER NOT NULL,
+    PRIMARY KEY (shelf_id, book_id)
+);
+CREATE INDEX IF NOT EXISTS idx_shelf_books_book ON shelf_books(book_id);
+
+CREATE TABLE IF NOT EXISTS listening_events (
+    id                  TEXT PRIMARY KEY,
+    user_id             TEXT NOT NULL REFERENCES users(id),
+    book_id             TEXT NOT NULL REFERENCES books(id),
+    start_position_ms   INTEGER NOT NULL,
+    end_position_ms     INTEGER NOT NULL,
+    started_at          TEXT NOT NULL,
+    ended_at            TEXT NOT NULL,
+    playback_speed      REAL NOT NULL,
+    device_id           TEXT NOT NULL,
+    device_name         TEXT,
+    source              TEXT NOT NULL,
+    duration_ms         INTEGER NOT NULL,
+    created_at          TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_le_user_ended ON listening_events(user_id, ended_at);
+CREATE INDEX IF NOT EXISTS idx_le_book ON listening_events(book_id);
+CREATE INDEX IF NOT EXISTS idx_le_user_book ON listening_events(user_id, book_id);
+
+CREATE TABLE IF NOT EXISTS playback_state (
+    user_id                 TEXT NOT NULL REFERENCES users(id),
+    book_id                 TEXT NOT NULL REFERENCES books(id),
+    current_position_ms     INTEGER NOT NULL DEFAULT 0,
+    is_finished             INTEGER NOT NULL DEFAULT 0,
+    finished_at             TEXT,
+    started_at              TEXT NOT NULL,
+    last_played_at          TEXT NOT NULL,
+    total_listen_time_ms    INTEGER NOT NULL DEFAULT 0,
+    updated_at              TEXT NOT NULL,
+    PRIMARY KEY (user_id, book_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ps_user_last_played ON playback_state(user_id, last_played_at DESC)
+    WHERE is_finished = 0;
+
+CREATE TABLE IF NOT EXISTS book_preferences (
+    user_id                         TEXT NOT NULL REFERENCES users(id),
+    book_id                         TEXT NOT NULL REFERENCES books(id),
+    playback_speed                  REAL,
+    skip_forward_sec                INTEGER,
+    hide_from_continue_listening    INTEGER NOT NULL DEFAULT 0,
+    updated_at                      TEXT NOT NULL,
+    PRIMARY KEY (user_id, book_id)
+);
+
+CREATE TABLE IF NOT EXISTS book_reading_sessions (
+    id              TEXT PRIMARY KEY,
+    user_id         TEXT NOT NULL REFERENCES users(id),
+    book_id         TEXT NOT NULL REFERENCES books(id),
+    started_at      TEXT NOT NULL,
+    finished_at     TEXT,
+    is_completed    INTEGER NOT NULL DEFAULT 0,
+    final_progress  REAL NOT NULL DEFAULT 0,
+    listen_time_ms  INTEGER NOT NULL DEFAULT 0,
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_brs_user_book ON book_reading_sessions(user_id, book_id);
+
+CREATE TABLE IF NOT EXISTS invites (
+    id          TEXT PRIMARY KEY,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL,
+    deleted_at  TEXT,
+    code        TEXT NOT NULL UNIQUE,
+    name        TEXT NOT NULL DEFAULT '',
+    email       TEXT NOT NULL DEFAULT '',
+    role        TEXT NOT NULL DEFAULT 'member',
+    created_by  TEXT NOT NULL REFERENCES users(id),
+    expires_at  TEXT NOT NULL,
+    claimed_at  TEXT,
+    claimed_by  TEXT REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS instance (
+    key     TEXT PRIMARY KEY,
+    value   TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS server_settings (
+    key         TEXT PRIMARY KEY,
+    value       TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);

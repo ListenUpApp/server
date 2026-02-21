@@ -44,7 +44,15 @@ func TestOpen(t *testing.T) {
 	}
 
 	// Verify tables exist.
-	tables := []string{"users", "sessions", "libraries", "books", "book_audio_files", "book_chapters", "contributors", "book_contributors", "series", "book_series"}
+	tables := []string{
+		"users", "sessions", "libraries", "books", "book_audio_files", "book_chapters",
+		"contributors", "book_contributors", "series", "book_series",
+		"genres", "book_genres", "tags", "book_tags",
+		"collections", "collection_books", "collection_shares",
+		"shelves", "shelf_books",
+		"listening_events", "playback_state", "book_preferences",
+		"book_reading_sessions", "invites", "instance", "server_settings",
+	}
 	for _, table := range tables {
 		var name string
 		err := s.db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&name)
