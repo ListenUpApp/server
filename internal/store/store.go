@@ -133,9 +133,9 @@ type Store struct {
 	done chan struct{}
 
 	// checkpointMu guards the in-memory checkpoint cache fields below.
-	checkpointMu        sync.Mutex
-	checkpointCache     time.Time
-	checkpointCachedAt  time.Time
+	checkpointMu       sync.Mutex
+	checkpointCache    time.Time
+	checkpointCachedAt time.Time
 }
 
 // New creates a new Store instance with the given database path and event emitter.
