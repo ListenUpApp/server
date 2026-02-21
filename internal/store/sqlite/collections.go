@@ -738,4 +738,3 @@ func (s *Store) GetInboxForLibrary(ctx context.Context, libraryID string) (*doma
 
 	return inbox, nil
 }
-

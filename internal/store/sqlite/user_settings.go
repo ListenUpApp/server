@@ -18,9 +18,9 @@ func scanSettings(scanner interface{ Scan(dest ...any) error }) (*domain.UserSet
 	var us domain.UserSettings
 
 	var (
-		sleepTimerMin    sql.NullInt64
-		shakeToReset     int
-		updatedAt        string
+		sleepTimerMin sql.NullInt64
+		shakeToReset  int
+		updatedAt     string
 	)
 
 	err := scanner.Scan(
