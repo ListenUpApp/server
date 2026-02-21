@@ -332,17 +332,10 @@ func TestDeleteSession_NotFound(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
+	// DeleteSession is idempotent: deleting a non-existent session is not an error.
 	err := s.DeleteSession(ctx, "never-existed")
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-
-	var storeErr *store.Error
-	if !errors.As(err, &storeErr) {
-		t.Fatalf("expected *store.Error, got %T: %v", err, err)
-	}
-	if storeErr.Code != store.ErrNotFound.Code {
-		t.Errorf("expected status %d, got %d", store.ErrNotFound.Code, storeErr.Code)
+	if err != nil {
+		t.Fatalf("expected nil error for idempotent delete, got: %v", err)
 	}
 }
 

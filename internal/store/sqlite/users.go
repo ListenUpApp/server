@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strings"
 	"time"
 
@@ -123,8 +124,8 @@ func scanUser(scanner interface{ Scan(dest ...any) error }) (*domain.User, error
 		return nil, err
 	}
 
-	// Permissions.
-	u.Permissions.CanDownload = canDownload != 0
+	// Permissions (can_download column is reused for CanEdit).
+	u.Permissions.CanEdit = canDownload != 0
 	u.Permissions.CanShare = canShare != 0
 
 	return &u, nil
@@ -165,7 +166,7 @@ func (s *Store) CreateUser(ctx context.Context, user *domain.User) error {
 		user.FirstName,
 		user.LastName,
 		formatTime(user.LastLoginAt),
-		boolToInt(user.Permissions.CanDownload),
+		boolToInt(user.Permissions.CanEdit),
 		boolToInt(user.Permissions.CanShare),
 		"", // avatar_type - future use
 		"", // avatar_color - future use
@@ -180,14 +181,14 @@ func (s *Store) CreateUser(ctx context.Context, user *domain.User) error {
 }
 
 // GetUser retrieves a user by ID, excluding soft-deleted records.
-// Returns store.ErrNotFound if the user does not exist.
+// Returns store.ErrUserNotFound if the user does not exist.
 func (s *Store) GetUser(ctx context.Context, id string) (*domain.User, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT `+userColumns+` FROM users WHERE id = ? AND deleted_at IS NULL`, id)
 
 	u, err := scanUser(row)
 	if err == sql.ErrNoRows {
-		return nil, store.ErrNotFound
+		return nil, store.ErrUserNotFound
 	}
 	if err != nil {
 		return nil, err
@@ -196,14 +197,14 @@ func (s *Store) GetUser(ctx context.Context, id string) (*domain.User, error) {
 }
 
 // GetUserByEmail retrieves a user by exact email match, excluding soft-deleted records.
-// Returns store.ErrNotFound if the user does not exist.
+// Returns store.ErrUserNotFound if the user does not exist.
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT `+userColumns+` FROM users WHERE email = ? AND deleted_at IS NULL`, email)
 
 	u, err := scanUser(row)
 	if err == sql.ErrNoRows {
-		return nil, store.ErrNotFound
+		return nil, store.ErrUserNotFound
 	}
 	if err != nil {
 		return nil, err
@@ -212,7 +213,7 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (*domain.User,
 }
 
 // GetUserByEmailLower retrieves a user by lowercased email, excluding soft-deleted records.
-// Returns store.ErrNotFound if the user does not exist.
+// Returns store.ErrUserNotFound if the user does not exist.
 func (s *Store) GetUserByEmailLower(ctx context.Context, email string) (*domain.User, error) {
 	lower := strings.ToLower(strings.TrimSpace(email))
 	row := s.db.QueryRowContext(ctx,
@@ -220,7 +221,7 @@ func (s *Store) GetUserByEmailLower(ctx context.Context, email string) (*domain.
 
 	u, err := scanUser(row)
 	if err == sql.ErrNoRows {
-		return nil, store.ErrNotFound
+		return nil, store.ErrUserNotFound
 	}
 	if err != nil {
 		return nil, err
@@ -230,8 +231,22 @@ func (s *Store) GetUserByEmailLower(ctx context.Context, email string) (*domain.
 
 // ListUsers returns all non-deleted users.
 func (s *Store) ListUsers(ctx context.Context) ([]*domain.User, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+userColumns+` FROM users WHERE deleted_at IS NULL ORDER BY created_at ASC`)
+	return s.listUsers(ctx, false)
+}
+
+// ListAllUsers returns all users including soft-deleted ones.
+// Used for backup export to preserve the full state.
+func (s *Store) ListAllUsers(ctx context.Context) ([]*domain.User, error) {
+	return s.listUsers(ctx, true)
+}
+
+func (s *Store) listUsers(ctx context.Context, includeDeleted bool) ([]*domain.User, error) {
+	query := `SELECT ` + userColumns + ` FROM users`
+	if !includeDeleted {
+		query += ` WHERE deleted_at IS NULL`
+	}
+	query += ` ORDER BY created_at ASC`
+	rows, err := s.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -265,6 +280,7 @@ func (s *Store) UpdateUser(ctx context.Context, user *domain.User) error {
 		UPDATE users SET
 			created_at = ?,
 			updated_at = ?,
+			deleted_at = ?,
 			email = ?,
 			email_lower = ?,
 			password_hash = ?,
@@ -283,6 +299,7 @@ func (s *Store) UpdateUser(ctx context.Context, user *domain.User) error {
 		WHERE id = ? AND deleted_at IS NULL`,
 		formatTime(user.CreatedAt),
 		formatTime(user.UpdatedAt),
+		nullTimeString(user.DeletedAt),
 		user.Email,
 		emailLower,
 		nullString(user.PasswordHash),
@@ -296,7 +313,7 @@ func (s *Store) UpdateUser(ctx context.Context, user *domain.User) error {
 		user.FirstName,
 		user.LastName,
 		formatTime(user.LastLoginAt),
-		boolToInt(user.Permissions.CanDownload),
+		boolToInt(user.Permissions.CanEdit),
 		boolToInt(user.Permissions.CanShare),
 		user.ID,
 	)
@@ -335,4 +352,67 @@ func (s *Store) DeleteUser(ctx context.Context, id string) error {
 		return store.ErrNotFound
 	}
 	return nil
+}
+
+// GetUsersByIDs retrieves multiple users by their IDs, excluding soft-deleted records.
+// Returns only the users that were found (no error for missing IDs).
+func (s *Store) GetUsersByIDs(ctx context.Context, ids []string) ([]*domain.User, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := fmt.Sprintf(
+		`SELECT %s FROM users WHERE id IN (%s) AND deleted_at IS NULL ORDER BY created_at ASC`,
+		userColumns,
+		strings.Join(placeholders, ","),
+	)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []*domain.User
+	for rows.Next() {
+		u, err := scanUser(rows)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
+// ListPendingUsers returns all non-deleted users with status "pending".
+func (s *Store) ListPendingUsers(ctx context.Context) ([]*domain.User, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+userColumns+` FROM users WHERE status = 'pending' AND deleted_at IS NULL ORDER BY created_at ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []*domain.User
+	for rows.Next() {
+		u, err := scanUser(rows)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return users, nil
 }

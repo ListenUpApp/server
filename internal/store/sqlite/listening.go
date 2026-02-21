@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"strings"
+	"time"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/store"
@@ -248,7 +249,7 @@ func (s *Store) GetPlaybackState(ctx context.Context, userID, bookID string) (*d
 
 	state, err := scanPlaybackState(row)
 	if err == sql.ErrNoRows {
-		return nil, store.ErrNotFound
+		return nil, store.ErrProgressNotFound
 	}
 	if err != nil {
 		return nil, err
@@ -304,4 +305,150 @@ func (s *Store) GetTotalListenTime(ctx context.Context, userID string) (int64, e
 		return 0, nil
 	}
 	return total.Int64, nil
+}
+
+// GetEventsForUser retrieves all listening events for a user, ordered by ended_at descending.
+// This is the interface-named alias for GetListeningEvents.
+func (s *Store) GetEventsForUser(ctx context.Context, userID string) ([]*domain.ListeningEvent, error) {
+	return s.GetListeningEvents(ctx, userID)
+}
+
+// GetEventsForBook retrieves all listening events for a book, ordered by ended_at descending.
+// This is the interface-named alias for GetListeningEventsForBook.
+func (s *Store) GetEventsForBook(ctx context.Context, bookID string) ([]*domain.ListeningEvent, error) {
+	return s.GetListeningEventsForBook(ctx, bookID)
+}
+
+// GetState retrieves playback state for a user+book.
+// This is the interface-named alias for GetPlaybackState.
+func (s *Store) GetState(ctx context.Context, userID, bookID string) (*domain.PlaybackState, error) {
+	return s.GetPlaybackState(ctx, userID, bookID)
+}
+
+// UpsertState creates or replaces playback state for a user+book.
+// This is the interface-named alias for UpsertPlaybackState.
+func (s *Store) UpsertState(ctx context.Context, state *domain.PlaybackState) error {
+	return s.UpsertPlaybackState(ctx, state)
+}
+
+// GetEventsForUserBook retrieves listening events for a specific user and book,
+// ordered by ended_at descending.
+func (s *Store) GetEventsForUserBook(ctx context.Context, userID, bookID string) ([]*domain.ListeningEvent, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+listeningEventColumns+` FROM listening_events
+		 WHERE user_id = ? AND book_id = ?
+		 ORDER BY ended_at DESC`, userID, bookID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []*domain.ListeningEvent
+	for rows.Next() {
+		event, err := scanListeningEvent(rows)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, event)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
+// GetEventsForUserInRange retrieves listening events for a user within a time range,
+// ordered by ended_at descending.
+func (s *Store) GetEventsForUserInRange(ctx context.Context, userID string, start, end time.Time) ([]*domain.ListeningEvent, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+listeningEventColumns+` FROM listening_events
+		 WHERE user_id = ? AND ended_at >= ? AND ended_at <= ?
+		 ORDER BY ended_at DESC`,
+		userID, formatTime(start), formatTime(end))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []*domain.ListeningEvent
+	for rows.Next() {
+		event, err := scanListeningEvent(rows)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, event)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
+// DeleteEventsForUserBook deletes all listening events for a specific user and book.
+func (s *Store) DeleteEventsForUserBook(ctx context.Context, userID, bookID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM listening_events WHERE user_id = ? AND book_id = ?`,
+		userID, bookID)
+	return err
+}
+
+// DeleteState deletes playback state for a specific user and book.
+func (s *Store) DeleteState(ctx context.Context, userID, bookID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM playback_state WHERE user_id = ? AND book_id = ?`,
+		userID, bookID)
+	return err
+}
+
+// GetStateForUser retrieves all playback states for a user, ordered by last_played_at descending.
+func (s *Store) GetStateForUser(ctx context.Context, userID string) ([]*domain.PlaybackState, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+playbackStateColumns+` FROM playback_state
+		 WHERE user_id = ?
+		 ORDER BY last_played_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var states []*domain.PlaybackState
+	for rows.Next() {
+		state, err := scanPlaybackState(rows)
+		if err != nil {
+			return nil, err
+		}
+		states = append(states, state)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return states, nil
+}
+
+// GetStateFinishedInRange retrieves playback states for a user that were finished
+// within the given time range, ordered by finished_at descending.
+func (s *Store) GetStateFinishedInRange(ctx context.Context, userID string, start, end time.Time) ([]*domain.PlaybackState, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+playbackStateColumns+` FROM playback_state
+		 WHERE user_id = ? AND is_finished = 1
+		   AND finished_at >= ? AND finished_at <= ?
+		 ORDER BY finished_at DESC`,
+		userID, formatTime(start), formatTime(end))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var states []*domain.PlaybackState
+	for rows.Next() {
+		state, err := scanPlaybackState(rows)
+		if err != nil {
+			return nil, err
+		}
+		states = append(states, state)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return states, nil
 }

@@ -13,12 +13,12 @@ import (
 
 // SharingService orchestrates collection sharing operations with ACL enforcement.
 type SharingService struct {
-	store  *store.Store
+	store  store.Store
 	logger *slog.Logger
 }
 
 // NewSharingService creates a new sharing service.
-func NewSharingService(store *store.Store, logger *slog.Logger) *SharingService {
+func NewSharingService(store store.Store, logger *slog.Logger) *SharingService {
 	return &SharingService{
 		store:  store,
 		logger: logger,

@@ -68,42 +68,73 @@ func (s *Store) CreateTag(ctx context.Context, t *domain.Tag) error {
 	return nil
 }
 
-// GetTagByID retrieves a tag by its ID.
+// GetTagByID retrieves a tag by its ID, including its book count.
 // Returns store.ErrNotFound if the tag does not exist.
 func (s *Store) GetTagByID(ctx context.Context, tagID string) (*domain.Tag, error) {
-	row := s.db.QueryRowContext(ctx,
-		`SELECT `+tagColumns+` FROM tags WHERE id = ?`, tagID)
+	var t domain.Tag
+	var createdAt, updatedAt string
 
-	t, err := scanTag(row)
+	err := s.db.QueryRowContext(ctx, `
+		SELECT t.id, t.slug, t.created_at, t.updated_at,
+			(SELECT COUNT(*) FROM book_tags bt WHERE bt.tag_id = t.id) AS book_count
+		FROM tags t WHERE t.id = ?`, tagID).Scan(
+		&t.ID, &t.Slug, &createdAt, &updatedAt, &t.BookCount,
+	)
 	if err == sql.ErrNoRows {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
-	return t, nil
+
+	t.CreatedAt, err = parseTime(createdAt)
+	if err != nil {
+		return nil, err
+	}
+	t.UpdatedAt, err = parseTime(updatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
 }
 
-// GetTagBySlug retrieves a tag by its slug.
+// GetTagBySlug retrieves a tag by its slug, including its book count.
 // Returns store.ErrNotFound if the tag does not exist.
 func (s *Store) GetTagBySlug(ctx context.Context, slug string) (*domain.Tag, error) {
-	row := s.db.QueryRowContext(ctx,
-		`SELECT `+tagColumns+` FROM tags WHERE slug = ?`, slug)
+	var t domain.Tag
+	var createdAt, updatedAt string
 
-	t, err := scanTag(row)
+	err := s.db.QueryRowContext(ctx, `
+		SELECT t.id, t.slug, t.created_at, t.updated_at,
+			(SELECT COUNT(*) FROM book_tags bt WHERE bt.tag_id = t.id) AS book_count
+		FROM tags t WHERE t.slug = ?`, slug).Scan(
+		&t.ID, &t.Slug, &createdAt, &updatedAt, &t.BookCount,
+	)
 	if err == sql.ErrNoRows {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
-	return t, nil
+
+	t.CreatedAt, err = parseTime(createdAt)
+	if err != nil {
+		return nil, err
+	}
+	t.UpdatedAt, err = parseTime(updatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
 }
 
 // ListTags returns all tags ordered by slug.
 func (s *Store) ListTags(ctx context.Context) ([]*domain.Tag, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+tagColumns+` FROM tags ORDER BY slug ASC`)
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT t.id, t.slug, t.created_at, t.updated_at,
+			(SELECT COUNT(*) FROM book_tags bt WHERE bt.tag_id = t.id) AS book_count
+		FROM tags t
+		ORDER BY t.slug ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -111,11 +142,21 @@ func (s *Store) ListTags(ctx context.Context) ([]*domain.Tag, error) {
 
 	var tags []*domain.Tag
 	for rows.Next() {
-		t, err := scanTag(rows)
+		var t domain.Tag
+		var createdAt, updatedAt string
+		err := rows.Scan(&t.ID, &t.Slug, &createdAt, &updatedAt, &t.BookCount)
 		if err != nil {
 			return nil, err
 		}
-		tags = append(tags, t)
+		t.CreatedAt, err = parseTime(createdAt)
+		if err != nil {
+			return nil, err
+		}
+		t.UpdatedAt, err = parseTime(updatedAt)
+		if err != nil {
+			return nil, err
+		}
+		tags = append(tags, &t)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -223,4 +264,226 @@ func (s *Store) GetBookTags(ctx context.Context, bookID string) ([]string, error
 	}
 
 	return tagIDs, nil
+}
+
+// DeleteTag removes a tag by ID. Also removes all book_tags associations.
+func (s *Store) DeleteTag(ctx context.Context, tagID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Delete book_tags associations first.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM book_tags WHERE tag_id = ?`, tagID); err != nil {
+		return fmt.Errorf("delete book_tags: %w", err)
+	}
+
+	result, err := tx.ExecContext(ctx, `DELETE FROM tags WHERE id = ?`, tagID)
+	if err != nil {
+		return fmt.Errorf("delete tag: %w", err)
+	}
+
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return store.ErrNotFound
+	}
+
+	return tx.Commit()
+}
+
+// AddTagToBook adds a tag to a book.
+// Uses INSERT OR IGNORE for idempotency.
+func (s *Store) AddTagToBook(ctx context.Context, bookID, tagID string) error {
+	now := formatTime(time.Now().UTC())
+	_, err := s.db.ExecContext(ctx, `
+		INSERT OR IGNORE INTO book_tags (book_id, tag_id, created_at)
+		VALUES (?, ?, ?)`, bookID, tagID, now)
+	return err
+}
+
+// RemoveTagFromBook removes a tag from a book.
+func (s *Store) RemoveTagFromBook(ctx context.Context, bookID, tagID string) error {
+	_, err := s.db.ExecContext(ctx, `
+		DELETE FROM book_tags WHERE book_id = ? AND tag_id = ?`, bookID, tagID)
+	return err
+}
+
+// GetTagsForBook returns all tags associated with a book (full tag objects via JOIN).
+func (s *Store) GetTagsForBook(ctx context.Context, bookID string) ([]*domain.Tag, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT t.id, t.slug, t.created_at, t.updated_at
+		FROM tags t
+		INNER JOIN book_tags bt ON bt.tag_id = t.id
+		WHERE bt.book_id = ?
+		ORDER BY t.slug`, bookID)
+	if err != nil {
+		return nil, fmt.Errorf("query tags for book: %w", err)
+	}
+	defer rows.Close()
+
+	var tags []*domain.Tag
+	for rows.Next() {
+		t, err := scanTag(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan tag: %w", err)
+		}
+		tags = append(tags, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return tags, nil
+}
+
+// GetTagsForBookIDs returns tags for multiple books in a single batch query.
+// The returned map is keyed by book ID.
+func (s *Store) GetTagsForBookIDs(ctx context.Context, bookIDs []string) (map[string][]*domain.Tag, error) {
+	result := make(map[string][]*domain.Tag, len(bookIDs))
+	if len(bookIDs) == 0 {
+		return result, nil
+	}
+
+	placeholders := make([]string, len(bookIDs))
+	args := make([]any, len(bookIDs))
+	for i, bid := range bookIDs {
+		placeholders[i] = "?"
+		args[i] = bid
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT bt.book_id, t.id, t.slug, t.created_at, t.updated_at
+		FROM book_tags bt
+		INNER JOIN tags t ON t.id = bt.tag_id
+		WHERE bt.book_id IN (`+strings.Join(placeholders, ",")+`)
+		ORDER BY t.slug`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query tags for book ids: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			bookID    string
+			t         domain.Tag
+			createdAt string
+			updatedAt string
+		)
+		if err := rows.Scan(&bookID, &t.ID, &t.Slug, &createdAt, &updatedAt); err != nil {
+			return nil, fmt.Errorf("scan tag row: %w", err)
+		}
+
+		t.CreatedAt, err = parseTime(createdAt)
+		if err != nil {
+			return nil, err
+		}
+		t.UpdatedAt, err = parseTime(updatedAt)
+		if err != nil {
+			return nil, err
+		}
+
+		result[bookID] = append(result[bookID], &t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// GetTagIDsForBook returns the tag IDs associated with a book.
+func (s *Store) GetTagIDsForBook(ctx context.Context, bookID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT tag_id FROM book_tags WHERE book_id = ?`, bookID)
+	if err != nil {
+		return nil, fmt.Errorf("query tag ids for book: %w", err)
+	}
+	defer rows.Close()
+
+	var tagIDs []string
+	for rows.Next() {
+		var tid string
+		if err := rows.Scan(&tid); err != nil {
+			return nil, fmt.Errorf("scan tag id: %w", err)
+		}
+		tagIDs = append(tagIDs, tid)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return tagIDs, nil
+}
+
+// GetBookIDsForTag returns all book IDs associated with a tag.
+func (s *Store) GetBookIDsForTag(ctx context.Context, tagID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT book_id FROM book_tags WHERE tag_id = ?`, tagID)
+	if err != nil {
+		return nil, fmt.Errorf("query book ids for tag: %w", err)
+	}
+	defer rows.Close()
+
+	var bookIDs []string
+	for rows.Next() {
+		var bid string
+		if err := rows.Scan(&bid); err != nil {
+			return nil, fmt.Errorf("scan book id: %w", err)
+		}
+		bookIDs = append(bookIDs, bid)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return bookIDs, nil
+}
+
+// CleanupTagsForDeletedBook removes all book_tags associations for a deleted book.
+func (s *Store) CleanupTagsForDeletedBook(ctx context.Context, bookID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM book_tags WHERE book_id = ?`, bookID)
+	return err
+}
+
+// RecalculateTagBookCount updates a tag's book_count based on actual book_tags rows.
+// Since the tags table does not have a book_count column, this is a no-op
+// that returns nil. The BookCount field on domain.Tag is computed at read time.
+func (s *Store) RecalculateTagBookCount(ctx context.Context, tagID string) error {
+	// The tags table schema does not have a book_count column.
+	// BookCount is computed dynamically when needed.
+	// This method exists to satisfy the interface.
+	return nil
+}
+
+// GetTagSlugsForBook returns the slugs of all tags associated with a book.
+func (s *Store) GetTagSlugsForBook(ctx context.Context, bookID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT t.slug
+		FROM tags t
+		INNER JOIN book_tags bt ON bt.tag_id = t.id
+		WHERE bt.book_id = ?
+		ORDER BY t.slug`, bookID)
+	if err != nil {
+		return nil, fmt.Errorf("query tag slugs for book: %w", err)
+	}
+	defer rows.Close()
+
+	var slugs []string
+	for rows.Next() {
+		var slug string
+		if err := rows.Scan(&slug); err != nil {
+			return nil, fmt.Errorf("scan tag slug: %w", err)
+		}
+		slugs = append(slugs, slug)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return slugs, nil
 }

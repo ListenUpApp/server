@@ -14,9 +14,9 @@ import (
 // Must match the scan order in scanShelf.
 const shelfColumns = `id, created_at, updated_at, owner_id, name, description, color, icon`
 
-// scanShelf scans a sql.Row (or sql.Rows via its Scan method) into a domain.Lens.
-func scanShelf(scanner interface{ Scan(dest ...any) error }) (*domain.Lens, error) {
-	var l domain.Lens
+// scanShelf scans a sql.Row (or sql.Rows via its Scan method) into a domain.Shelf.
+func scanShelf(scanner interface{ Scan(dest ...any) error }) (*domain.Shelf, error) {
+	var l domain.Shelf
 
 	var (
 		createdAt   string
@@ -89,7 +89,7 @@ func (s *Store) loadShelfBookIDs(ctx context.Context, shelfID string) ([]string,
 
 // CreateLens inserts a new shelf and its book associations.
 // Returns store.ErrAlreadyExists on duplicate ID.
-func (s *Store) CreateLens(ctx context.Context, lens *domain.Lens) error {
+func (s *Store) CreateLens(ctx context.Context, lens *domain.Shelf) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -133,7 +133,7 @@ func (s *Store) CreateLens(ctx context.Context, lens *domain.Lens) error {
 
 // GetLens retrieves a lens by its shelf ID, including ordered BookIDs.
 // Returns store.ErrNotFound if the shelf does not exist.
-func (s *Store) GetLens(ctx context.Context, id string) (*domain.Lens, error) {
+func (s *Store) GetLens(ctx context.Context, id string) (*domain.Shelf, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT `+shelfColumns+` FROM shelves WHERE id = ?`, id)
 
@@ -155,7 +155,7 @@ func (s *Store) GetLens(ctx context.Context, id string) (*domain.Lens, error) {
 
 // UpdateLens updates a shelf row and replaces its book associations in a transaction.
 // Returns store.ErrNotFound if the shelf does not exist.
-func (s *Store) UpdateLens(ctx context.Context, lens *domain.Lens) error {
+func (s *Store) UpdateLens(ctx context.Context, lens *domain.Shelf) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -233,7 +233,7 @@ func (s *Store) DeleteLens(ctx context.Context, id string) error {
 
 // ListLensesByOwner returns all lenses owned by a user, ordered by creation time.
 // BookIDs are loaded for each lens.
-func (s *Store) ListLensesByOwner(ctx context.Context, ownerID string) ([]*domain.Lens, error) {
+func (s *Store) ListLensesByOwner(ctx context.Context, ownerID string) ([]*domain.Shelf, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+shelfColumns+` FROM shelves WHERE owner_id = ? ORDER BY created_at`, ownerID)
 	if err != nil {
@@ -241,7 +241,7 @@ func (s *Store) ListLensesByOwner(ctx context.Context, ownerID string) ([]*domai
 	}
 	defer rows.Close()
 
-	var lenses []*domain.Lens
+	var lenses []*domain.Shelf
 	for rows.Next() {
 		l, err := scanShelf(rows)
 		if err != nil {
@@ -295,4 +295,125 @@ func (s *Store) RemoveBookFromLens(ctx context.Context, lensID, bookID string) e
 		lensID, bookID,
 	)
 	return err
+}
+
+// ListAllLenses returns all lenses across all users, ordered by creation time.
+// BookIDs are loaded for each lens.
+func (s *Store) ListAllLenses(ctx context.Context) ([]*domain.Shelf, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+shelfColumns+` FROM shelves ORDER BY created_at`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var lenses []*domain.Shelf
+	for rows.Next() {
+		l, err := scanShelf(rows)
+		if err != nil {
+			return nil, err
+		}
+		lenses = append(lenses, l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Load BookIDs for each lens.
+	for _, l := range lenses {
+		l.BookIDs, err = s.loadShelfBookIDs(ctx, l.ID)
+		if err != nil {
+			return nil, fmt.Errorf("load shelf book ids for %s: %w", l.ID, err)
+		}
+	}
+
+	return lenses, nil
+}
+
+// GetLensesContainingBook returns all lenses that contain a specific book.
+// BookIDs are loaded for each lens.
+func (s *Store) GetLensesContainingBook(ctx context.Context, bookID string) ([]*domain.Shelf, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT s.id, s.created_at, s.updated_at, s.owner_id, s.name,
+		       s.description, s.color, s.icon
+		FROM shelves s
+		INNER JOIN shelf_books sb ON sb.shelf_id = s.id
+		WHERE sb.book_id = ?
+		ORDER BY s.created_at`, bookID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var lenses []*domain.Shelf
+	for rows.Next() {
+		l, err := scanShelf(rows)
+		if err != nil {
+			return nil, err
+		}
+		lenses = append(lenses, l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Load BookIDs for each lens.
+	for _, l := range lenses {
+		l.BookIDs, err = s.loadShelfBookIDs(ctx, l.ID)
+		if err != nil {
+			return nil, fmt.Errorf("load shelf book ids for %s: %w", l.ID, err)
+		}
+	}
+
+	return lenses, nil
+}
+
+// DeleteLensesForUser deletes all lenses owned by a user.
+// The ON DELETE CASCADE on shelf_books ensures book associations are removed.
+func (s *Store) DeleteLensesForUser(ctx context.Context, userID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM shelves WHERE owner_id = ?`, userID)
+	return err
+}
+
+// Shelf-named aliases for the Lens→Shelf rename.
+
+func (s *Store) CreateShelf(ctx context.Context, shelf *domain.Shelf) error {
+	return s.CreateLens(ctx, shelf)
+}
+
+func (s *Store) GetShelf(ctx context.Context, id string) (*domain.Shelf, error) {
+	return s.GetLens(ctx, id)
+}
+
+func (s *Store) UpdateShelf(ctx context.Context, shelf *domain.Shelf) error {
+	return s.UpdateLens(ctx, shelf)
+}
+
+func (s *Store) DeleteShelf(ctx context.Context, id string) error {
+	return s.DeleteLens(ctx, id)
+}
+
+func (s *Store) ListShelvesByOwner(ctx context.Context, ownerID string) ([]*domain.Shelf, error) {
+	return s.ListLensesByOwner(ctx, ownerID)
+}
+
+func (s *Store) ListAllShelves(ctx context.Context) ([]*domain.Shelf, error) {
+	return s.ListAllLenses(ctx)
+}
+
+func (s *Store) GetShelvesContainingBook(ctx context.Context, bookID string) ([]*domain.Shelf, error) {
+	return s.GetLensesContainingBook(ctx, bookID)
+}
+
+func (s *Store) AddBookToShelf(ctx context.Context, shelfID, bookID string) error {
+	return s.AddBookToLens(ctx, shelfID, bookID)
+}
+
+func (s *Store) RemoveBookFromShelf(ctx context.Context, shelfID, bookID string) error {
+	return s.RemoveBookFromLens(ctx, shelfID, bookID)
+}
+
+func (s *Store) DeleteShelvesForUser(ctx context.Context, userID string) error {
+	return s.DeleteLensesForUser(ctx, userID)
 }

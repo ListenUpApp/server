@@ -5,10 +5,13 @@ import (
 	"database/sql"
 	"encoding/json/v2"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/dto"
+	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
@@ -344,8 +347,9 @@ func (s *Store) CreateBook(ctx context.Context, book *domain.Book) error {
 
 // GetBook retrieves a book by ID, excluding soft-deleted records.
 // Audio files and chapters are loaded. Contributors and Series are NOT loaded.
+// The userID parameter is accepted for interface compatibility but not used for access checks.
 // Returns store.ErrNotFound if the book does not exist.
-func (s *Store) GetBook(ctx context.Context, id string) (*domain.Book, error) {
+func (s *Store) GetBook(ctx context.Context, id string, _ string) (*domain.Book, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT `+bookColumns+` FROM books WHERE id = ? AND deleted_at IS NULL`, id)
 
@@ -365,6 +369,11 @@ func (s *Store) GetBook(ctx context.Context, id string) (*domain.Book, error) {
 	b.Chapters, err = s.loadBookChapters(ctx, s.db, id)
 	if err != nil {
 		return nil, fmt.Errorf("load chapters: %w", err)
+	}
+
+	b.GenreIDs, err = s.GetGenreIDsForBook(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("load genre IDs: %w", err)
 	}
 
 	return b, nil
@@ -655,4 +664,433 @@ func (s *Store) GetBooksDeletedAfter(ctx context.Context, timestamp time.Time) (
 		return nil, err
 	}
 	return ids, nil
+}
+
+// GetBookNoAccessCheck retrieves a book by ID without access control.
+// Identical to GetBook since the SQLite implementation does not perform access checks.
+func (s *Store) GetBookNoAccessCheck(ctx context.Context, id string) (*domain.Book, error) {
+	return s.GetBook(ctx, id, "")
+}
+
+// GetBookByInode retrieves a book by an audio file inode.
+// This looks up the inode in book_audio_files to find the book_id, then loads the full book.
+// Returns store.ErrNotFound if no audio file with this inode exists.
+func (s *Store) GetBookByInode(ctx context.Context, inode int64) (*domain.Book, error) {
+	var bookID string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT book_id FROM book_audio_files WHERE inode = ? LIMIT 1`, inode).Scan(&bookID)
+	if err == sql.ErrNoRows {
+		return nil, store.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get book by inode: %w", err)
+	}
+	return s.GetBookNoAccessCheck(ctx, bookID)
+}
+
+// GetBookByASIN retrieves a book by its Amazon ASIN.
+// Returns store.ErrNotFound if no non-deleted book with this ASIN exists.
+func (s *Store) GetBookByASIN(ctx context.Context, asin string) (*domain.Book, error) {
+	if asin == "" {
+		return nil, store.ErrNotFound
+	}
+
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+bookColumns+` FROM books WHERE asin = ? AND deleted_at IS NULL`, asin)
+
+	b, err := scanBook(row)
+	if err == sql.ErrNoRows {
+		return nil, store.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	b.AudioFiles, err = s.loadBookAudioFiles(ctx, s.db, b.ID)
+	if err != nil {
+		return nil, fmt.Errorf("load audio files: %w", err)
+	}
+
+	b.Chapters, err = s.loadBookChapters(ctx, s.db, b.ID)
+	if err != nil {
+		return nil, fmt.Errorf("load chapters: %w", err)
+	}
+
+	return b, nil
+}
+
+// GetBookByISBN retrieves a book by its ISBN.
+// Returns store.ErrNotFound if no non-deleted book with this ISBN exists.
+func (s *Store) GetBookByISBN(ctx context.Context, isbn string) (*domain.Book, error) {
+	if isbn == "" {
+		return nil, store.ErrNotFound
+	}
+
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+bookColumns+` FROM books WHERE isbn = ? AND deleted_at IS NULL`, isbn)
+
+	b, err := scanBook(row)
+	if err == sql.ErrNoRows {
+		return nil, store.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	b.AudioFiles, err = s.loadBookAudioFiles(ctx, s.db, b.ID)
+	if err != nil {
+		return nil, fmt.Errorf("load audio files: %w", err)
+	}
+
+	b.Chapters, err = s.loadBookChapters(ctx, s.db, b.ID)
+	if err != nil {
+		return nil, fmt.Errorf("load chapters: %w", err)
+	}
+
+	return b, nil
+}
+
+// BookExists checks if a non-deleted book exists by ID.
+func (s *Store) BookExists(ctx context.Context, id string) (bool, error) {
+	var exists int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT 1 FROM books WHERE id = ? AND deleted_at IS NULL`, id).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// ListAllBooks returns all non-deleted books without pagination.
+// Audio files and chapters are loaded for each book.
+func (s *Store) ListAllBooks(ctx context.Context) ([]*domain.Book, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+bookColumns+` FROM books WHERE deleted_at IS NULL ORDER BY updated_at ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var books []*domain.Book
+	for rows.Next() {
+		b, err := scanBook(rows)
+		if err != nil {
+			return nil, err
+		}
+		books = append(books, b)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Load audio files and chapters for each book.
+	for _, b := range books {
+		b.AudioFiles, err = s.loadBookAudioFiles(ctx, s.db, b.ID)
+		if err != nil {
+			return nil, fmt.Errorf("load audio files for %s: %w", b.ID, err)
+		}
+		b.Chapters, err = s.loadBookChapters(ctx, s.db, b.ID)
+		if err != nil {
+			return nil, fmt.Errorf("load chapters for %s: %w", b.ID, err)
+		}
+	}
+
+	return books, nil
+}
+
+// CountBooks returns the total number of non-deleted books.
+func (s *Store) CountBooks(ctx context.Context) (int, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM books WHERE deleted_at IS NULL`).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// GetAllBookIDs returns all non-deleted book IDs.
+func (s *Store) GetAllBookIDs(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id FROM books WHERE deleted_at IS NULL`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+// GetBooksByCollectionPaginated returns a paginated list of books in a collection.
+// Books are fetched via the collection_books join table.
+func (s *Store) GetBooksByCollectionPaginated(ctx context.Context, _, collectionID string, params store.PaginationParams) (*store.PaginatedResult[*domain.Book], error) {
+	params.Validate()
+
+	// Count total books in collection.
+	var total int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM collection_books cb
+		JOIN books b ON b.id = cb.book_id
+		WHERE cb.collection_id = ? AND b.deleted_at IS NULL`,
+		collectionID).Scan(&total)
+	if err != nil {
+		return nil, err
+	}
+
+	// Decode cursor: index-based offset.
+	startIdx := 0
+	if params.Cursor != "" {
+		decoded, err := store.DecodeCursor(params.Cursor)
+		if err != nil {
+			return nil, fmt.Errorf("invalid cursor: %w", err)
+		}
+		idx, err := strconv.Atoi(decoded)
+		if err != nil {
+			return nil, fmt.Errorf("invalid cursor format: %w", err)
+		}
+		startIdx = idx
+	}
+
+	// Fetch books via join with offset.
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT `+bookColumnsAliased+`
+		FROM collection_books cb
+		JOIN books b ON b.id = cb.book_id
+		WHERE cb.collection_id = ? AND b.deleted_at IS NULL
+		ORDER BY b.title COLLATE NOCASE ASC
+		LIMIT ? OFFSET ?`,
+		collectionID, params.Limit+1, startIdx)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var books []*domain.Book
+	for rows.Next() {
+		b, err := scanBook(rows)
+		if err != nil {
+			return nil, err
+		}
+		books = append(books, b)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	hasMore := len(books) > params.Limit
+	if hasMore {
+		books = books[:params.Limit]
+	}
+
+	// Load audio files and chapters for each book.
+	for _, b := range books {
+		b.AudioFiles, err = s.loadBookAudioFiles(ctx, s.db, b.ID)
+		if err != nil {
+			return nil, fmt.Errorf("load audio files for %s: %w", b.ID, err)
+		}
+		b.Chapters, err = s.loadBookChapters(ctx, s.db, b.ID)
+		if err != nil {
+			return nil, fmt.Errorf("load chapters for %s: %w", b.ID, err)
+		}
+	}
+
+	result := &store.PaginatedResult[*domain.Book]{
+		Items:   books,
+		Total:   total,
+		HasMore: hasMore,
+	}
+
+	if hasMore {
+		result.NextCursor = store.EncodeCursor(strconv.Itoa(startIdx + params.Limit))
+	}
+
+	return result, nil
+}
+
+// SearchBooksByTitle finds non-deleted books where the title contains the query (case-insensitive).
+// Returns up to 100 candidates. Audio files and chapters are loaded.
+func (s *Store) SearchBooksByTitle(ctx context.Context, title string) ([]*domain.Book, error) {
+	if title == "" {
+		return nil, nil
+	}
+
+	query := "%" + strings.ToLower(strings.TrimSpace(title)) + "%"
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+bookColumns+` FROM books
+		WHERE deleted_at IS NULL AND LOWER(title) LIKE ?
+		LIMIT 100`, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var books []*domain.Book
+	for rows.Next() {
+		b, err := scanBook(rows)
+		if err != nil {
+			return nil, err
+		}
+		books = append(books, b)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Load audio files and chapters for each book.
+	for _, b := range books {
+		b.AudioFiles, err = s.loadBookAudioFiles(ctx, s.db, b.ID)
+		if err != nil {
+			return nil, fmt.Errorf("load audio files for %s: %w", b.ID, err)
+		}
+		b.Chapters, err = s.loadBookChapters(ctx, s.db, b.ID)
+		if err != nil {
+			return nil, fmt.Errorf("load chapters for %s: %w", b.ID, err)
+		}
+	}
+
+	return books, nil
+}
+
+// TouchEntity updates the updated_at timestamp for an entity (book, contributor, or series).
+func (s *Store) TouchEntity(ctx context.Context, entityType, id string) error {
+	now := formatTime(time.Now())
+
+	var query string
+	switch entityType {
+	case "book":
+		query = `UPDATE books SET updated_at = ? WHERE id = ? AND deleted_at IS NULL`
+	case "contributor":
+		query = `UPDATE contributors SET updated_at = ? WHERE id = ? AND deleted_at IS NULL`
+	case "series":
+		query = `UPDATE series SET updated_at = ? WHERE id = ? AND deleted_at IS NULL`
+	default:
+		return fmt.Errorf("unknown entity type: %s", entityType)
+	}
+
+	result, err := s.db.ExecContext(ctx, query, now, id)
+	if err != nil {
+		return err
+	}
+
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+// EnrichBook denormalizes a book with contributor names, series name, and genre names.
+// This is a convenience wrapper around the enricher for API handlers.
+func (s *Store) EnrichBook(ctx context.Context, book *domain.Book) (*dto.Book, error) {
+	return s.enricher.EnrichBook(ctx, book)
+}
+
+// SetBookContributors replaces all contributors for a book using store.ContributorInput.
+// For each contributor:
+//   - If name matches existing (case-insensitive) -> link to that contributor
+//   - Else -> create new contributor and link
+//
+// Returns the updated book.
+func (s *Store) SetBookContributors(ctx context.Context, bookID string, contributors []store.ContributorInput) (*domain.Book, error) {
+	// Build domain.BookContributor list by resolving names to IDs.
+	bookContributors := make([]domain.BookContributor, 0, len(contributors))
+
+	for _, input := range contributors {
+		// Get or create the contributor by name.
+		contributor, err := s.GetOrCreateContributor(ctx, input.Name)
+		if err != nil {
+			return nil, fmt.Errorf("get or create contributor %q: %w", input.Name, err)
+		}
+
+		bookContributors = append(bookContributors, domain.BookContributor{
+			ContributorID: contributor.ID,
+			Roles:         input.Roles,
+		})
+	}
+
+	// Replace all book_contributors rows.
+	if err := s.setBookContributorsInternal(ctx, bookID, bookContributors); err != nil {
+		return nil, fmt.Errorf("set book contributors: %w", err)
+	}
+
+	// Touch book updated_at.
+	if err := s.TouchEntity(ctx, "book", bookID); err != nil {
+		return nil, fmt.Errorf("touch book: %w", err)
+	}
+
+	return s.GetBookNoAccessCheck(ctx, bookID)
+}
+
+// SetBookSeries replaces all series for a book using store.SeriesInput.
+// For each series:
+//   - If name matches existing (case-insensitive) -> link to that series
+//   - Else -> create new series and link
+//
+// Returns the updated book.
+func (s *Store) SetBookSeries(ctx context.Context, bookID string, seriesInputs []store.SeriesInput) (*domain.Book, error) {
+	// Build domain.BookSeries list by resolving names to IDs.
+	bookSeries := make([]domain.BookSeries, 0, len(seriesInputs))
+
+	for _, input := range seriesInputs {
+		// Get or create the series by name.
+		series, err := s.GetOrCreateSeries(ctx, input.Name)
+		if err != nil {
+			return nil, fmt.Errorf("get or create series %q: %w", input.Name, err)
+		}
+
+		bookSeries = append(bookSeries, domain.BookSeries{
+			SeriesID: series.ID,
+			Sequence: input.Sequence,
+		})
+	}
+
+	// Replace all book_series rows.
+	if err := s.setBookSeriesInternal(ctx, bookID, bookSeries); err != nil {
+		return nil, fmt.Errorf("set book series: %w", err)
+	}
+
+	// Touch book updated_at.
+	if err := s.TouchEntity(ctx, "book", bookID); err != nil {
+		return nil, fmt.Errorf("touch book: %w", err)
+	}
+
+	return s.GetBookNoAccessCheck(ctx, bookID)
+}
+
+// BroadcastBookCreated enriches and broadcasts a book.created SSE event.
+// Should be called AFTER cover extraction to ensure cover is available when clients receive event.
+func (s *Store) BroadcastBookCreated(ctx context.Context, book *domain.Book) error {
+	enrichedBook, err := s.enricher.EnrichBook(ctx, book)
+	if err != nil {
+		// Don't fail broadcasting if enrichment fails.
+		if s.logger != nil {
+			s.logger.Warn("failed to enrich book for SSE event",
+				"book_id", book.ID,
+				"error", err,
+			)
+		}
+		// Fallback: wrap domain.Book in dto.Book without enrichment
+		enrichedBook = &dto.Book{Book: book}
+	}
+
+	s.emitter.Emit(sse.NewBookCreatedEvent(enrichedBook))
+	return nil
 }

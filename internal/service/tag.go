@@ -14,14 +14,14 @@ import (
 // TagService orchestrates global tag operations.
 // Tags are community-wide — no user ownership, but requires book access to tag.
 type TagService struct {
-	store      *store.Store
+	store      store.Store
 	sseManager *sse.Manager
 	search     *SearchService
 	logger     *slog.Logger
 }
 
 // NewTagService creates a new tag service.
-func NewTagService(store *store.Store, sseManager *sse.Manager, search *SearchService, logger *slog.Logger) *TagService {
+func NewTagService(store store.Store, sseManager *sse.Manager, search *SearchService, logger *slog.Logger) *TagService {
 	return &TagService{
 		store:      store,
 		sseManager: sseManager,

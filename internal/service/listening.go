@@ -29,7 +29,7 @@ type StreakCalculator interface {
 
 // ListeningService handles listening events and playback progress.
 type ListeningService struct {
-	store                 *store.Store
+	store                 store.Store
 	events                store.EventEmitter
 	readingSessionService *ReadingSessionService
 	logger                *slog.Logger
@@ -38,7 +38,7 @@ type ListeningService struct {
 }
 
 // NewListeningService creates a new listening service.
-func NewListeningService(store *store.Store, events store.EventEmitter, readingSessionService *ReadingSessionService, logger *slog.Logger) *ListeningService {
+func NewListeningService(store store.Store, events store.EventEmitter, readingSessionService *ReadingSessionService, logger *slog.Logger) *ListeningService {
 	return &ListeningService{
 		store:                 store,
 		events:                events,

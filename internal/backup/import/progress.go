@@ -73,7 +73,7 @@ func (i *Importer) rebuildProgress(ctx context.Context) error {
 }
 
 // RebuildAllProgress is the public admin function for progress rebuild.
-func RebuildAllProgress(ctx context.Context, s *store.Store, logger *slog.Logger) error {
+func RebuildAllProgress(ctx context.Context, s store.Store, logger *slog.Logger) error {
 	importer := New(s, "", logger)
 	return importer.rebuildProgress(ctx)
 }

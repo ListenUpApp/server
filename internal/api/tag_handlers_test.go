@@ -23,7 +23,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/service"
 	"github.com/listenupapp/listenup-server/internal/sse"
-	"github.com/listenupapp/listenup-server/internal/store"
+	"github.com/listenupapp/listenup-server/internal/store/sqlite"
 )
 
 // tagTestServer wraps the API server for tag testing.
@@ -44,8 +44,8 @@ func setupTagTestServer(t *testing.T) *tagTestServer {
 
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	// Create store with noop emitter.
-	st, err := store.New(dbPath, nil, store.NewNoopEmitter())
+	// Create store.
+	st, err := sqlite.Open(dbPath, nil)
 	require.NoError(t, err)
 
 	// Create test config.
@@ -199,13 +199,24 @@ func (ts *tagTestServer) createBookInCollection(t *testing.T, bookID, collection
 	t.Helper()
 	ctx := context.Background()
 
+	// Ensure owner user exists (FK constraint).
+	now := time.Now()
+	_ = ts.store.CreateUser(ctx, &domain.User{
+		Syncable:    domain.Syncable{ID: ownerID, CreatedAt: now, UpdatedAt: now},
+		Email:       ownerID + "@test.com",
+		DisplayName: "Owner " + ownerID,
+		Role:        domain.RoleMember,
+		Status:      domain.UserStatusActive,
+	}) // Ignore if exists.
+
 	// Ensure library exists.
 	lib := &domain.Library{
-		ID:        "test-lib",
+		ID:        "test-lib-" + ownerID,
+		OwnerID:   ownerID,
 		Name:      "Test Library",
 		ScanPaths: []string{"/test"},
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 	_ = ts.store.CreateLibrary(ctx, lib) // Ignore if exists.
 
@@ -215,13 +226,12 @@ func (ts *tagTestServer) createBookInCollection(t *testing.T, bookID, collection
 		LibraryID: lib.ID,
 		OwnerID:   ownerID,
 		Name:      "Test Collection",
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 	_ = ts.store.CreateCollection(ctx, coll) // Ignore if exists.
 
 	// Create book.
-	now := time.Now()
 	book := &domain.Book{
 		Syncable: domain.Syncable{
 			ID:        bookID,

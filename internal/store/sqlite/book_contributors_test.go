@@ -49,7 +49,7 @@ func TestSetAndGetBookContributors(t *testing.T) {
 		},
 	}
 
-	if err := s.SetBookContributors(ctx, "book-1", contributors); err != nil {
+	if err := s.setBookContributorsInternal(ctx, "book-1", contributors); err != nil {
 		t.Fatalf("SetBookContributors: %v", err)
 	}
 
@@ -107,7 +107,7 @@ func TestSetBookContributors_Replace(t *testing.T) {
 		{ContributorID: "contrib-a", Roles: []domain.ContributorRole{domain.RoleAuthor}},
 		{ContributorID: "contrib-b", Roles: []domain.ContributorRole{domain.RoleNarrator}},
 	}
-	if err := s.SetBookContributors(ctx, "book-r", first); err != nil {
+	if err := s.setBookContributorsInternal(ctx, "book-r", first); err != nil {
 		t.Fatalf("SetBookContributors (first): %v", err)
 	}
 
@@ -116,7 +116,7 @@ func TestSetBookContributors_Replace(t *testing.T) {
 		{ContributorID: "contrib-a", Roles: []domain.ContributorRole{domain.RoleAuthor}},
 		{ContributorID: "contrib-c", Roles: []domain.ContributorRole{domain.RoleNarrator}, CreditedAs: "Kate Reading"},
 	}
-	if err := s.SetBookContributors(ctx, "book-r", second); err != nil {
+	if err := s.setBookContributorsInternal(ctx, "book-r", second); err != nil {
 		t.Fatalf("SetBookContributors (second): %v", err)
 	}
 
@@ -180,7 +180,7 @@ func TestSetBookContributors_MultipleRoles(t *testing.T) {
 		},
 	}
 
-	if err := s.SetBookContributors(ctx, "book-mr", contributors); err != nil {
+	if err := s.setBookContributorsInternal(ctx, "book-mr", contributors); err != nil {
 		t.Fatalf("SetBookContributors: %v", err)
 	}
 

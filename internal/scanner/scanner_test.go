@@ -9,14 +9,15 @@ import (
 	"testing"
 
 	"github.com/listenupapp/listenup-server/internal/store"
+	"github.com/listenupapp/listenup-server/internal/store/sqlite"
 )
 
-func setupTestStore(t *testing.T) (*store.Store, func()) {
+func setupTestStore(t *testing.T) (store.Store, func()) {
 	t.Helper()
 
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
-	s, err := store.New(dbPath, nil, store.NewNoopEmitter())
+	s, err := sqlite.Open(dbPath, nil)
 	if err != nil {
 		t.Fatalf("failed to create test store: %v", err)
 	}

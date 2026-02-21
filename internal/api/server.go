@@ -20,7 +20,7 @@ import (
 
 // Server holds dependencies for HTTP handlers.
 type Server struct {
-	store                     *store.Store
+	store                     store.Store
 	services                  *Services
 	storage                   *StorageServices
 	sseHandler                *sse.Handler
@@ -45,7 +45,7 @@ func (s *Server) SetOnInstanceUpdated(fn func(*domain.Instance)) {
 
 // NewServer creates a new HTTP server with all routes configured.
 func NewServer(
-	st *store.Store,
+	st store.Store,
 	services *Services,
 	storage *StorageServices,
 	sseHandler *sse.Handler,

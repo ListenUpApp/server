@@ -14,16 +14,17 @@ import (
 	"github.com/listenupapp/listenup-server/internal/color"
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/store"
+	"github.com/listenupapp/listenup-server/internal/store/sqlite"
 )
 
-func setupTestReadingSession(t *testing.T) (*ReadingSessionService, *store.Store, func()) {
+func setupTestReadingSession(t *testing.T) (*ReadingSessionService, store.Store, func()) {
 	t.Helper()
 
 	tmpDir, err := os.MkdirTemp("", "reading-session-test-*")
 	require.NoError(t, err)
 
 	dbPath := filepath.Join(tmpDir, "test.db")
-	testStore, err := store.New(dbPath, nil, store.NewNoopEmitter())
+	testStore, err := sqlite.Open(dbPath, nil)
 	require.NoError(t, err)
 
 	logger := slog.New(slog.DiscardHandler)
@@ -37,7 +38,7 @@ func setupTestReadingSession(t *testing.T) (*ReadingSessionService, *store.Store
 	return svc, testStore, cleanup
 }
 
-func createTestBookForSession(t *testing.T, s *store.Store, bookID string, durationMs int64) {
+func createTestBookForSession(t *testing.T, s store.Store, bookID string, durationMs int64) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -46,6 +47,7 @@ func createTestBookForSession(t *testing.T, s *store.Store, bookID string, durat
 			ID: bookID,
 		},
 		Title:         "Test Book " + bookID,
+		Path:          "/test/" + bookID,
 		TotalDuration: durationMs,
 	}
 	book.InitTimestamps()
@@ -53,10 +55,12 @@ func createTestBookForSession(t *testing.T, s *store.Store, bookID string, durat
 }
 
 func TestEnsureActiveSession_CreateNew(t *testing.T) {
-	svc, _, cleanup := setupTestReadingSession(t)
+	svc, s, cleanup := setupTestReadingSession(t)
 	defer cleanup()
 
 	ctx := context.Background()
+	createTestUserForSession(t, s, "user-1", "user1@test.com", "User 1")
+	createTestBookForSession(t, s, "book-1", 3600000)
 
 	// No active session exists
 	session, err := svc.EnsureActiveSession(ctx, "user-1", "book-1")
@@ -71,10 +75,12 @@ func TestEnsureActiveSession_CreateNew(t *testing.T) {
 }
 
 func TestEnsureActiveSession_ReturnExisting(t *testing.T) {
-	svc, _, cleanup := setupTestReadingSession(t)
+	svc, s, cleanup := setupTestReadingSession(t)
 	defer cleanup()
 
 	ctx := context.Background()
+	createTestUserForSession(t, s, "user-1", "user1@test.com", "User 1")
+	createTestBookForSession(t, s, "book-1", 3600000)
 
 	// Create first session
 	session1, err := svc.EnsureActiveSession(ctx, "user-1", "book-1")
@@ -93,6 +99,8 @@ func TestEnsureActiveSession_AbandonStale(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
+	createTestUserForSession(t, s, "user-1", "user1@test.com", "User 1")
+	createTestBookForSession(t, s, "book-1", 3600000)
 
 	// Create a session and make it stale by backdating UpdatedAt
 	oldSession := domain.NewBookReadingSession("old-session", "user-1", "book-1")
@@ -120,6 +128,8 @@ func TestUpdateSessionProgress(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
+	createTestUserForSession(t, s, "user-1", "user1@test.com", "User 1")
+	createTestBookForSession(t, s, "book-1", 3600000)
 
 	// Create session
 	session, err := svc.EnsureActiveSession(ctx, "user-1", "book-1")
@@ -152,6 +162,8 @@ func TestCompleteSession(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
+	createTestUserForSession(t, s, "user-1", "user1@test.com", "User 1")
+	createTestBookForSession(t, s, "book-1", 3600000)
 
 	// Create session
 	session, err := svc.EnsureActiveSession(ctx, "user-1", "book-1")
@@ -177,7 +189,8 @@ func TestAbandonSession(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create book first (1 hour duration)
+	// Create user and book first (1 hour duration)
+	createTestUserForSession(t, s, "user-1", "user1@test.com", "User 1")
 	createTestBookForSession(t, s, "book-1", 3600000)
 
 	// Create session and some progress
@@ -225,9 +238,10 @@ func TestGetBookReaders(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create test users
+	// Create test users and book
 	user1 := createTestUserForSession(t, s, "user-1", "alice@example.com", "Alice")
 	user2 := createTestUserForSession(t, s, "user-2", "bob@example.com", "Bob")
+	createTestBookForSession(t, s, "book-1", 3600000)
 
 	// User 1: 2 sessions (1 completed, 1 active)
 	session1 := domain.NewBookReadingSession("session-1", user1.ID, "book-1")
@@ -278,6 +292,7 @@ func TestGetUserReadingHistory(t *testing.T) {
 			ID: "book-1",
 		},
 		Title:         "The Great Book",
+		Path:          "/test/book-1",
 		TotalDuration: 3600000,
 	}
 	book1.InitTimestamps()
@@ -289,6 +304,7 @@ func TestGetUserReadingHistory(t *testing.T) {
 			ID: "book-2",
 		},
 		Title:         "Another Book",
+		Path:          "/test/book-2",
 		TotalDuration: 1800000,
 	}
 	book2.InitTimestamps()
@@ -351,7 +367,7 @@ func TestAvatarColorForUser(t *testing.T) {
 
 // Helper functions
 
-func createTestUserForSession(t *testing.T, s *store.Store, id, email, displayName string) *domain.User {
+func createTestUserForSession(t *testing.T, s store.Store, id, email, displayName string) *domain.User {
 	t.Helper()
 	user := &domain.User{
 		Syncable: domain.Syncable{

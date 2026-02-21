@@ -77,8 +77,8 @@ func TestCreateAndGetUser(t *testing.T) {
 	if got.LastName != "User" {
 		t.Errorf("LastName: got %q, want %q", got.LastName, "User")
 	}
-	if !got.Permissions.CanDownload {
-		t.Error("CanDownload: expected true")
+	if !got.Permissions.CanEdit {
+		t.Error("CanEdit: expected true")
 	}
 	if !got.Permissions.CanShare {
 		t.Error("CanShare: expected true")
@@ -107,13 +107,8 @@ func TestGetUser_NotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-
-	var storeErr *store.Error
-	if !errors.As(err, &storeErr) {
-		t.Fatalf("expected *store.Error, got %T: %v", err, err)
-	}
-	if storeErr.Code != store.ErrNotFound.Code {
-		t.Errorf("expected status %d, got %d", store.ErrNotFound.Code, storeErr.Code)
+	if !errors.Is(err, store.ErrUserNotFound) {
+		t.Errorf("expected ErrUserNotFound, got %v", err)
 	}
 }
 
@@ -270,7 +265,7 @@ func TestUpdateUser(t *testing.T) {
 	user.LastName = "Person"
 	user.Role = domain.RoleAdmin
 	user.IsRoot = true
-	user.Permissions.CanDownload = false
+	user.Permissions.CanEdit = false
 	user.Permissions.CanShare = false
 	user.Status = domain.UserStatusPending
 	// Create the approving user first to satisfy FK constraint.
@@ -306,8 +301,8 @@ func TestUpdateUser(t *testing.T) {
 	if !got.IsRoot {
 		t.Error("IsRoot: expected true")
 	}
-	if got.Permissions.CanDownload {
-		t.Error("CanDownload: expected false after update")
+	if got.Permissions.CanEdit {
+		t.Error("CanEdit: expected false after update")
 	}
 	if got.Permissions.CanShare {
 		t.Error("CanShare: expected false after update")
@@ -368,21 +363,14 @@ func TestDeleteUser(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected not found after delete, got nil")
 	}
-	var storeErr *store.Error
-	if !errors.As(err, &storeErr) {
-		t.Fatalf("expected *store.Error, got %T: %v", err, err)
-	}
-	if storeErr.Code != store.ErrNotFound.Code {
-		t.Errorf("expected status %d, got %d", store.ErrNotFound.Code, storeErr.Code)
+	if !errors.Is(err, store.ErrUserNotFound) {
+		t.Errorf("expected ErrUserNotFound, got %v", err)
 	}
 
 	// Deleting again should return not found (already deleted).
 	err = s.DeleteUser(ctx, "user-delete")
 	if err == nil {
 		t.Fatal("expected not found on double delete, got nil")
-	}
-	if !errors.As(err, &storeErr) {
-		t.Fatalf("expected *store.Error on double delete, got %T: %v", err, err)
 	}
 }
 
@@ -431,7 +419,7 @@ func TestCreateUser_PermissionsDisabled(t *testing.T) {
 	ctx := context.Background()
 
 	user := makeTestUser("user-no-perms", "noperms@example.com")
-	user.Permissions.CanDownload = false
+	user.Permissions.CanEdit = false
 	user.Permissions.CanShare = false
 
 	if err := s.CreateUser(ctx, user); err != nil {
@@ -443,8 +431,8 @@ func TestCreateUser_PermissionsDisabled(t *testing.T) {
 		t.Fatalf("GetUser: %v", err)
 	}
 
-	if got.Permissions.CanDownload {
-		t.Error("CanDownload: expected false")
+	if got.Permissions.CanEdit {
+		t.Error("CanEdit: expected false")
 	}
 	if got.Permissions.CanShare {
 		t.Error("CanShare: expected false")

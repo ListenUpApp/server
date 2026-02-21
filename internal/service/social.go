@@ -16,42 +16,12 @@ import (
 
 // SocialService provides social features like leaderboards.
 type SocialService struct {
-	store  *store.Store
+	store  store.Store
 	logger *slog.Logger
 }
 
 // NewSocialService creates a new social service.
-
-// isFirstInSeries returns true if the sequence indicates the book is a series starter.
-// Includes empty/unknown sequences, "0", "0.5", "1", "01", "001", "1.0", "Book 1", etc.
-func isFirstInSeries(sequence string) bool {
-	s := strings.TrimSpace(sequence)
-	if s == "" {
-		return true
-	}
-	// Prequels
-	if s == "0" || s == "0.5" {
-		return true
-	}
-	// Find the first digit, stripping prefixes like "Book "
-	idx := strings.IndexFunc(s, func(r rune) bool { return r >= '0' && r <= '9' })
-	if idx == -1 {
-		return true // no number found, include rather than hide
-	}
-	numPart := strings.TrimLeft(s[idx:], "0")
-	if numPart == "" {
-		return true // all zeros
-	}
-	if numPart[0] != '1' {
-		return false
-	}
-	if len(numPart) == 1 {
-		return true
-	}
-	return numPart[1] == '.' || numPart[1] == ' '
-}
-
-func NewSocialService(store *store.Store, logger *slog.Logger) *SocialService {
+func NewSocialService(store store.Store, logger *slog.Logger) *SocialService {
 	return &SocialService{
 		store:  store,
 		logger: logger,
@@ -666,6 +636,35 @@ func (s *SocialService) GetRandomBooks(ctx context.Context, viewingUserID string
 	}
 
 	return candidates, nil
+}
+
+// isFirstInSeries returns true if the sequence indicates the book is a series starter.
+// Includes empty/unknown sequences, "0", "0.5", "1", "01", "001", "1.0", "Book 1", etc.
+func isFirstInSeries(sequence string) bool {
+	s := strings.TrimSpace(sequence)
+	if s == "" {
+		return true
+	}
+	// Prequels
+	if s == "0" || s == "0.5" {
+		return true
+	}
+	// Find the first digit, stripping prefixes like "Book "
+	idx := strings.IndexFunc(s, func(r rune) bool { return r >= '0' && r <= '9' })
+	if idx == -1 {
+		return true // no number found, include rather than hide
+	}
+	numPart := strings.TrimLeft(s[idx:], "0")
+	if numPart == "" {
+		return true // all zeros
+	}
+	if numPart[0] != '1' {
+		return false
+	}
+	if len(numPart) == 1 {
+		return true
+	}
+	return numPart[1] == '.' || numPart[1] == ' '
 }
 
 // shuffleBooks shuffles a slice of books in place using Fisher-Yates.

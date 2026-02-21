@@ -21,7 +21,7 @@ type EventEmitter interface {
 // Importer executes the actual import of ABS data into ListenUp.
 // Use Analyzer first to preview what will be imported.
 type Importer struct {
-	store     *store.Store
+	store     store.Store
 	events    EventEmitter
 	converter *Converter
 	logger    *slog.Logger
@@ -29,7 +29,7 @@ type Importer struct {
 
 // NewImporter creates an importer.
 // The events parameter is optional - if nil, SSE events won't be emitted.
-func NewImporter(s *store.Store, events EventEmitter, logger *slog.Logger) *Importer {
+func NewImporter(s store.Store, events EventEmitter, logger *slog.Logger) *Importer {
 	if logger == nil {
 		logger = slog.Default()
 	}

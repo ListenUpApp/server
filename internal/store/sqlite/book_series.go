@@ -8,9 +8,9 @@ import (
 	"github.com/listenupapp/listenup-server/internal/domain"
 )
 
-// SetBookSeries replaces all series links for a book in a single transaction.
+// setBookSeriesInternal replaces all series links for a book in a single transaction.
 // It deletes existing rows and inserts the new set.
-func (s *Store) SetBookSeries(ctx context.Context, bookID string, series []domain.BookSeries) error {
+func (s *Store) setBookSeriesInternal(ctx context.Context, bookID string, series []domain.BookSeries) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -72,4 +72,24 @@ func (s *Store) GetBookSeries(ctx context.Context, bookID string) ([]domain.Book
 	}
 
 	return series, nil
+}
+
+// GetSeriesBookIDMap returns a map of series ID → list of book IDs.
+func (s *Store) GetSeriesBookIDMap(ctx context.Context) (map[string][]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT series_id, book_id FROM book_series`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string][]string)
+	for rows.Next() {
+		var seriesID, bookID string
+		if err := rows.Scan(&seriesID, &bookID); err != nil {
+			return nil, err
+		}
+		result[seriesID] = append(result[seriesID], bookID)
+	}
+	return result, rows.Err()
 }

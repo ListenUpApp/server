@@ -61,7 +61,7 @@ func TestCreateAndGetCollection(t *testing.T) {
 		t.Fatalf("CreateCollection: %v", err)
 	}
 
-	got, err := s.GetCollection(ctx, "coll-1")
+	got, err := s.GetCollection(ctx, "coll-1", "")
 	if err != nil {
 		t.Fatalf("GetCollection: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestGetCollection_NotFound(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	_, err := s.GetCollection(ctx, "nonexistent")
+	_, err := s.GetCollection(ctx, "nonexistent", "")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -158,11 +158,11 @@ func TestUpdateCollection(t *testing.T) {
 	coll.BookIDs = []string{"book-2", "book-3"}
 	coll.UpdatedAt = time.Now()
 
-	if err := s.UpdateCollection(ctx, coll); err != nil {
+	if err := s.UpdateCollection(ctx, coll, ""); err != nil {
 		t.Fatalf("UpdateCollection: %v", err)
 	}
 
-	got, err := s.GetCollection(ctx, "coll-upd")
+	got, err := s.GetCollection(ctx, "coll-upd", "")
 	if err != nil {
 		t.Fatalf("GetCollection after update: %v", err)
 	}
@@ -211,18 +211,18 @@ func TestDeleteCollection(t *testing.T) {
 	}
 
 	// Verify it exists.
-	_, err := s.GetCollection(ctx, "coll-del")
+	_, err := s.GetCollection(ctx, "coll-del", "")
 	if err != nil {
 		t.Fatalf("GetCollection before delete: %v", err)
 	}
 
 	// Hard delete.
-	if err := s.DeleteCollection(ctx, "coll-del"); err != nil {
+	if err := s.DeleteCollection(ctx, "coll-del", ""); err != nil {
 		t.Fatalf("DeleteCollection: %v", err)
 	}
 
 	// Should be gone.
-	_, err = s.GetCollection(ctx, "coll-del")
+	_, err = s.GetCollection(ctx, "coll-del", "")
 	if err == nil {
 		t.Fatal("expected not found after delete, got nil")
 	}
@@ -267,7 +267,7 @@ func TestListCollectionsByLibrary(t *testing.T) {
 		t.Fatalf("CreateCollection 2: %v", err)
 	}
 
-	collections, err := s.ListCollectionsByLibrary(ctx, "lib-1")
+	collections, err := s.ListCollectionsByLibrary(ctx, "lib-1", "")
 	if err != nil {
 		t.Fatalf("ListCollectionsByLibrary: %v", err)
 	}
@@ -306,11 +306,11 @@ func TestAddAndRemoveBookFromCollection(t *testing.T) {
 	}
 
 	// Add a book.
-	if err := s.AddBookToCollection(ctx, "coll-ab", "book-1"); err != nil {
+	if err := s.AddBookToCollection(ctx, "book-1", "coll-ab", ""); err != nil {
 		t.Fatalf("AddBookToCollection: %v", err)
 	}
 
-	got, err := s.GetCollection(ctx, "coll-ab")
+	got, err := s.GetCollection(ctx, "coll-ab", "")
 	if err != nil {
 		t.Fatalf("GetCollection after add: %v", err)
 	}
@@ -322,11 +322,11 @@ func TestAddAndRemoveBookFromCollection(t *testing.T) {
 	}
 
 	// Remove the book.
-	if err := s.RemoveBookFromCollection(ctx, "coll-ab", "book-1"); err != nil {
+	if err := s.RemoveBookFromCollection(ctx, "book-1", "coll-ab", ""); err != nil {
 		t.Fatalf("RemoveBookFromCollection: %v", err)
 	}
 
-	got, err = s.GetCollection(ctx, "coll-ab")
+	got, err = s.GetCollection(ctx, "coll-ab", "")
 	if err != nil {
 		t.Fatalf("GetCollection after remove: %v", err)
 	}

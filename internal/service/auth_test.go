@@ -13,6 +13,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/id"
 	"github.com/listenupapp/listenup-server/internal/store"
+	"github.com/listenupapp/listenup-server/internal/store/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +29,7 @@ func setupAuthTest(t *testing.T) (*AuthService, *InstanceService, *auth.TokenSer
 	dbPath := filepath.Join(tmpDir, "test.db")
 
 	// Create store
-	s, err := store.New(dbPath, nil, store.NewNoopEmitter())
+	s, err := sqlite.Open(dbPath, nil)
 	require.NoError(t, err)
 
 	// Create test config
@@ -600,7 +601,7 @@ func TestAuthService_Setup_ValidationErrors(t *testing.T) {
 // Helper function to create a test user.
 //
 //nolint:unparam // email parameter is kept for test flexibility despite current uniform usage
-func createTestUser(t *testing.T, s *store.Store, email, passwordHash string) *domain.User {
+func createTestUser(t *testing.T, s store.Store, email, passwordHash string) *domain.User {
 	t.Helper()
 
 	userID, err := id.Generate("user")

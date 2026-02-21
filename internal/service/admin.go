@@ -15,14 +15,14 @@ import (
 
 // AdminService handles admin-only user management operations.
 type AdminService struct {
-	store                   *store.Store
+	store                   store.Store
 	logger                  *slog.Logger
 	registrationBroadcaster *sse.RegistrationBroadcaster
 	shelfService            *ShelfService
 }
 
 // NewAdminService creates a new admin service.
-func NewAdminService(store *store.Store, logger *slog.Logger, registrationBroadcaster *sse.RegistrationBroadcaster, shelfService *ShelfService) *AdminService {
+func NewAdminService(store store.Store, logger *slog.Logger, registrationBroadcaster *sse.RegistrationBroadcaster, shelfService *ShelfService) *AdminService {
 	return &AdminService{
 		store:                   store,
 		logger:                  logger,

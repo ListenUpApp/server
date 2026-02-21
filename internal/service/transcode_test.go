@@ -11,6 +11,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/id"
 	"github.com/listenupapp/listenup-server/internal/store"
+	"github.com/listenupapp/listenup-server/internal/store/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -27,7 +28,7 @@ func setupTranscodeTest(t *testing.T) (*TranscodeService, string, func()) {
 	cachePath := filepath.Join(tmpDir, "cache")
 
 	// Create store
-	s, err := store.New(dbPath, nil, store.NewNoopEmitter())
+	s, err := sqlite.Open(dbPath, nil)
 	require.NoError(t, err)
 
 	// Create transcode service config
@@ -56,14 +57,49 @@ func setupTranscodeTest(t *testing.T) (*TranscodeService, string, func()) {
 }
 
 // createTestTranscodeJob creates a transcode job for testing.
-func createTestTranscodeJob(t *testing.T, s *store.Store, bookID, audioFileID string, status domain.TranscodeStatus) *domain.TranscodeJob {
+func createTestTranscodeJob(t *testing.T, s store.Store, bookID, audioFileID string, status domain.TranscodeStatus) *domain.TranscodeJob {
 	t.Helper()
 	return createTestTranscodeJobWithVariant(t, s, bookID, audioFileID, status, domain.TranscodeVariantSpatial)
 }
 
-// createTestTranscodeJobWithVariant creates a transcode job with a specific variant for testing.
-func createTestTranscodeJobWithVariant(t *testing.T, s *store.Store, bookID, audioFileID string, status domain.TranscodeStatus, variant domain.TranscodeVariant) *domain.TranscodeJob {
+// ensureTestBookWithAudioFile creates the book and audio file if they don't already exist.
+func ensureTestBookWithAudioFile(t *testing.T, s store.Store, bookID, audioFileID string) {
 	t.Helper()
+	ctx := context.Background()
+
+	// Check if book already exists (pass empty userID to skip access check).
+	if _, err := s.GetBook(ctx, bookID, ""); err != nil {
+		now := time.Now()
+		book := &domain.Book{
+			Syncable: domain.Syncable{
+				ID:        bookID,
+				CreatedAt: now,
+				UpdatedAt: now,
+			},
+			Title:         "Test Book " + bookID,
+			Path:          "/test/" + bookID,
+			TotalDuration: 300000,
+			TotalSize:     1024000,
+			ScannedAt:     now,
+			AudioFiles: []domain.AudioFileInfo{
+				{
+					ID:       audioFileID,
+					Path:     "/test/source.m4a",
+					Filename: "source.m4a",
+					Duration: 300000,
+					Size:     1024000,
+				},
+			},
+		}
+		require.NoError(t, s.CreateBook(ctx, book))
+	}
+}
+
+// createTestTranscodeJobWithVariant creates a transcode job with a specific variant for testing.
+func createTestTranscodeJobWithVariant(t *testing.T, s store.Store, bookID, audioFileID string, status domain.TranscodeStatus, variant domain.TranscodeVariant) *domain.TranscodeJob {
+	t.Helper()
+
+	ensureTestBookWithAudioFile(t, s, bookID, audioFileID)
 
 	jobID, err := id.Generate("tj")
 	require.NoError(t, err)
@@ -188,7 +224,7 @@ func Test_findAvailableSegments(t *testing.T) {
 func Test_GenerateDynamicPlaylist(t *testing.T) {
 	tests := []struct {
 		name        string
-		setupJob    func(t *testing.T, s *store.Store, cachePath string) (string, string) // Returns bookID, audioFileID
+		setupJob    func(t *testing.T, s store.Store, cachePath string) (string, string) // Returns bookID, audioFileID
 		setupFiles  func(t *testing.T, cachePath, bookID, audioFileID string)
 		wantErr     bool
 		wantErrMsg  string
@@ -196,7 +232,7 @@ func Test_GenerateDynamicPlaylist(t *testing.T) {
 	}{
 		{
 			name: "job exists, segments exist, status=Running - playlist without ENDLIST",
-			setupJob: func(t *testing.T, s *store.Store, cachePath string) (string, string) {
+			setupJob: func(t *testing.T, s store.Store, cachePath string) (string, string) {
 				t.Helper()
 				bookID := "book_test123"
 				audioFileID := "af_test456"
@@ -226,7 +262,7 @@ func Test_GenerateDynamicPlaylist(t *testing.T) {
 		},
 		{
 			name: "job exists, segments exist, status=Completed - playlist with ENDLIST",
-			setupJob: func(t *testing.T, s *store.Store, cachePath string) (string, string) {
+			setupJob: func(t *testing.T, s store.Store, cachePath string) (string, string) {
 				t.Helper()
 				bookID := "book_test789"
 				audioFileID := "af_test012"
@@ -255,7 +291,7 @@ func Test_GenerateDynamicPlaylist(t *testing.T) {
 		},
 		{
 			name: "job not found returns error",
-			setupJob: func(t *testing.T, s *store.Store, cachePath string) (string, string) {
+			setupJob: func(t *testing.T, s store.Store, cachePath string) (string, string) {
 				t.Helper()
 				// Don't create a job - return non-existent IDs
 				return "book_nonexistent", "af_nonexistent"
@@ -269,7 +305,7 @@ func Test_GenerateDynamicPlaylist(t *testing.T) {
 		},
 		{
 			name: "no segments available returns error",
-			setupJob: func(t *testing.T, s *store.Store, cachePath string) (string, string) {
+			setupJob: func(t *testing.T, s store.Store, cachePath string) (string, string) {
 				t.Helper()
 				bookID := "book_noseg"
 				audioFileID := "af_noseg"

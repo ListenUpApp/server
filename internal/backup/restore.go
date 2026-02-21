@@ -15,14 +15,14 @@ import (
 
 // RestoreService restores from backups.
 type RestoreService struct {
-	store    *store.Store
+	store    store.Store
 	dataDir  string
 	logger   *slog.Logger
 	importer *backupimport.Importer
 }
 
 // NewRestoreService creates a RestoreService.
-func NewRestoreService(s *store.Store, dataDir string, logger *slog.Logger) *RestoreService {
+func NewRestoreService(s store.Store, dataDir string, logger *slog.Logger) *RestoreService {
 	return &RestoreService{
 		store:    s,
 		dataDir:  dataDir,

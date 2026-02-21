@@ -13,7 +13,7 @@ import (
 
 	"github.com/listenupapp/listenup-server/internal/backup"
 	"github.com/listenupapp/listenup-server/internal/domain"
-	"github.com/listenupapp/listenup-server/internal/store"
+	"github.com/listenupapp/listenup-server/internal/store/sqlite"
 )
 
 // TestMergeMode_KeepLocal tests merge mode with keep_local strategy.
@@ -38,7 +38,7 @@ func TestMergeMode_KeepLocal(t *testing.T) {
 		Role:        domain.RoleAdmin,
 		Status:      domain.UserStatusActive,
 	}
-	require.NoError(t, sourceStore.Users.Create(ctx, sourceUser.ID, sourceUser))
+	require.NoError(t, sourceStore.CreateUser(ctx, sourceUser))
 
 	// Create instance (required for backup)
 	_, err := sourceStore.CreateInstance(ctx)
@@ -53,7 +53,7 @@ func TestMergeMode_KeepLocal(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	destStore, err := store.New(filepath.Join(destDir, "dest.db"), nil, store.NewNoopEmitter())
+	destStore, err := sqlite.Open(filepath.Join(destDir, "dest.db"), nil)
 	require.NoError(t, err)
 	defer destStore.Close()
 
@@ -70,7 +70,7 @@ func TestMergeMode_KeepLocal(t *testing.T) {
 		Role:        domain.RoleAdmin,
 		Status:      domain.UserStatusActive,
 	}
-	require.NoError(t, destStore.Users.Create(ctx, destUser.ID, destUser))
+	require.NoError(t, destStore.CreateUser(ctx, destUser))
 
 	// Restore with keep_local strategy
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
@@ -84,7 +84,7 @@ func TestMergeMode_KeepLocal(t *testing.T) {
 	assert.Equal(t, 1, restoreResult.Skipped["users"]) // Should skip
 
 	// Verify local data kept
-	user, err := destStore.Users.Get(ctx, "user-1")
+	user, err := destStore.GetUser(ctx, "user-1")
 	require.NoError(t, err)
 	assert.Equal(t, "dest@test.com", user.Email) // Local email kept
 	assert.Equal(t, "Dest User", user.DisplayName)
@@ -111,7 +111,7 @@ func TestMergeMode_KeepBackup(t *testing.T) {
 		Role:        domain.RoleAdmin,
 		Status:      domain.UserStatusActive,
 	}
-	require.NoError(t, sourceStore.Users.Create(ctx, sourceUser.ID, sourceUser))
+	require.NoError(t, sourceStore.CreateUser(ctx, sourceUser))
 
 	// Create instance
 	_, err := sourceStore.CreateInstance(ctx)
@@ -126,7 +126,7 @@ func TestMergeMode_KeepBackup(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	destStore, err := store.New(filepath.Join(destDir, "dest.db"), nil, store.NewNoopEmitter())
+	destStore, err := sqlite.Open(filepath.Join(destDir, "dest.db"), nil)
 	require.NoError(t, err)
 	defer destStore.Close()
 
@@ -143,7 +143,7 @@ func TestMergeMode_KeepBackup(t *testing.T) {
 		Role:        domain.RoleAdmin,
 		Status:      domain.UserStatusActive,
 	}
-	require.NoError(t, destStore.Users.Create(ctx, destUser.ID, destUser))
+	require.NoError(t, destStore.CreateUser(ctx, destUser))
 
 	// Restore with keep_backup strategy
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
@@ -157,7 +157,7 @@ func TestMergeMode_KeepBackup(t *testing.T) {
 	assert.Equal(t, 1, restoreResult.Imported["users"]) // Should import
 
 	// Verify backup data used
-	user, err := destStore.Users.Get(ctx, "user-1")
+	user, err := destStore.GetUser(ctx, "user-1")
 	require.NoError(t, err)
 	assert.Equal(t, "source@test.com", user.Email) // Backup email used
 	assert.Equal(t, "Source User", user.DisplayName)
@@ -186,7 +186,7 @@ func TestMergeMode_Newest(t *testing.T) {
 		Role:        domain.RoleAdmin,
 		Status:      domain.UserStatusActive,
 	}
-	require.NoError(t, sourceStore.Users.Create(ctx, sourceUser.ID, sourceUser))
+	require.NoError(t, sourceStore.CreateUser(ctx, sourceUser))
 
 	// Create instance
 	_, err := sourceStore.CreateInstance(ctx)
@@ -201,7 +201,7 @@ func TestMergeMode_Newest(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	destStore, err := store.New(filepath.Join(destDir, "dest.db"), nil, store.NewNoopEmitter())
+	destStore, err := sqlite.Open(filepath.Join(destDir, "dest.db"), nil)
 	require.NoError(t, err)
 	defer destStore.Close()
 
@@ -218,7 +218,7 @@ func TestMergeMode_Newest(t *testing.T) {
 		Role:        domain.RoleAdmin,
 		Status:      domain.UserStatusActive,
 	}
-	require.NoError(t, destStore.Users.Create(ctx, destUser.ID, destUser))
+	require.NoError(t, destStore.CreateUser(ctx, destUser))
 
 	// Restore with newest strategy
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
@@ -232,7 +232,7 @@ func TestMergeMode_Newest(t *testing.T) {
 	assert.Equal(t, 1, restoreResult.Skipped["users"]) // Should skip (local is newer)
 
 	// Verify newer (local) data kept
-	user, err := destStore.Users.Get(ctx, "user-1")
+	user, err := destStore.GetUser(ctx, "user-1")
 	require.NoError(t, err)
 	assert.Equal(t, "dest@test.com", user.Email)
 	assert.Equal(t, "Dest User (Newer)", user.DisplayName)
@@ -262,8 +262,8 @@ func TestMergeMode_NewEntitiesAdded(t *testing.T) {
 		Role:        domain.RoleMember,
 		Status:      domain.UserStatusActive,
 	}
-	require.NoError(t, sourceStore.Users.Create(ctx, user1.ID, user1))
-	require.NoError(t, sourceStore.Users.Create(ctx, user2.ID, user2))
+	require.NoError(t, sourceStore.CreateUser(ctx, user1))
+	require.NoError(t, sourceStore.CreateUser(ctx, user2))
 
 	// Create instance
 	_, err := sourceStore.CreateInstance(ctx)
@@ -278,7 +278,7 @@ func TestMergeMode_NewEntitiesAdded(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	destStore, err := store.New(filepath.Join(destDir, "dest.db"), nil, store.NewNoopEmitter())
+	destStore, err := sqlite.Open(filepath.Join(destDir, "dest.db"), nil)
 	require.NoError(t, err)
 	defer destStore.Close()
 
@@ -291,7 +291,7 @@ func TestMergeMode_NewEntitiesAdded(t *testing.T) {
 		Role:        domain.RoleAdmin,
 		Status:      domain.UserStatusActive,
 	}
-	require.NoError(t, destStore.Users.Create(ctx, destUser1.ID, destUser1))
+	require.NoError(t, destStore.CreateUser(ctx, destUser1))
 
 	// Restore with keep_local strategy
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
@@ -306,12 +306,12 @@ func TestMergeMode_NewEntitiesAdded(t *testing.T) {
 	assert.Equal(t, 1, restoreResult.Skipped["users"])  // user-1 skipped
 
 	// Verify user-1 kept local data
-	u1, err := destStore.Users.Get(ctx, "user-1")
+	u1, err := destStore.GetUser(ctx, "user-1")
 	require.NoError(t, err)
 	assert.Equal(t, "dest1@test.com", u1.Email)
 
 	// Verify user-2 was added from backup
-	u2, err := destStore.Users.Get(ctx, "user-2")
+	u2, err := destStore.GetUser(ctx, "user-2")
 	require.NoError(t, err)
 	assert.Equal(t, "user2@test.com", u2.Email)
 	assert.Equal(t, "User Two", u2.DisplayName)
@@ -340,7 +340,7 @@ func TestMergeMode_SoftDeletedSkipped(t *testing.T) {
 		Role:        domain.RoleAdmin,
 		Status:      domain.UserStatusActive,
 	}
-	require.NoError(t, sourceStore.Users.Create(ctx, deletedUser.ID, deletedUser))
+	require.NoError(t, sourceStore.CreateUser(ctx, deletedUser))
 
 	// Create instance
 	_, err := sourceStore.CreateInstance(ctx)
@@ -355,7 +355,7 @@ func TestMergeMode_SoftDeletedSkipped(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	destStore, err := store.New(filepath.Join(destDir, "dest.db"), nil, store.NewNoopEmitter())
+	destStore, err := sqlite.Open(filepath.Join(destDir, "dest.db"), nil)
 	require.NoError(t, err)
 	defer destStore.Close()
 
@@ -371,6 +371,6 @@ func TestMergeMode_SoftDeletedSkipped(t *testing.T) {
 	assert.Equal(t, 1, restoreResult.Skipped["users"]) // Soft-deleted should be skipped
 
 	// Verify user was not imported
-	_, err = destStore.Users.Get(ctx, "user-deleted")
+	_, err = destStore.GetUser(ctx, "user-deleted")
 	assert.Error(t, err) // Should not exist
 }

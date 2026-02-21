@@ -16,12 +16,12 @@ import (
 // creation, updates, and query execution.
 type SearchService struct {
 	index  *search.SearchIndex
-	store  *store.Store
+	store  store.Store
 	logger *slog.Logger
 }
 
 // NewSearchService creates a new search service.
-func NewSearchService(index *search.SearchIndex, store *store.Store, logger *slog.Logger) *SearchService {
+func NewSearchService(index *search.SearchIndex, store store.Store, logger *slog.Logger) *SearchService {
 	return &SearchService{
 		index:  index,
 		store:  store,

@@ -330,6 +330,25 @@ CREATE TABLE IF NOT EXISTS invites (
     claimed_by  TEXT REFERENCES users(id)
 );
 
+CREATE TABLE IF NOT EXISTS user_profiles (
+    user_id       TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    avatar_type   TEXT NOT NULL DEFAULT 'auto',
+    avatar_value  TEXT NOT NULL DEFAULT '',
+    tagline       TEXT NOT NULL DEFAULT '',
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_settings (
+    user_id                     TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    default_playback_speed      REAL NOT NULL DEFAULT 1.0,
+    default_skip_forward_sec    INTEGER NOT NULL DEFAULT 30,
+    default_skip_backward_sec   INTEGER NOT NULL DEFAULT 10,
+    default_sleep_timer_min     INTEGER,
+    shake_to_reset_sleep_timer  INTEGER NOT NULL DEFAULT 0,
+    updated_at                  TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS instance (
     key     TEXT PRIMARY KEY,
     value   TEXT NOT NULL
@@ -339,4 +358,196 @@ CREATE TABLE IF NOT EXISTS server_settings (
     key         TEXT PRIMARY KEY,
     value       TEXT NOT NULL,
     updated_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS genre_aliases (
+    id          TEXT PRIMARY KEY,
+    raw_value   TEXT NOT NULL,
+    raw_lower   TEXT NOT NULL,
+    genre_ids   TEXT NOT NULL DEFAULT '[]',
+    created_by  TEXT NOT NULL REFERENCES users(id),
+    created_at  TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_genre_aliases_raw ON genre_aliases(raw_lower);
+
+CREATE TABLE IF NOT EXISTS unmapped_genres (
+    raw_value   TEXT NOT NULL,
+    raw_slug    TEXT NOT NULL PRIMARY KEY,
+    book_count  INTEGER NOT NULL DEFAULT 1,
+    first_seen  TEXT NOT NULL,
+    book_ids    TEXT NOT NULL DEFAULT '[]'
+);
+
+-- Phase 3 tables
+
+CREATE TABLE IF NOT EXISTS activities (
+    id                  TEXT PRIMARY KEY,
+    user_id             TEXT NOT NULL REFERENCES users(id),
+    type                TEXT NOT NULL,
+    created_at          TEXT NOT NULL,
+    user_display_name   TEXT NOT NULL DEFAULT '',
+    user_avatar_color   TEXT NOT NULL DEFAULT '',
+    user_avatar_type    TEXT NOT NULL DEFAULT '',
+    user_avatar_value   TEXT NOT NULL DEFAULT '',
+    book_id             TEXT,
+    book_title          TEXT,
+    book_author_name    TEXT,
+    book_cover_path     TEXT,
+    is_reread           INTEGER NOT NULL DEFAULT 0,
+    duration_ms         INTEGER NOT NULL DEFAULT 0,
+    milestone_value     INTEGER NOT NULL DEFAULT 0,
+    milestone_unit      TEXT,
+    lens_id             TEXT,
+    lens_name           TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_activities_user ON activities(user_id);
+CREATE INDEX IF NOT EXISTS idx_activities_created ON activities(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS user_stats (
+    user_id             TEXT PRIMARY KEY REFERENCES users(id),
+    total_listen_ms     INTEGER NOT NULL DEFAULT 0,
+    books_finished      INTEGER NOT NULL DEFAULT 0,
+    current_streak      INTEGER NOT NULL DEFAULT 0,
+    longest_streak      INTEGER NOT NULL DEFAULT 0,
+    last_listened_date  TEXT,
+    updated_at          TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_milestone_states (
+    user_id                  TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    last_streak_days         INTEGER NOT NULL DEFAULT 0,
+    last_listen_hours_total  INTEGER NOT NULL DEFAULT 0,
+    updated_at               TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS transcode_jobs (
+    id              TEXT PRIMARY KEY,
+    book_id         TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+    audio_file_id   TEXT NOT NULL,
+    source_path     TEXT NOT NULL,
+    source_codec    TEXT NOT NULL,
+    source_hash     TEXT NOT NULL DEFAULT '',
+    output_path     TEXT NOT NULL DEFAULT '',
+    output_codec    TEXT NOT NULL DEFAULT 'aac',
+    output_size     INTEGER NOT NULL DEFAULT 0,
+    variant         TEXT NOT NULL DEFAULT 'stereo',
+    status          TEXT NOT NULL DEFAULT 'pending',
+    progress        INTEGER NOT NULL DEFAULT 0,
+    priority        INTEGER NOT NULL DEFAULT 1,
+    error           TEXT NOT NULL DEFAULT '',
+    created_at      TEXT NOT NULL,
+    started_at      TEXT,
+    completed_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_transcode_jobs_book ON transcode_jobs(book_id);
+CREATE INDEX IF NOT EXISTS idx_transcode_jobs_audio_file ON transcode_jobs(audio_file_id);
+CREATE INDEX IF NOT EXISTS idx_transcode_jobs_status ON transcode_jobs(status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_transcode_jobs_audio_variant ON transcode_jobs(audio_file_id, variant);
+
+CREATE TABLE IF NOT EXISTS abs_imports (
+    id                  TEXT PRIMARY KEY,
+    name                TEXT NOT NULL,
+    backup_path         TEXT NOT NULL,
+    status              TEXT NOT NULL DEFAULT 'active',
+    created_at          TEXT NOT NULL,
+    updated_at          TEXT NOT NULL,
+    completed_at        TEXT,
+    total_users         INTEGER NOT NULL DEFAULT 0,
+    total_books         INTEGER NOT NULL DEFAULT 0,
+    total_sessions      INTEGER NOT NULL DEFAULT 0,
+    users_mapped        INTEGER NOT NULL DEFAULT 0,
+    books_mapped        INTEGER NOT NULL DEFAULT 0,
+    sessions_imported   INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS abs_import_users (
+    import_id       TEXT NOT NULL REFERENCES abs_imports(id) ON DELETE CASCADE,
+    abs_user_id     TEXT NOT NULL,
+    abs_username    TEXT NOT NULL DEFAULT '',
+    abs_email       TEXT NOT NULL DEFAULT '',
+    listenup_id     TEXT,
+    lu_email        TEXT,
+    lu_display_name TEXT,
+    mapped_at       TEXT,
+    session_count   INTEGER NOT NULL DEFAULT 0,
+    total_listen_ms INTEGER NOT NULL DEFAULT 0,
+    confidence      TEXT NOT NULL DEFAULT 'none',
+    match_reason    TEXT NOT NULL DEFAULT '',
+    suggestions     TEXT NOT NULL DEFAULT '[]',
+    PRIMARY KEY (import_id, abs_user_id)
+);
+
+CREATE TABLE IF NOT EXISTS abs_import_books (
+    import_id       TEXT NOT NULL REFERENCES abs_imports(id) ON DELETE CASCADE,
+    abs_media_id    TEXT NOT NULL,
+    abs_title       TEXT NOT NULL DEFAULT '',
+    abs_author      TEXT NOT NULL DEFAULT '',
+    abs_duration_ms INTEGER NOT NULL DEFAULT 0,
+    abs_asin        TEXT NOT NULL DEFAULT '',
+    abs_isbn        TEXT NOT NULL DEFAULT '',
+    listenup_id     TEXT,
+    lu_title        TEXT,
+    lu_author       TEXT,
+    mapped_at       TEXT,
+    session_count   INTEGER NOT NULL DEFAULT 0,
+    confidence      TEXT NOT NULL DEFAULT 'none',
+    match_reason    TEXT NOT NULL DEFAULT '',
+    suggestions     TEXT NOT NULL DEFAULT '[]',
+    PRIMARY KEY (import_id, abs_media_id)
+);
+
+CREATE TABLE IF NOT EXISTS abs_import_sessions (
+    import_id       TEXT NOT NULL REFERENCES abs_imports(id) ON DELETE CASCADE,
+    abs_session_id  TEXT NOT NULL,
+    abs_user_id     TEXT NOT NULL,
+    abs_media_id    TEXT NOT NULL,
+    start_time      TEXT NOT NULL,
+    duration        INTEGER NOT NULL DEFAULT 0,
+    start_position  INTEGER NOT NULL DEFAULT 0,
+    end_position    INTEGER NOT NULL DEFAULT 0,
+    status          TEXT NOT NULL DEFAULT 'pending_user',
+    imported_at     TEXT,
+    skip_reason     TEXT,
+    PRIMARY KEY (import_id, abs_session_id)
+);
+CREATE INDEX IF NOT EXISTS idx_abs_import_sessions_user ON abs_import_sessions(import_id, abs_user_id);
+CREATE INDEX IF NOT EXISTS idx_abs_import_sessions_media ON abs_import_sessions(import_id, abs_media_id);
+
+CREATE TABLE IF NOT EXISTS abs_import_progress (
+    import_id       TEXT NOT NULL REFERENCES abs_imports(id) ON DELETE CASCADE,
+    abs_user_id     TEXT NOT NULL,
+    abs_media_id    TEXT NOT NULL,
+    current_time    INTEGER NOT NULL DEFAULT 0,
+    duration        INTEGER NOT NULL DEFAULT 0,
+    progress        REAL NOT NULL DEFAULT 0,
+    is_finished     INTEGER NOT NULL DEFAULT 0,
+    finished_at     TEXT,
+    last_update     TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'pending_user',
+    imported_at     TEXT,
+    PRIMARY KEY (import_id, abs_user_id, abs_media_id)
+);
+
+CREATE TABLE IF NOT EXISTS audible_cache_books (
+    region      TEXT NOT NULL,
+    asin        TEXT NOT NULL,
+    data        TEXT NOT NULL,
+    fetched_at  TEXT NOT NULL,
+    PRIMARY KEY (region, asin)
+);
+
+CREATE TABLE IF NOT EXISTS audible_cache_chapters (
+    region      TEXT NOT NULL,
+    asin        TEXT NOT NULL,
+    data        TEXT NOT NULL,
+    fetched_at  TEXT NOT NULL,
+    PRIMARY KEY (region, asin)
+);
+
+CREATE TABLE IF NOT EXISTS audible_cache_search (
+    region      TEXT NOT NULL,
+    query       TEXT NOT NULL,
+    data        TEXT NOT NULL,
+    fetched_at  TEXT NOT NULL,
+    PRIMARY KEY (region, query)
 );

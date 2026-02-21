@@ -31,7 +31,7 @@ func TestSetAndGetBookSeries(t *testing.T) {
 		{SeriesID: "series-2", Sequence: "6"},
 	}
 
-	if err := s.SetBookSeries(ctx, "book-s1", series); err != nil {
+	if err := s.setBookSeriesInternal(ctx, "book-s1", series); err != nil {
 		t.Fatalf("SetBookSeries: %v", err)
 	}
 
@@ -81,7 +81,7 @@ func TestSetBookSeries_Replace(t *testing.T) {
 		{SeriesID: "series-a", Sequence: "2"},
 		{SeriesID: "series-b", Sequence: "7"},
 	}
-	if err := s.SetBookSeries(ctx, "book-sr", first); err != nil {
+	if err := s.setBookSeriesInternal(ctx, "book-sr", first); err != nil {
 		t.Fatalf("SetBookSeries (first): %v", err)
 	}
 
@@ -90,7 +90,7 @@ func TestSetBookSeries_Replace(t *testing.T) {
 		{SeriesID: "series-a", Sequence: "2"},
 		{SeriesID: "series-c", Sequence: "2"},
 	}
-	if err := s.SetBookSeries(ctx, "book-sr", second); err != nil {
+	if err := s.setBookSeriesInternal(ctx, "book-sr", second); err != nil {
 		t.Fatalf("SetBookSeries (second): %v", err)
 	}
 

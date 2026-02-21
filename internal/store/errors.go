@@ -6,11 +6,34 @@ import (
 	"net/http"
 )
 
-// ErrShelfNotFound is returned when a shelf is not found in the store.
-var ErrShelfNotFound = errors.New("shelf not found")
-
-// ErrDuplicateShelf is returned when trying to create a shelf that already exists.
-var ErrDuplicateShelf = errors.New("shelf already exists")
+// Domain-specific sentinel errors.
+var (
+	ErrBookNotFound            = errors.New("book not found")
+	ErrBookExists              = errors.New("book already exists")
+	ErrLensNotFound            = errors.New("lens not found")
+	ErrDuplicateLens           = errors.New("lens already exists")
+	ErrLibraryNotFound         = errors.New("library not found")
+	ErrCollectionNotFound      = errors.New("collection not found")
+	ErrDuplicateLibrary        = errors.New("library already exists")
+	ErrDuplicateCollection     = errors.New("collection already exists")
+	ErrPermissionDenied        = errors.New("insufficient permissions")
+	ErrServerNotFound          = errors.New("server not found")
+	ErrServerAlreadyExists     = errors.New("server already exists")
+	ErrUserNotFound            = errors.New("user not found")
+	ErrEmailExists             = errors.New("email already exists")
+	ErrContributorNotFound     = errors.New("contributor not found")
+	ErrSeriesNotFound          = errors.New("series not found")
+	ErrInviteNotFound          = errors.New("invite not found")
+	ErrInviteCodeExists        = errors.New("invite code already exists")
+	ErrProgressNotFound        = errors.New("playback progress not found")
+	ErrBookPreferencesNotFound = errors.New("book preferences not found")
+	ErrProfileNotFound         = errors.New("profile not found")
+	ErrTagNotFound             = errors.New("tag not found")
+	ErrGenreNotFound           = errors.New("genre not found")
+	ErrSessionNotFound         = errors.New("session not found")
+	ErrShareNotFound           = errors.New("share not found")
+	ErrShelfNotFound           = ErrLensNotFound
+)
 
 // Error is a domain error with an HTTP status code.
 type Error struct {

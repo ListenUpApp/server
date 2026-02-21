@@ -25,7 +25,7 @@ const (
 
 // InviteService handles invite creation, validation, and claiming.
 type InviteService struct {
-	store          *store.Store
+	store          store.Store
 	sessionService *SessionService
 	logger         *slog.Logger
 	serverURL      string // Base URL for generating invite links
@@ -33,7 +33,7 @@ type InviteService struct {
 
 // NewInviteService creates a new invite service.
 func NewInviteService(
-	store *store.Store,
+	store store.Store,
 	sessionService *SessionService,
 	logger *slog.Logger,
 	serverURL string,

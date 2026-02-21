@@ -59,7 +59,7 @@ func (NoopTranscodeQueuer) QueueTranscode(context.Context, string, string, strin
 
 // Scanner orchestrates the library scanning process.
 type Scanner struct {
-	store           *store.Store
+	store           store.Store
 	eventEmitter    store.EventEmitter
 	logger          *slog.Logger
 	imageProcessor  *images.Processor
@@ -73,7 +73,7 @@ type Scanner struct {
 }
 
 // NewScanner creates a new scanner instance.
-func NewScanner(store *store.Store, emitter store.EventEmitter, imageProcessor *images.Processor, logger *slog.Logger) *Scanner {
+func NewScanner(store store.Store, emitter store.EventEmitter, imageProcessor *images.Processor, logger *slog.Logger) *Scanner {
 	return &Scanner{
 		store:           store,
 		eventEmitter:    emitter,

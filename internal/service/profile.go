@@ -24,7 +24,7 @@ const MaxAvatarSize = 2 * 1024 * 1024
 
 // ProfileService provides user profile management.
 type ProfileService struct {
-	store      *store.Store
+	store      store.Store
 	avatars    *images.Storage
 	sseManager *sse.Manager
 	stats      *StatsService
@@ -33,7 +33,7 @@ type ProfileService struct {
 
 // NewProfileService creates a new profile service.
 func NewProfileService(
-	store *store.Store,
+	store store.Store,
 	avatars *images.Storage,
 	sseManager *sse.Manager,
 	stats *StatsService,

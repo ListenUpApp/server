@@ -12,6 +12,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/logger"
 	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
+	"github.com/listenupapp/listenup-server/internal/store/sqlite"
 )
 
 // SSEManagerHandle wraps the SSE manager with its context for lifecycle management.
@@ -48,7 +49,7 @@ func ProvideSSEManager(i do.Injector) (*SSEManagerHandle, error) {
 
 // StoreHandle wraps the store with shutdown capability.
 type StoreHandle struct {
-	*store.Store
+	store.Store
 }
 
 // Shutdown implements do.Shutdownable.
@@ -62,8 +63,8 @@ func ProvideStore(i do.Injector) (*StoreHandle, error) {
 	log := do.MustInvoke[*logger.Logger](i)
 	sseHandle := do.MustInvoke[*SSEManagerHandle](i)
 
-	dbPath := filepath.Join(cfg.Metadata.BasePath, "db")
-	db, err := store.New(dbPath, log.Logger, sseHandle.Manager)
+	dbPath := filepath.Join(cfg.Metadata.BasePath, "listenup.db")
+	db, err := sqlite.Open(dbPath, log.Logger)
 	if err != nil {
 		return nil, err
 	}

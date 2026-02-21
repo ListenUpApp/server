@@ -99,7 +99,7 @@ func TestCreateAndGetBook(t *testing.T) {
 		t.Fatalf("CreateBook: %v", err)
 	}
 
-	got, err := s.GetBook(ctx, "book-1")
+	got, err := s.GetBook(ctx, "book-1", "")
 	if err != nil {
 		t.Fatalf("GetBook: %v", err)
 	}
@@ -237,7 +237,7 @@ func TestGetBook_NotFound(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	_, err := s.GetBook(ctx, "nonexistent")
+	_, err := s.GetBook(ctx, "nonexistent", "")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -446,7 +446,7 @@ func TestUpdateBook(t *testing.T) {
 		t.Fatalf("UpdateBook: %v", err)
 	}
 
-	got, err := s.GetBook(ctx, "book-update")
+	got, err := s.GetBook(ctx, "book-update", "")
 	if err != nil {
 		t.Fatalf("GetBook after update: %v", err)
 	}
@@ -523,7 +523,7 @@ func TestDeleteBook(t *testing.T) {
 	}
 
 	// Verify book exists before delete.
-	_, err := s.GetBook(ctx, "book-delete")
+	_, err := s.GetBook(ctx, "book-delete", "")
 	if err != nil {
 		t.Fatalf("GetBook before delete: %v", err)
 	}
@@ -534,7 +534,7 @@ func TestDeleteBook(t *testing.T) {
 	}
 
 	// GetBook should return not found.
-	_, err = s.GetBook(ctx, "book-delete")
+	_, err = s.GetBook(ctx, "book-delete", "")
 	if err == nil {
 		t.Fatal("expected not found after delete, got nil")
 	}
@@ -673,7 +673,7 @@ func TestBook_NilCoverImage(t *testing.T) {
 		t.Fatalf("CreateBook: %v", err)
 	}
 
-	got, err := s.GetBook(ctx, "book-no-cover")
+	got, err := s.GetBook(ctx, "book-no-cover", "")
 	if err != nil {
 		t.Fatalf("GetBook: %v", err)
 	}
@@ -694,7 +694,7 @@ func TestBook_StagedCollectionIDs(t *testing.T) {
 		t.Fatalf("CreateBook: %v", err)
 	}
 
-	got, err := s.GetBook(ctx, "book-staged")
+	got, err := s.GetBook(ctx, "book-staged", "")
 	if err != nil {
 		t.Fatalf("GetBook: %v", err)
 	}
@@ -716,7 +716,7 @@ func TestBook_StagedCollectionIDs(t *testing.T) {
 		t.Fatalf("UpdateBook: %v", err)
 	}
 
-	got, err = s.GetBook(ctx, "book-staged")
+	got, err = s.GetBook(ctx, "book-staged", "")
 	if err != nil {
 		t.Fatalf("GetBook after update: %v", err)
 	}

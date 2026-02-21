@@ -75,12 +75,8 @@ func TestGetBookPreferences_NotFound(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
-	var storeErr *store.Error
-	if !errors.As(err, &storeErr) {
-		t.Fatalf("expected *store.Error, got %T: %v", err, err)
-	}
-	if storeErr.Code != store.ErrNotFound.Code {
-		t.Errorf("expected status %d, got %d", store.ErrNotFound.Code, storeErr.Code)
+	if !errors.Is(err, store.ErrBookPreferencesNotFound) {
+		t.Fatalf("expected store.ErrBookPreferencesNotFound, got %T: %v", err, err)
 	}
 }
 

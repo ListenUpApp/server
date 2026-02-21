@@ -13,12 +13,12 @@ import (
 
 // StatsService provides detailed listening statistics.
 type StatsService struct {
-	store  *store.Store
+	store  store.Store
 	logger *slog.Logger
 }
 
 // NewStatsService creates a new stats service.
-func NewStatsService(store *store.Store, logger *slog.Logger) *StatsService {
+func NewStatsService(store store.Store, logger *slog.Logger) *StatsService {
 	return &StatsService{
 		store:  store,
 		logger: logger,

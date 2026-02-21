@@ -14,10 +14,11 @@ import (
 	"github.com/listenupapp/listenup-server/internal/backup"
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/store"
+	"github.com/listenupapp/listenup-server/internal/store/sqlite"
 )
 
 // testSetup creates a test store and backup/restore services.
-func testSetup(t *testing.T) (*store.Store, *backup.BackupService, *backup.RestoreService, string, func()) {
+func testSetup(t *testing.T) (store.Store, *backup.BackupService, *backup.RestoreService, string, func()) {
 	t.Helper()
 
 	tmpDir, err := os.MkdirTemp("", "backup_test")
@@ -32,7 +33,7 @@ func testSetup(t *testing.T) (*store.Store, *backup.BackupService, *backup.Resto
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
 
-	testStore, err := store.New(dbPath, nil, store.NewNoopEmitter())
+	testStore, err := sqlite.Open(dbPath, nil)
 	require.NoError(t, err)
 
 	backupSvc := backup.NewBackupService(testStore, backupDir, dataDir, "test", logger)
@@ -47,7 +48,7 @@ func testSetup(t *testing.T) (*store.Store, *backup.BackupService, *backup.Resto
 }
 
 // createTestEntities creates a set of test entities in the store.
-func createTestEntities(t *testing.T, s *store.Store) {
+func createTestEntities(t *testing.T, s store.Store) {
 	t.Helper()
 	ctx := context.Background()
 	now := time.Now()
@@ -72,7 +73,7 @@ func createTestEntities(t *testing.T, s *store.Store) {
 		FirstName:    "Test",
 		LastName:     "Admin",
 	}
-	require.NoError(t, s.Users.Create(ctx, user.ID, user))
+	require.NoError(t, s.CreateUser(ctx, user))
 
 	// Create library
 	library := &domain.Library{
@@ -194,7 +195,7 @@ func TestBackupRestore_RoundTrip(t *testing.T) {
 	require.NoError(t, os.MkdirAll(destDataDir, 0o755))
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	destStore, err := store.New(destDbPath, nil, store.NewNoopEmitter())
+	destStore, err := sqlite.Open(destDbPath, nil)
 	require.NoError(t, err)
 	defer destStore.Close()
 
@@ -208,7 +209,7 @@ func TestBackupRestore_RoundTrip(t *testing.T) {
 	assert.Empty(t, restoreResult.Errors)
 
 	// Verify restored entities
-	user, err := destStore.Users.Get(ctx, "user-root")
+	user, err := destStore.GetUser(ctx, "user-root")
 	require.NoError(t, err)
 	assert.Equal(t, "admin@test.com", user.Email)
 	assert.Equal(t, "Test Admin", user.DisplayName)
@@ -330,7 +331,7 @@ func TestRebuildProgress(t *testing.T) {
 		Role:        domain.RoleAdmin,
 		Status:      domain.UserStatusActive,
 	}
-	require.NoError(t, sourceStore.Users.Create(ctx, user.ID, user))
+	require.NoError(t, sourceStore.CreateUser(ctx, user))
 
 	// Create library
 	library := &domain.Library{
@@ -381,7 +382,7 @@ func TestRebuildProgress(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	destStore, err := store.New(filepath.Join(destDir, "dest.db"), nil, store.NewNoopEmitter())
+	destStore, err := sqlite.Open(filepath.Join(destDir, "dest.db"), nil)
 	require.NoError(t, err)
 	defer destStore.Close()
 

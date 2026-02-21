@@ -56,7 +56,7 @@ type SeriesMatchEntry struct {
 
 // BookService orchestrates book operations.
 type BookService struct {
-	store           *store.Store
+	store           store.Store
 	scanner         *scanner.Scanner
 	metadataService *MetadataService
 	coverService    *CoverService
@@ -66,7 +66,7 @@ type BookService struct {
 
 // NewBookService creates a new book service.
 func NewBookService(
-	store *store.Store,
+	store store.Store,
 	scanner *scanner.Scanner,
 	metadataService *MetadataService,
 	coverService *CoverService,

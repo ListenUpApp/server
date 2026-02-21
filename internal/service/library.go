@@ -14,13 +14,13 @@ import (
 
 // LibraryService orchestrates library operations.
 type LibraryService struct {
-	store      *store.Store
+	store      store.Store
 	sseManager *sse.Manager
 	logger     *slog.Logger
 }
 
 // NewLibraryService creates a new library service.
-func NewLibraryService(store *store.Store, sseManager *sse.Manager, logger *slog.Logger) *LibraryService {
+func NewLibraryService(store store.Store, sseManager *sse.Manager, logger *slog.Logger) *LibraryService {
 	return &LibraryService{
 		store:      store,
 		sseManager: sseManager,

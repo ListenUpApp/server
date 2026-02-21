@@ -11,6 +11,7 @@ import (
 
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/store"
+	"github.com/listenupapp/listenup-server/internal/store/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,7 +19,7 @@ import (
 const testUserID = "test-user-123"
 
 // setupTestSync creates a test sync service with temp database.
-func setupTestSync(t *testing.T) (*SyncService, *store.Store, func()) {
+func setupTestSync(t *testing.T) (*SyncService, store.Store, func()) {
 	t.Helper()
 
 	// Create temp directory for test database.
@@ -28,7 +29,7 @@ func setupTestSync(t *testing.T) (*SyncService, *store.Store, func()) {
 	dbPath := filepath.Join(tmpDir, "test.db")
 
 	// Create store.
-	testStore, err := store.New(dbPath, nil, store.NewNoopEmitter())
+	testStore, err := sqlite.Open(dbPath, nil)
 	require.NoError(t, err)
 	require.NotNil(t, testStore)
 

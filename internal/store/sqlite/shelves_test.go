@@ -19,7 +19,7 @@ func TestCreateAndGetLens(t *testing.T) {
 	insertTestBook(t, s, "book-2", "Book Two", "/books/two")
 
 	now := time.Now()
-	lens := &domain.Lens{
+	lens := &domain.Shelf{
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		ID:          "lens-1",
@@ -107,7 +107,7 @@ func TestUpdateLens(t *testing.T) {
 	insertTestBook(t, s, "book-3", "Book Three", "/books/three")
 
 	now := time.Now()
-	lens := &domain.Lens{
+	lens := &domain.Shelf{
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		ID:          "lens-upd",
@@ -160,7 +160,7 @@ func TestDeleteLens(t *testing.T) {
 	insertTestUser(t, s, "user-1")
 
 	now := time.Now()
-	lens := &domain.Lens{
+	lens := &domain.Shelf{
 		CreatedAt: now,
 		UpdatedAt: now,
 		ID:        "lens-del",
@@ -204,14 +204,14 @@ func TestListLensesByOwner(t *testing.T) {
 	insertTestUser(t, s, "user-1")
 
 	now := time.Now()
-	lens1 := &domain.Lens{
+	lens1 := &domain.Shelf{
 		CreatedAt: now,
 		UpdatedAt: now,
 		ID:        "lens-lo-1",
 		OwnerID:   "user-1",
 		Name:      "First Lens",
 	}
-	lens2 := &domain.Lens{
+	lens2 := &domain.Shelf{
 		CreatedAt: now.Add(1 * time.Second),
 		UpdatedAt: now.Add(1 * time.Second),
 		ID:        "lens-lo-2",
@@ -250,7 +250,7 @@ func TestAddAndRemoveBookFromLens(t *testing.T) {
 	insertTestBook(t, s, "book-1", "Book One", "/books/one")
 
 	now := time.Now()
-	lens := &domain.Lens{
+	lens := &domain.Shelf{
 		CreatedAt: now,
 		UpdatedAt: now,
 		ID:        "lens-ab",

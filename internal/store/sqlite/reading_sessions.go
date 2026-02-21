@@ -3,7 +3,9 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"iter"
 	"strings"
+	"time"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/store"
@@ -181,4 +183,182 @@ func (s *Store) GetActiveReadingSession(ctx context.Context, userID, bookID stri
 		return nil, err
 	}
 	return rs, nil
+}
+
+// GetReadingSession retrieves a single reading session by ID.
+// Returns store.ErrNotFound if the session does not exist.
+func (s *Store) GetReadingSession(ctx context.Context, id string) (*domain.BookReadingSession, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+readingSessionColumns+` FROM book_reading_sessions WHERE id = ?`, id)
+
+	rs, err := scanReadingSession(row)
+	if err == sql.ErrNoRows {
+		return nil, store.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return rs, nil
+}
+
+// DeleteReadingSession deletes a reading session by ID.
+// This operation is idempotent.
+func (s *Store) DeleteReadingSession(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM book_reading_sessions WHERE id = ?`, id)
+	return err
+}
+
+// GetActiveSession is an alias for GetActiveReadingSession.
+// Returns the most recent active (unfinished) reading session for a user and book.
+func (s *Store) GetActiveSession(ctx context.Context, userID, bookID string) (*domain.BookReadingSession, error) {
+	return s.GetActiveReadingSession(ctx, userID, bookID)
+}
+
+// GetUserReadingSessions returns all reading sessions for a user,
+// ordered by started_at descending (most recent first).
+// If limit > 0, at most limit sessions are returned.
+func (s *Store) GetUserReadingSessions(ctx context.Context, userID string, limit int) ([]*domain.BookReadingSession, error) {
+	query := `SELECT ` + readingSessionColumns + ` FROM book_reading_sessions
+		WHERE user_id = ?
+		ORDER BY started_at DESC`
+
+	var args []any
+	args = append(args, userID)
+
+	if limit > 0 {
+		query += ` LIMIT ?`
+		args = append(args, limit)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sessions []*domain.BookReadingSession
+	for rows.Next() {
+		rs, err := scanReadingSession(rows)
+		if err != nil {
+			return nil, err
+		}
+		sessions = append(sessions, rs)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return sessions, nil
+}
+
+// GetUserBookSessions is an alias for GetReadingSessions.
+// Returns all reading sessions for a user and book.
+func (s *Store) GetUserBookSessions(ctx context.Context, userID, bookID string) ([]*domain.BookReadingSession, error) {
+	return s.GetReadingSessions(ctx, userID, bookID)
+}
+
+// GetBookSessions returns all reading sessions for a book (across all users),
+// ordered by started_at descending.
+func (s *Store) GetBookSessions(ctx context.Context, bookID string) ([]*domain.BookReadingSession, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+readingSessionColumns+` FROM book_reading_sessions
+		WHERE book_id = ?
+		ORDER BY started_at DESC`,
+		bookID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sessions []*domain.BookReadingSession
+	for rows.Next() {
+		rs, err := scanReadingSession(rows)
+		if err != nil {
+			return nil, err
+		}
+		sessions = append(sessions, rs)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return sessions, nil
+}
+
+// GetAllActiveSessions returns all active (unfinished) reading sessions across all users.
+func (s *Store) GetAllActiveSessions(ctx context.Context) ([]*domain.BookReadingSession, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+readingSessionColumns+` FROM book_reading_sessions
+		WHERE finished_at IS NULL
+		ORDER BY started_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sessions []*domain.BookReadingSession
+	for rows.Next() {
+		rs, err := scanReadingSession(rows)
+		if err != nil {
+			return nil, err
+		}
+		sessions = append(sessions, rs)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return sessions, nil
+}
+
+// CleanupStaleSessions marks reading sessions as finished if they've been active
+// longer than maxAge. Returns the number of sessions cleaned up.
+func (s *Store) CleanupStaleSessions(ctx context.Context, maxAge time.Duration) (int, error) {
+	cutoff := time.Now().Add(-maxAge)
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE book_reading_sessions
+		SET finished_at = updated_at, updated_at = ?
+		WHERE finished_at IS NULL AND updated_at < ?`,
+		formatTime(time.Now()), formatTime(cutoff))
+	if err != nil {
+		return 0, err
+	}
+	n, err := result.RowsAffected()
+	return int(n), err
+}
+
+// ListAllSessions returns an iterator over all reading sessions.
+// This is useful for export/backup operations.
+func (s *Store) ListAllSessions(ctx context.Context) iter.Seq2[*domain.BookReadingSession, error] {
+	return func(yield func(*domain.BookReadingSession, error) bool) {
+		rows, err := s.db.QueryContext(ctx,
+			`SELECT `+readingSessionColumns+` FROM book_reading_sessions ORDER BY started_at DESC`)
+		if err != nil {
+			yield(nil, err)
+			return
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			if ctx.Err() != nil {
+				yield(nil, ctx.Err())
+				return
+			}
+
+			rs, err := scanReadingSession(rows)
+			if err != nil {
+				if !yield(nil, err) {
+					return
+				}
+				continue
+			}
+
+			if !yield(rs, nil) {
+				return
+			}
+		}
+
+		if err := rows.Err(); err != nil {
+			yield(nil, err)
+		}
+	}
 }

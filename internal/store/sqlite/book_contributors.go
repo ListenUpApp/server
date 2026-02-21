@@ -9,9 +9,9 @@ import (
 	"github.com/listenupapp/listenup-server/internal/domain"
 )
 
-// SetBookContributors replaces all contributors for a book in a single transaction.
+// setBookContributorsInternal replaces all contributors for a book in a single transaction.
 // It deletes existing rows and inserts the new set.
-func (s *Store) SetBookContributors(ctx context.Context, bookID string, contributors []domain.BookContributor) error {
+func (s *Store) setBookContributorsInternal(ctx context.Context, bookID string, contributors []domain.BookContributor) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -84,4 +84,44 @@ func (s *Store) GetBookContributors(ctx context.Context, bookID string) ([]domai
 	}
 
 	return contributors, nil
+}
+
+// GetBookIDsByContributor returns the book IDs linked to a specific contributor.
+func (s *Store) GetBookIDsByContributor(ctx context.Context, contributorID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT book_id FROM book_contributors WHERE contributor_id = ?`, contributorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var bookIDs []string
+	for rows.Next() {
+		var bookID string
+		if err := rows.Scan(&bookID); err != nil {
+			return nil, err
+		}
+		bookIDs = append(bookIDs, bookID)
+	}
+	return bookIDs, rows.Err()
+}
+
+// GetContributorBookIDMap returns a map of contributor ID → list of book IDs.
+func (s *Store) GetContributorBookIDMap(ctx context.Context) (map[string][]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT contributor_id, book_id FROM book_contributors`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string][]string)
+	for rows.Next() {
+		var contribID, bookID string
+		if err := rows.Scan(&contribID, &bookID); err != nil {
+			return nil, err
+		}
+		result[contribID] = append(result[contribID], bookID)
+	}
+	return result, rows.Err()
 }

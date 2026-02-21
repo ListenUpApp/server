@@ -5,7 +5,12 @@ import (
 	_ "embed"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
+
+	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/dto"
+	"github.com/listenupapp/listenup-server/internal/store"
 
 	_ "modernc.org/sqlite"
 )
@@ -17,6 +22,14 @@ var schemaSQL string
 type Store struct {
 	db     *sql.DB
 	logger *slog.Logger
+
+	enricher         *dto.Enricher
+	emitter          store.EventEmitter
+	searchIndexer    store.SearchIndexer
+	transcodeDeleter store.TranscodeDeleter
+
+	mu       sync.RWMutex
+	bulkMode bool
 }
 
 // Open creates a new SQLite store at the given path.
@@ -53,9 +66,16 @@ func Open(path string, logger *slog.Logger) (*Store, error) {
 	}
 
 	s := &Store{
-		db:     db,
-		logger: logger,
+		db:               db,
+		logger:           logger,
+		emitter:          store.NewNoopEmitter(),
+		searchIndexer:    store.NewNoopSearchIndexer(),
+		transcodeDeleter: store.NewNoopTranscodeDeleter(),
 	}
+
+	// Initialize enricher for SSE event denormalization.
+	// The store implements dto.Store interface.
+	s.enricher = dto.NewEnricher(s)
 
 	return s, nil
 }
@@ -64,6 +84,43 @@ func Open(path string, logger *slog.Logger) (*Store, error) {
 func (s *Store) Close() error {
 	return s.db.Close()
 }
+
+// SetSearchIndexer sets the search indexer used for maintaining the search index.
+func (s *Store) SetSearchIndexer(indexer store.SearchIndexer) {
+	s.searchIndexer = indexer
+}
+
+// SetTranscodeDeleter sets the transcode deleter used for cleaning up transcoded files.
+func (s *Store) SetTranscodeDeleter(deleter store.TranscodeDeleter) {
+	s.transcodeDeleter = deleter
+}
+
+// SetBulkMode enables or disables bulk mode, which suppresses indexing and events.
+func (s *Store) SetBulkMode(enabled bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.bulkMode = enabled
+}
+
+// IsBulkMode returns whether the store is in bulk mode.
+func (s *Store) IsBulkMode() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.bulkMode
+}
+
+// InvalidateGenreCache is a no-op for the SQLite store.
+// The SQLite store does not maintain an in-memory genre cache.
+func (s *Store) InvalidateGenreCache() {}
+
+// BroadcastUserPending is a no-op; SSE events will be handled separately.
+func (s *Store) BroadcastUserPending(_ *domain.User) {}
+
+// BroadcastUserApproved is a no-op; SSE events will be handled separately.
+func (s *Store) BroadcastUserApproved(_ *domain.User) {}
+
+// BroadcastUserDeleted is a no-op; SSE events will be handled separately.
+func (s *Store) BroadcastUserDeleted(_, _ string) {}
 
 // formatTime formats a time.Time to RFC3339Nano for storage.
 func formatTime(t time.Time) string {
@@ -93,6 +150,14 @@ func nullString(s string) sql.NullString {
 		return sql.NullString{}
 	}
 	return sql.NullString{String: s, Valid: true}
+}
+
+// nullableString returns a sql.NullString from a *string.
+func nullableString(s *string) sql.NullString {
+	if s == nil {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: *s, Valid: true}
 }
 
 // nullTimeString returns a sql.NullString from a *time.Time.

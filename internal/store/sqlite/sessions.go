@@ -248,22 +248,11 @@ func (s *Store) UpdateSession(ctx context.Context, session *domain.Session) erro
 }
 
 // DeleteSession performs a hard delete of a session by ID.
-// Returns store.ErrNotFound if the session does not exist.
+// This is idempotent: deleting a non-existent session is not an error.
 func (s *Store) DeleteSession(ctx context.Context, id string) error {
-	result, err := s.db.ExecContext(ctx,
+	_, err := s.db.ExecContext(ctx,
 		`DELETE FROM sessions WHERE id = ?`, id)
-	if err != nil {
-		return err
-	}
-
-	n, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return store.ErrNotFound
-	}
-	return nil
+	return err
 }
 
 // GetSessionsByUser returns all sessions for a given user ID.
@@ -305,4 +294,33 @@ func (s *Store) DeleteExpiredSessions(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	return int(n), nil
+}
+
+// GetSessionByRefreshToken retrieves a session by its refresh token hash.
+// Returns store.ErrNotFound if no session matches the given token hash.
+func (s *Store) GetSessionByRefreshToken(ctx context.Context, tokenHash string) (*domain.Session, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+sessionColumns+` FROM sessions WHERE refresh_token_hash = ?`, tokenHash)
+
+	sess, err := scanSession(row)
+	if err == sql.ErrNoRows {
+		return nil, store.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return sess, nil
+}
+
+// ListUserSessions returns all sessions for a given user ID.
+// This is an alias for GetSessionsByUser to satisfy the store.Store interface.
+func (s *Store) ListUserSessions(ctx context.Context, userID string) ([]*domain.Session, error) {
+	return s.GetSessionsByUser(ctx, userID)
+}
+
+// DeleteAllUserSessions deletes all sessions for a given user ID.
+func (s *Store) DeleteAllUserSessions(ctx context.Context, userID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM sessions WHERE user_id = ?`, userID)
+	return err
 }

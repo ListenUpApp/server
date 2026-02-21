@@ -11,12 +11,13 @@ import (
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/id"
 	"github.com/listenupapp/listenup-server/internal/store"
+	"github.com/listenupapp/listenup-server/internal/store/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // setupSharingTest creates a sharing service with temporary storage for testing.
-func setupSharingTest(t *testing.T) (*SharingService, *store.Store, func()) {
+func setupSharingTest(t *testing.T) (*SharingService, store.Store, func()) {
 	t.Helper()
 
 	// Create temp directory for test database
@@ -26,7 +27,7 @@ func setupSharingTest(t *testing.T) (*SharingService, *store.Store, func()) {
 	dbPath := filepath.Join(tmpDir, "test.db")
 
 	// Create store
-	s, err := store.New(dbPath, nil, store.NewNoopEmitter())
+	s, err := sqlite.Open(dbPath, nil)
 	require.NoError(t, err)
 
 	// Create logger (discard output in tests)
@@ -45,7 +46,7 @@ func setupSharingTest(t *testing.T) (*SharingService, *store.Store, func()) {
 }
 
 // createTestUserWithPermissions creates a test user with specific permissions.
-func createTestUserWithPermissions(t *testing.T, s *store.Store, email string, canShare bool) *domain.User {
+func createTestUserWithPermissions(t *testing.T, s store.Store, email string, canShare bool) *domain.User {
 	t.Helper()
 
 	userID, err := id.Generate("user")
@@ -75,7 +76,7 @@ func createTestUserWithPermissions(t *testing.T, s *store.Store, email string, c
 }
 
 // createTestLibrary creates a test library.
-func createTestLibrary(t *testing.T, s *store.Store, ownerID string) *domain.Library {
+func createTestLibrary(t *testing.T, s store.Store, ownerID string) *domain.Library {
 	t.Helper()
 
 	libID, err := id.Generate("lib")
@@ -97,7 +98,7 @@ func createTestLibrary(t *testing.T, s *store.Store, ownerID string) *domain.Lib
 }
 
 // createTestCollection creates a test collection owned by a user.
-func createTestCollection(t *testing.T, s *store.Store, ownerID, libraryID, name string) *domain.Collection {
+func createTestCollection(t *testing.T, s store.Store, ownerID, libraryID, name string) *domain.Collection {
 	t.Helper()
 
 	collID, err := id.Generate("coll")

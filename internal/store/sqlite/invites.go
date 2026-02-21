@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"strings"
+	"time"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/store"
@@ -162,6 +163,98 @@ func (s *Store) UseInvite(ctx context.Context, invite *domain.Invite) error {
 func (s *Store) ListInvites(ctx context.Context) ([]*domain.Invite, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+inviteColumns+` FROM invites WHERE deleted_at IS NULL ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var invites []*domain.Invite
+	for rows.Next() {
+		inv, err := scanInvite(rows)
+		if err != nil {
+			return nil, err
+		}
+		invites = append(invites, inv)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return invites, nil
+}
+
+// GetInviteByCode is an alias for GetInviteByToken.
+// Retrieves an invite by its unique code, excluding soft-deleted records.
+func (s *Store) GetInviteByCode(ctx context.Context, code string) (*domain.Invite, error) {
+	return s.GetInviteByToken(ctx, code)
+}
+
+// UpdateInvite performs a full update on an existing invite.
+// Returns store.ErrNotFound if the invite does not exist.
+func (s *Store) UpdateInvite(ctx context.Context, invite *domain.Invite) error {
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE invites SET
+			created_at = ?,
+			updated_at = ?,
+			deleted_at = ?,
+			code = ?,
+			name = ?,
+			email = ?,
+			role = ?,
+			created_by = ?,
+			expires_at = ?,
+			claimed_at = ?,
+			claimed_by = ?
+		WHERE id = ?`,
+		formatTime(invite.CreatedAt),
+		formatTime(invite.UpdatedAt),
+		nullTimeString(invite.DeletedAt),
+		invite.Code,
+		invite.Name,
+		invite.Email,
+		string(invite.Role),
+		invite.CreatedBy,
+		formatTime(invite.ExpiresAt),
+		nullTimeString(invite.ClaimedAt),
+		nullString(invite.ClaimedBy),
+		invite.ID,
+	)
+	if err != nil {
+		return err
+	}
+
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+// DeleteInvite soft-deletes an invite by setting its deleted_at timestamp.
+// This operation is idempotent.
+func (s *Store) DeleteInvite(ctx context.Context, inviteID string) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE invites SET
+			deleted_at = ?,
+			updated_at = ?
+		WHERE id = ? AND deleted_at IS NULL`,
+		formatTime(time.Now().UTC()),
+		formatTime(time.Now().UTC()),
+		inviteID,
+	)
+	return err
+}
+
+// ListInvitesByCreator returns all non-deleted invites created by a specific user,
+// ordered by created_at descending.
+func (s *Store) ListInvitesByCreator(ctx context.Context, creatorID string) ([]*domain.Invite, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+inviteColumns+` FROM invites
+		WHERE created_by = ? AND deleted_at IS NULL
+		ORDER BY created_at DESC`,
+		creatorID)
 	if err != nil {
 		return nil, err
 	}

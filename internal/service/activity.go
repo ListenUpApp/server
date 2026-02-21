@@ -16,7 +16,7 @@ import (
 
 // ActivityService manages social activity recording and retrieval.
 type ActivityService struct {
-	store      *store.Store
+	store      store.Store
 	sseManager *sse.Manager
 	logger     *slog.Logger
 }
@@ -32,7 +32,7 @@ func (s *ActivityService) getUserAvatarInfo(ctx context.Context, userID string) 
 }
 
 // NewActivityService creates a new activity service.
-func NewActivityService(store *store.Store, sseManager *sse.Manager, logger *slog.Logger) *ActivityService {
+func NewActivityService(store store.Store, sseManager *sse.Manager, logger *slog.Logger) *ActivityService {
 	return &ActivityService{
 		store:      store,
 		sseManager: sseManager,

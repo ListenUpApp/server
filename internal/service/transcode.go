@@ -28,7 +28,7 @@ import (
 
 // TranscodeService manages audio transcoding operations.
 type TranscodeService struct {
-	store      *store.Store
+	store      store.Store
 	emitter    *sse.Manager
 	logger     *slog.Logger
 	config     config.TranscodeConfig
@@ -43,7 +43,7 @@ type TranscodeService struct {
 
 // NewTranscodeService creates a new transcode service.
 func NewTranscodeService(
-	store *store.Store,
+	store store.Store,
 	emitter *sse.Manager,
 	cfg config.TranscodeConfig,
 	logger *slog.Logger,

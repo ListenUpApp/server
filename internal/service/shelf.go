@@ -21,14 +21,14 @@ type ShelfActivityRecorder interface {
 
 // ShelfService orchestrates shelf operations with ownership enforcement and SSE events.
 type ShelfService struct {
-	store            *store.Store
+	store            store.Store
 	sseManager       *sse.Manager
 	logger           *slog.Logger
 	activityRecorder ShelfActivityRecorder
 }
 
 // NewShelfService creates a new shelf service.
-func NewShelfService(store *store.Store, sseManager *sse.Manager, logger *slog.Logger) *ShelfService {
+func NewShelfService(store store.Store, sseManager *sse.Manager, logger *slog.Logger) *ShelfService {
 	return &ShelfService{
 		store:      store,
 		sseManager: sseManager,
