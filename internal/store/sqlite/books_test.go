@@ -20,11 +20,11 @@ func makeTestBook(id, title, path string) *domain.Book {
 			CreatedAt: now,
 			UpdatedAt: now,
 		},
-		ScannedAt:     now,
-		Title:         title,
-		Path:          path,
-		TotalDuration: 36000,
-		TotalSize:     500000000,
+		ScannedAt:           now,
+		Title:               title,
+		Path:                path,
+		TotalDuration:       36000,
+		TotalSize:           500000000,
 		StagedCollectionIDs: []string{},
 	}
 }
