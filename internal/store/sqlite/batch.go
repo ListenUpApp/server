@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
@@ -9,19 +10,18 @@ import (
 )
 
 // sqliteBatchWriter implements store.BatchWriter for SQLite.
-// Since SQLite handles transactions internally, this is a thin wrapper
-// that delegates to the store's CreateBook method and tracks the count.
+// It accumulates books and writes them all in a single transaction on Flush.
 type sqliteBatchWriter struct {
 	store    *Store
 	maxSize  int
+	books    []*domain.Book
 	count    int
 	mu       sync.Mutex
 	canceled bool
 }
 
-// NewBatchWriter creates a new batch writer that wraps the store's CreateBook method.
-// For SQLite, the maxSize parameter is accepted for interface compatibility
-// but does not trigger automatic flushing (each write is immediate).
+// NewBatchWriter creates a new batch writer that accumulates books
+// and commits them atomically in Flush.
 func (s *Store) NewBatchWriter(maxSize int) store.BatchWriter {
 	return &sqliteBatchWriter{
 		store:   s,
@@ -29,30 +29,52 @@ func (s *Store) NewBatchWriter(maxSize int) store.BatchWriter {
 	}
 }
 
-// CreateBook adds a book to the store. For SQLite, this is a direct write.
+// CreateBook accumulates a book for the batch.
 // Returns an error if the batch has been canceled.
-func (bw *sqliteBatchWriter) CreateBook(ctx context.Context, book *domain.Book) error {
+func (bw *sqliteBatchWriter) CreateBook(_ context.Context, book *domain.Book) error {
 	bw.mu.Lock()
+	defer bw.mu.Unlock()
+
 	if bw.canceled {
-		bw.mu.Unlock()
 		return context.Canceled
 	}
-	bw.mu.Unlock()
 
-	if err := bw.store.CreateBook(ctx, book); err != nil {
-		return err
-	}
-
-	bw.mu.Lock()
-	bw.count++
-	bw.mu.Unlock()
-
+	bw.books = append(bw.books, book)
 	return nil
 }
 
-// Flush is a no-op for SQLite since writes are immediate.
-// Each CreateBook call writes directly to the database.
-func (bw *sqliteBatchWriter) Flush(_ context.Context) error {
+// Flush writes all accumulated books in a single transaction.
+// If any book fails, the entire batch is rolled back.
+func (bw *sqliteBatchWriter) Flush(ctx context.Context) error {
+	bw.mu.Lock()
+	books := bw.books
+	bw.books = nil
+	bw.mu.Unlock()
+
+	if len(books) == 0 {
+		return nil
+	}
+
+	tx, err := bw.store.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin batch tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	for _, book := range books {
+		if err := createBookTx(ctx, tx, book); err != nil {
+			return fmt.Errorf("batch create book %s: %w", book.ID, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit batch: %w", err)
+	}
+
+	bw.mu.Lock()
+	bw.count += len(books)
+	bw.mu.Unlock()
+
 	return nil
 }
 
@@ -62,9 +84,10 @@ func (bw *sqliteBatchWriter) Cancel() {
 	bw.mu.Lock()
 	defer bw.mu.Unlock()
 	bw.canceled = true
+	bw.books = nil
 }
 
-// Count returns the number of books successfully written so far.
+// Count returns the number of books successfully flushed.
 func (bw *sqliteBatchWriter) Count() int {
 	bw.mu.Lock()
 	defer bw.mu.Unlock()

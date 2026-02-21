@@ -46,12 +46,13 @@ func (s *Store) setBookContributorsInternal(ctx context.Context, bookID string, 
 	return tx.Commit()
 }
 
-// GetBookContributors returns all contributors linked to a book.
+// GetBookContributors returns all non-deleted contributors linked to a book.
 func (s *Store) GetBookContributors(ctx context.Context, bookID string) ([]domain.BookContributor, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT contributor_id, roles, credited_as
-		FROM book_contributors
-		WHERE book_id = ?`, bookID)
+		SELECT bc.contributor_id, bc.roles, bc.credited_as
+		FROM book_contributors bc
+		JOIN contributors c ON c.id = bc.contributor_id
+		WHERE bc.book_id = ? AND c.deleted_at IS NULL`, bookID)
 	if err != nil {
 		return nil, fmt.Errorf("query book_contributors: %w", err)
 	}

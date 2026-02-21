@@ -150,7 +150,7 @@ func (s *Store) UseInvite(ctx context.Context, invite *domain.Invite) error {
 			claimed_at = ?,
 			claimed_by = ?,
 			updated_at = ?
-		WHERE id = ?`,
+		WHERE id = ? AND deleted_at IS NULL`,
 		nullTimeString(invite.ClaimedAt),
 		nullString(invite.ClaimedBy),
 		formatTime(invite.UpdatedAt),
@@ -204,7 +204,7 @@ func (s *Store) UpdateInvite(ctx context.Context, invite *domain.Invite) error {
 			expires_at = ?,
 			claimed_at = ?,
 			claimed_by = ?
-		WHERE id = ?`,
+		WHERE id = ? AND deleted_at IS NULL`,
 		formatTime(invite.CreatedAt),
 		formatTime(invite.UpdatedAt),
 		nullTimeString(invite.DeletedAt),

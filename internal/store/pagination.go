@@ -40,8 +40,7 @@ func (p *PaginationParams) Validate() {
 	}
 }
 
-// EncodeCursor creates an opaque cusor from a key.
-// for BadgerDB, we use the last time's key as the cursor.
+// EncodeCursor creates an opaque cursor from a key.
 func EncodeCursor(key string) string {
 	if key == "" {
 		return ""

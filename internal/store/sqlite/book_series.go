@@ -39,12 +39,13 @@ func (s *Store) setBookSeriesInternal(ctx context.Context, bookID string, series
 	return tx.Commit()
 }
 
-// GetBookSeries returns all series linked to a book.
+// GetBookSeries returns all non-deleted series linked to a book.
 func (s *Store) GetBookSeries(ctx context.Context, bookID string) ([]domain.BookSeries, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT series_id, sequence
-		FROM book_series
-		WHERE book_id = ?`, bookID)
+		SELECT bs.series_id, bs.sequence
+		FROM book_series bs
+		JOIN series s ON s.id = bs.series_id
+		WHERE bs.book_id = ? AND s.deleted_at IS NULL`, bookID)
 	if err != nil {
 		return nil, fmt.Errorf("query book_series: %w", err)
 	}

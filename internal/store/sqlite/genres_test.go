@@ -364,6 +364,75 @@ func TestSetAndGetBookGenres(t *testing.T) {
 	}
 }
 
+func TestMoveGenre_UpdatesPathAndDepth(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	// Create a genre tree: /fiction, /fiction/fantasy, /fiction/fantasy/epic
+	fiction := makeTestGenre("genre-fiction", "Fiction", "fiction")
+	fiction.Path = "/fiction"
+	fiction.Depth = 0
+	if err := s.CreateGenre(ctx, fiction); err != nil {
+		t.Fatalf("CreateGenre fiction: %v", err)
+	}
+
+	fantasy := makeTestGenre("genre-fantasy", "Fantasy", "fantasy")
+	fantasy.ParentID = "genre-fiction"
+	fantasy.Path = "/fiction/fantasy"
+	fantasy.Depth = 1
+	if err := s.CreateGenre(ctx, fantasy); err != nil {
+		t.Fatalf("CreateGenre fantasy: %v", err)
+	}
+
+	epic := makeTestGenre("genre-epic", "Epic", "epic")
+	epic.ParentID = "genre-fantasy"
+	epic.Path = "/fiction/fantasy/epic"
+	epic.Depth = 2
+	if err := s.CreateGenre(ctx, epic); err != nil {
+		t.Fatalf("CreateGenre epic: %v", err)
+	}
+
+	// Create a new parent: /nonfiction
+	nonfiction := makeTestGenre("genre-nonfiction", "Nonfiction", "nonfiction")
+	nonfiction.Path = "/nonfiction"
+	nonfiction.Depth = 0
+	if err := s.CreateGenre(ctx, nonfiction); err != nil {
+		t.Fatalf("CreateGenre nonfiction: %v", err)
+	}
+
+	// Move fantasy (with child epic) under nonfiction.
+	if err := s.MoveGenre(ctx, "genre-fantasy", "genre-nonfiction"); err != nil {
+		t.Fatalf("MoveGenre: %v", err)
+	}
+
+	// Verify fantasy's new path and depth.
+	got, err := s.GetGenre(ctx, "genre-fantasy")
+	if err != nil {
+		t.Fatalf("GetGenre fantasy: %v", err)
+	}
+	if got.Path != "/nonfiction/fantasy" {
+		t.Errorf("fantasy path: got %q, want %q", got.Path, "/nonfiction/fantasy")
+	}
+	if got.Depth != 1 {
+		t.Errorf("fantasy depth: got %d, want 1", got.Depth)
+	}
+	if got.ParentID != "genre-nonfiction" {
+		t.Errorf("fantasy parent_id: got %q, want %q", got.ParentID, "genre-nonfiction")
+	}
+
+	// Verify epic (descendant) has updated path and depth.
+	gotEpic, err := s.GetGenre(ctx, "genre-epic")
+	if err != nil {
+		t.Fatalf("GetGenre epic: %v", err)
+	}
+	if gotEpic.Path != "/nonfiction/fantasy/epic" {
+		t.Errorf("epic path: got %q, want %q", gotEpic.Path, "/nonfiction/fantasy/epic")
+	}
+	if gotEpic.Depth != 2 {
+		t.Errorf("epic depth: got %d, want 2", gotEpic.Depth)
+	}
+}
+
 func TestGetOrCreateGenreBySlug(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

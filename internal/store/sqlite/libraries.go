@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json/v2"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -193,26 +192,48 @@ func (s *Store) GetDefaultLibrary(ctx context.Context) (*domain.Library, error) 
 	return libraries[0], nil
 }
 
-// DeleteLibrary deletes a library and all its collections.
-// This is a destructive operation.
+// DeleteLibrary deletes a library and all its collections in a single transaction.
 func (s *Store) DeleteLibrary(ctx context.Context, id string) error {
-	// Get all collections for this library.
-	collections, err := s.ListAllCollectionsByLibrary(ctx, id)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Get all collection IDs for this library.
+	rows, err := tx.QueryContext(ctx,
+		`SELECT id FROM collections WHERE library_id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("list collections: %w", err)
 	}
-
-	// Delete all collections first (including their shares).
-	for _, coll := range collections {
-		if err := s.DeleteSharesForCollection(ctx, coll.ID); err != nil {
-			return fmt.Errorf("delete shares for collection %s: %w", coll.ID, err)
+	var collIDs []string
+	for rows.Next() {
+		var cid string
+		if err := rows.Scan(&cid); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan collection id: %w", err)
 		}
-		if err := s.AdminDeleteCollection(ctx, coll.ID); err != nil {
-			return fmt.Errorf("delete collection %s: %w", coll.ID, err)
+		collIDs = append(collIDs, cid)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("rows iteration: %w", err)
+	}
+
+	// Delete shares and collections.
+	for _, cid := range collIDs {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM collection_shares WHERE collection_id = ?`, cid); err != nil {
+			return fmt.Errorf("delete shares for collection %s: %w", cid, err)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM collection_books WHERE collection_id = ?`, cid); err != nil {
+			return fmt.Errorf("delete collection_books for %s: %w", cid, err)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM collections WHERE id = ?`, cid); err != nil {
+			return fmt.Errorf("delete collection %s: %w", cid, err)
 		}
 	}
 
-	result, err := s.db.ExecContext(ctx, `DELETE FROM libraries WHERE id = ?`, id)
+	result, err := tx.ExecContext(ctx, `DELETE FROM libraries WHERE id = ?`, id)
 	if err != nil {
 		return err
 	}
@@ -224,29 +245,39 @@ func (s *Store) DeleteLibrary(ctx context.Context, id string) error {
 	if n == 0 {
 		return store.ErrNotFound
 	}
-	return nil
+
+	return tx.Commit()
 }
 
 // EnsureLibrary ensures a library exists with the given scan path and owner.
-// If no library exists, creates one with an inbox collection.
+// If no library exists, creates one with an inbox collection in a single transaction.
 // If a library exists, adds the scan path if not already present.
 // Returns the library and its inbox collection.
 func (s *Store) EnsureLibrary(ctx context.Context, scanPath string, userID string) (*store.BootstrapResult, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
 	result := &store.BootstrapResult{}
 
 	// Try to get existing library.
-	library, err := s.GetDefaultLibrary(ctx)
+	row := tx.QueryRowContext(ctx, `SELECT `+libraryColumns+` FROM libraries ORDER BY created_at ASC LIMIT 1`)
+	library, err := scanLibrary(row)
 
-	var storeErr *store.Error
-	switch {
-	case errors.As(err, &storeErr) && storeErr.Code == store.ErrNotFound.Code:
+	if err == sql.ErrNoRows {
 		// No library exists - create everything from scratch.
 		now := time.Now()
 
 		libraryID := fmt.Sprintf("lib-%d", now.UnixNano())
 		inboxCollID := fmt.Sprintf("coll-%d", now.UnixNano())
 
-		// Create library.
+		scanPathsJSON, jsonErr := json.Marshal([]string{scanPath})
+		if jsonErr != nil {
+			return nil, jsonErr
+		}
+
 		library = &domain.Library{
 			ID:        libraryID,
 			OwnerID:   userID,
@@ -257,7 +288,12 @@ func (s *Store) EnsureLibrary(ctx context.Context, scanPath string, userID strin
 			UpdatedAt: now,
 		}
 
-		if err := s.CreateLibrary(ctx, library); err != nil {
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO libraries (id, created_at, updated_at, owner_id, name, scan_paths, skip_inbox, access_mode)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			library.ID, formatTime(now), formatTime(now),
+			userID, "My Library", string(scanPathsJSON), 0, "")
+		if err != nil {
 			return nil, fmt.Errorf("create library: %w", err)
 		}
 
@@ -275,14 +311,19 @@ func (s *Store) EnsureLibrary(ctx context.Context, scanPath string, userID strin
 			UpdatedAt: now,
 		}
 
-		if err := s.CreateCollection(ctx, inboxColl); err != nil {
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO collections (id, created_at, updated_at, library_id, owner_id, name, is_inbox, is_global_access)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			inboxColl.ID, formatTime(now), formatTime(now),
+			library.ID, userID, "Inbox", 1, 0)
+		if err != nil {
 			return nil, fmt.Errorf("create inbox collection: %w", err)
 		}
 
 		result.InboxCollection = inboxColl
-	case err != nil:
+	} else if err != nil {
 		return nil, fmt.Errorf("get default library: %w", err)
-	default:
+	} else {
 		// Library exists - ensure scan path is included.
 		result.IsNewLibrary = false
 
@@ -292,17 +333,48 @@ func (s *Store) EnsureLibrary(ctx context.Context, scanPath string, userID strin
 			library.ScanPaths = append(library.ScanPaths, scanPath)
 			library.UpdatedAt = time.Now()
 
-			if err := s.UpdateLibrary(ctx, library); err != nil {
+			scanPathsJSON, jsonErr := json.Marshal(library.ScanPaths)
+			if jsonErr != nil {
+				return nil, jsonErr
+			}
+
+			_, err = tx.ExecContext(ctx, `
+				UPDATE libraries SET scan_paths = ?, updated_at = ? WHERE id = ?`,
+				string(scanPathsJSON), formatTime(library.UpdatedAt), library.ID)
+			if err != nil {
 				return nil, fmt.Errorf("update library: %w", err)
 			}
 		}
 
 		// Get existing inbox collection.
-		inboxColl, err := s.GetInboxForLibrary(ctx, library.ID)
+		inboxRows, err := tx.QueryContext(ctx,
+			`SELECT `+collectionColumns+` FROM collections WHERE library_id = ? ORDER BY created_at`, library.ID)
 		if err != nil {
-			return nil, fmt.Errorf("get inbox collection: %w", err)
+			return nil, fmt.Errorf("list collections: %w", err)
 		}
-		result.InboxCollection = inboxColl
+		defer inboxRows.Close()
+
+		for inboxRows.Next() {
+			coll, err := scanCollection(inboxRows)
+			if err != nil {
+				return nil, err
+			}
+			if coll.IsInbox {
+				result.InboxCollection = coll
+				break
+			}
+		}
+		if err := inboxRows.Err(); err != nil {
+			return nil, err
+		}
+
+		if result.InboxCollection == nil {
+			return nil, fmt.Errorf("inbox collection not found for library %s", library.ID)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
 	}
 
 	result.Library = library

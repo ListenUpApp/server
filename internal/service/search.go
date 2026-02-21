@@ -35,7 +35,6 @@ func (s *SearchService) Search(ctx context.Context, params search.SearchParams) 
 }
 
 // SearchContributors performs a fast contributor search for autocomplete.
-// Uses Bleve index for O(log n) performance instead of O(n) BadgerDB scan.
 func (s *SearchService) SearchContributors(ctx context.Context, query string, limit int) ([]search.ContributorSearchResult, error) {
 	return s.index.SearchContributors(ctx, query, limit)
 }

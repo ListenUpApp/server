@@ -50,7 +50,7 @@ func (s *Server) handleHealthCheck(ctx context.Context, _ *struct{}) (*HealthOut
 	components := make(map[string]ComponentHealth)
 	overall := statusHealthy
 
-	// Check database (BadgerDB)
+	// Check database.
 	dbHealth := s.checkDatabase(ctx)
 	components["database"] = dbHealth
 	if dbHealth.Status != statusHealthy {
@@ -83,7 +83,7 @@ func (s *Server) handleHealthCheck(ctx context.Context, _ *struct{}) (*HealthOut
 	}, nil
 }
 
-// checkDatabase verifies BadgerDB is accessible.
+// checkDatabase verifies the database is accessible.
 func (s *Server) checkDatabase(ctx context.Context) ComponentHealth {
 	// Handle nil store (e.g., in tests)
 	if s.store == nil {

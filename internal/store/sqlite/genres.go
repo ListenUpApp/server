@@ -424,12 +424,68 @@ func (s *Store) GetGenreChildren(ctx context.Context, parentID string) ([]*domai
 	return children, nil
 }
 
-// MoveGenre changes a genre's parent, updating path and depth accordingly.
+// MoveGenre changes a genre's parent, updating path and depth for the genre and all descendants.
 func (s *Store) MoveGenre(ctx context.Context, genreID, newParentID string) error {
-	_, err := s.db.ExecContext(ctx,
-		`UPDATE genres SET parent_id = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`,
-		nullString(newParentID), formatTime(time.Now().UTC()), genreID)
-	return err
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Get the genre's current path and slug.
+	var oldPath, slug string
+	var oldDepth int
+	err = tx.QueryRowContext(ctx,
+		`SELECT path, depth, slug FROM genres WHERE id = ? AND deleted_at IS NULL`, genreID).
+		Scan(&oldPath, &oldDepth, &slug)
+	if err != nil {
+		return fmt.Errorf("get genre: %w", err)
+	}
+
+	// Compute new path and depth from the new parent.
+	var newPath string
+	var newDepth int
+	if newParentID == "" {
+		newPath = "/" + slug
+		newDepth = 0
+	} else {
+		var parentPath string
+		var parentDepth int
+		err = tx.QueryRowContext(ctx,
+			`SELECT path, depth FROM genres WHERE id = ? AND deleted_at IS NULL`, newParentID).
+			Scan(&parentPath, &parentDepth)
+		if err != nil {
+			return fmt.Errorf("get new parent: %w", err)
+		}
+		newPath = parentPath + "/" + slug
+		newDepth = parentDepth + 1
+	}
+
+	now := formatTime(time.Now().UTC())
+	depthDelta := newDepth - oldDepth
+
+	// Update the moved genre.
+	_, err = tx.ExecContext(ctx, `
+		UPDATE genres SET parent_id = ?, path = ?, depth = ?, updated_at = ?
+		WHERE id = ? AND deleted_at IS NULL`,
+		nullString(newParentID), newPath, newDepth, now, genreID)
+	if err != nil {
+		return fmt.Errorf("update genre: %w", err)
+	}
+
+	// Update all descendants: replace old path prefix with new, adjust depth.
+	_, err = tx.ExecContext(ctx, `
+		UPDATE genres SET
+			path = ? || SUBSTR(path, LENGTH(?) + 1),
+			depth = depth + ?,
+			updated_at = ?
+		WHERE path LIKE ? || '/%' AND deleted_at IS NULL`,
+		newPath, oldPath, depthDelta, now, oldPath)
+	if err != nil {
+		return fmt.Errorf("update descendants: %w", err)
+	}
+
+	return tx.Commit()
 }
 
 // MergeGenres merges the source genre into the target genre.
@@ -456,8 +512,33 @@ func (s *Store) MergeGenres(ctx context.Context, sourceID, targetID string) erro
 		return fmt.Errorf("delete source book_genres: %w", err)
 	}
 
-	// Soft-delete the source genre.
+	// Reparent child genres from source to target before deleting source.
+	// Look up source and target paths for path rewriting.
+	var sourcePath, targetPath string
+	err = tx.QueryRowContext(ctx, `SELECT path FROM genres WHERE id = ? AND deleted_at IS NULL`, sourceID).Scan(&sourcePath)
+	if err != nil {
+		return fmt.Errorf("get source path: %w", err)
+	}
+	err = tx.QueryRowContext(ctx, `SELECT path FROM genres WHERE id = ? AND deleted_at IS NULL`, targetID).Scan(&targetPath)
+	if err != nil {
+		return fmt.Errorf("get target path: %w", err)
+	}
+
 	now := formatTime(time.Now().UTC())
+
+	// Update direct children: set parent_id and rewrite path prefix.
+	_, err = tx.ExecContext(ctx, `
+		UPDATE genres SET
+			parent_id = ?,
+			path = ? || SUBSTR(path, LENGTH(?) + 1),
+			updated_at = ?
+		WHERE parent_id = ? AND deleted_at IS NULL`,
+		targetID, targetPath, sourcePath, now, sourceID)
+	if err != nil {
+		return fmt.Errorf("reparent child genres: %w", err)
+	}
+
+	// Soft-delete the source genre.
 	_, err = tx.ExecContext(ctx, `
 		UPDATE genres SET deleted_at = ?, updated_at = ?
 		WHERE id = ? AND deleted_at IS NULL`,

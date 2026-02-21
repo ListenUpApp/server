@@ -282,18 +282,27 @@ func coverArgs(img *domain.ImageFileInfo) (coverPath, coverFilename, coverFormat
 // CreateBook inserts a book row along with its audio files and chapters in a transaction.
 // Returns store.ErrAlreadyExists on duplicate ID or path.
 func (s *Store) CreateBook(ctx context.Context, book *domain.Book) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := createBookTx(ctx, tx, book); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// createBookTx inserts a book and its audio files/chapters using the provided transaction.
+func createBookTx(ctx context.Context, tx *sql.Tx, book *domain.Book) error {
 	stagedJSON, err := json.Marshal(book.StagedCollectionIDs)
 	if err != nil {
 		return fmt.Errorf("marshal staged_collection_ids: %w", err)
 	}
 
 	coverPath, coverFilename, coverFormat, coverSize, coverInode, coverModTime, coverBlurHash := coverArgs(book.CoverImage)
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
 
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO books (
@@ -342,7 +351,7 @@ func (s *Store) CreateBook(ctx context.Context, book *domain.Book) error {
 		return err
 	}
 
-	return tx.Commit()
+	return nil
 }
 
 // GetBook retrieves a book by ID, excluding soft-deleted records.

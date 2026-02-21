@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -58,6 +59,35 @@ func TestOpen(t *testing.T) {
 		err := s.db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&name)
 		if err != nil {
 			t.Errorf("table %s not found: %v", table, err)
+		}
+	}
+}
+
+func TestPragmasOnAllConnections(t *testing.T) {
+	s := newTestStore(t)
+
+	// Open 4 concurrent connections and verify foreign_keys is enabled on each.
+	var wg sync.WaitGroup
+	errs := make([]error, 4)
+	vals := make([]int, 4)
+
+	for i := range 4 {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			var fk int
+			errs[idx] = s.db.QueryRow("PRAGMA foreign_keys").Scan(&fk)
+			vals[idx] = fk
+		}(i)
+	}
+	wg.Wait()
+
+	for i := range 4 {
+		if errs[i] != nil {
+			t.Fatalf("connection %d: query foreign_keys: %v", i, errs[i])
+		}
+		if vals[i] != 1 {
+			t.Errorf("connection %d: expected foreign_keys=1, got %d", i, vals[i])
 		}
 	}
 }

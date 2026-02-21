@@ -406,6 +406,34 @@ func TestContributor_AliasesRoundTrip(t *testing.T) {
 	}
 }
 
+func TestMergeContributors_SelfMerge(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	c := makeTestContributor("contrib-self-merge", "Self Merge Author")
+	if err := s.CreateContributor(ctx, c); err != nil {
+		t.Fatalf("CreateContributor: %v", err)
+	}
+
+	// Self-merge should return an error.
+	_, err := s.MergeContributors(ctx, "contrib-self-merge", "contrib-self-merge")
+	if err == nil {
+		t.Fatal("expected error for self-merge, got nil")
+	}
+
+	// Verify the contributor is unchanged.
+	got, err := s.GetContributor(ctx, "contrib-self-merge")
+	if err != nil {
+		t.Fatalf("GetContributor after failed self-merge: %v", err)
+	}
+	if got.Name != "Self Merge Author" {
+		t.Errorf("Name: got %q, want %q", got.Name, "Self Merge Author")
+	}
+	if got.DeletedAt != nil {
+		t.Error("DeletedAt: expected nil after failed self-merge")
+	}
+}
+
 func TestContributor_SoftDelete(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

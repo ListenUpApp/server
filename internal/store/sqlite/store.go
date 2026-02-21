@@ -35,29 +35,15 @@ type Store struct {
 // Open creates a new SQLite store at the given path.
 // It configures WAL mode, sets pragmas, and runs schema migrations.
 func Open(path string, logger *slog.Logger) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
+	dsn := path + "?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=synchronous(normal)&_pragma=busy_timeout(5000)"
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
 
-	// Set connection pool to 1 writer (SQLite limitation).
 	db.SetMaxOpenConns(4)
 	db.SetMaxIdleConns(2)
 	db.SetConnMaxLifetime(time.Hour)
-
-	// Configure pragmas.
-	pragmas := []string{
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA synchronous=NORMAL",
-		"PRAGMA foreign_keys=ON",
-		"PRAGMA busy_timeout=5000",
-	}
-	for _, pragma := range pragmas {
-		if _, err := db.Exec(pragma); err != nil {
-			db.Close()
-			return nil, fmt.Errorf("exec pragma %q: %w", pragma, err)
-		}
-	}
 
 	// Run schema migration.
 	if _, err := db.Exec(schemaSQL); err != nil {

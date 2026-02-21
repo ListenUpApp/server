@@ -705,6 +705,10 @@ func (s *Store) GetContributorsDeletedAfter(ctx context.Context, timestamp time.
 // The source's name is added to the target's aliases. The source is then soft-deleted.
 // Returns the updated target contributor.
 func (s *Store) MergeContributors(ctx context.Context, sourceID, targetID string) (*domain.Contributor, error) {
+	if sourceID == targetID {
+		return nil, fmt.Errorf("merge contributor: source and target must be different")
+	}
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("begin tx: %w", err)
