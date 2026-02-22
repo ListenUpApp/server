@@ -185,12 +185,7 @@ func ProvideMDNSService(i do.Injector) (*MDNSServiceHandle, error) {
 	log := do.MustInvoke[*logger.Logger](i)
 	instanceService := do.MustInvoke[*service.InstanceService](i)
 
-	if !cfg.Server.AdvertiseMDNS {
-		log.Info("mDNS advertisement disabled by configuration")
-		return &MDNSServiceHandle{Service: nil, started: false}, nil
-	}
-
-	// Initialize instance if needed
+	// Always initialize instance regardless of mDNS config.
 	ctx := context.Background()
 	instanceConfig, err := instanceService.InitializeInstance(ctx)
 	if err != nil {
@@ -209,6 +204,11 @@ func ProvideMDNSService(i do.Injector) (*MDNSServiceHandle, error) {
 			"instance_id", instanceConfig.ID,
 			"setup_required", true,
 		)
+	}
+
+	if !cfg.Server.AdvertiseMDNS {
+		log.Info("mDNS advertisement disabled by configuration")
+		return &MDNSServiceHandle{Service: nil, started: false}, nil
 	}
 
 	svc := mdns.NewService(log.Logger)
