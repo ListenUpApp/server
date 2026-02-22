@@ -105,7 +105,16 @@ func (im *Importer) Import(
 		}
 	}
 
-	// 4. Record affected users
+	// 4. Apply authoritative MediaProgress overrides
+	// Books with session history get progress rebuilt from event sums, which
+	// always undercounts. Override with the ABS-authoritative values.
+	if opts.ImportProgress || opts.ImportSessions {
+		if err := im.applyMediaProgressOverride(ctx, backup, userMap, bookMap, result); err != nil {
+			return result, fmt.Errorf("apply media progress override: %w", err)
+		}
+	}
+
+	// 5. Record affected users
 	for userID := range affectedUsers {
 		result.AffectedUserIDs = append(result.AffectedUserIDs, userID)
 	}
@@ -119,6 +128,7 @@ func (im *Importer) Import(
 		"progress_skipped", result.ProgressSkipped,
 		"events_created", result.EventsCreated,
 		"reading_sessions_created", result.ReadingSessionsCreated,
+		"progress_overrides_applied", result.ProgressOverridesApplied,
 		"affected_users", len(result.AffectedUserIDs),
 		"duration", result.Duration,
 	)
@@ -407,6 +417,98 @@ func (im *Importer) convertProgressToSession(
 	}
 
 	return session
+}
+
+// applyMediaProgressOverride writes authoritative progress from ABS MediaProgress
+// directly to playback state. This runs after session and progress import to fix
+// books whose progress was undercounted by event-sum reconstruction.
+func (im *Importer) applyMediaProgressOverride(
+	ctx context.Context,
+	backup *Backup,
+	userMap, bookMap map[string]string,
+	result *ImportResult,
+) error {
+	var overrideCount int
+
+	for _, user := range backup.ImportableUsers() {
+		listenUpUserID, userOK := userMap[user.ID]
+		if !userOK {
+			continue
+		}
+
+		for _, progress := range user.Progress {
+			if !progress.IsBook() {
+				continue
+			}
+
+			listenUpBookID, bookOK := bookMap[progress.LibraryItemID]
+			if !bookOK {
+				continue
+			}
+
+			if progress.Progress == 0 && !progress.IsFinished {
+				continue
+			}
+
+			now := time.Now()
+
+			// Get existing state or create a new one
+			state, _ := im.store.GetState(ctx, listenUpUserID, listenUpBookID)
+			if state == nil {
+				startedAt := now
+				if progress.StartedAt > 0 {
+					startedAt = time.UnixMilli(progress.StartedAt)
+				}
+				state = &domain.PlaybackState{
+					UserID:    listenUpUserID,
+					BookID:    listenUpBookID,
+					StartedAt: startedAt,
+				}
+			}
+
+			// Apply authoritative values from ABS
+			state.CurrentPositionMs = int64(progress.CurrentTime * 1000)
+			state.IsFinished = progress.IsFinished
+			state.UpdatedAt = now
+			if progress.LastUpdate > 0 {
+				state.LastPlayedAt = time.UnixMilli(progress.LastUpdate)
+			} else {
+				state.LastPlayedAt = now
+			}
+
+			if progress.IsFinished {
+				if progress.FinishedAt > 0 {
+					finishedAt := time.UnixMilli(progress.FinishedAt)
+					state.FinishedAt = &finishedAt
+				} else {
+					state.FinishedAt = &now
+				}
+			}
+
+			if err := im.store.UpsertState(ctx, state); err != nil {
+				im.logger.Warn("failed to apply media progress override",
+					"error", err,
+					"user_id", listenUpUserID,
+					"book_id", listenUpBookID,
+				)
+				continue
+			}
+
+			overrideCount++
+			im.logger.Debug("applied media progress override",
+				"user_id", listenUpUserID,
+				"book_id", listenUpBookID,
+				"progress", progress.Progress,
+				"position_ms", int64(progress.CurrentTime*1000),
+				"is_finished", progress.IsFinished,
+			)
+		}
+	}
+
+	result.ProgressOverridesApplied = overrideCount
+	im.logger.Info("applied media progress overrides", "total_overrides", overrideCount)
+
+	return nil
 }
 
 // RebuildProgressForUsers rebuilds PlaybackProgress for affected users.
