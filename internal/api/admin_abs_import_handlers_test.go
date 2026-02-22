@@ -465,12 +465,12 @@ func TestCreateABSImport_ReturnsAnalyzingStatus(t *testing.T) {
 // (e.g. "Matching 1,011 books…") before the full storage phase completes.
 func TestAnalysisCountsWrittenBeforeSessionStorage(t *testing.T) {
 	imp := &domain.ABSImport{
-		ID:         "import-analysis-counts",
-		Name:       "ABS Import 2024-12-01",
-		BackupPath: "/tmp/backup.audiobookshelf",
-		Status:     domain.ABSImportStatusAnalyzing, // Still analyzing
-		TotalUsers: 3,
-		TotalBooks: 1011,
+		ID:            "import-analysis-counts",
+		Name:          "ABS Import 2024-12-01",
+		BackupPath:    "/tmp/backup.audiobookshelf",
+		Status:        domain.ABSImportStatusAnalyzing, // Still analyzing
+		TotalUsers:    3,
+		TotalBooks:    1011,
 		TotalSessions: 5432,
 		// Mapped counts still zero — storage hasn't run yet
 		UsersMapped:      0,
