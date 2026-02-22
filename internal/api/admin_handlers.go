@@ -305,7 +305,7 @@ type SetOpenRegistrationInput struct {
 type SearchUsersInput struct {
 	Authorization string `header:"Authorization"`
 	Query         string `query:"q" doc:"Search query (matches email, display name, first/last name)"`
-	Limit         int    `query:"limit" default:"10" doc:"Maximum number of results to return"`
+	Limit         int    `query:"limit" default:"10" minimum:"1" maximum:"50" doc:"Maximum number of results to return"`
 }
 
 // UserSearchResult is a single user search result.

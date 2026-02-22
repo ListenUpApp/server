@@ -274,7 +274,7 @@ type RestartBookOutput struct {
 // GetContinueListeningInput contains parameters for getting continue listening items.
 type GetContinueListeningInput struct {
 	Authorization string `header:"Authorization"`
-	Limit         int    `query:"limit" doc:"Max items (default 10)"`
+	Limit         int    `query:"limit" default:"10" minimum:"1" maximum:"100" doc:"Max items"`
 }
 
 // ContinueListeningItemResponse represents an item in continue listening.

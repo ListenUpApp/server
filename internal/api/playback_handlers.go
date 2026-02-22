@@ -245,8 +245,8 @@ func (s *Server) handleUpdateBookPreferences(ctx context.Context, input *UpdateB
 
 // PreparePlaybackRequest is the request body for preparing audio playback.
 type PreparePlaybackRequest struct {
-	BookID       string   `json:"book_id" doc:"Book ID"`
-	AudioFileID  string   `json:"audio_file_id" doc:"Audio file ID"`
+	BookID       string   `json:"book_id" validate:"required" doc:"Book ID"`
+	AudioFileID  string   `json:"audio_file_id" validate:"required" doc:"Audio file ID"`
 	Capabilities []string `json:"capabilities" doc:"Codecs the client can play (e.g., aac, mp3, opus)"`
 	Spatial      bool     `json:"spatial" doc:"Whether client prefers spatial audio"`
 }
