@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -633,12 +634,22 @@ func (s *Server) handleApplyBookMatch(ctx context.Context, input *ApplyMatchInpu
 	// Apply the match
 	result, err := s.services.Book.ApplyMatchWithCoverResult(ctx, userID, input.ID, input.Body.ASIN, input.Body.Region, opts)
 	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to apply book match",
+			slog.String("book_id", input.ID),
+			slog.String("asin", input.Body.ASIN),
+			slog.String("region", input.Body.Region),
+			slog.String("error", err.Error()),
+		)
 		return nil, err
 	}
 
 	// Enrich book for response
 	enriched, err := s.store.EnrichBook(ctx, result.Book)
 	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to enrich book after match",
+			slog.String("book_id", input.ID),
+			slog.String("error", err.Error()),
+		)
 		return nil, err
 	}
 
