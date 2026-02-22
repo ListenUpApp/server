@@ -35,14 +35,14 @@ func (m *mockStore) UpsertState(_ context.Context, state *domain.PlaybackState) 
 
 func TestApplyMediaProgressOverride(t *testing.T) {
 	tests := []struct {
-		name            string
-		users           []User
-		userMap         map[string]string
-		bookMap         map[string]string
-		existingStates  map[string]*domain.PlaybackState
-		wantOverrides   int
-		wantFinished    map[string]bool    // key -> isFinished
-		wantPositionMs  map[string]int64   // key -> currentPositionMs
+		name           string
+		users          []User
+		userMap        map[string]string
+		bookMap        map[string]string
+		existingStates map[string]*domain.PlaybackState
+		wantOverrides  int
+		wantFinished   map[string]bool  // key -> isFinished
+		wantPositionMs map[string]int64 // key -> currentPositionMs
 	}{
 		{
 			name: "finished book with session history gets override",
