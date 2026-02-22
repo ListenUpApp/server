@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS libraries (
     id          TEXT PRIMARY KEY,
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL,
-    owner_id    TEXT NOT NULL REFERENCES users(id),
+    owner_id    TEXT NOT NULL,
     name        TEXT NOT NULL,
     scan_paths  TEXT NOT NULL DEFAULT '[]',
     skip_inbox  INTEGER NOT NULL DEFAULT 0,
@@ -212,7 +212,7 @@ CREATE TABLE IF NOT EXISTS collections (
     created_at        TEXT NOT NULL,
     updated_at        TEXT NOT NULL,
     library_id        TEXT NOT NULL REFERENCES libraries(id),
-    owner_id          TEXT NOT NULL REFERENCES users(id),
+    owner_id          TEXT NOT NULL,
     name              TEXT NOT NULL,
     is_inbox          INTEGER NOT NULL DEFAULT 0,
     is_global_access  INTEGER NOT NULL DEFAULT 0
