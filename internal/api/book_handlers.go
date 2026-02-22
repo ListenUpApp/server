@@ -329,9 +329,11 @@ func (s *Server) handleListBooks(ctx context.Context, input *ListBooksInput) (*L
 		Cursor: input.Cursor,
 	}
 	if input.UpdatedAfter != "" {
-		if t, err := time.Parse(time.RFC3339, input.UpdatedAfter); err == nil {
-			params.UpdatedAfter = t
+		t, err := time.Parse(time.RFC3339, input.UpdatedAfter)
+		if err != nil {
+			return nil, huma.Error400BadRequest("invalid updated_after format, expected RFC3339")
 		}
+		params.UpdatedAfter = t
 	}
 
 	result, err := s.services.Book.ListBooks(ctx, userID, params)

@@ -89,7 +89,7 @@ func (s *Server) registerSeriesRoutes() {
 type ListSeriesInput struct {
 	Authorization string `header:"Authorization"`
 	Cursor        string `query:"cursor" doc:"Pagination cursor"`
-	Limit         int    `query:"limit" doc:"Items per page (default 50)"`
+	Limit         int    `query:"limit" default:"50" minimum:"1" maximum:"500" doc:"Items per page"`
 }
 
 // SeriesResponse contains series data in API responses.

@@ -128,7 +128,7 @@ func (s *Server) registerContributorRoutes() {
 type ListContributorsInput struct {
 	Authorization string `header:"Authorization"`
 	Cursor        string `query:"cursor" doc:"Pagination cursor"`
-	Limit         int    `query:"limit" doc:"Items per page (default 50)"`
+	Limit         int    `query:"limit" default:"50" minimum:"1" maximum:"500" doc:"Items per page"`
 }
 
 // ContributorResponse contains contributor data in API responses.
@@ -284,7 +284,7 @@ type SearchContributorsOutput struct {
 
 // ApplyContributorMetadataRequest is the request body for applying Audible metadata to a contributor.
 type ApplyContributorMetadataRequest struct {
-	ASIN     string                    `json:"asin" doc:"Audible ASIN"`
+	ASIN     string                    `json:"asin" validate:"required" doc:"Audible ASIN"`
 	ImageURL string                    `json:"image_url,omitempty" doc:"Image URL from search results"`
 	Fields   ContributorMetadataFields `json:"fields" doc:"Which fields to apply"`
 }

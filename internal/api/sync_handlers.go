@@ -101,7 +101,7 @@ type SyncManifestOutput struct {
 type GetSyncBooksInput struct {
 	Authorization string `header:"Authorization"`
 	Cursor        string `query:"cursor" doc:"Pagination cursor"`
-	Limit         int    `query:"limit" doc:"Items per page (default 50)"`
+	Limit         int    `query:"limit" default:"50" minimum:"1" maximum:"500" doc:"Items per page"`
 	UpdatedAfter  string `query:"updated_after" doc:"For delta sync, only return items updated after this time (RFC3339)"`
 }
 
@@ -122,7 +122,7 @@ type SyncBooksOutput struct {
 type GetSyncContributorsInput struct {
 	Authorization string `header:"Authorization"`
 	Cursor        string `query:"cursor" doc:"Pagination cursor"`
-	Limit         int    `query:"limit" doc:"Items per page (default 50)"`
+	Limit         int    `query:"limit" default:"50" minimum:"1" maximum:"500" doc:"Items per page"`
 	UpdatedAfter  string `query:"updated_after" doc:"For delta sync, only return items updated after this time (RFC3339)"`
 }
 
@@ -160,7 +160,7 @@ type SyncContributorsOutput struct {
 type GetSyncSeriesInput struct {
 	Authorization string `header:"Authorization"`
 	Cursor        string `query:"cursor" doc:"Pagination cursor"`
-	Limit         int    `query:"limit" doc:"Items per page (default 50)"`
+	Limit         int    `query:"limit" default:"50" minimum:"1" maximum:"500" doc:"Items per page"`
 	UpdatedAfter  string `query:"updated_after" doc:"For delta sync, only return items updated after this time (RFC3339)"`
 }
 

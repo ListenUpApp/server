@@ -81,7 +81,7 @@ type GetLeaderboardInput struct {
 	Authorization string `header:"Authorization"`
 	Period        string `query:"period" enum:"week,month,year,all" default:"week" doc:"Time period for leaderboard"`
 	Category      string `query:"category" enum:"time,books,streak" default:"time" doc:"Ranking category"`
-	Limit         int    `query:"limit" doc:"Max entries (default 10, max 50)"`
+	Limit         int    `query:"limit" default:"10" minimum:"1" maximum:"50" doc:"Max entries"`
 }
 
 // LeaderboardEntryResponse represents a single leaderboard entry.
@@ -567,7 +567,7 @@ func (s *Server) handleGetActivityFeed(ctx context.Context, input *GetActivityFe
 // GetCurrentlyListeningInput contains parameters for getting currently listening books.
 type GetCurrentlyListeningInput struct {
 	Authorization string `header:"Authorization"`
-	Limit         int    `query:"limit" default:"10" doc:"Max books to return (max 20)"`
+	Limit         int    `query:"limit" default:"10" minimum:"1" maximum:"50" doc:"Max books to return"`
 }
 
 // CurrentlyListeningReaderResponse represents a reader for avatar display.
@@ -606,7 +606,7 @@ type GetCurrentlyListeningOutput struct {
 // GetDiscoverBooksInput contains parameters for getting discovery books.
 type GetDiscoverBooksInput struct {
 	Authorization string `header:"Authorization"`
-	Limit         int    `query:"limit" default:"10" doc:"Max books to return (max 20)"`
+	Limit         int    `query:"limit" default:"10" minimum:"1" maximum:"50" doc:"Max books to return"`
 }
 
 // DiscoverBookResponse represents a book for discovery.
