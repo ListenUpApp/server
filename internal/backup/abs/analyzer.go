@@ -13,14 +13,14 @@ import (
 // The analysis shows what can be automatically imported and what needs
 // admin attention before import.
 type Analyzer struct {
-	store    *store.Store
+	store    store.Store
 	matcher  *Matcher
 	logger   *slog.Logger
 	progress ProgressCallback
 }
 
 // NewAnalyzer creates an analyzer with the given store and options.
-func NewAnalyzer(s *store.Store, logger *slog.Logger, opts AnalysisOptions) *Analyzer {
+func NewAnalyzer(s store.Store, logger *slog.Logger, opts AnalysisOptions) *Analyzer {
 	if logger == nil {
 		logger = slog.Default()
 	}

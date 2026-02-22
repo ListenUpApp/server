@@ -16,14 +16,14 @@ import (
 // SessionService handles user session management and lifecycle.
 // Sessions track authenticated devices and their refresh tokens.
 type SessionService struct {
-	store        *store.Store
+	store        store.Store
 	tokenService *auth.TokenService
 	logger       *slog.Logger
 }
 
 // NewSessionService creates a new session management service.
 func NewSessionService(
-	store *store.Store,
+	store store.Store,
 	tokenService *auth.TokenService,
 	logger *slog.Logger,
 ) *SessionService {

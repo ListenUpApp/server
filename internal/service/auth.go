@@ -39,7 +39,7 @@ var validate = func() *validator.Validate {
 // AuthService handles user authentication (login, setup, token verification).
 // Session management is delegated to SessionService.
 type AuthService struct {
-	store           *store.Store
+	store           store.Store
 	tokenService    *auth.TokenService
 	sessionService  *SessionService
 	instanceService *InstanceService
@@ -48,7 +48,7 @@ type AuthService struct {
 
 // NewAuthService creates a new authentication service.
 func NewAuthService(
-	store *store.Store,
+	store store.Store,
 	tokenService *auth.TokenService,
 	sessionService *SessionService,
 	instanceService *InstanceService,

@@ -63,7 +63,7 @@ func (i *Importer) importUsers(ctx context.Context, zr *zip.ReadCloser, opts Res
 		}
 
 		// Check for existing
-		existing, _ := i.store.Users.Get(ctx, user.ID)
+		existing, _ := i.store.GetUser(ctx, user.ID)
 
 		if existing != nil {
 			// Entity exists - handle based on mode
@@ -82,7 +82,7 @@ func (i *Importer) importUsers(ctx context.Context, zr *zip.ReadCloser, opts Res
 			}
 
 			// Update existing
-			if err := i.store.Users.Update(ctx, user.ID, user); err != nil {
+			if err := i.store.UpdateUser(ctx, user); err != nil {
 				errs = append(errs, RestoreError{
 					EntityType: "users",
 					EntityID:   user.ID,
@@ -95,7 +95,7 @@ func (i *Importer) importUsers(ctx context.Context, zr *zip.ReadCloser, opts Res
 		}
 
 		// Create new
-		if err := i.store.Users.Create(ctx, user.ID, user); err != nil {
+		if err := i.store.CreateUser(ctx, user); err != nil {
 			errs = append(errs, RestoreError{
 				EntityType: "users",
 				EntityID:   user.ID,
@@ -669,7 +669,7 @@ func (i *Importer) importCollectionShares(ctx context.Context, zr *zip.ReadClose
 			continue
 		}
 
-		existing, _ := i.store.CollectionShares.Get(ctx, share.ID)
+		existing, _ := i.store.GetShare(ctx, share.ID)
 		if existing != nil {
 			if opts.Mode == RestoreModeMerge {
 				switch opts.MergeStrategy {
@@ -683,7 +683,7 @@ func (i *Importer) importCollectionShares(ctx context.Context, zr *zip.ReadClose
 					}
 				}
 			}
-			if err := i.store.CollectionShares.Update(ctx, share.ID, &share); err != nil {
+			if err := i.store.UpdateShare(ctx, &share); err != nil {
 				errs = append(errs, RestoreError{
 					EntityType: "collection_shares",
 					EntityID:   share.ID,
@@ -695,7 +695,7 @@ func (i *Importer) importCollectionShares(ctx context.Context, zr *zip.ReadClose
 			continue
 		}
 
-		if err := i.store.CollectionShares.Create(ctx, share.ID, &share); err != nil {
+		if err := i.store.CreateShare(ctx, &share); err != nil {
 			errs = append(errs, RestoreError{
 				EntityType: "collection_shares",
 				EntityID:   share.ID,
@@ -880,7 +880,7 @@ func (i *Importer) importReadingSessions(ctx context.Context, zr *zip.ReadCloser
 			continue
 		}
 
-		existing, _ := i.store.Sessions.Get(ctx, session.ID)
+		existing, _ := i.store.GetReadingSession(ctx, session.ID)
 		if existing != nil {
 			if opts.Mode == RestoreModeMerge {
 				switch opts.MergeStrategy {
@@ -894,7 +894,7 @@ func (i *Importer) importReadingSessions(ctx context.Context, zr *zip.ReadCloser
 					}
 				}
 			}
-			if err := i.store.Sessions.Update(ctx, session.ID, &session); err != nil {
+			if err := i.store.UpdateReadingSession(ctx, &session); err != nil {
 				errs = append(errs, RestoreError{
 					EntityType: "reading_sessions",
 					EntityID:   session.ID,
@@ -906,7 +906,7 @@ func (i *Importer) importReadingSessions(ctx context.Context, zr *zip.ReadCloser
 			continue
 		}
 
-		if err := i.store.Sessions.Create(ctx, session.ID, &session); err != nil {
+		if err := i.store.CreateReadingSession(ctx, &session); err != nil {
 			errs = append(errs, RestoreError{
 				EntityType: "reading_sessions",
 				EntityID:   session.ID,

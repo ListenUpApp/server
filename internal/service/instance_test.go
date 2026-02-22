@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/config"
-	"github.com/listenupapp/listenup-server/internal/store"
+	"github.com/listenupapp/listenup-server/internal/store/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +24,7 @@ func setupTestService(t *testing.T) (*InstanceService, func()) { //nolint:gocrit
 	dbPath := filepath.Join(tmpDir, "test.db")
 
 	// Create store.
-	s, err := store.New(dbPath, nil, store.NewNoopEmitter())
+	s, err := sqlite.Open(dbPath, nil)
 	require.NoError(t, err)
 
 	// Create test config.

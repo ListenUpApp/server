@@ -35,17 +35,18 @@ type ServerExport struct {
 	Settings *domain.ServerSettings `json:"settings,omitempty"`
 }
 
-func exportUsers(ctx context.Context, s *store.Store, zw *zip.Writer) (int, error) {
+func exportUsers(ctx context.Context, s store.Store, zw *zip.Writer) (int, error) {
 	w, err := stream.NewWriter(zw, "entities/users.jsonl")
 	if err != nil {
 		return 0, err
 	}
 
-	for user, err := range s.Users.List(ctx) {
-		if err != nil {
-			return w.Count(), err
-		}
+	users, err := s.ListAllUsers(ctx)
+	if err != nil {
+		return 0, err
+	}
 
+	for _, user := range users {
 		export := UserExport{
 			Syncable:     user.Syncable,
 			Email:        user.Email,
@@ -69,7 +70,7 @@ func exportUsers(ctx context.Context, s *store.Store, zw *zip.Writer) (int, erro
 	return w.Count(), nil
 }
 
-func exportProfiles(ctx context.Context, s *store.Store, zw *zip.Writer) (int, error) {
+func exportProfiles(ctx context.Context, s store.Store, zw *zip.Writer) (int, error) {
 	w, err := stream.NewWriter(zw, "entities/profiles.jsonl")
 	if err != nil {
 		return 0, err
@@ -87,7 +88,7 @@ func exportProfiles(ctx context.Context, s *store.Store, zw *zip.Writer) (int, e
 	return w.Count(), nil
 }
 
-func exportLibraries(ctx context.Context, s *store.Store, zw *zip.Writer) (int, error) {
+func exportLibraries(ctx context.Context, s store.Store, zw *zip.Writer) (int, error) {
 	w, err := stream.NewWriter(zw, "entities/libraries.jsonl")
 	if err != nil {
 		return 0, err
@@ -107,7 +108,7 @@ func exportLibraries(ctx context.Context, s *store.Store, zw *zip.Writer) (int, 
 	return w.Count(), nil
 }
 
-func exportBooks(ctx context.Context, s *store.Store, zw *zip.Writer) (int, error) {
+func exportBooks(ctx context.Context, s store.Store, zw *zip.Writer) (int, error) {
 	w, err := stream.NewWriter(zw, "entities/books.jsonl")
 	if err != nil {
 		return 0, err
@@ -125,7 +126,7 @@ func exportBooks(ctx context.Context, s *store.Store, zw *zip.Writer) (int, erro
 	return w.Count(), nil
 }
 
-func exportContributors(ctx context.Context, s *store.Store, zw *zip.Writer) (int, error) {
+func exportContributors(ctx context.Context, s store.Store, zw *zip.Writer) (int, error) {
 	w, err := stream.NewWriter(zw, "entities/contributors.jsonl")
 	if err != nil {
 		return 0, err
@@ -143,7 +144,7 @@ func exportContributors(ctx context.Context, s *store.Store, zw *zip.Writer) (in
 	return w.Count(), nil
 }
 
-func exportSeries(ctx context.Context, s *store.Store, zw *zip.Writer) (int, error) {
+func exportSeries(ctx context.Context, s store.Store, zw *zip.Writer) (int, error) {
 	w, err := stream.NewWriter(zw, "entities/series.jsonl")
 	if err != nil {
 		return 0, err
@@ -162,7 +163,7 @@ func exportSeries(ctx context.Context, s *store.Store, zw *zip.Writer) (int, err
 }
 
 // exportGenres exports as single JSON (hierarchical structure).
-func exportGenres(ctx context.Context, s *store.Store, zw *zip.Writer) (int, error) {
+func exportGenres(ctx context.Context, s store.Store, zw *zip.Writer) (int, error) {
 	genres, err := s.ListGenres(ctx)
 	if err != nil {
 		return 0, err
@@ -180,7 +181,7 @@ func exportGenres(ctx context.Context, s *store.Store, zw *zip.Writer) (int, err
 	return len(genres), nil
 }
 
-func exportTags(ctx context.Context, s *store.Store, zw *zip.Writer) (int, error) {
+func exportTags(ctx context.Context, s store.Store, zw *zip.Writer) (int, error) {
 	w, err := stream.NewWriter(zw, "entities/tags.jsonl")
 	if err != nil {
 		return 0, err
@@ -200,7 +201,7 @@ func exportTags(ctx context.Context, s *store.Store, zw *zip.Writer) (int, error
 	return w.Count(), nil
 }
 
-func exportCollections(ctx context.Context, s *store.Store, zw *zip.Writer) (int, error) {
+func exportCollections(ctx context.Context, s store.Store, zw *zip.Writer) (int, error) {
 	w, err := stream.NewWriter(zw, "entities/collections.jsonl")
 	if err != nil {
 		return 0, err
@@ -218,13 +219,13 @@ func exportCollections(ctx context.Context, s *store.Store, zw *zip.Writer) (int
 	return w.Count(), nil
 }
 
-func exportCollectionShares(ctx context.Context, s *store.Store, zw *zip.Writer) (int, error) {
+func exportCollectionShares(ctx context.Context, s store.Store, zw *zip.Writer) (int, error) {
 	w, err := stream.NewWriter(zw, "entities/collection_shares.jsonl")
 	if err != nil {
 		return 0, err
 	}
 
-	for share, err := range s.CollectionShares.List(ctx) {
+	for share, err := range s.StreamCollectionShares(ctx) {
 		if err != nil {
 			return w.Count(), err
 		}
@@ -236,7 +237,7 @@ func exportCollectionShares(ctx context.Context, s *store.Store, zw *zip.Writer)
 	return w.Count(), nil
 }
 
-func exportShelves(ctx context.Context, s *store.Store, zw *zip.Writer) (int, error) {
+func exportShelves(ctx context.Context, s store.Store, zw *zip.Writer) (int, error) {
 	w, err := stream.NewWriter(zw, "entities/shelves.jsonl")
 	if err != nil {
 		return 0, err
@@ -254,7 +255,7 @@ func exportShelves(ctx context.Context, s *store.Store, zw *zip.Writer) (int, er
 	return w.Count(), nil
 }
 
-func exportActivities(ctx context.Context, s *store.Store, zw *zip.Writer) (int, error) {
+func exportActivities(ctx context.Context, s store.Store, zw *zip.Writer) (int, error) {
 	w, err := stream.NewWriter(zw, "entities/activities.jsonl")
 	if err != nil {
 		return 0, err
@@ -272,7 +273,7 @@ func exportActivities(ctx context.Context, s *store.Store, zw *zip.Writer) (int,
 	return w.Count(), nil
 }
 
-func exportListeningEvents(ctx context.Context, s *store.Store, zw *zip.Writer) (int, error) {
+func exportListeningEvents(ctx context.Context, s store.Store, zw *zip.Writer) (int, error) {
 	w, err := stream.NewWriter(zw, "listening/events.jsonl")
 	if err != nil {
 		return 0, err
@@ -290,13 +291,13 @@ func exportListeningEvents(ctx context.Context, s *store.Store, zw *zip.Writer) 
 	return w.Count(), nil
 }
 
-func exportReadingSessions(ctx context.Context, s *store.Store, zw *zip.Writer) (int, error) {
+func exportReadingSessions(ctx context.Context, s store.Store, zw *zip.Writer) (int, error) {
 	w, err := stream.NewWriter(zw, "listening/sessions.jsonl")
 	if err != nil {
 		return 0, err
 	}
 
-	for session, err := range s.Sessions.List(ctx) {
+	for session, err := range s.ListAllSessions(ctx) {
 		if err != nil {
 			return w.Count(), err
 		}
@@ -308,7 +309,7 @@ func exportReadingSessions(ctx context.Context, s *store.Store, zw *zip.Writer) 
 	return w.Count(), nil
 }
 
-func exportServer(ctx context.Context, s *store.Store, zw *zip.Writer, m *Manifest) error {
+func exportServer(ctx context.Context, s store.Store, zw *zip.Writer, m *Manifest) error {
 	instance, err := s.GetInstance(ctx)
 	if err != nil {
 		return err

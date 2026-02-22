@@ -20,7 +20,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/dto"
 	"github.com/listenupapp/listenup-server/internal/service"
 	"github.com/listenupapp/listenup-server/internal/sse"
-	"github.com/listenupapp/listenup-server/internal/store"
+	"github.com/listenupapp/listenup-server/internal/store/sqlite"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,8 +41,8 @@ func setupTestServer(t *testing.T) *testServer {
 
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	// Create store with no-op emitter
-	st, err := store.New(dbPath, nil, store.NewNoopEmitter())
+	// Create store
+	st, err := sqlite.Open(dbPath, nil)
 	require.NoError(t, err)
 
 	// Create test config

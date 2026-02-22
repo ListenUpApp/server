@@ -10,18 +10,19 @@ import (
 
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/store"
+	"github.com/listenupapp/listenup-server/internal/store/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestListening(t *testing.T) (*ListeningService, *store.Store, func()) {
+func setupTestListening(t *testing.T) (*ListeningService, store.Store, func()) {
 	t.Helper()
 
 	tmpDir, err := os.MkdirTemp("", "listening-service-test-*")
 	require.NoError(t, err)
 
 	dbPath := filepath.Join(tmpDir, "test.db")
-	testStore, err := store.New(dbPath, nil, store.NewNoopEmitter())
+	testStore, err := sqlite.Open(dbPath, nil)
 	require.NoError(t, err)
 
 	logger := slog.New(slog.DiscardHandler)
@@ -36,7 +37,19 @@ func setupTestListening(t *testing.T) (*ListeningService, *store.Store, func()) 
 	return svc, testStore, cleanup
 }
 
-func createTestBookForListening(t *testing.T, s *store.Store, bookID string, durationMs int64) {
+func ensureTestUserForListening(t *testing.T, s store.Store, userID string) {
+	t.Helper()
+	now := time.Now()
+	_ = s.CreateUser(context.Background(), &domain.User{
+		Syncable:    domain.Syncable{ID: userID, CreatedAt: now, UpdatedAt: now},
+		Email:       userID + "@test.com",
+		DisplayName: "Test " + userID,
+		Role:        domain.RoleMember,
+		Status:      domain.UserStatusActive,
+	}) // Ignore error if user already exists.
+}
+
+func createTestBookForListening(t *testing.T, s store.Store, bookID string, durationMs int64) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -45,6 +58,7 @@ func createTestBookForListening(t *testing.T, s *store.Store, bookID string, dur
 			ID: bookID,
 		},
 		Title:         "Test Book",
+		Path:          "/test/" + bookID,
 		TotalDuration: durationMs,
 	}
 	book.InitTimestamps()
@@ -57,7 +71,8 @@ func TestRecordEvent_CreatesEventAndProgress(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create a test book first
+	// Create parent records first
+	ensureTestUserForListening(t, testStore, "user-456")
 	createTestBookForListening(t, testStore, "book-123", 3600000) // 1 hour
 
 	// Record event
@@ -96,7 +111,8 @@ func TestRecordEvent_UpdatesExistingProgress(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create a test book
+	// Create parent records first
+	ensureTestUserForListening(t, testStore, "user-456")
 	createTestBookForListening(t, testStore, "book-123", 3600000) // 1 hour
 
 	// First event - listen to first 30 min
@@ -137,7 +153,8 @@ func TestRecordEvent_MarksFinished(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create a test book
+	// Create parent records first
+	ensureTestUserForListening(t, testStore, "user-456")
 	createTestBookForListening(t, testStore, "book-123", 3600000) // 1 hour
 
 	// Listen to 99% of the book
@@ -179,7 +196,8 @@ func TestGetContinueListening(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create test books
+	// Create parent records first
+	ensureTestUserForListening(t, testStore, "user-456")
 	createTestBookForListening(t, testStore, "book-1", 3600000)
 	createTestBookForListening(t, testStore, "book-2", 3600000)
 	createTestBookForListening(t, testStore, "book-3", 3600000)
@@ -209,10 +227,13 @@ func TestGetContinueListening(t *testing.T) {
 }
 
 func TestUserSettings_CRUD(t *testing.T) {
-	svc, _, cleanup := setupTestListening(t)
+	svc, testStore, cleanup := setupTestListening(t)
 	defer cleanup()
 
 	ctx := context.Background()
+
+	// Create parent user first
+	ensureTestUserForListening(t, testStore, "user-123")
 
 	// Get creates defaults
 	settings, err := svc.GetUserSettings(ctx, "user-123")
@@ -238,10 +259,14 @@ func TestUserSettings_CRUD(t *testing.T) {
 }
 
 func TestBookPreferences_CRUD(t *testing.T) {
-	svc, _, cleanup := setupTestListening(t)
+	svc, testStore, cleanup := setupTestListening(t)
 	defer cleanup()
 
 	ctx := context.Background()
+
+	// Create parent records first
+	ensureTestUserForListening(t, testStore, "user-123")
+	createTestBookForListening(t, testStore, "book-456", 3600000)
 
 	// Get returns defaults
 	prefs, err := svc.GetBookPreferences(ctx, "user-123", "book-456")
@@ -273,7 +298,8 @@ func TestRecordEvent_Idempotency(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create a test book
+	// Create parent records first
+	ensureTestUserForListening(t, testStore, "user-456")
 	createTestBookForListening(t, testStore, "book-123", 3600000) // 1 hour
 
 	// Record event with client-provided ID
@@ -325,6 +351,9 @@ func TestABSImport_DirectEventCreation_RequiresProgressRebuild(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
+
+	// Create parent records first
+	ensureTestUserForListening(t, testStore, "user-abs")
 
 	// Create a test book with specific duration (10 hours)
 	bookDurationMs := int64(36_000_000) // 10 hours
@@ -386,6 +415,9 @@ func TestABSImport_DurationMismatch_ViaRecordEvent(t *testing.T) {
 
 	ctx := context.Background()
 
+	// Create parent user first
+	ensureTestUserForListening(t, testStore, "user-duration-test")
+
 	// ListenUp's book duration (10 hours)
 	listenUpDurationMs := int64(36_000_000)
 	createTestBookForListening(t, testStore, "book-duration-test", listenUpDurationMs)
@@ -433,7 +465,8 @@ func TestGetUserStats(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create test books
+	// Create parent records first
+	ensureTestUserForListening(t, testStore, "user-456")
 	createTestBookForListening(t, testStore, "book-1", 3600000)
 	createTestBookForListening(t, testStore, "book-2", 3600000)
 

@@ -21,6 +21,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/id"
 	"github.com/listenupapp/listenup-server/internal/store"
+	"github.com/listenupapp/listenup-server/internal/store/sqlite"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -37,7 +38,7 @@ func main() {
 	fmt.Printf("Opening database at: %s\n", dbPath)
 
 	// Open store (not read-only since we're writing)
-	s, err := store.New(dbPath, nil, store.NewNoopEmitter())
+	s, err := sqlite.Open(dbPath, nil)
 	if err != nil {
 		log.Fatalf("Failed to open store: %v", err)
 	}
@@ -198,7 +199,7 @@ func main() {
 }
 
 // createListeningEvent creates a listening event using the store.
-func createListeningEvent(ctx context.Context, s *store.Store, event *domain.ListeningEvent) error {
+func createListeningEvent(ctx context.Context, s store.Store, event *domain.ListeningEvent) error {
 	return s.CreateListeningEvent(ctx, event)
 }
 
@@ -212,7 +213,7 @@ var testUserNames = []string{
 }
 
 // createTestUsers creates test users and shares collections with them.
-func createTestUsers(ctx context.Context, s *store.Store) {
+func createTestUsers(ctx context.Context, s store.Store) {
 	fmt.Println("\n=== Creating Test Users ===")
 
 	// Get existing users to find an admin to share from

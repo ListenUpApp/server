@@ -16,7 +16,7 @@ import (
 
 // BackupService manages backup creation and listing.
 type BackupService struct {
-	store     *store.Store
+	store     store.Store
 	backupDir string
 	dataDir   string
 	version   string
@@ -25,7 +25,7 @@ type BackupService struct {
 }
 
 // NewBackupService creates a BackupService.
-func NewBackupService(s *store.Store, backupDir, dataDir, version string, logger *slog.Logger) *BackupService {
+func NewBackupService(s store.Store, backupDir, dataDir, version string, logger *slog.Logger) *BackupService {
 	return &BackupService{
 		store:     s,
 		backupDir: backupDir,

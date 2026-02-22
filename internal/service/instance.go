@@ -15,13 +15,13 @@ import (
 
 // InstanceService handles business logic for server instance configuration.
 type InstanceService struct {
-	store  *store.Store
+	store  store.Store
 	logger *slog.Logger
 	config *config.Config
 }
 
 // NewInstanceService creates a new instance service.
-func NewInstanceService(store *store.Store, logger *slog.Logger, config *config.Config) *InstanceService {
+func NewInstanceService(store store.Store, logger *slog.Logger, config *config.Config) *InstanceService {
 	return &InstanceService{
 		store:  store,
 		logger: logger,

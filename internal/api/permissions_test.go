@@ -24,7 +24,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/dto"
 	"github.com/listenupapp/listenup-server/internal/service"
 	"github.com/listenupapp/listenup-server/internal/sse"
-	"github.com/listenupapp/listenup-server/internal/store"
+	"github.com/listenupapp/listenup-server/internal/store/sqlite"
 )
 
 // permTestServer wraps the API server for permission testing.
@@ -44,7 +44,8 @@ func setupPermTestServer(t *testing.T) *permTestServer {
 
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	st, err := store.New(dbPath, nil, store.NewNoopEmitter())
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	st, err := sqlite.Open(dbPath, logger)
 	require.NoError(t, err)
 
 	cfg := &config.Config{
@@ -69,8 +70,6 @@ func setupPermTestServer(t *testing.T) *permTestServer {
 		cfg.Auth.RefreshTokenDuration,
 	)
 	require.NoError(t, err)
-
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	sseManager := sse.NewManager(logger)
 	enricher := dto.NewEnricher(st)
@@ -300,16 +299,28 @@ func TestCanShare_ShareCollection_Forbidden(t *testing.T) {
 
 	token, userID := ts.createPermUser(t)
 
-	// Create a collection to share
+	// Create a library + collection to share
 	ctx := context.Background()
+	now := time.Now()
+	lib := &domain.Library{
+		ID:        "lib-1",
+		CreatedAt: now,
+		UpdatedAt: now,
+		OwnerID:   userID,
+		Name:      "Test Library",
+	}
+	err := ts.store.CreateLibrary(ctx, lib)
+	require.NoError(t, err)
+
 	coll := &domain.Collection{
 		ID:        "coll-1",
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		CreatedAt: now,
+		UpdatedAt: now,
+		LibraryID: "lib-1",
 		Name:      "Test Collection",
 		OwnerID:   userID,
 	}
-	err := ts.store.CreateCollection(ctx, coll)
+	err = ts.store.CreateCollection(ctx, coll)
 	require.NoError(t, err)
 
 	// Disable share permission

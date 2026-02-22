@@ -12,13 +12,13 @@ import (
 
 // SettingsService manages server-wide settings.
 type SettingsService struct {
-	store        *store.Store
+	store        store.Store
 	inboxService *InboxService
 	logger       *slog.Logger
 }
 
 // NewSettingsService creates a new settings service.
-func NewSettingsService(store *store.Store, inboxService *InboxService, logger *slog.Logger) *SettingsService {
+func NewSettingsService(store store.Store, inboxService *InboxService, logger *slog.Logger) *SettingsService {
 	return &SettingsService{
 		store:        store,
 		inboxService: inboxService,

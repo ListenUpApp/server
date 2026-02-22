@@ -67,13 +67,13 @@ type EntityCounts struct {
 
 // Exporter creates backup archives.
 type Exporter struct {
-	store   *store.Store
+	store   store.Store
 	dataDir string
 	version string
 }
 
 // New creates an Exporter.
-func New(s *store.Store, dataDir, version string) *Exporter {
+func New(s store.Store, dataDir, version string) *Exporter {
 	return &Exporter{store: s, dataDir: dataDir, version: version}
 }
 
@@ -115,7 +115,7 @@ func (e *Exporter) Export(ctx context.Context, opts Options) (*Result, error) {
 
 	exportSteps := []struct {
 		name string
-		fn   func(context.Context, *store.Store, *zip.Writer) (int, error)
+		fn   func(context.Context, store.Store, *zip.Writer) (int, error)
 		dest *int
 	}{
 		{"users", exportUsers, &counts.Users},

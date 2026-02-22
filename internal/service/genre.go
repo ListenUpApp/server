@@ -15,13 +15,13 @@ import (
 
 // GenreService orchestrates genre operations.
 type GenreService struct {
-	store     *store.Store
+	store     store.Store
 	logger    *slog.Logger
 	validator *validation.Validator
 }
 
 // NewGenreService creates a new genre service.
-func NewGenreService(store *store.Store, logger *slog.Logger) *GenreService {
+func NewGenreService(store store.Store, logger *slog.Logger) *GenreService {
 	return &GenreService{
 		store:     store,
 		logger:    logger,

@@ -15,14 +15,14 @@ import (
 // InboxService manages the Inbox staging workflow.
 // Books in Inbox are hidden from all library views until released.
 type InboxService struct {
-	store    *store.Store
+	store    store.Store
 	enricher *dto.Enricher
 	sse      *sse.Manager
 	logger   *slog.Logger
 }
 
 // NewInboxService creates a new inbox service.
-func NewInboxService(store *store.Store, enricher *dto.Enricher, sseManager *sse.Manager, logger *slog.Logger) *InboxService {
+func NewInboxService(store store.Store, enricher *dto.Enricher, sseManager *sse.Manager, logger *slog.Logger) *InboxService {
 	return &InboxService{
 		store:    store,
 		enricher: enricher,

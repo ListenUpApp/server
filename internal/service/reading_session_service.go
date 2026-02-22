@@ -25,14 +25,14 @@ type ActivityRecorder interface {
 
 // ReadingSessionService manages book reading sessions - tracking when users start and complete books.
 type ReadingSessionService struct {
-	store            *store.Store
+	store            store.Store
 	events           store.EventEmitter
 	logger           *slog.Logger
 	activityRecorder ActivityRecorder
 }
 
 // NewReadingSessionService creates a new reading session service.
-func NewReadingSessionService(store *store.Store, events store.EventEmitter, logger *slog.Logger) *ReadingSessionService {
+func NewReadingSessionService(store store.Store, events store.EventEmitter, logger *slog.Logger) *ReadingSessionService {
 	return &ReadingSessionService{
 		store:  store,
 		events: events,
@@ -626,7 +626,7 @@ func buildReaderSummary(user *domain.User, profile *domain.UserProfile, sessions
 }
 
 // getAuthorName extracts author name(s) from book contributors.
-func getAuthorName(ctx context.Context, store *store.Store, book *domain.Book) string {
+func getAuthorName(ctx context.Context, store store.Store, book *domain.Book) string {
 	// Collect author contributor IDs
 	var authorIDs []string
 	for _, contrib := range book.Contributors {

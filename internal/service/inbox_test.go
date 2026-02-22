@@ -11,12 +11,13 @@ import (
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
+	"github.com/listenupapp/listenup-server/internal/store/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // setupTestInbox creates a test inbox service with temp database.
-func setupTestInbox(t *testing.T) (*InboxService, *store.Store, func()) {
+func setupTestInbox(t *testing.T) (*InboxService, store.Store, func()) {
 	t.Helper()
 
 	// Create temp directory for test database.
@@ -32,7 +33,7 @@ func setupTestInbox(t *testing.T) (*InboxService, *store.Store, func()) {
 	sseManager := sse.NewManager(logger)
 
 	// Create store.
-	testStore, err := store.New(dbPath, nil, sseManager)
+	testStore, err := sqlite.Open(dbPath, nil)
 	require.NoError(t, err)
 	require.NotNil(t, testStore)
 
@@ -48,9 +49,36 @@ func setupTestInbox(t *testing.T) (*InboxService, *store.Store, func()) {
 	return inboxService, testStore, cleanup
 }
 
-// createTestLibraryInbox creates a default library for testing.
-func createTestLibraryInbox(t *testing.T, ctx context.Context, testStore *store.Store) *domain.Library {
+// createTestUserInbox creates a user to satisfy foreign key constraints.
+func createTestUserInbox(t *testing.T, ctx context.Context, testStore store.Store, userID string) {
 	t.Helper()
+
+	now := time.Now()
+	user := &domain.User{
+		Syncable: domain.Syncable{
+			ID:        userID,
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		Email:       userID + "@example.com",
+		IsRoot:      false,
+		Role:        domain.RoleMember,
+		Status:      domain.UserStatusActive,
+		DisplayName: "Test User",
+		LastLoginAt: now,
+		Permissions: domain.DefaultPermissions(),
+	}
+
+	err := testStore.CreateUser(ctx, user)
+	require.NoError(t, err)
+}
+
+// createTestLibraryInbox creates a default library for testing.
+func createTestLibraryInbox(t *testing.T, ctx context.Context, testStore store.Store) *domain.Library {
+	t.Helper()
+
+	// Create owner user to satisfy FK constraint on libraries.owner_id.
+	createTestUserInbox(t, ctx, testStore, "owner-test")
 
 	library := &domain.Library{
 		ID:        "library-test",
@@ -68,7 +96,7 @@ func createTestLibraryInbox(t *testing.T, ctx context.Context, testStore *store.
 }
 
 // createTestInboxCollection creates the inbox collection for testing.
-func createTestInboxCollection(t *testing.T, ctx context.Context, testStore *store.Store, libraryID string) *domain.Collection {
+func createTestInboxCollection(t *testing.T, ctx context.Context, testStore store.Store, libraryID string) *domain.Collection {
 	t.Helper()
 
 	inbox := &domain.Collection{
@@ -89,7 +117,7 @@ func createTestInboxCollection(t *testing.T, ctx context.Context, testStore *sto
 }
 
 // createTestCollectionInbox creates a regular collection for testing.
-func createTestCollectionInbox(t *testing.T, ctx context.Context, testStore *store.Store, id, name, libraryID string) *domain.Collection {
+func createTestCollectionInbox(t *testing.T, ctx context.Context, testStore store.Store, id, name, libraryID string) *domain.Collection {
 	t.Helper()
 
 	collection := &domain.Collection{
@@ -110,7 +138,7 @@ func createTestCollectionInbox(t *testing.T, ctx context.Context, testStore *sto
 }
 
 // createInboxBook creates a test book with the given ID and adds it to inbox.
-func createInboxBook(t *testing.T, ctx context.Context, testStore *store.Store, id, inboxID string) *domain.Book {
+func createInboxBook(t *testing.T, ctx context.Context, testStore store.Store, id, inboxID string) *domain.Book {
 	t.Helper()
 
 	book := createSyncTestBook(id, time.Now())

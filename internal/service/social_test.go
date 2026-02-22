@@ -10,18 +10,19 @@ import (
 
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/store"
+	"github.com/listenupapp/listenup-server/internal/store/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestSocialService(t *testing.T) (*SocialService, *store.Store, func()) {
+func setupTestSocialService(t *testing.T) (*SocialService, store.Store, func()) {
 	t.Helper()
 
 	tmpDir, err := os.MkdirTemp("", "social-test-*")
 	require.NoError(t, err)
 
 	dbPath := filepath.Join(tmpDir, "test.db")
-	testStore, err := store.New(dbPath, nil, store.NewNoopEmitter())
+	testStore, err := sqlite.Open(dbPath, nil)
 	require.NoError(t, err)
 
 	logger := slog.New(slog.DiscardHandler)
@@ -35,7 +36,7 @@ func setupTestSocialService(t *testing.T) (*SocialService, *store.Store, func())
 	return svc, testStore, cleanup
 }
 
-func createTestUserForSocial(t *testing.T, s *store.Store, id, displayName string, role domain.Role) *domain.User {
+func createTestUserForSocial(t *testing.T, s store.Store, id, displayName string, role domain.Role) *domain.User {
 	t.Helper()
 	user := &domain.User{
 		Syncable: domain.Syncable{
@@ -52,7 +53,7 @@ func createTestUserForSocial(t *testing.T, s *store.Store, id, displayName strin
 	return user
 }
 
-func createTestBookForSocial(t *testing.T, s *store.Store, id, title string) *domain.Book {
+func createTestBookForSocial(t *testing.T, s store.Store, id, title string) *domain.Book {
 	t.Helper()
 	book := &domain.Book{
 		Syncable: domain.Syncable{

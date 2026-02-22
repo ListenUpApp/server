@@ -11,7 +11,7 @@ import (
 // MetadataService orchestrates metadata fetching with caching.
 type MetadataService struct {
 	client        *audible.Client
-	store         *store.Store
+	store         store.Store
 	defaultRegion audible.Region
 	logger        *slog.Logger
 }
@@ -19,7 +19,7 @@ type MetadataService struct {
 // NewMetadataService creates a new metadata service.
 func NewMetadataService(
 	client *audible.Client,
-	store *store.Store,
+	store store.Store,
 	defaultRegion audible.Region,
 	logger *slog.Logger,
 ) *MetadataService {

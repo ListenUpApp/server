@@ -29,13 +29,13 @@ type ManifestResponse struct {
 
 // SyncService orchestrates sync operations between server and clients.
 type SyncService struct {
-	store    *store.Store
+	store    store.Store
 	enricher *dto.Enricher
 	logger   *slog.Logger
 }
 
 // NewSyncService creates a new sync service.
-func NewSyncService(store *store.Store, logger *slog.Logger) *SyncService {
+func NewSyncService(store store.Store, logger *slog.Logger) *SyncService {
 	return &SyncService{
 		store:    store,
 		enricher: dto.NewEnricher(store),

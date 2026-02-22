@@ -17,14 +17,14 @@ var ErrNoASIN = errors.New("book has no ASIN for chapter lookup")
 
 // ChapterService handles chapter name alignment operations.
 type ChapterService struct {
-	store           *store.Store
+	store           store.Store
 	metadataService *MetadataService
 	logger          *slog.Logger
 }
 
 // NewChapterService creates a new chapter service.
 func NewChapterService(
-	store *store.Store,
+	store store.Store,
 	metadataService *MetadataService,
 	logger *slog.Logger,
 ) *ChapterService {

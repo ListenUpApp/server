@@ -16,13 +16,13 @@ import (
 
 // Importer restores from backup archives.
 type Importer struct {
-	store   *store.Store
+	store   store.Store
 	dataDir string
 	logger  *slog.Logger
 }
 
 // New creates an Importer.
-func New(s *store.Store, dataDir string, logger *slog.Logger) *Importer {
+func New(s store.Store, dataDir string, logger *slog.Logger) *Importer {
 	if logger == nil {
 		logger = slog.Default()
 	}

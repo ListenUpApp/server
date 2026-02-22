@@ -33,14 +33,14 @@ type CachedBook struct {
 
 // Matcher finds correspondences between ABS and ListenUp entities.
 type Matcher struct {
-	store     *store.Store
+	store     store.Store
 	logger    *slog.Logger
 	opts      AnalysisOptions
 	bookCache *BookCache
 }
 
 // NewMatcher creates a matcher with the given options.
-func NewMatcher(s *store.Store, logger *slog.Logger, opts AnalysisOptions) *Matcher {
+func NewMatcher(s store.Store, logger *slog.Logger, opts AnalysisOptions) *Matcher {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -110,13 +110,14 @@ func (m *Matcher) matchUserByName(ctx context.Context, absUser *User) *UserMatch
 	var bestMatch *UserMatch
 	var matchCount int
 
-	// Iterate over all users
-	for user, err := range m.store.Users.List(ctx) {
-		if err != nil {
-			m.logger.Warn("failed to iterate users for name matching", "error", err)
-			break
-		}
+	// Get all users
+	allUsers, err := m.store.ListUsers(ctx)
+	if err != nil {
+		m.logger.Warn("failed to list users for name matching", "error", err)
+		return nil
+	}
 
+	for _, user := range allUsers {
 		// Check display name similarity
 		displayNameSim := stringSimilarity(normalizeString(user.DisplayName), absUsername)
 
@@ -175,13 +176,14 @@ func (m *Matcher) suggestUsers(ctx context.Context, absUser *User) []UserSuggest
 
 	absUsername := normalizeString(absUser.Username)
 
-	// Iterate over all users using the iterator pattern
-	for user, err := range m.store.Users.List(ctx) {
-		if err != nil {
-			m.logger.Warn("failed to iterate users for suggestions", "error", err)
-			break
-		}
+	// Get all users for suggestion matching
+	allUsers, err := m.store.ListUsers(ctx)
+	if err != nil {
+		m.logger.Warn("failed to list users for suggestions", "error", err)
+		return nil
+	}
 
+	for _, user := range allUsers {
 		// Skip if email matches - should have been caught above
 		if user.Email != "" && strings.EqualFold(user.Email, absUser.Email) {
 			continue

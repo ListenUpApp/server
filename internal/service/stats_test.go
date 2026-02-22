@@ -10,18 +10,19 @@ import (
 
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/store"
+	"github.com/listenupapp/listenup-server/internal/store/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestStats(t *testing.T) (*StatsService, *store.Store, func()) {
+func setupTestStats(t *testing.T) (*StatsService, store.Store, func()) {
 	t.Helper()
 
 	tmpDir, err := os.MkdirTemp("", "stats-service-test-*")
 	require.NoError(t, err)
 
 	dbPath := filepath.Join(tmpDir, "test.db")
-	testStore, err := store.New(dbPath, nil, store.NewNoopEmitter())
+	testStore, err := sqlite.Open(dbPath, nil)
 	require.NoError(t, err)
 
 	logger := slog.New(slog.DiscardHandler)
@@ -35,7 +36,7 @@ func setupTestStats(t *testing.T) (*StatsService, *store.Store, func()) {
 	return svc, testStore, cleanup
 }
 
-func createTestBook(t *testing.T, s *store.Store, bookID string, durationMs int64) {
+func createTestBook(t *testing.T, s store.Store, bookID string, durationMs int64) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -44,15 +45,30 @@ func createTestBook(t *testing.T, s *store.Store, bookID string, durationMs int6
 			ID: bookID,
 		},
 		Title:         "Test Book " + bookID,
+		Path:          "/test/" + bookID,
 		TotalDuration: durationMs,
 	}
 	book.InitTimestamps()
 	require.NoError(t, s.CreateBook(ctx, book))
 }
 
-func createTestEvent(t *testing.T, s *store.Store, userID, bookID string, durationMs int64, endedAt time.Time) {
+func ensureTestUser(t *testing.T, s store.Store, userID string) {
+	t.Helper()
+	now := time.Now()
+	_ = s.CreateUser(context.Background(), &domain.User{
+		Syncable:    domain.Syncable{ID: userID, CreatedAt: now, UpdatedAt: now},
+		Email:       userID + "@test.com",
+		DisplayName: "Test " + userID,
+		Role:        domain.RoleMember,
+		Status:      domain.UserStatusActive,
+	}) // Ignore if exists.
+}
+
+func createTestEvent(t *testing.T, s store.Store, userID, bookID string, durationMs int64, endedAt time.Time) {
 	t.Helper()
 	ctx := context.Background()
+
+	ensureTestUser(t, s, userID)
 
 	event := domain.NewListeningEvent(
 		"evt-"+bookID+"-"+endedAt.Format("20060102150405"),
@@ -165,6 +181,7 @@ func TestGetUserStats_GenreBreakdown(t *testing.T) {
 	book1 := &domain.Book{
 		Syncable:      domain.Syncable{ID: "book-fantasy"},
 		Title:         "Fantasy Book",
+		Path:          "/test/book-fantasy",
 		TotalDuration: 3600000,
 		GenreIDs:      []string{"genre-fantasy"},
 	}
@@ -175,6 +192,7 @@ func TestGetUserStats_GenreBreakdown(t *testing.T) {
 	book2 := &domain.Book{
 		Syncable:      domain.Syncable{ID: "book-scifi"},
 		Title:         "Sci-Fi Book",
+		Path:          "/test/book-scifi",
 		TotalDuration: 3600000,
 		GenreIDs:      []string{"genre-scifi"},
 	}
@@ -361,6 +379,8 @@ func TestGetUserStats_BooksStartedAndFinished(t *testing.T) {
 
 	ctx := context.Background()
 	userID := "user-books"
+
+	ensureTestUser(t, testStore, userID)
 
 	// Create books
 	for i := 1; i <= 3; i++ {

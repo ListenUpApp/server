@@ -16,12 +16,12 @@ import (
 // creation, updates, and query execution.
 type SearchService struct {
 	index  *search.SearchIndex
-	store  *store.Store
+	store  store.Store
 	logger *slog.Logger
 }
 
 // NewSearchService creates a new search service.
-func NewSearchService(index *search.SearchIndex, store *store.Store, logger *slog.Logger) *SearchService {
+func NewSearchService(index *search.SearchIndex, store store.Store, logger *slog.Logger) *SearchService {
 	return &SearchService{
 		index:  index,
 		store:  store,
@@ -35,7 +35,6 @@ func (s *SearchService) Search(ctx context.Context, params search.SearchParams) 
 }
 
 // SearchContributors performs a fast contributor search for autocomplete.
-// Uses Bleve index for O(log n) performance instead of O(n) BadgerDB scan.
 func (s *SearchService) SearchContributors(ctx context.Context, query string, limit int) ([]search.ContributorSearchResult, error) {
 	return s.index.SearchContributors(ctx, query, limit)
 }

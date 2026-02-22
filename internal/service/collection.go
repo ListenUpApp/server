@@ -13,12 +13,12 @@ import (
 
 // CollectionService orchestrates collection operations with ACL enforcement.
 type CollectionService struct {
-	store  *store.Store
+	store  store.Store
 	logger *slog.Logger
 }
 
 // NewCollectionService creates a new collection service.
-func NewCollectionService(store *store.Store, logger *slog.Logger) *CollectionService {
+func NewCollectionService(store store.Store, logger *slog.Logger) *CollectionService {
 	return &CollectionService{
 		store:  store,
 		logger: logger,

@@ -3,7 +3,6 @@ package domain
 import "time"
 
 // ServerSettings contains server-wide configuration.
-// Stored as a single key in Badger.
 type ServerSettings struct {
 	Name         string    `json:"name"`
 	InboxEnabled bool      `json:"inbox_enabled"`
