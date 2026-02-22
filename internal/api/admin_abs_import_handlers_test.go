@@ -459,6 +459,41 @@ func TestCreateABSImport_ReturnsAnalyzingStatus(t *testing.T) {
 	assert.Equal(t, 0, resp.BooksMapped)
 }
 
+// TestAnalysisCountsWrittenBeforeSessionStorage verifies that after analysis,
+// the import record carries total_books/total_users/total_sessions even while
+// still in "analyzing" status. This lets polling clients show scope context
+// (e.g. "Matching 1,011 books…") before the full storage phase completes.
+func TestAnalysisCountsWrittenBeforeSessionStorage(t *testing.T) {
+	imp := &domain.ABSImport{
+		ID:            "import-analysis-counts",
+		Name:          "ABS Import 2024-12-01",
+		BackupPath:    "/tmp/backup.audiobookshelf",
+		Status:        domain.ABSImportStatusAnalyzing, // Still analyzing
+		TotalUsers:    3,
+		TotalBooks:    1011,
+		TotalSessions: 5432,
+		// Mapped counts still zero — storage hasn't run yet
+		UsersMapped:      0,
+		BooksMapped:      0,
+		SessionsImported: 0,
+	}
+
+	resp := toABSImportResponse(imp)
+
+	// Status is still analyzing (storage phase hasn't completed)
+	assert.Equal(t, "analyzing", resp.Status)
+
+	// But totals are already populated from analysis
+	assert.Equal(t, 3, resp.TotalUsers, "total_users should be set after analysis")
+	assert.Equal(t, 1011, resp.TotalBooks, "total_books should be set after analysis")
+	assert.Equal(t, 5432, resp.TotalSessions, "total_sessions should be set after analysis")
+
+	// Mapped/imported counts are still zero
+	assert.Equal(t, 0, resp.UsersMapped)
+	assert.Equal(t, 0, resp.BooksMapped)
+	assert.Equal(t, 0, resp.SessionsImported)
+}
+
 // TestAutoMatchedBookDisplayName verifies that when a book is auto-matched,
 // the display name (ListenUpTitle) is populated from the store lookup.
 func TestAutoMatchedBookDisplayName(t *testing.T) {

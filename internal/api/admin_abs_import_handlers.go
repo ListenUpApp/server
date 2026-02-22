@@ -472,6 +472,20 @@ func (s *Server) runImportAnalysis(importID, backupPath string) {
 		return
 	}
 
+	// Write total counts to import record immediately so polling clients
+	// can show scope (e.g. "Matching 1,011 books…") during the storage phase.
+	if imp, err := s.store.GetABSImport(bgCtx, importID); err == nil {
+		imp.TotalUsers = analysis.TotalUsers
+		imp.TotalBooks = analysis.TotalBooks
+		imp.TotalSessions = analysis.TotalSessions
+		imp.UpdatedAt = time.Now()
+		if err := s.store.UpdateABSImport(bgCtx, imp); err != nil {
+			s.logger.Error("failed to write analysis counts to import record",
+				slog.String("import_id", importID),
+				slog.String("error", err.Error()))
+		}
+	}
+
 	// Store all parsed users with analysis results
 	usersMapped := 0
 	for _, um := range analysis.UserMatches {
