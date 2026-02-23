@@ -356,6 +356,8 @@ type Store interface {
 	UpdateABSImportSessionStatus(ctx context.Context, importID, sessionID string, status domain.SessionImportStatus) error
 	SkipABSImportSession(ctx context.Context, importID, sessionID, reason string) error
 	RecalculateSessionStatuses(ctx context.Context, importID string) error
+	RecalculateSessionStatusesForBook(ctx context.Context, importID, absMediaID string) error
+	RecalculateSessionStatusesForUser(ctx context.Context, importID, absUserID string) error
 	GetABSImportStats(ctx context.Context, importID string) (mapped, unmapped, ready, imported int, err error)
 	CreateABSImportProgress(ctx context.Context, progress *domain.ABSImportProgress) error
 	GetABSImportProgress(ctx context.Context, importID, absUserID, absMediaID string) (*domain.ABSImportProgress, error)

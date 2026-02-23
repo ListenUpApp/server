@@ -840,7 +840,7 @@ func (s *Server) handleMapABSImportUser(ctx context.Context, input *MapABSImport
 	}
 
 	// Recalculate session statuses
-	if err := s.store.RecalculateSessionStatuses(ctx, input.ID); err != nil {
+	if err := s.store.RecalculateSessionStatusesForUser(ctx, input.ID, input.ABSUserID); err != nil {
 		s.logger.Error("failed to recalculate sessions", slog.String("error", err.Error()))
 	}
 
@@ -868,7 +868,7 @@ func (s *Server) handleClearABSImportUserMapping(ctx context.Context, input *Cle
 	}
 
 	// Recalculate session statuses
-	if err := s.store.RecalculateSessionStatuses(ctx, input.ID); err != nil {
+	if err := s.store.RecalculateSessionStatusesForUser(ctx, input.ID, input.ABSUserID); err != nil {
 		s.logger.Error("failed to recalculate sessions", slog.String("error", err.Error()))
 	}
 
@@ -938,7 +938,7 @@ func (s *Server) handleMapABSImportBook(ctx context.Context, input *MapABSImport
 	}
 
 	// Recalculate session statuses
-	if err := s.store.RecalculateSessionStatuses(ctx, input.ID); err != nil {
+	if err := s.store.RecalculateSessionStatusesForBook(ctx, input.ID, input.ABSMediaID); err != nil {
 		s.logger.Error("failed to recalculate sessions", slog.String("error", err.Error()))
 	}
 
@@ -966,7 +966,7 @@ func (s *Server) handleClearABSImportBookMapping(ctx context.Context, input *Cle
 	}
 
 	// Recalculate session statuses
-	if err := s.store.RecalculateSessionStatuses(ctx, input.ID); err != nil {
+	if err := s.store.RecalculateSessionStatusesForBook(ctx, input.ID, input.ABSMediaID); err != nil {
 		s.logger.Error("failed to recalculate sessions", slog.String("error", err.Error()))
 	}
 
