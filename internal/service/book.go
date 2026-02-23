@@ -222,6 +222,11 @@ func (s *BookService) ScanFolder(ctx context.Context, folderPath string) (*domai
 	return book, nil
 }
 
+// RepairBookRelationships rescans all books and rebuilds missing contributor/series links.
+func (s *BookService) RepairBookRelationships(ctx context.Context) (int, error) {
+	return s.scanner.RepairBookRelationships(ctx)
+}
+
 // ApplyMatch applies selected Audible metadata to a local book.
 func (s *BookService) ApplyMatch(
 	ctx context.Context,

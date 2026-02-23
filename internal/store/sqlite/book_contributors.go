@@ -46,6 +46,26 @@ func (s *Store) setBookContributorsInternal(ctx context.Context, bookID string, 
 	return tx.Commit()
 }
 
+// setBookContributorsTx replaces all contributors for a book within an existing transaction.
+func setBookContributorsTx(ctx context.Context, tx *sql.Tx, bookID string, contributors []domain.BookContributor) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM book_contributors WHERE book_id = ?`, bookID); err != nil {
+		return fmt.Errorf("delete book_contributors: %w", err)
+	}
+	for _, c := range contributors {
+		rolesJSON, err := json.Marshal(c.Roles)
+		if err != nil {
+			return fmt.Errorf("marshal roles: %w", err)
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO book_contributors (book_id, contributor_id, roles, credited_as) VALUES (?, ?, ?, ?)`,
+			bookID, c.ContributorID, string(rolesJSON), nullString(c.CreditedAs),
+		)
+		if err != nil {
+			return fmt.Errorf("insert book_contributor: %w", err)
+		}
+	}
+	return nil
+}
+
 // GetBookContributors returns all non-deleted contributors linked to a book.
 func (s *Store) GetBookContributors(ctx context.Context, bookID string) ([]domain.BookContributor, error) {
 	rows, err := s.db.QueryContext(ctx, `

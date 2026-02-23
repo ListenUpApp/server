@@ -717,6 +717,91 @@ func (s *Scanner) ScanFolder(ctx context.Context, folderPath string, opts ScanOp
 	return item, nil
 }
 
+// RepairBookRelationships rescans all books to rebuild missing book_contributors
+// and book_series junction rows. Returns the number of books repaired.
+func (s *Scanner) RepairBookRelationships(ctx context.Context) (int, error) {
+	books, err := s.store.ListAllBooks(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list all books: %w", err)
+	}
+
+	s.logger.Info("starting book relationship repair", "total_books", len(books))
+
+	repaired := 0
+	for _, book := range books {
+		select {
+		case <-ctx.Done():
+			return repaired, ctx.Err()
+		default:
+		}
+
+		item, err := s.ScanFolder(ctx, book.Path, ScanOptions{})
+		if err != nil {
+			s.logger.Warn("skipping book - scan failed", "book_id", book.ID, "path", book.Path, "error", err)
+			continue
+		}
+
+		if item.Metadata == nil {
+			s.logger.Debug("skipping book - no metadata", "book_id", book.ID, "path", book.Path)
+			continue
+		}
+
+		var didRepair bool
+
+		// Rebuild contributors from metadata.
+		if len(item.Metadata.Authors) > 0 || len(item.Metadata.Narrators) > 0 {
+			var inputs []store.ContributorInput
+			contributorMap := make(map[string][]domain.ContributorRole)
+
+			for _, author := range item.Metadata.Authors {
+				parsed := parseContributorString(author, domain.RoleAuthor)
+				for name, roles := range parsed {
+					contributorMap[name] = append(contributorMap[name], roles...)
+				}
+			}
+			for _, narrator := range item.Metadata.Narrators {
+				parsed := parseContributorString(narrator, domain.RoleNarrator)
+				for name, roles := range parsed {
+					contributorMap[name] = append(contributorMap[name], roles...)
+				}
+			}
+
+			for name, roles := range contributorMap {
+				inputs = append(inputs, store.ContributorInput{Name: name, Roles: roles})
+			}
+
+			if len(inputs) > 0 {
+				if _, err := s.store.SetBookContributors(ctx, book.ID, inputs); err != nil {
+					s.logger.Warn("failed to set contributors", "book_id", book.ID, "error", err)
+				} else {
+					didRepair = true
+				}
+			}
+		}
+
+		// Rebuild series from metadata.
+		if len(item.Metadata.Series) > 0 {
+			inputs := make([]store.SeriesInput, 0, len(item.Metadata.Series))
+			for _, si := range item.Metadata.Series {
+				inputs = append(inputs, store.SeriesInput{Name: si.Name, Sequence: si.Sequence})
+			}
+			if _, err := s.store.SetBookSeries(ctx, book.ID, inputs); err != nil {
+				s.logger.Warn("failed to set series", "book_id", book.ID, "error", err)
+			} else {
+				didRepair = true
+			}
+		}
+
+		if didRepair {
+			repaired++
+			s.logger.Debug("repaired book relationships", "book_id", book.ID, "title", book.Title)
+		}
+	}
+
+	s.logger.Info("book relationship repair complete", "repaired", repaired, "total", len(books))
+	return repaired, nil
+}
+
 // isImageExt checks if a file extension is for an image file.
 func isImageExt(ext string) bool {
 	return imageExtensions[ext]
