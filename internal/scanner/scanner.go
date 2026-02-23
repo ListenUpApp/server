@@ -792,6 +792,20 @@ func (s *Scanner) RepairBookRelationships(ctx context.Context) (int, error) {
 			}
 		}
 
+		// Rebuild genres from metadata.
+		if len(item.Metadata.Genres) > 0 {
+			genreIDs, err := extractGenres(ctx, item.Metadata.Genres, book.ID, s.store)
+			if err != nil {
+				s.logger.Warn("failed to extract genres", "book_id", book.ID, "error", err)
+			} else if len(genreIDs) > 0 {
+				if err := s.store.SetBookGenres(ctx, book.ID, genreIDs); err != nil {
+					s.logger.Warn("failed to set genres", "book_id", book.ID, "error", err)
+				} else {
+					didRepair = true
+				}
+			}
+		}
+
 		if didRepair {
 			repaired++
 			s.logger.Debug("repaired book relationships", "book_id", book.ID, "title", book.Title)

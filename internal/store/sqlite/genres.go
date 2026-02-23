@@ -294,6 +294,20 @@ func (s *Store) DeleteGenre(ctx context.Context, id string) error {
 	return nil
 }
 
+// setBookGenresTx replaces all genre associations for a book within an existing transaction.
+func setBookGenresTx(ctx context.Context, tx *sql.Tx, bookID string, genreIDs []string) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM book_genres WHERE book_id = ?`, bookID); err != nil {
+		return fmt.Errorf("delete book_genres: %w", err)
+	}
+	for _, gid := range genreIDs {
+		_, err := tx.ExecContext(ctx, `INSERT INTO book_genres (book_id, genre_id) VALUES (?, ?)`, bookID, gid)
+		if err != nil {
+			return fmt.Errorf("insert book_genre: %w", err)
+		}
+	}
+	return nil
+}
+
 // SetBookGenres replaces all genre associations for a book in a single transaction.
 // It deletes existing book_genres rows for the book, then inserts the new set.
 func (s *Store) SetBookGenres(ctx context.Context, bookID string, genreIDs []string) error {
