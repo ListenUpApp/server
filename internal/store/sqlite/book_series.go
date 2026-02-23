@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"strings"
 	"context"
 	"database/sql"
 	"fmt"
@@ -107,6 +108,50 @@ func (s *Store) GetSeriesBookIDMap(ctx context.Context) (map[string][]string, er
 			return nil, err
 		}
 		result[seriesID] = append(result[seriesID], bookID)
+	}
+	return result, rows.Err()
+}
+
+// GetSeriesByBookIDs returns book series for multiple books in one query.
+// Returns a map of bookID → []domain.BookSeries.
+func (s *Store) GetSeriesByBookIDs(ctx context.Context, bookIDs []string) (map[string][]domain.BookSeries, error) {
+	if len(bookIDs) == 0 {
+		return map[string][]domain.BookSeries{}, nil
+	}
+
+	placeholders := make([]string, len(bookIDs))
+	args := make([]any, len(bookIDs))
+	for i, id := range bookIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := `
+		SELECT bs.book_id, bs.series_id, bs.sequence
+		FROM book_series bs
+		JOIN series s ON s.id = bs.series_id
+		WHERE bs.book_id IN (` + strings.Join(placeholders, ",") + `) AND s.deleted_at IS NULL`
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query book_series batch: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[string][]domain.BookSeries)
+	for rows.Next() {
+		var (
+			bookID string
+			bs     domain.BookSeries
+			seq    sql.NullString
+		)
+		if err := rows.Scan(&bookID, &bs.SeriesID, &seq); err != nil {
+			return nil, fmt.Errorf("scan book_series batch: %w", err)
+		}
+		if seq.Valid {
+			bs.Sequence = seq.String
+		}
+		result[bookID] = append(result[bookID], bs)
 	}
 	return result, rows.Err()
 }
