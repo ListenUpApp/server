@@ -891,3 +891,36 @@ func (s *Store) seedGenreTree(ctx context.Context, seeds []genre.GenreSeed, pare
 
 	return nil
 }
+
+// GetGenreIDsByBookIDs returns genre IDs for multiple books in one query.
+// Returns a map of bookID → []string (genre IDs).
+func (s *Store) GetGenreIDsByBookIDs(ctx context.Context, bookIDs []string) (map[string][]string, error) {
+	if len(bookIDs) == 0 {
+		return map[string][]string{}, nil
+	}
+
+	placeholders := make([]string, len(bookIDs))
+	args := make([]any, len(bookIDs))
+	for i, id := range bookIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := `SELECT book_id, genre_id FROM book_genres WHERE book_id IN (` + strings.Join(placeholders, ",") + `)`
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query book_genres batch: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[string][]string)
+	for rows.Next() {
+		var bookID, genreID string
+		if err := rows.Scan(&bookID, &genreID); err != nil {
+			return nil, fmt.Errorf("scan book_genres batch: %w", err)
+		}
+		result[bookID] = append(result[bookID], genreID)
+	}
+	return result, rows.Err()
+}

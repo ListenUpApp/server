@@ -186,6 +186,9 @@ type Store interface {
 	AddBookGenre(ctx context.Context, bookID, genreID string) error
 	RemoveBookGenre(ctx context.Context, bookID, genreID string) error
 	GetGenreIDsForBook(ctx context.Context, bookID string) ([]string, error)
+	GetContributorsByBookIDs(ctx context.Context, bookIDs []string) (map[string][]domain.BookContributor, error)
+	GetSeriesByBookIDs(ctx context.Context, bookIDs []string) (map[string][]domain.BookSeries, error)
+	GetGenreIDsByBookIDs(ctx context.Context, bookIDs []string) (map[string][]string, error)
 	GetBookIDsForGenre(ctx context.Context, genreID string) ([]string, error)
 	GetBookIDsForGenreTree(ctx context.Context, genreID string) ([]string, error)
 	CreateGenreAlias(ctx context.Context, alias *domain.GenreAlias) error

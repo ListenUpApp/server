@@ -187,6 +187,32 @@ func (s *SyncService) GetBooksForSync(ctx context.Context, userID string, params
 	pageBooks := books[startIdx:endIdx]
 	hasMore := endIdx < total
 
+	// Batch-load contributor, series, and genre relationships before enrichment.
+	// GetBooksForUser does not load these — they must be populated explicitly.
+	if len(pageBooks) > 0 {
+		bookIDs := make([]string, len(pageBooks))
+		for i, b := range pageBooks {
+			bookIDs[i] = b.ID
+		}
+		contribMap, err := s.store.GetContributorsByBookIDs(ctx, bookIDs)
+		if err != nil {
+			return nil, fmt.Errorf("batch load contributors: %w", err)
+		}
+		seriesMap, err := s.store.GetSeriesByBookIDs(ctx, bookIDs)
+		if err != nil {
+			return nil, fmt.Errorf("batch load series: %w", err)
+		}
+		genreMap, err := s.store.GetGenreIDsByBookIDs(ctx, bookIDs)
+		if err != nil {
+			return nil, fmt.Errorf("batch load genres: %w", err)
+		}
+		for _, book := range pageBooks {
+			book.Contributors = contribMap[book.ID]
+			book.Series = seriesMap[book.ID]
+			book.GenreIDs = genreMap[book.ID]
+		}
+	}
+
 	// Enrich books with denormalized display fields.
 	enrichedBooks, err := s.enricher.EnrichBooks(ctx, pageBooks)
 	if err != nil {
