@@ -1010,3 +1010,113 @@ func (s *Store) FindABSImportProgressByListenUpBook(ctx context.Context, importI
 	}
 	return p, nil
 }
+
+// RecalculateSessionStatusesForBook recalculates session statuses for sessions
+// involving a specific book (abs_media_id). Much faster than full recalculation.
+func (s *Store) RecalculateSessionStatusesForBook(ctx context.Context, importID, absMediaID string) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE abs_import_sessions SET status = 'pending_book'
+		WHERE import_id = ?
+			AND abs_media_id = ?
+			AND status NOT IN ('imported', 'skipped')
+			AND abs_media_id NOT IN (
+				SELECT abs_media_id FROM abs_import_books
+				WHERE import_id = ? AND listenup_id IS NOT NULL
+			)`,
+		importID, absMediaID, importID)
+	if err != nil {
+		return fmt.Errorf("update pending_book sessions: %w", err)
+	}
+
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE abs_import_sessions SET status = 'ready'
+		WHERE import_id = ?
+			AND abs_media_id = ?
+			AND status NOT IN ('imported', 'skipped')
+			AND abs_user_id IN (
+				SELECT abs_user_id FROM abs_import_users
+				WHERE import_id = ? AND listenup_id IS NOT NULL
+			)
+			AND abs_media_id IN (
+				SELECT abs_media_id FROM abs_import_books
+				WHERE import_id = ? AND listenup_id IS NOT NULL
+			)`,
+		importID, absMediaID, importID, importID)
+	if err != nil {
+		return fmt.Errorf("update ready sessions: %w", err)
+	}
+
+	// Handle case where book mapping was cleared - sessions with unmapped user go to pending_user
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE abs_import_sessions SET status = 'pending_user'
+		WHERE import_id = ?
+			AND abs_media_id = ?
+			AND status NOT IN ('imported', 'skipped')
+			AND abs_user_id NOT IN (
+				SELECT abs_user_id FROM abs_import_users
+				WHERE import_id = ? AND listenup_id IS NOT NULL
+			)`,
+		importID, absMediaID, importID)
+	if err != nil {
+		return fmt.Errorf("update pending_user sessions: %w", err)
+	}
+
+	return nil
+}
+
+// RecalculateSessionStatusesForUser recalculates session statuses for sessions
+// involving a specific user (abs_user_id). Much faster than full recalculation.
+func (s *Store) RecalculateSessionStatusesForUser(ctx context.Context, importID, absUserID string) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE abs_import_sessions SET status = 'pending_user'
+		WHERE import_id = ?
+			AND abs_user_id = ?
+			AND status NOT IN ('imported', 'skipped')
+			AND abs_user_id NOT IN (
+				SELECT abs_user_id FROM abs_import_users
+				WHERE import_id = ? AND listenup_id IS NOT NULL
+			)`,
+		importID, absUserID, importID)
+	if err != nil {
+		return fmt.Errorf("update pending_user sessions: %w", err)
+	}
+
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE abs_import_sessions SET status = 'ready'
+		WHERE import_id = ?
+			AND abs_user_id = ?
+			AND status NOT IN ('imported', 'skipped')
+			AND abs_user_id IN (
+				SELECT abs_user_id FROM abs_import_users
+				WHERE import_id = ? AND listenup_id IS NOT NULL
+			)
+			AND abs_media_id IN (
+				SELECT abs_media_id FROM abs_import_books
+				WHERE import_id = ? AND listenup_id IS NOT NULL
+			)`,
+		importID, absUserID, importID, importID)
+	if err != nil {
+		return fmt.Errorf("update ready sessions: %w", err)
+	}
+
+	// Handle case where user mapping was cleared - sessions with unmapped book go to pending_book
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE abs_import_sessions SET status = 'pending_book'
+		WHERE import_id = ?
+			AND abs_user_id = ?
+			AND status NOT IN ('imported', 'skipped')
+			AND abs_user_id IN (
+				SELECT abs_user_id FROM abs_import_users
+				WHERE import_id = ? AND listenup_id IS NOT NULL
+			)
+			AND abs_media_id NOT IN (
+				SELECT abs_media_id FROM abs_import_books
+				WHERE import_id = ? AND listenup_id IS NOT NULL
+			)`,
+		importID, absUserID, importID, importID)
+	if err != nil {
+		return fmt.Errorf("update pending_book sessions: %w", err)
+	}
+
+	return nil
+}
