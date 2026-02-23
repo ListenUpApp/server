@@ -39,6 +39,22 @@ func (s *Store) setBookSeriesInternal(ctx context.Context, bookID string, series
 	return tx.Commit()
 }
 
+// setBookSeriesTx replaces all series links for a book within an existing transaction.
+func setBookSeriesTx(ctx context.Context, tx *sql.Tx, bookID string, series []domain.BookSeries) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM book_series WHERE book_id = ?`, bookID); err != nil {
+		return fmt.Errorf("delete book_series: %w", err)
+	}
+	for _, bs := range series {
+		_, err := tx.ExecContext(ctx, `INSERT INTO book_series (book_id, series_id, sequence) VALUES (?, ?, ?)`,
+			bookID, bs.SeriesID, nullString(bs.Sequence),
+		)
+		if err != nil {
+			return fmt.Errorf("insert book_series: %w", err)
+		}
+	}
+	return nil
+}
+
 // GetBookSeries returns all non-deleted series linked to a book.
 func (s *Store) GetBookSeries(ctx context.Context, bookID string) ([]domain.BookSeries, error) {
 	rows, err := s.db.QueryContext(ctx, `

@@ -351,6 +351,22 @@ func createBookTx(ctx context.Context, tx *sql.Tx, book *domain.Book) error {
 		return err
 	}
 
+	if len(book.Contributors) > 0 {
+		if err := setBookContributorsTx(ctx, tx, book.ID, book.Contributors); err != nil {
+			return fmt.Errorf("set contributors: %w", err)
+		}
+	}
+	if len(book.Series) > 0 {
+		if err := setBookSeriesTx(ctx, tx, book.ID, book.Series); err != nil {
+			return fmt.Errorf("set series: %w", err)
+		}
+	}
+	if len(book.GenreIDs) > 0 {
+		if err := setBookGenresTx(ctx, tx, book.ID, book.GenreIDs); err != nil {
+			return fmt.Errorf("set genres: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -583,6 +599,22 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 	}
 	if err := insertBookChapters(ctx, tx, book.ID, book.Chapters); err != nil {
 		return err
+	}
+
+	if len(book.Contributors) > 0 {
+		if err := setBookContributorsTx(ctx, tx, book.ID, book.Contributors); err != nil {
+			return fmt.Errorf("set contributors: %w", err)
+		}
+	}
+	if len(book.Series) > 0 {
+		if err := setBookSeriesTx(ctx, tx, book.ID, book.Series); err != nil {
+			return fmt.Errorf("set series: %w", err)
+		}
+	}
+	if len(book.GenreIDs) > 0 {
+		if err := setBookGenresTx(ctx, tx, book.ID, book.GenreIDs); err != nil {
+			return fmt.Errorf("set genres: %w", err)
+		}
 	}
 
 	return tx.Commit()
