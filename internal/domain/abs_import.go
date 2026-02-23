@@ -9,6 +9,7 @@ const (
 	ABSImportStatusActive    ABSImportStatus = "active"
 	ABSImportStatusCompleted ABSImportStatus = "completed"
 	ABSImportStatusArchived  ABSImportStatus = "archived"
+	ABSImportStatusAnalyzed  ABSImportStatus = "analyzed"
 	ABSImportStatusAnalyzing ABSImportStatus = "analyzing"
 	ABSImportStatusFailed    ABSImportStatus = "failed"
 )

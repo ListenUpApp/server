@@ -466,9 +466,15 @@ func (im *Importer) applyMediaProgressOverride(
 				}
 			}
 
-			// Apply authoritative values from ABS
-			state.CurrentPositionMs = int64(progress.CurrentTime * 1000)
-			state.IsFinished = progress.IsFinished
+			// Apply authoritative values from ABS — only advance position, never regress.
+			// Finished is a terminal state: ABS can set it but not unset it.
+			absPositionMs := int64(progress.CurrentTime * 1000)
+			if absPositionMs > state.CurrentPositionMs {
+				state.CurrentPositionMs = absPositionMs
+			}
+			if progress.IsFinished {
+				state.IsFinished = true
+			}
 			state.UpdatedAt = now
 			if progress.LastUpdate > 0 {
 				state.LastPlayedAt = time.UnixMilli(progress.LastUpdate)
