@@ -708,7 +708,7 @@ func (s *Server) runImportAnalysis(importID, backupPath string) {
 		setFailed(fmt.Errorf("failed to get import for final update: %w", err))
 		return
 	}
-	imp.Status = domain.ABSImportStatusActive
+	imp.Status = domain.ABSImportStatusAnalyzed
 	imp.TotalUsers = analysis.TotalUsers
 	imp.TotalBooks = analysis.TotalBooks
 	imp.TotalSessions = analysis.TotalSessions

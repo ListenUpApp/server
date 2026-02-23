@@ -166,7 +166,7 @@ func LoadConfig() (*Config, error) {
 	}
 
 	// Parse auth durations.
-	accessDurationStr := getConfigValue(*accessTokenDuration, "ACCESS_TOKEN_DURATION", "15m")
+	accessDurationStr := getConfigValue(*accessTokenDuration, "ACCESS_TOKEN_DURATION", "720h")
 	accessDuration, err := time.ParseDuration(accessDurationStr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid access token duration %q: %w", accessDurationStr, err)
