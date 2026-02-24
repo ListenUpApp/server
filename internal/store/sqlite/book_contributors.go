@@ -204,7 +204,7 @@ func (s *Store) ListAllBookContributorNames(ctx context.Context) (map[string][]s
 		FROM book_contributors bc
 		JOIN contributors c ON c.id = bc.contributor_id,
 		     json_each(bc.roles) je
-		WHERE je.value = author AND c.deleted_at IS NULL
+		WHERE je.value = 'author' AND c.deleted_at IS NULL
 	`)
 	if err != nil {
 		return nil, err
