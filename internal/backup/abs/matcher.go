@@ -222,6 +222,13 @@ func (m *Matcher) PreloadBooks(ctx context.Context) {
 		return
 	}
 
+	// Batch-load author names in a single query (avoids N+1 per-book lookups).
+	authorsByBook, err := m.store.ListAllBookContributorNames(ctx)
+	if err != nil {
+		m.logger.Warn("failed to load book author names", "error", err)
+		authorsByBook = make(map[string][]string)
+	}
+
 	for _, book := range books {
 
 		cached := &CachedBook{
@@ -232,13 +239,7 @@ func (m *Matcher) PreloadBooks(ctx context.Context) {
 			ISBN:          book.ISBN,
 			Path:          book.Path,
 			TotalDuration: book.TotalDuration,
-		}
-
-		// Load author names
-		for _, bc := range book.Contributors {
-			if contributor, err := m.store.GetContributor(ctx, bc.ContributorID); err == nil {
-				cached.Authors = append(cached.Authors, contributor.Name)
-			}
+			Authors:       authorsByBook[book.ID],
 		}
 
 		m.bookCache.all = append(m.bookCache.all, cached)

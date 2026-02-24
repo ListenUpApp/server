@@ -195,3 +195,29 @@ func (s *Store) GetContributorsByBookIDs(ctx context.Context, bookIDs []string) 
 	}
 	return result, rows.Err()
 }
+
+// ListAllBookContributorNames returns a map of bookID -> author names for all books.
+// Only includes contributors with role "author". Uses a single JOIN + json_each query (no N+1).
+func (s *Store) ListAllBookContributorNames(ctx context.Context) (map[string][]string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT bc.book_id, c.name
+		FROM book_contributors bc
+		JOIN contributors c ON c.id = bc.contributor_id,
+		     json_each(bc.roles) je
+		WHERE je.value = author AND c.deleted_at IS NULL
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string][]string)
+	for rows.Next() {
+		var bookID, name string
+		if err := rows.Scan(&bookID, &name); err != nil {
+			return nil, err
+		}
+		result[bookID] = append(result[bookID], name)
+	}
+	return result, rows.Err()
+}

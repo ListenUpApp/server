@@ -150,6 +150,9 @@ type Store interface {
 	MergeContributors(ctx context.Context, sourceID, targetID string) (*domain.Contributor, error)
 	UnmergeContributor(ctx context.Context, sourceID, aliasName string) (*domain.Contributor, error)
 	GetContributorBookIDMap(ctx context.Context) (map[string][]string, error)
+	// ListAllBookContributorNames returns a map of bookID -> author names for all books.
+	// Only includes contributors with role "author".
+	ListAllBookContributorNames(ctx context.Context) (map[string][]string, error)
 	GetBookIDsByContributor(ctx context.Context, contributorID string) ([]string, error)
 
 	// Series
