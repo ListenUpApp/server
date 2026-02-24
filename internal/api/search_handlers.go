@@ -19,6 +19,16 @@ func (s *Server) registerSearchRoutes() {
 		Tags:        []string{"Search"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleSearch)
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "admin-reindex-search",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/admin/search/reindex",
+		Summary:     "Rebuild search index",
+		Description: "Triggers a full rebuild of the search index. Runs asynchronously.",
+		Tags:        []string{"Admin"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleReindexSearch)
 }
 
 // === DTOs ===
@@ -186,4 +196,41 @@ func (s *Server) handleSearch(ctx context.Context, input *SearchInput) (*SearchO
 	resp.Total = int64(len(resp.Hits))
 
 	return &SearchOutput{Body: resp}, nil
+}
+
+func (s *Server) handleReindexSearch(ctx context.Context, _ *struct{}) (*struct {
+	Body struct {
+		Message string `json:"message"`
+	}
+}, error) {
+	userID, err := GetUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := s.store.GetUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !user.IsAdmin() {
+		return nil, huma.Error403Forbidden("admin access required")
+	}
+
+	go func() {
+		reindexCtx := context.Background()
+		if err := s.services.Search.ReindexAll(reindexCtx); err != nil {
+			s.logger.Error("reindex failed", "error", err)
+		} else {
+			count, _ := s.services.Search.DocumentCount()
+			s.logger.Info("reindex completed", "documents", count)
+		}
+	}()
+
+	resp := &struct {
+		Body struct {
+			Message string `json:"message"`
+		}
+	}{}
+	resp.Body.Message = "Reindex started"
+	return resp, nil
 }
