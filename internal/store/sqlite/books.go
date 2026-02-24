@@ -281,6 +281,25 @@ func coverArgs(img *domain.ImageFileInfo) (coverPath, coverFilename, coverFormat
 
 // CreateBook inserts a book row along with its audio files and chapters in a transaction.
 // Returns store.ErrAlreadyExists on duplicate ID or path.
+// indexBookAsync triggers a non-blocking search index update for a book.
+// Errors are logged but do not fail the caller.
+func (s *Store) indexBookAsync(ctx context.Context, book *domain.Book) {
+	go func() {
+		if err := s.searchIndexer.IndexBook(ctx, book); err != nil {
+			s.logger.Warn("failed to index book", "book_id", book.ID, "error", err)
+		}
+	}()
+}
+
+// deleteBookFromIndexAsync triggers a non-blocking search index removal.
+func (s *Store) deleteBookFromIndexAsync(ctx context.Context, id string) {
+	go func() {
+		if err := s.searchIndexer.DeleteBook(ctx, id); err != nil {
+			s.logger.Warn("failed to delete book from index", "book_id", id, "error", err)
+		}
+	}()
+}
+
 func (s *Store) CreateBook(ctx context.Context, book *domain.Book) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -292,7 +311,11 @@ func (s *Store) CreateBook(ctx context.Context, book *domain.Book) error {
 		return err
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.indexBookAsync(ctx, book)
+	return nil
 }
 
 // createBookTx inserts a book and its audio files/chapters using the provided transaction.
@@ -617,7 +640,11 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 		}
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.indexBookAsync(ctx, book)
+	return nil
 }
 
 // DeleteBook performs a soft delete by setting deleted_at and updated_at.
@@ -640,6 +667,7 @@ func (s *Store) DeleteBook(ctx context.Context, id string) error {
 	if n == 0 {
 		return store.ErrNotFound
 	}
+	s.deleteBookFromIndexAsync(ctx, id)
 	return nil
 }
 
