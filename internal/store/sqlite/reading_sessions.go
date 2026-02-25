@@ -310,7 +310,6 @@ func (s *Store) GetAllActiveSessions(ctx context.Context) ([]*domain.BookReading
 	return sessions, nil
 }
 
-
 // GetAllReadingSessions returns ALL reading sessions across all users (active, completed, and abandoned).
 // Unlike GetAllActiveSessions, this does not filter on finished_at, so it includes
 // completed and abandoned sessions. Used for the Readers section sync endpoint.

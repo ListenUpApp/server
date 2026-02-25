@@ -484,7 +484,6 @@ func (s *Server) handleGetSyncActiveSessions(ctx context.Context, _ *GetSyncActi
 	}, nil
 }
 
-
 // GetSyncReadingSessionsInput is the input for the reading sessions sync endpoint.
 type GetSyncReadingSessionsInput struct {
 	Authorization string `header:"Authorization"`
