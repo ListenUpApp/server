@@ -146,6 +146,26 @@ func (s *SearchService) ReindexAll(ctx context.Context) error {
 		return fmt.Errorf("list books: %w", err)
 	}
 
+	// Batch-load contributors for all books to avoid N+1 and ensure author names are populated.
+	// ListAllBooks intentionally omits contributors for performance; we load them here in one shot.
+	bookIDs := make([]string, 0, len(books))
+	for _, book := range books {
+		if !book.IsDeleted() {
+			bookIDs = append(bookIDs, book.ID)
+		}
+	}
+	bookContributorsMap, err := s.store.GetContributorsByBookIDs(ctx, bookIDs)
+	if err != nil {
+		s.logger.Warn("failed to batch-load book contributors for reindex", "error", err)
+		bookContributorsMap = map[string][]domain.BookContributor{}
+	}
+	// Inject pre-loaded contributors into each book struct so buildBookDocument finds them.
+	for _, book := range books {
+		if contributors, ok := bookContributorsMap[book.ID]; ok {
+			book.Contributors = contributors
+		}
+	}
+
 	bookDocs := make([]*search.SearchDocument, 0, len(books))
 	for _, book := range books {
 		if book.IsDeleted() {
