@@ -20,12 +20,16 @@ func (s *Server) registerSearchRoutes() {
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleSearch)
 
+	// Manual reindex for recovery: index corruption, upgrades from pre-search
+	// versions, or any scenario where the index diverges from the database.
+	// Normal book writes (including batch scanner flushes) auto-index, so this
+	// endpoint should rarely be needed.
 	huma.Register(s.api, huma.Operation{
 		OperationID: "admin-reindex-search",
 		Method:      http.MethodPost,
 		Path:        "/api/v1/admin/search/reindex",
 		Summary:     "Rebuild search index",
-		Description: "Triggers a full rebuild of the search index. Runs asynchronously.",
+		Description: "Triggers a full rebuild of the search index. Runs asynchronously. Use for recovery after index corruption or version upgrades.",
 		Tags:        []string{"Admin"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleReindexSearch)
