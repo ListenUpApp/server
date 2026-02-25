@@ -249,3 +249,97 @@ func TestUpdateReadingSession_NotFound(t *testing.T) {
 		t.Errorf("expected status %d, got %d", store.ErrNotFound.Code, storeErr.Code)
 	}
 }
+
+func TestGetAllReadingSessions(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	insertTestUser(t, s, "user-all-rs-1")
+	insertTestUser(t, s, "user-all-rs-2")
+	insertTestBook(t, s, "book-all-rs-1", "All Sessions Book 1", "/books/all-rs-1")
+	insertTestBook(t, s, "book-all-rs-2", "All Sessions Book 2", "/books/all-rs-2")
+
+	now := time.Now().UTC()
+	finishedAt := now.Add(-10 * time.Minute)
+
+	// Active session (finished_at IS NULL).
+	active := &domain.BookReadingSession{
+		ID:            "all-rs-active",
+		UserID:        "user-all-rs-1",
+		BookID:        "book-all-rs-1",
+		StartedAt:     now.Add(-1 * time.Hour),
+		FinishedAt:    nil,
+		IsCompleted:   false,
+		FinalProgress: 0.50,
+		ListenTimeMs:  60000,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+
+	// Completed session (finished_at set, is_completed true).
+	completed := &domain.BookReadingSession{
+		ID:            "all-rs-completed",
+		UserID:        "user-all-rs-1",
+		BookID:        "book-all-rs-1",
+		StartedAt:     now.Add(-2 * time.Hour),
+		FinishedAt:    &finishedAt,
+		IsCompleted:   true,
+		FinalProgress: 1.0,
+		ListenTimeMs:  180000,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+
+	// Abandoned session (finished_at set, is_completed false).
+	abandoned := &domain.BookReadingSession{
+		ID:            "all-rs-abandoned",
+		UserID:        "user-all-rs-2",
+		BookID:        "book-all-rs-2",
+		StartedAt:     now.Add(-3 * time.Hour),
+		FinishedAt:    &finishedAt,
+		IsCompleted:   false,
+		FinalProgress: 0.30,
+		ListenTimeMs:  45000,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+
+	for _, rs := range []*domain.BookReadingSession{active, completed, abandoned} {
+		if err := s.CreateReadingSession(ctx, rs); err != nil {
+			t.Fatalf("CreateReadingSession(%s): %v", rs.ID, err)
+		}
+	}
+
+	// GetAllReadingSessions should return ALL sessions (active + completed + abandoned).
+	sessions, err := s.GetAllReadingSessions(ctx)
+	if err != nil {
+		t.Fatalf("GetAllReadingSessions: %v", err)
+	}
+
+	if len(sessions) != 3 {
+		t.Fatalf("expected 3 sessions, got %d", len(sessions))
+	}
+
+	// Should be ordered by started_at DESC — active first, then completed, then abandoned.
+	if sessions[0].ID != "all-rs-active" {
+		t.Errorf("sessions[0].ID: got %q, want %q", sessions[0].ID, "all-rs-active")
+	}
+	if sessions[1].ID != "all-rs-completed" {
+		t.Errorf("sessions[1].ID: got %q, want %q", sessions[1].ID, "all-rs-completed")
+	}
+	if sessions[2].ID != "all-rs-abandoned" {
+		t.Errorf("sessions[2].ID: got %q, want %q", sessions[2].ID, "all-rs-abandoned")
+	}
+
+	// Verify that GetAllActiveSessions only returns the active one (existing behavior).
+	activeSessions, err := s.GetAllActiveSessions(ctx)
+	if err != nil {
+		t.Fatalf("GetAllActiveSessions: %v", err)
+	}
+	if len(activeSessions) != 1 {
+		t.Fatalf("expected 1 active session, got %d", len(activeSessions))
+	}
+	if activeSessions[0].ID != "all-rs-active" {
+		t.Errorf("active session ID: got %q, want %q", activeSessions[0].ID, "all-rs-active")
+	}
+}

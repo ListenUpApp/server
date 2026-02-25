@@ -310,6 +310,32 @@ func (s *Store) GetAllActiveSessions(ctx context.Context) ([]*domain.BookReading
 	return sessions, nil
 }
 
+// GetAllReadingSessions returns ALL reading sessions across all users (active, completed, and abandoned).
+// Unlike GetAllActiveSessions, this does not filter on finished_at, so it includes
+// completed and abandoned sessions. Used for the Readers section sync endpoint.
+func (s *Store) GetAllReadingSessions(ctx context.Context) ([]*domain.BookReadingSession, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+readingSessionColumns+` FROM book_reading_sessions
+		ORDER BY started_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sessions []*domain.BookReadingSession
+	for rows.Next() {
+		rs, err := scanReadingSession(rows)
+		if err != nil {
+			return nil, err
+		}
+		sessions = append(sessions, rs)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return sessions, nil
+}
+
 // CleanupStaleSessions marks reading sessions as finished if they've been active
 // longer than maxAge. Returns the number of sessions cleaned up.
 func (s *Store) CleanupStaleSessions(ctx context.Context, maxAge time.Duration) (int, error) {
