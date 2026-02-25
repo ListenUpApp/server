@@ -64,6 +64,16 @@ func (s *Server) registerSyncRoutes() {
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.handleGetSyncActiveSessions)
 
+	huma.Register(s.api, huma.Operation{
+		OperationID: "getSyncReadingSessions",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/sync/reading-sessions",
+		Summary:     "Get all reading sessions",
+		Description: "Returns all reading sessions (active, completed, and abandoned) for populating the Readers section during sync",
+		Tags:        []string{"Sync"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, s.handleGetSyncReadingSessions)
+
 	// NOTE: SSE endpoint registered directly on chi (not Huma) because Huma doesn't support SSE.
 	// Route: GET /api/v1/sync/events - Server-Sent Events for real-time sync notifications
 	// SSE endpoint (handled via chi directly, not huma)
@@ -468,6 +478,100 @@ func (s *Server) handleGetSyncActiveSessions(ctx context.Context, _ *GetSyncActi
 	}
 
 	return &SyncActiveSessionsOutput{
+		Body: SyncActiveSessionsResponse{
+			Sessions: resp,
+		},
+	}, nil
+}
+
+
+// GetSyncReadingSessionsInput is the input for the reading sessions sync endpoint.
+type GetSyncReadingSessionsInput struct {
+	Authorization string `header:"Authorization"`
+}
+
+// SyncReadingSessionsOutput wraps the reading sessions response for Huma.
+type SyncReadingSessionsOutput struct {
+	Body SyncActiveSessionsResponse
+}
+
+// handleGetSyncReadingSessions returns ALL reading sessions (active, completed, and abandoned)
+// for populating the Readers section on book detail pages.
+func (s *Server) handleGetSyncReadingSessions(ctx context.Context, _ *GetSyncReadingSessionsInput) (*SyncReadingSessionsOutput, error) {
+	userID, err := GetUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	allSessions, err := s.store.GetAllReadingSessions(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter sessions to only include books the user can access
+	accessibleSessions := make([]*domain.BookReadingSession, 0, len(allSessions))
+	for _, session := range allSessions {
+		canAccess, err := s.store.CanUserAccessBook(ctx, userID, session.BookID)
+		if err != nil {
+			continue // Skip sessions we can't verify access for
+		}
+		if canAccess {
+			accessibleSessions = append(accessibleSessions, session)
+		}
+	}
+
+	// Collect unique user IDs for batch fetching
+	userIDSet := make(map[string]bool, len(accessibleSessions))
+	for _, session := range accessibleSessions {
+		userIDSet[session.UserID] = true
+	}
+	userIDs := make([]string, 0, len(userIDSet))
+	for id := range userIDSet {
+		userIDs = append(userIDs, id)
+	}
+
+	// Batch fetch all users and profiles
+	users, err := s.store.GetUsersByIDs(ctx, userIDs)
+	if err != nil {
+		return nil, err
+	}
+	userMap := make(map[string]*domain.User, len(users))
+	for _, user := range users {
+		userMap[user.ID] = user
+	}
+
+	profiles, err := s.store.GetUserProfilesByIDs(ctx, userIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := make([]SyncActiveSessionResponse, 0, len(accessibleSessions))
+	for _, session := range accessibleSessions {
+		user, ok := userMap[session.UserID]
+		if !ok {
+			continue
+		}
+
+		profile, ok := profiles[session.UserID]
+		if !ok {
+			profile = &domain.UserProfile{
+				AvatarType: domain.AvatarTypeAuto,
+			}
+		}
+
+		resp = append(resp, SyncActiveSessionResponse{
+			SessionID:   session.ID,
+			UserID:      session.UserID,
+			BookID:      session.BookID,
+			StartedAt:   session.StartedAt,
+			DisplayName: user.DisplayName,
+			AvatarType:  string(profile.AvatarType),
+			AvatarValue: profile.AvatarValue,
+			AvatarColor: color.ForUser(session.UserID),
+		})
+	}
+
+	return &SyncReadingSessionsOutput{
 		Body: SyncActiveSessionsResponse{
 			Sessions: resp,
 		},

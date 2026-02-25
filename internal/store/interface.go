@@ -272,6 +272,7 @@ type Store interface {
 	GetUserBookSessions(ctx context.Context, userID, bookID string) ([]*domain.BookReadingSession, error)
 	GetBookSessions(ctx context.Context, bookID string) ([]*domain.BookReadingSession, error)
 	GetAllActiveSessions(ctx context.Context) ([]*domain.BookReadingSession, error)
+	GetAllReadingSessions(ctx context.Context) ([]*domain.BookReadingSession, error)
 	CleanupStaleSessions(ctx context.Context, maxAge time.Duration) (int, error)
 	ListAllSessions(ctx context.Context) iter.Seq2[*domain.BookReadingSession, error]
 
