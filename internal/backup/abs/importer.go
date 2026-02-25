@@ -475,6 +475,17 @@ func (im *Importer) applyMediaProgressOverride(
 			if progress.IsFinished {
 				state.IsFinished = true
 			}
+			// Mirror ABS "hide from continue listening" flag.
+			if progress.HideFromContinue {
+				state.IsFinished = true
+			}
+			// Treat near-complete books (within 10 min of end) as finished.
+			// ABS sometimes misses the final tracking segment, leaving books at 97-98%
+			// indefinitely. A time-based threshold (not percentage) works for all lengths.
+			const nearCompleteThresholdSecs = 600 // 10 minutes
+			if !state.IsFinished && progress.Duration > 0 && (progress.Duration-progress.CurrentTime) <= nearCompleteThresholdSecs {
+				state.IsFinished = true
+			}
 			state.UpdatedAt = now
 			if progress.LastUpdate > 0 {
 				state.LastPlayedAt = time.UnixMilli(progress.LastUpdate)
@@ -482,8 +493,9 @@ func (im *Importer) applyMediaProgressOverride(
 				state.LastPlayedAt = now
 			}
 
-			if progress.IsFinished {
-				if progress.FinishedAt > 0 {
+			// Set FinishedAt for any finishing path (explicit, hideFromContinue, or near-complete).
+			if state.IsFinished && state.FinishedAt == nil {
+				if progress.IsFinished && progress.FinishedAt > 0 {
 					finishedAt := time.UnixMilli(progress.FinishedAt)
 					state.FinishedAt = &finishedAt
 				} else {
