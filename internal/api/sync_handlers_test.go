@@ -160,3 +160,32 @@ func TestGetSyncSeries_Unauthorized(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnauthorized, resp.Code)
 }
+
+func TestGetSyncReadingSessions_Success(t *testing.T) {
+	ts := setupTestServer(t)
+	defer ts.cleanup()
+
+	token := ts.createTestUserAndLogin(t)
+
+	resp := ts.api.Get("/api/v1/sync/reading-sessions",
+		"Authorization: Bearer "+token)
+
+	assert.Equal(t, http.StatusOK, resp.Code)
+
+	var envelope testEnvelope[SyncActiveSessionsResponse]
+	err := json.Unmarshal(resp.Body.Bytes(), &envelope)
+	require.NoError(t, err)
+
+	assert.True(t, envelope.Success)
+	// No sessions initially
+	assert.Empty(t, envelope.Data.Sessions)
+}
+
+func TestGetSyncReadingSessions_Unauthorized(t *testing.T) {
+	ts := setupTestServer(t)
+	defer ts.cleanup()
+
+	resp := ts.api.Get("/api/v1/sync/reading-sessions")
+
+	assert.Equal(t, http.StatusUnauthorized, resp.Code)
+}
