@@ -186,13 +186,23 @@ func TestPlaybackState_DetectsCompletion(t *testing.T) {
 	}{
 		{
 			name:         "50% - not finished",
-			positionMs:   1800000,
+			positionMs:   1800000, // 1800s remaining, well outside 10-min window
 			wantFinished: false,
 		},
 		{
-			name:         "98% - not finished",
-			positionMs:   3528000,
+			name:         "just outside 10-min window - not finished",
+			positionMs:   2999999, // 600001ms remaining
 			wantFinished: false,
+		},
+		{
+			name:         "exactly 10 min from end - finished",
+			positionMs:   3000000, // 600000ms remaining = exactly the threshold
+			wantFinished: true,
+		},
+		{
+			name:         "98% - finished (within 10 min)",
+			positionMs:   3528000, // 72s remaining, well within 10-min window
+			wantFinished: true,
 		},
 		{
 			name:         "99% - finished",

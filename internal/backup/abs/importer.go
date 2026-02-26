@@ -99,7 +99,7 @@ func (im *Importer) Import(
 	}
 
 	// 3. Create reading sessions from progress data (for "readers" section)
-	if opts.ImportProgress {
+	if opts.ImportProgress || opts.ImportSessions {
 		if err := im.createReadingSessions(ctx, backup, userMap, bookMap, result); err != nil {
 			return result, fmt.Errorf("create reading sessions: %w", err)
 		}
@@ -485,6 +485,19 @@ func (im *Importer) applyMediaProgressOverride(
 			const nearCompleteThresholdSecs = 600 // 10 minutes
 			if !state.IsFinished && progress.Duration > 0 && (progress.Duration-progress.CurrentTime) <= nearCompleteThresholdSecs {
 				state.IsFinished = true
+			}
+			// Secondary check: use ListenUp's own book duration (more reliable than ABS duration).
+			// ABS and ListenUp can differ by up to ~2% due to different audio duration parsers,
+			// causing the ABS-duration check above to miss books that are near complete in
+			// ListenUp terms. This catch-all ensures consistent 10-minute threshold regardless.
+			if !state.IsFinished {
+				book, bookErr := im.store.GetBookNoAccessCheck(ctx, listenUpBookID)
+				if bookErr == nil && book.TotalDuration > 0 {
+					remainingMs := book.TotalDuration - state.CurrentPositionMs
+					if remainingMs <= nearCompleteThresholdSecs*1000 {
+						state.IsFinished = true
+					}
+				}
 			}
 			state.UpdatedAt = now
 			if progress.LastUpdate > 0 {

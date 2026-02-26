@@ -65,7 +65,7 @@ func NewPlaybackState(event *ListeningEvent, bookDurationMs int64) *PlaybackStat
 		UpdatedAt:         time.Now(),
 	}
 
-	// Check completion (99% threshold)
+	// Check completion (10-minute near-end threshold)
 	state.checkCompletion(bookDurationMs)
 
 	return state
@@ -88,20 +88,23 @@ func (s *PlaybackState) UpdateFromEvent(event *ListeningEvent, bookDurationMs in
 		s.LastPlayedAt = event.EndedAt
 	}
 
-	// Check completion
+	// Check completion (10-minute near-end threshold)
 	s.checkCompletion(bookDurationMs)
 
 	s.UpdatedAt = time.Now()
 }
 
-// checkCompletion marks the book as finished if position >= 99% of duration.
+// checkCompletion marks the book as finished if within 10 minutes of the end.
+// Uses a time-based threshold (not percentage) so it works for books of any length.
+// Consistent with applyMediaProgressOverride in the ABS importer.
 func (s *PlaybackState) checkCompletion(bookDurationMs int64) {
 	if bookDurationMs <= 0 {
 		return
 	}
 
-	threshold := float64(bookDurationMs) * 0.99
-	if float64(s.CurrentPositionMs) >= threshold {
+	const nearCompleteMs int64 = 600_000 // 10 minutes in milliseconds
+	remaining := bookDurationMs - s.CurrentPositionMs
+	if remaining <= nearCompleteMs {
 		s.IsFinished = true
 		now := time.Now()
 		s.FinishedAt = &now
