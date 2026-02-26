@@ -211,8 +211,8 @@ func TestApplyMediaProgressOverride(t *testing.T) {
 							LibraryItemID: "abs-item-5",
 							MediaItemType: "book",
 							Progress:      0.98,
-							CurrentTime:   13144, // 98% of ListenUp duration (13412s)
-							Duration:      14500, // ABS thinks longer: 13144/14500=90.6%, >10min from end
+							CurrentTime:   13310, // 102s from ListenUp end (within 2 min)
+							Duration:      14500, // ABS thinks longer: 13310/14500=91.8%, >2min from ABS end
 							IsFinished:    false, // ABS didn't mark it finished
 							LastUpdate:    1704067200000,
 							StartedAt:     1704000000000,
@@ -223,11 +223,11 @@ func TestApplyMediaProgressOverride(t *testing.T) {
 			userMap: map[string]string{"abs-user-1": "lu-user-1"},
 			bookMap: map[string]string{"abs-item-5": "lu-book-5"},
 			books: map[string]*domain.Book{
-				"lu-book-5": {TotalDuration: 13412654}, // 13412s, 13144s is 98% of this
+				"lu-book-5": {TotalDuration: 13412654}, // 13412s, 13310s leaves 102s (1.7 min) remaining
 			},
 			wantOverrides:  1,
 			wantFinished:   map[string]bool{"lu-user-1:lu-book-5": true},
-			wantPositionMs: map[string]int64{"lu-user-1:lu-book-5": 13144000},
+			wantPositionMs: map[string]int64{"lu-user-1:lu-book-5": 13310000},
 		},
 	}
 

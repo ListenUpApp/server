@@ -482,7 +482,7 @@ func (im *Importer) applyMediaProgressOverride(
 			// Treat near-complete books (within 10 min of end) as finished.
 			// ABS sometimes misses the final tracking segment, leaving books at 97-98%
 			// indefinitely. A time-based threshold (not percentage) works for all lengths.
-			const nearCompleteThresholdSecs = 600 // 10 minutes
+			const nearCompleteThresholdSecs = 120 // 2 minutes
 			if !state.IsFinished && progress.Duration > 0 && (progress.Duration-progress.CurrentTime) <= nearCompleteThresholdSecs {
 				state.IsFinished = true
 			}
