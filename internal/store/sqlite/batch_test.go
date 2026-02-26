@@ -22,7 +22,7 @@ func (s *spySearchIndexer) IndexBook(_ context.Context, book *domain.Book) error
 	return nil
 }
 
-func (s *spySearchIndexer) DeleteBook(_ context.Context, _ string) error               { return nil }
+func (s *spySearchIndexer) DeleteBook(_ context.Context, _ string) error { return nil }
 func (s *spySearchIndexer) IndexContributor(_ context.Context, _ *domain.Contributor) error {
 	return nil
 }
