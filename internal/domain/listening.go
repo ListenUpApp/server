@@ -102,7 +102,7 @@ func (s *PlaybackState) checkCompletion(bookDurationMs int64) {
 		return
 	}
 
-	const nearCompleteMs int64 = 600_000 // 10 minutes in milliseconds
+	const nearCompleteMs int64 = 120_000 // 2 minutes in milliseconds
 	remaining := bookDurationMs - s.CurrentPositionMs
 	if remaining <= nearCompleteMs {
 		s.IsFinished = true

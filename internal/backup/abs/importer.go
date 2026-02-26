@@ -482,21 +482,23 @@ func (im *Importer) applyMediaProgressOverride(
 			// Treat near-complete books (within 10 min of end) as finished.
 			// ABS sometimes misses the final tracking segment, leaving books at 97-98%
 			// indefinitely. A time-based threshold (not percentage) works for all lengths.
-			const nearCompleteThresholdSecs = 600 // 10 minutes
+			const nearCompleteThresholdSecs = 120 // 2 minutes
 			if !state.IsFinished && progress.Duration > 0 && (progress.Duration-progress.CurrentTime) <= nearCompleteThresholdSecs {
 				state.IsFinished = true
 			}
+			// Fetch book for secondary near-complete check and SSE emission.
+			// Done unconditionally so TotalDuration is available for SSE regardless of
+			// which finishing path (explicit, ABS near-complete, or LU near-complete) triggered.
+			book, _ := im.store.GetBookNoAccessCheck(ctx, listenUpBookID)
+
 			// Secondary check: use ListenUp's own book duration (more reliable than ABS duration).
 			// ABS and ListenUp can differ by up to ~2% due to different audio duration parsers,
 			// causing the ABS-duration check above to miss books that are near complete in
-			// ListenUp terms. This catch-all ensures consistent 10-minute threshold regardless.
-			if !state.IsFinished {
-				book, bookErr := im.store.GetBookNoAccessCheck(ctx, listenUpBookID)
-				if bookErr == nil && book.TotalDuration > 0 {
-					remainingMs := book.TotalDuration - state.CurrentPositionMs
-					if remainingMs <= nearCompleteThresholdSecs*1000 {
-						state.IsFinished = true
-					}
+			// ListenUp terms. This catch-all ensures consistent 2-minute threshold regardless.
+			if !state.IsFinished && book != nil && book.TotalDuration > 0 {
+				remainingMs := book.TotalDuration - state.CurrentPositionMs
+				if remainingMs <= nearCompleteThresholdSecs*1000 {
+					state.IsFinished = true
 				}
 			}
 			state.UpdatedAt = now
@@ -531,8 +533,14 @@ func (im *Importer) applyMediaProgressOverride(
 				"book_id", listenUpBookID,
 				"progress", progress.Progress,
 				"position_ms", int64(progress.CurrentTime*1000),
-				"is_finished", progress.IsFinished,
+				"is_finished", state.IsFinished,
 			)
+
+			// Emit SSE so connected clients update their Continue Listening section immediately.
+			// Without this, clients only see the updated isFinished flag after the next full sync.
+			if im.events != nil && book != nil {
+				im.events.Emit(sse.NewProgressUpdatedEvent(listenUpUserID, state, book.TotalDuration))
+			}
 		}
 	}
 
