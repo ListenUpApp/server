@@ -13,6 +13,7 @@ import (
 type mockStore struct {
 	store.Store
 	states map[string]*domain.PlaybackState
+	books  map[string]*domain.Book // optional: set to test secondary near-complete check
 }
 
 func newMockStore() *mockStore {
@@ -33,6 +34,17 @@ func (m *mockStore) UpsertState(_ context.Context, state *domain.PlaybackState) 
 	return nil
 }
 
+// books can be set per-test to provide a known TotalDuration for secondary near-complete check.
+// When nil, returns a book with TotalDuration=0 so the secondary check is skipped.
+func (m *mockStore) GetBookNoAccessCheck(_ context.Context, bookID string) (*domain.Book, error) {
+	if m.books != nil {
+		if b, ok := m.books[bookID]; ok {
+			return b, nil
+		}
+	}
+	return &domain.Book{}, nil
+}
+
 func TestApplyMediaProgressOverride(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -40,6 +52,7 @@ func TestApplyMediaProgressOverride(t *testing.T) {
 		userMap        map[string]string
 		bookMap        map[string]string
 		existingStates map[string]*domain.PlaybackState
+		books          map[string]*domain.Book // optional: populate mockStore.books
 		wantOverrides  int
 		wantFinished   map[string]bool  // key -> isFinished
 		wantPositionMs map[string]int64 // key -> currentPositionMs
@@ -184,6 +197,38 @@ func TestApplyMediaProgressOverride(t *testing.T) {
 			wantFinished:   map[string]bool{},
 			wantPositionMs: map[string]int64{},
 		},
+		{
+			// Regression: ABS duration can be ~2% longer than ListenUp duration.
+			// A book at 98% of ListenUp duration is only 96% of ABS duration,
+			// so the primary (ABS-based) near-complete check misses it.
+			// The secondary check using ListenUp's own book duration catches it.
+			name: "near-complete via ListenUp duration when ABS duration is longer",
+			users: []User{
+				{
+					ID: "abs-user-1", Username: "frank", Type: "user",
+					Progress: []MediaProgress{
+						{
+							LibraryItemID: "abs-item-5",
+							MediaItemType: "book",
+							Progress:      0.98,
+							CurrentTime:   13144,  // 98% of ListenUp duration (13412s)
+							Duration:      14500,  // ABS thinks longer: 13144/14500=90.6%, >10min from end
+							IsFinished:    false,  // ABS didn't mark it finished
+							LastUpdate:    1704067200000,
+							StartedAt:     1704000000000,
+						},
+					},
+				},
+			},
+			userMap: map[string]string{"abs-user-1": "lu-user-1"},
+			bookMap: map[string]string{"abs-item-5": "lu-book-5"},
+			books: map[string]*domain.Book{
+				"lu-book-5": {TotalDuration: 13412654}, // 13412s, 13144s is 98% of this
+			},
+			wantOverrides:  1,
+			wantFinished:   map[string]bool{"lu-user-1:lu-book-5": true},
+			wantPositionMs: map[string]int64{"lu-user-1:lu-book-5": 13144000},
+		},
 	}
 
 	for _, tt := range tests {
@@ -192,6 +237,10 @@ func TestApplyMediaProgressOverride(t *testing.T) {
 			// Seed existing states
 			for k, v := range tt.existingStates {
 				ms.states[k] = v
+			}
+			// Seed books for secondary near-complete check
+			if tt.books != nil {
+				ms.books = tt.books
 			}
 
 			im := NewImporter(ms, nil, slog.Default())
