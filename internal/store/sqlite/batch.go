@@ -71,6 +71,10 @@ func (bw *sqliteBatchWriter) Flush(ctx context.Context) error {
 		return fmt.Errorf("commit batch: %w", err)
 	}
 
+	for _, book := range books {
+		bw.store.indexBookAsync(ctx, book)
+	}
+
 	bw.mu.Lock()
 	bw.count += len(books)
 	bw.mu.Unlock()
