@@ -211,9 +211,9 @@ func TestApplyMediaProgressOverride(t *testing.T) {
 							LibraryItemID: "abs-item-5",
 							MediaItemType: "book",
 							Progress:      0.98,
-							CurrentTime:   13144,  // 98% of ListenUp duration (13412s)
-							Duration:      14500,  // ABS thinks longer: 13144/14500=90.6%, >10min from end
-							IsFinished:    false,  // ABS didn't mark it finished
+							CurrentTime:   13144, // 98% of ListenUp duration (13412s)
+							Duration:      14500, // ABS thinks longer: 13144/14500=90.6%, >10min from end
+							IsFinished:    false, // ABS didn't mark it finished
 							LastUpdate:    1704067200000,
 							StartedAt:     1704000000000,
 						},
