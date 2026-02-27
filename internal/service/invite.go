@@ -166,7 +166,11 @@ func (s *InviteService) GetInviteDetails(ctx context.Context, code string) (*Inv
 	}
 
 	// Get server name (from instance settings)
-	serverName := "ListenUp Server" // TODO: Get from instance settings
+	serverName := "ListenUp Server" // fallback
+	instance, instanceErr := s.store.GetInstance(ctx)
+	if instanceErr == nil && instance.Name != "" {
+		serverName = instance.Name
+	}
 
 	return &InviteDetailsResponse{
 		Name:       invite.Name,
