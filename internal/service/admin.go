@@ -182,7 +182,16 @@ func (s *AdminService) DeleteUser(ctx context.Context, adminUserID, targetUserID
 		}
 	}
 
-	// TODO: Invalidate all user sessions
+	// Invalidate all user sessions so the deleted user cannot continue using stale tokens
+	if err := s.store.DeleteAllUserSessions(ctx, targetUserID); err != nil {
+		if s.logger != nil {
+			s.logger.Warn("Failed to invalidate sessions for deleted user",
+				"user_id", targetUserID,
+				"error", err,
+			)
+		}
+		// Non-fatal: user is already deleted and will fail auth on next token refresh
+	}
 
 	if s.logger != nil {
 		s.logger.Info("User deleted by admin",
