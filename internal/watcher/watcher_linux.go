@@ -17,16 +17,17 @@ import (
 
 // linuxBackend implements Backend using Linux inotify with IN_CLOSE_WRITE.
 type linuxBackend struct {
-	logger  *slog.Logger
-	watches map[string]int
-	wdPaths map[int]string
-	events  chan Event
-	errors  chan error
-	done    chan struct{}
-	opts    Options
-	wg      sync.WaitGroup
-	fd      int
-	mu      sync.RWMutex
+	logger     *slog.Logger
+	watches    map[string]int
+	wdPaths    map[int]string
+	knownFiles map[string]struct{}
+	events     chan Event
+	errors     chan error
+	done       chan struct{}
+	opts       Options
+	wg         sync.WaitGroup
+	fd         int
+	mu         sync.RWMutex
 }
 
 // newLinuxBackend creates a new Linux-specific file watcher backend.
@@ -38,14 +39,15 @@ func newLinuxBackend(logger *slog.Logger, opts Options) (*linuxBackend, error) {
 	}
 
 	return &linuxBackend{
-		logger:  logger,
-		opts:    opts,
-		fd:      fd,
-		watches: make(map[string]int),
-		wdPaths: make(map[int]string),
-		events:  make(chan Event, 100),
-		errors:  make(chan error, 10),
-		done:    make(chan struct{}),
+		logger:     logger,
+		opts:       opts,
+		fd:         fd,
+		watches:    make(map[string]int),
+		wdPaths:    make(map[int]string),
+		knownFiles: make(map[string]struct{}),
+		events:     make(chan Event, 100),
+		errors:     make(chan error, 10),
+		done:       make(chan struct{}),
 	}, nil
 }
 
@@ -253,6 +255,9 @@ func (b *linuxBackend) processEvent(path string, mask uint32) {
 	// Handle file/directory deletion (something deleted FROM this directory).
 	if mask&unix.IN_DELETE != 0 {
 		b.logger.Debug("IN_DELETE event", "path", path)
+		b.mu.Lock()
+		delete(b.knownFiles, path)
+		b.mu.Unlock()
 		b.emitEvent(Event{
 			Type: EventRemoved,
 			Path: path,
@@ -263,6 +268,9 @@ func (b *linuxBackend) processEvent(path string, mask uint32) {
 	// Handle watched directory itself being deleted.
 	if mask&unix.IN_DELETE_SELF != 0 {
 		b.logger.Debug("IN_DELETE_SELF event", "path", path)
+		b.mu.Lock()
+		delete(b.knownFiles, path)
+		b.mu.Unlock()
 		b.emitEvent(Event{
 			Type: EventRemoved,
 			Path: path,
@@ -275,6 +283,9 @@ func (b *linuxBackend) processEvent(path string, mask uint32) {
 	// Handle file/directory moved OUT of watched directory.
 	if mask&unix.IN_MOVED_FROM != 0 {
 		b.logger.Debug("IN_MOVED_FROM event", "path", path)
+		b.mu.Lock()
+		delete(b.knownFiles, path)
+		b.mu.Unlock()
 		b.emitEvent(Event{
 			Type: EventRemoved,
 			Path: path,
@@ -309,16 +320,24 @@ func (b *linuxBackend) handleFileReady(path string) {
 		return
 	}
 
-	// Create event.
-	event := Event{
-		Type:    EventAdded, // TODO: Track files to determine if added or modified
+	// Determine event type based on whether we've seen this file before.
+	b.mu.Lock()
+	_, known := b.knownFiles[path]
+	b.knownFiles[path] = struct{}{}
+	b.mu.Unlock()
+
+	eventType := EventAdded
+	if known {
+		eventType = EventModified
+	}
+
+	b.emitEvent(Event{
+		Type:    eventType,
 		Path:    path,
 		Inode:   getInode(info.Sys()),
 		Size:    info.Size(),
 		ModTime: info.ModTime(),
-	}
-
-	b.emitEvent(event)
+	})
 }
 
 // emitEvent sends an event to the events channel.

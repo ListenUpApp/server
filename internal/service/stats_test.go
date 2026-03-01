@@ -114,9 +114,9 @@ func TestGetUserStats_DailyAggregation(t *testing.T) {
 	// Create book
 	createTestBook(t, testStore, "book-1", 3600000)
 
-	// Create events on different days using a 30-day period to avoid
-	// timezone-sensitive week boundary issues. Events are placed 2 and 3
-	// days ago so they're safely within any period regardless of TZ.
+	// Create events on different days. Use AllTime period to avoid calendar
+	// boundary issues (e.g. on the 1st of a month, "2 days ago" falls into
+	// the previous month and would be excluded by StatsPeriodMonth).
 	now := time.Now()
 	day1 := time.Date(now.Year(), now.Month(), now.Day(), 12, 0, 0, 0, now.Location()).AddDate(0, 0, -2)
 	day2 := day1.AddDate(0, 0, -1)
@@ -126,7 +126,7 @@ func TestGetUserStats_DailyAggregation(t *testing.T) {
 	// 15 minutes on day2
 	createTestEvent(t, testStore, userID, "book-1", 900000, day2)
 
-	stats, err := svc.GetUserStats(ctx, userID, domain.StatsPeriodMonth)
+	stats, err := svc.GetUserStats(ctx, userID, domain.StatsPeriodAllTime)
 	require.NoError(t, err)
 
 	assert.Equal(t, int64(2700000), stats.TotalListenTimeMs) // 45 min total
