@@ -1,12 +1,9 @@
 package api
 
 import (
-	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -34,7 +31,9 @@ func (s *Server) registerAudioRoutes() {
 
 	// Transcoded audio (HLS segments, etc.)
 	s.router.Get("/api/v1/audio/{bookId}/{fileId}/transcode/{*}", s.handleTranscodedAudio)
+	s.router.Head("/api/v1/audio/{bookId}/{fileId}/transcode/{*}", s.handleTranscodedAudio)
 	s.router.Get("/api/v1/books/{bookId}/audio/{fileId}/transcode/{*}", s.handleTranscodedAudio)
+	s.router.Head("/api/v1/books/{bookId}/audio/{fileId}/transcode/{*}", s.handleTranscodedAudio)
 }
 
 // handleStreamAudio streams audio files with range request support.
@@ -85,7 +84,7 @@ func (s *Server) handleStreamAudio(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	// Get file info for size
+	// Get file info for modtime
 	fileInfo, err := file.Stat()
 	if err != nil {
 		http.Error(w, "failed to stat file", http.StatusInternalServerError)
@@ -93,90 +92,10 @@ func (s *Server) handleStreamAudio(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set content type based on format
-	contentType := getMimeType(audioFile.Format)
-	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Accept-Ranges", "bytes")
+	w.Header().Set("Content-Type", getMimeType(audioFile.Format))
 
-	// Handle range requests
-	rangeHeader := r.Header.Get("Range")
-	if rangeHeader != "" {
-		s.handleRangeRequest(w, r, file, fileInfo.Size(), rangeHeader)
-		return
-	}
-
-	// Full file
-	w.Header().Set("Content-Length", strconv.FormatInt(fileInfo.Size(), 10))
-	if r.Method != http.MethodHead {
-		_, _ = io.Copy(w, file)
-	}
-}
-
-func (s *Server) handleRangeRequest(w http.ResponseWriter, r *http.Request, reader io.ReadSeeker, fileSize int64, rangeHeader string) {
-	// Parse range header: "bytes=start-end"
-	if !strings.HasPrefix(rangeHeader, "bytes=") {
-		http.Error(w, "invalid range header", http.StatusBadRequest)
-		return
-	}
-
-	rangeSpec := strings.TrimPrefix(rangeHeader, "bytes=")
-	parts := strings.Split(rangeSpec, "-")
-	if len(parts) != 2 {
-		http.Error(w, "invalid range format", http.StatusBadRequest)
-		return
-	}
-
-	var start, end int64
-	var err error
-
-	if parts[0] == "" {
-		// Suffix range: -500 means last 500 bytes
-		end = fileSize - 1
-		suffixLen, err := strconv.ParseInt(parts[1], 10, 64)
-		if err != nil {
-			http.Error(w, "invalid range", http.StatusBadRequest)
-			return
-		}
-		start = max(fileSize-suffixLen, 0)
-	} else {
-		start, err = strconv.ParseInt(parts[0], 10, 64)
-		if err != nil {
-			http.Error(w, "invalid range start", http.StatusBadRequest)
-			return
-		}
-
-		if parts[1] == "" {
-			end = fileSize - 1
-		} else {
-			end, err = strconv.ParseInt(parts[1], 10, 64)
-			if err != nil {
-				http.Error(w, "invalid range end", http.StatusBadRequest)
-				return
-			}
-		}
-	}
-
-	// Validate range
-	if start < 0 || start >= fileSize || end < start || end >= fileSize {
-		w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", fileSize))
-		http.Error(w, "range not satisfiable", http.StatusRequestedRangeNotSatisfiable)
-		return
-	}
-
-	// Seek to start position
-	if _, err := reader.Seek(start, io.SeekStart); err != nil {
-		http.Error(w, "seek failed", http.StatusInternalServerError)
-		return
-	}
-
-	// Set headers
-	contentLength := end - start + 1
-	w.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
-	w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, fileSize))
-	w.WriteHeader(http.StatusPartialContent)
-
-	if r.Method != http.MethodHead {
-		_, _ = io.CopyN(w, reader, contentLength)
-	}
+	// ServeContent handles Range requests, Content-Length, and HEAD automatically
+	http.ServeContent(w, r, audioFile.Path, fileInfo.ModTime(), file)
 }
 
 func (s *Server) handleTranscodedAudio(w http.ResponseWriter, r *http.Request) {
@@ -239,6 +158,12 @@ func (s *Server) handleTranscodedAudio(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
+	fileInfo, err := file.Stat()
+	if err != nil {
+		http.Error(w, "failed to stat file", http.StatusInternalServerError)
+		return
+	}
+
 	// Determine content type
 	contentType := "application/octet-stream"
 	ext := strings.ToLower(filepath.Ext(transcodePath))
@@ -253,7 +178,9 @@ func (s *Server) handleTranscodedAudio(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	_, _ = io.Copy(w, file)
+
+	// ServeContent handles Range requests, Content-Length, and HEAD automatically
+	http.ServeContent(w, r, transcodePath, fileInfo.ModTime(), file)
 }
 
 // getMimeType returns MIME type based on audio format.
