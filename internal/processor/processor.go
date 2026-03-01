@@ -334,13 +334,39 @@ func (ep *EventProcessor) handleCoverFile(ctx context.Context, bookFolder, fileP
 		return fmt.Errorf("scan folder: %w", err)
 	}
 
-	// For now, just log the results.
-	// TODO: Database integration - update book cover
-	ep.logger.Info("scanned cover file folder",
-		"folder", bookFolder,
-		"audioFiles", len(item.AudioFiles),
-		"imageFiles", len(item.ImageFiles),
-		"metadataFiles", len(item.MetadataFiles),
+	// Look up the existing book for this folder.
+	existingBook, err := ep.store.GetBookByPath(ctx, bookFolder)
+	if err != nil {
+		ep.logger.Debug("no existing book found for folder, skipping cover update",
+			"folder", bookFolder,
+			"error", err,
+		)
+		return nil
+	}
+
+	// Update book from scan data (handles cover image from item.ImageFiles).
+	if updateErr := scanner.UpdateBookFromScan(ctx, existingBook, item, ep.store); updateErr != nil {
+		ep.logger.Error("failed to update book from scan",
+			"folder", bookFolder,
+			"book_id", existingBook.ID,
+			"error", updateErr,
+		)
+		return fmt.Errorf("update book: %w", updateErr)
+	}
+
+	if saveErr := ep.store.UpdateBook(ctx, existingBook); saveErr != nil {
+		ep.logger.Error("failed to save updated book",
+			"folder", bookFolder,
+			"book_id", existingBook.ID,
+			"error", saveErr,
+		)
+		return fmt.Errorf("save book: %w", saveErr)
+	}
+
+	ep.logger.Info("updated book cover",
+		"book_id", existingBook.ID,
+		"title", existingBook.Title,
+		"path", existingBook.Path,
 	)
 
 	return nil
@@ -366,13 +392,39 @@ func (ep *EventProcessor) handleMetadataFile(ctx context.Context, bookFolder, fi
 		return fmt.Errorf("scan folder: %w", err)
 	}
 
-	// For now, just log the results.
-	// TODO: Database integration - update book metadata
-	ep.logger.Info("scanned metadata file folder",
-		"folder", bookFolder,
-		"audioFiles", len(item.AudioFiles),
-		"imageFiles", len(item.ImageFiles),
-		"metadataFiles", len(item.MetadataFiles),
+	// Look up the existing book for this folder.
+	existingBook, err := ep.store.GetBookByPath(ctx, bookFolder)
+	if err != nil {
+		ep.logger.Debug("no existing book found for folder, skipping metadata update",
+			"folder", bookFolder,
+			"error", err,
+		)
+		return nil
+	}
+
+	// Update book from scan data (handles metadata from item).
+	if updateErr := scanner.UpdateBookFromScan(ctx, existingBook, item, ep.store); updateErr != nil {
+		ep.logger.Error("failed to update book from scan",
+			"folder", bookFolder,
+			"book_id", existingBook.ID,
+			"error", updateErr,
+		)
+		return fmt.Errorf("update book: %w", updateErr)
+	}
+
+	if saveErr := ep.store.UpdateBook(ctx, existingBook); saveErr != nil {
+		ep.logger.Error("failed to save updated book",
+			"folder", bookFolder,
+			"book_id", existingBook.ID,
+			"error", saveErr,
+		)
+		return fmt.Errorf("save book: %w", saveErr)
+	}
+
+	ep.logger.Info("updated book metadata",
+		"book_id", existingBook.ID,
+		"title", existingBook.Title,
+		"path", existingBook.Path,
 	)
 
 	return nil
