@@ -173,6 +173,7 @@ type Store interface {
 	GetSeriesUpdatedAfter(ctx context.Context, timestamp time.Time) ([]*domain.Series, error)
 	GetSeriesDeletedAfter(ctx context.Context, timestamp time.Time) ([]string, error)
 	GetSeriesBookIDMap(ctx context.Context) (map[string][]string, error)
+	MergeSeries(ctx context.Context, sourceID, targetID string) (*domain.Series, error)
 
 	// Genres
 	CreateGenre(ctx context.Context, g *domain.Genre) error

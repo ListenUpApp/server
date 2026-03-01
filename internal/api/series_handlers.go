@@ -392,13 +392,21 @@ func (s *Server) handleGetSeriesBooks(ctx context.Context, input *GetSeriesBooks
 	return &SeriesBooksOutput{Body: SeriesBooksResponse{Books: resp}}, nil
 }
 
-func (s *Server) handleMergeSeries(ctx context.Context, _ *MergeSeriesInput) (*SeriesOutput, error) {
+func (s *Server) handleMergeSeries(ctx context.Context, input *MergeSeriesInput) (*SeriesOutput, error) {
 	if _, err := s.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
-	// TODO: Implement series merging
-	return nil, huma.Error501NotImplemented("Series merging not yet implemented")
+	if input.Body.SourceID == input.Body.TargetID {
+		return nil, huma.Error400BadRequest("source and target series must be different")
+	}
+
+	target, err := s.store.MergeSeries(ctx, input.Body.SourceID, input.Body.TargetID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &SeriesOutput{Body: mapSeriesResponse(target)}, nil
 }
 
 // === Mappers ===

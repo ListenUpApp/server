@@ -556,6 +556,87 @@ func (s *Store) GetBookIDsBySeries(ctx context.Context, seriesID string) ([]stri
 	return ids, nil
 }
 
+// MergeSeries moves all books from the source series to the target series,
+// then soft-deletes the source. Returns the updated target series.
+func (s *Store) MergeSeries(ctx context.Context, sourceID, targetID string) (*domain.Series, error) {
+	if sourceID == targetID {
+		return nil, fmt.Errorf("merge series: source and target must be different")
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Verify source exists.
+	sourceRow := tx.QueryRowContext(ctx,
+		`SELECT `+seriesColumns+` FROM series WHERE id = ? AND deleted_at IS NULL`, sourceID)
+	if _, err := scanSeries(sourceRow); err == sql.ErrNoRows {
+		return nil, store.ErrNotFound
+	} else if err != nil {
+		return nil, fmt.Errorf("get source series: %w", err)
+	}
+
+	// Verify target exists.
+	targetRow := tx.QueryRowContext(ctx,
+		`SELECT `+seriesColumns+` FROM series WHERE id = ? AND deleted_at IS NULL`, targetID)
+	target, err := scanSeries(targetRow)
+	if err == sql.ErrNoRows {
+		return nil, store.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get target series: %w", err)
+	}
+
+	// Remove book_series rows for source where the book already belongs to target.
+	_, err = tx.ExecContext(ctx, `
+		DELETE FROM book_series
+		WHERE series_id = ? AND book_id IN (
+			SELECT book_id FROM book_series WHERE series_id = ?
+		)`, sourceID, targetID)
+	if err != nil {
+		return nil, fmt.Errorf("delete duplicate book_series: %w", err)
+	}
+
+	// Move remaining source book_series rows to target.
+	_, err = tx.ExecContext(ctx, `
+		UPDATE book_series SET series_id = ?
+		WHERE series_id = ?`, targetID, sourceID)
+	if err != nil {
+		return nil, fmt.Errorf("update book_series: %w", err)
+	}
+
+	// Soft-delete the source series.
+	now := formatTime(time.Now())
+	_, err = tx.ExecContext(ctx, `
+		UPDATE series SET deleted_at = ?, updated_at = ?
+		WHERE id = ?`, now, now, sourceID)
+	if err != nil {
+		return nil, fmt.Errorf("soft-delete source series: %w", err)
+	}
+
+	// Touch the target series.
+	_, err = tx.ExecContext(ctx, `
+		UPDATE series SET updated_at = ?
+		WHERE id = ?`, now, targetID)
+	if err != nil {
+		return nil, fmt.Errorf("touch target series: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit tx: %w", err)
+	}
+
+	// Re-read target to return fresh state.
+	target, err = s.GetSeries(ctx, targetID)
+	if err != nil {
+		return nil, fmt.Errorf("reload target series: %w", err)
+	}
+
+	return target, nil
+}
+
 // GetSeriesUpdatedAfter returns all non-deleted series updated after the given timestamp.
 func (s *Store) GetSeriesUpdatedAfter(ctx context.Context, timestamp time.Time) ([]*domain.Series, error) {
 	rows, err := s.db.QueryContext(ctx,
