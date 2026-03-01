@@ -20,8 +20,9 @@ type fallbackBackend struct {
 	opts    Options
 	watcher *fsnotify.Watcher
 
-	pending map[string]*pendingEvent // path -> pending event info
-	mu      sync.RWMutex             // protects pending map
+	pending    map[string]*pendingEvent // path -> pending event info
+	knownFiles map[string]struct{}      // tracks files we've already seen
+	mu         sync.RWMutex             // protects pending and knownFiles maps
 
 	events chan Event
 	errors chan error
@@ -45,13 +46,14 @@ func newFallbackBackend(logger *slog.Logger, opts Options) (*fallbackBackend, er
 	}
 
 	return &fallbackBackend{
-		logger:  logger,
-		opts:    opts,
-		watcher: watcher,
-		pending: make(map[string]*pendingEvent),
-		events:  make(chan Event, 100),
-		errors:  make(chan error, 10),
-		done:    make(chan struct{}),
+		logger:     logger,
+		opts:       opts,
+		watcher:    watcher,
+		pending:    make(map[string]*pendingEvent),
+		knownFiles: make(map[string]struct{}),
+		events:     make(chan Event, 100),
+		errors:     make(chan error, 10),
+		done:       make(chan struct{}),
 	}, nil
 }
 
@@ -159,6 +161,9 @@ func (b *fallbackBackend) handleFsnotifyEvent(event fsnotify.Event) {
 	// Handle deletion.
 	if event.Op&fsnotify.Remove != 0 {
 		b.cancelPending(path)
+		b.mu.Lock()
+		delete(b.knownFiles, path)
+		b.mu.Unlock()
 		b.emitEvent(Event{
 			Type: EventRemoved,
 			Path: path,
@@ -246,15 +251,22 @@ func (b *fallbackBackend) checkSettled(path string) {
 	// File has settled, emit event.
 	delete(b.pending, path)
 
-	event := Event{
-		Type:    EventAdded, // TODO: Track to determine if added or modified
+	// Determine event type based on whether we've seen this file before.
+	_, known := b.knownFiles[path]
+	b.knownFiles[path] = struct{}{}
+
+	eventType := EventAdded
+	if known {
+		eventType = EventModified
+	}
+
+	b.emitEvent(Event{
+		Type:    eventType,
 		Path:    path,
 		Inode:   getInode(info.Sys()),
 		Size:    info.Size(),
 		ModTime: info.ModTime(),
-	}
-
-	b.emitEvent(event)
+	})
 }
 
 // cancelPending cancels a pending event.
