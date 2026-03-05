@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -115,7 +116,17 @@ func formatTime(t time.Time) string {
 
 // parseTime parses a RFC3339Nano string back to time.Time.
 func parseTime(s string) (time.Time, error) {
-	return time.Parse(time.RFC3339Nano, s)
+	t, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		// Attempt to salvage malformed timestamps (e.g. double "ZZ" suffix
+		// from earlier ABS import bugs) before giving up.
+		cleaned := strings.TrimRight(s, "Z") + "Z"
+		t, err2 := time.Parse(time.RFC3339Nano, cleaned)
+		if err2 == nil {
+			return t, nil
+		}
+	}
+	return t, err
 }
 
 // parseNullableTime parses an optional time string.
