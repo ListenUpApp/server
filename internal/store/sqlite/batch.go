@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -43,8 +44,9 @@ func (bw *sqliteBatchWriter) CreateBook(_ context.Context, book *domain.Book) er
 	return nil
 }
 
-// Flush writes all accumulated books in a single transaction.
-// If any book fails, the entire batch is rolled back.
+// Flush writes all accumulated books individually.
+// Books that already exist (ErrAlreadyExists) are skipped so that
+// new books in the same batch are not lost.
 func (bw *sqliteBatchWriter) Flush(ctx context.Context) error {
 	bw.mu.Lock()
 	books := bw.books
@@ -55,28 +57,36 @@ func (bw *sqliteBatchWriter) Flush(ctx context.Context) error {
 		return nil
 	}
 
-	tx, err := bw.store.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin batch tx: %w", err)
-	}
-	defer tx.Rollback()
-
+	var written []*domain.Book
 	for _, book := range books {
+		tx, err := bw.store.db.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("begin batch tx: %w", err)
+		}
+
 		if err := createBookTx(ctx, tx, book); err != nil {
+			tx.Rollback()
+			if errors.Is(err, store.ErrAlreadyExists) {
+				// Book already in DB — skip it and continue with the rest.
+				continue
+			}
 			return fmt.Errorf("batch create book %s: %w", book.ID, err)
 		}
+
+		if err := tx.Commit(); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("commit batch: %w", err)
+		}
+
+		written = append(written, book)
 	}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit batch: %w", err)
-	}
-
-	for _, book := range books {
+	for _, book := range written {
 		bw.store.indexBookAsync(ctx, book)
 	}
 
 	bw.mu.Lock()
-	bw.count += len(books)
+	bw.count += len(written)
 	bw.mu.Unlock()
 
 	return nil
