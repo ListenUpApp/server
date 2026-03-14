@@ -52,7 +52,7 @@ func TestOpen(t *testing.T) {
 		"collections", "collection_books", "collection_shares",
 		"shelves", "shelf_books",
 		"listening_events", "playback_state", "book_preferences",
-		"book_reading_sessions", "invites", "instance", "server_settings",
+		"book_reading_sessions", "invites", "instance", "server_settings", "sse_event_log",
 	}
 	for _, table := range tables {
 		var name string

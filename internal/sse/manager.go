@@ -2,6 +2,7 @@ package sse
 
 import (
 	"context"
+	json "encoding/json/v2"
 	"iter"
 	"log/slog"
 	"sync"
@@ -40,6 +41,9 @@ type Manager struct {
 	shutdownMu sync.RWMutex
 	shutdown   bool
 
+	// Event logger for persistent replay (nil = no logging).
+	eventLogger EventLogger
+
 	// Scan state tracking - protected by scanMu
 	scanMu     sync.RWMutex
 	isScanning bool
@@ -58,6 +62,16 @@ func NewManager(logger *slog.Logger) *Manager {
 // SetBookAccessChecker sets the function used to check book access during broadcast filtering.
 func (m *Manager) SetBookAccessChecker(fn BookAccessChecker) {
 	m.checkBookAccess = fn
+}
+
+// SetEventLogger sets the persistent event logger for replay on reconnect.
+func (m *Manager) SetEventLogger(logger EventLogger) {
+	m.eventLogger = logger
+}
+
+// GetEventLogger returns the configured event logger (may be nil).
+func (m *Manager) GetEventLogger() EventLogger {
+	return m.eventLogger
 }
 
 // Start begins the event broadcasting loop.
@@ -159,6 +173,11 @@ func (m *Manager) broadcast(event Event) {
 		m.scanMu.Lock()
 		m.isScanning = false
 		m.scanMu.Unlock()
+	}
+
+	// Persist to event log for replay (skip heartbeats).
+	if event.Type != EventHeartbeat && m.eventLogger != nil {
+		m.logToEventLog(event)
 	}
 
 	var delivered, dropped, filtered int
@@ -363,6 +382,23 @@ func (m *Manager) SetScanning(scanning bool) {
 	m.scanMu.Lock()
 	defer m.scanMu.Unlock()
 	m.isScanning = scanning
+}
+
+// logToEventLog persists an event to the event log for replay on reconnect.
+func (m *Manager) logToEventLog(event Event) {
+	jsonData, err := json.Marshal(event)
+	if err != nil {
+		m.logger.Error("failed to marshal event for log",
+			slog.String("event_type", string(event.Type)),
+			slog.String("error", err.Error()))
+		return
+	}
+
+	if _, err := m.eventLogger.LogEvent(context.Background(), string(event.Type), string(jsonData), event.UserID); err != nil {
+		m.logger.Error("failed to log event",
+			slog.String("event_type", string(event.Type)),
+			slog.String("error", err.Error()))
+	}
 }
 
 // closeAllClients closes all client connections (used during shutdown).

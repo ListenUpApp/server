@@ -196,3 +196,55 @@ func ProvideSessionCleanupJob(i do.Injector) (*SessionCleanupJob, error) {
 
 	return &SessionCleanupJob{cancel: cancel}, nil
 }
+
+// EventLogCleanupJob runs periodic SSE event log cleanup.
+type EventLogCleanupJob struct {
+	cancel context.CancelFunc
+}
+
+func (j *EventLogCleanupJob) Shutdown() error {
+	j.cancel()
+	return nil
+}
+
+// ProvideEventLogCleanupJob provides periodic cleanup of the SSE event log.
+func ProvideEventLogCleanupJob(i do.Injector) (*EventLogCleanupJob, error) {
+	log := do.MustInvoke[*logger.Logger](i)
+	sseHandle := do.MustInvoke[*SSEManagerHandle](i)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		eventLogger := sseHandle.Manager.GetEventLogger()
+		if eventLogger == nil {
+			return
+		}
+
+		// Initial cleanup on startup.
+		if count, err := eventLogger.CleanupEventLog(ctx, 24*time.Hour); err != nil {
+			log.Warn("Initial event log cleanup failed", "error", err)
+		} else if count > 0 {
+			log.Info("Initial event log cleanup completed", "deleted", count)
+		}
+
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				if count, err := eventLogger.CleanupEventLog(ctx, 24*time.Hour); err != nil {
+					log.Warn("Event log cleanup failed", "error", err)
+				} else if count > 0 {
+					log.Info("Event log cleanup completed", "deleted", count)
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	log.Info("Event log cleanup job started")
+
+	return &EventLogCleanupJob{cancel: cancel}, nil
+}

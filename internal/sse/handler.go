@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,14 +24,16 @@ type Handler struct {
 	manager       *Manager
 	logger        *slog.Logger
 	tokenVerifier TokenVerifier
+	eventLogger   EventLogger
 }
 
 // NewHandler creates a new SSE Handler.
-func NewHandler(manager *Manager, logger *slog.Logger, tokenVerifier TokenVerifier) *Handler {
+func NewHandler(manager *Manager, logger *slog.Logger, tokenVerifier TokenVerifier, eventLogger EventLogger) *Handler {
 	return &Handler{
 		manager:       manager,
 		logger:        logger,
 		tokenVerifier: tokenVerifier,
+		eventLogger:   eventLogger,
 	}
 }
 
@@ -116,6 +119,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Replay missed events if client provides Last-Event-ID or ?since= parameter.
+	if h.eventLogger != nil {
+		h.replayMissedEvents(w, rc, r, client, clientLogger)
+	}
+
 	// Stream events until client disconnects.
 	ctx := r.Context()
 
@@ -151,6 +159,61 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+// replayMissedEvents replays logged events to a reconnecting client.
+func (h *Handler) replayMissedEvents(w http.ResponseWriter, rc *http.ResponseController, r *http.Request, client *Client, logger *slog.Logger) {
+	var entries []EventLogEntry
+	var err error
+
+	// Check Last-Event-ID header first (standard SSE reconnect mechanism).
+	if lastID := r.Header.Get("Last-Event-ID"); lastID != "" {
+		id, parseErr := strconv.ParseInt(lastID, 10, 64)
+		if parseErr == nil {
+			entries, err = h.eventLogger.ReplayEventsSinceID(r.Context(), id, client.UserID)
+		}
+	} else if sinceStr := r.URL.Query().Get("since"); sinceStr != "" {
+		// Fall back to ?since= query parameter.
+		since, parseErr := time.Parse(time.RFC3339, sinceStr)
+		if parseErr == nil {
+			entries, err = h.eventLogger.ReplayEvents(r.Context(), since, client.UserID)
+		} else {
+			// Try RFC3339Nano.
+			since, parseErr = time.Parse(time.RFC3339Nano, sinceStr)
+			if parseErr == nil {
+				entries, err = h.eventLogger.ReplayEvents(r.Context(), since, client.UserID)
+			}
+		}
+	}
+
+	if err != nil {
+		logger.Error("failed to replay events", slog.String("error", err.Error()))
+		return
+	}
+
+	if len(entries) > 0 {
+		logger.Info("replaying missed events", slog.Int("count", len(entries)))
+		for _, entry := range entries {
+			if err := h.sendRawEvent(w, rc, entry.EventType, entry.ID, entry.Payload); err != nil {
+				logger.Warn("failed to replay event", slog.String("error", err.Error()))
+				return
+			}
+		}
+	}
+}
+
+// sendRawEvent writes a pre-serialized SSE event with an id field.
+func (h *Handler) sendRawEvent(w http.ResponseWriter, rc *http.ResponseController, eventType string, id int64, jsonPayload string) error {
+	if _, err := fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", id, eventType, jsonPayload); err != nil {
+		return err
+	}
+	if err := rc.Flush(); err != nil {
+		return err
+	}
+	if err := rc.SetWriteDeadline(time.Now().Add(60 * time.Second)); err != nil {
+		h.logger.Debug("failed to set write deadline", slog.String("error", err.Error()))
+	}
+	return nil
 }
 
 // sendEvent writes an SSE event to the response writer using modern json/v2.

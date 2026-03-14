@@ -551,3 +551,16 @@ CREATE TABLE IF NOT EXISTS audible_cache_search (
     fetched_at  TEXT NOT NULL,
     PRIMARY KEY (region, query)
 );
+
+-- SSE event log for replay on reconnect (issue #81).
+-- Events older than 24h are cleaned up periodically.
+CREATE TABLE IF NOT EXISTS sse_event_log (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type TEXT NOT NULL,
+    payload    TEXT NOT NULL,
+    user_id    TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_sse_event_log_created_at ON sse_event_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_sse_event_log_user_id ON sse_event_log(user_id);

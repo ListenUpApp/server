@@ -78,6 +78,7 @@ func NewContainer() *do.RootScope {
 	do.Provide(injector, providers.ProvideTranscodeService)
 	do.Provide(injector, providers.ProvideFileWatcher)
 	do.Provide(injector, providers.ProvideSessionCleanupJob)
+	do.Provide(injector, providers.ProvideEventLogCleanupJob)
 
 	// Server
 	do.Provide(injector, providers.ProvideHTTPServer)
