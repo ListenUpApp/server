@@ -85,6 +85,9 @@ func ProvideStore(i do.Injector) (*StoreHandle, error) {
 		return canAccess
 	})
 
+	// Wire up event logger for SSE replay on reconnect.
+	sseHandle.SetEventLogger(db)
+
 	return &StoreHandle{Store: db}, nil
 }
 

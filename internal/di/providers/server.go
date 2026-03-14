@@ -87,7 +87,7 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 	shelfService.SetActivityRecorder(activityService)
 
 	tokenVerifier := &sseTokenVerifier{authService: authService}
-	sseHandler := sse.NewHandler(sseHandle.Manager, log.Logger, tokenVerifier)
+	sseHandler := sse.NewHandler(sseHandle.Manager, log.Logger, tokenVerifier, sseHandle.Manager.GetEventLogger())
 
 	services := &api.Services{
 		Instance:       instanceService,
