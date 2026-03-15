@@ -673,6 +673,13 @@ func (s *Store) updateBookJunctionTables(ctx context.Context, book *domain.Book)
 		}
 	}
 
+	// Bump updated_at so delta sync picks up junction-table changes.
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE books SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`,
+		book.ID); err != nil {
+		return fmt.Errorf("bump updated_at: %w", err)
+	}
+
 	return tx.Commit()
 }
 
