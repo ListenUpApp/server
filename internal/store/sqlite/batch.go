@@ -67,7 +67,13 @@ func (bw *sqliteBatchWriter) Flush(ctx context.Context) error {
 		if err := createBookTx(ctx, tx, book); err != nil {
 			tx.Rollback()
 			if errors.Is(err, store.ErrAlreadyExists) {
-				// Book already in DB — skip it and continue with the rest.
+				// Book already in DB — update its junction tables in case they're
+				// missing (e.g., book was created before junction table writing was added).
+				if err := bw.store.updateBookJunctionTables(ctx, book); err != nil {
+					// Log but don't fail — the book row already exists, junction update is best-effort.
+					continue
+				}
+				written = append(written, book)
 				continue
 			}
 			return fmt.Errorf("batch create book %s: %w", book.ID, err)

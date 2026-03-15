@@ -418,13 +418,9 @@ func (s *Scanner) saveToDatabase(ctx context.Context, items []*LibraryItemData, 
 	}
 
 	batchWriter := s.store.NewBatchWriter(100)
-	defer func() {
-		if err := batchWriter.Flush(ctx); err != nil {
-			s.logger.Error("failed to flush final batch", "error", err)
-		}
-	}()
 
 	var errs []error
+	var pendingBooks []*domain.Book // Books to process after flush
 
 	for _, item := range items {
 		// Check context cancellation.
@@ -502,7 +498,7 @@ func (s *Scanner) saveToDatabase(ctx context.Context, items []*LibraryItemData, 
 			}
 		}
 
-		// Save to database.
+		// Queue book for batch insert.
 		if err := batchWriter.CreateBook(ctx, book); err != nil {
 			createErr := fmt.Errorf("save %s (%s): %w", book.Title, book.Path, err)
 			errs = append(errs, createErr)
@@ -517,10 +513,20 @@ func (s *Scanner) saveToDatabase(ctx context.Context, items []*LibraryItemData, 
 		}
 
 		result.Added++
+		pendingBooks = append(pendingBooks, book)
+	}
 
+	// Flush all books to database — this is where rows are actually written.
+	if err := batchWriter.Flush(ctx); err != nil {
+		s.logger.Error("failed to flush batch", "error", err)
+		return fmt.Errorf("flush batch: %w", err)
+	}
+
+	// Post-flush operations: inbox, transcodes, SSE events.
+	// These require the book rows to exist in the database.
+	for _, book := range pendingBooks {
 		// Add to inbox if workflow is enabled
 		if inboxEnabled && inboxCollection != nil {
-			// Add book to inbox collection using the admin method
 			if err := s.store.AdminAddBookToCollection(ctx, book.ID, inboxCollection.ID); err != nil {
 				s.logger.Warn("failed to add book to inbox",
 					"book_id", book.ID,

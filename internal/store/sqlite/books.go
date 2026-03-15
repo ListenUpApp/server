@@ -647,6 +647,35 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 	return nil
 }
 
+// updateBookJunctionTables writes contributor, series, and genre junction rows
+// for an existing book. Used by the batch writer when a book already exists but
+// may have been created before junction-table writing was added.
+func (s *Store) updateBookJunctionTables(ctx context.Context, book *domain.Book) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	if len(book.Contributors) > 0 {
+		if err := setBookContributorsTx(ctx, tx, book.ID, book.Contributors); err != nil {
+			return fmt.Errorf("set contributors: %w", err)
+		}
+	}
+	if len(book.Series) > 0 {
+		if err := setBookSeriesTx(ctx, tx, book.ID, book.Series); err != nil {
+			return fmt.Errorf("set series: %w", err)
+		}
+	}
+	if len(book.GenreIDs) > 0 {
+		if err := setBookGenresTx(ctx, tx, book.ID, book.GenreIDs); err != nil {
+			return fmt.Errorf("set genres: %w", err)
+		}
+	}
+
+	return tx.Commit()
+}
+
 // DeleteBook performs a soft delete by setting deleted_at and updated_at.
 // Returns store.ErrNotFound if the book does not exist or is already deleted.
 func (s *Store) DeleteBook(ctx context.Context, id string) error {
