@@ -215,3 +215,49 @@ func TestBatchWriter_FlushUpdatesJunctionTablesForExistingBook(t *testing.T) {
 		t.Errorf("genre ID: got %q, want %q", genreIDs[0], "genre-epic-fantasy")
 	}
 }
+
+func TestUpdateBookJunctionTables_BumpsUpdatedAt(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	// Create a contributor.
+	contributor, err := s.GetOrCreateContributor(ctx, "Patrick Rothfuss")
+	if err != nil {
+		t.Fatalf("GetOrCreateContributor: %v", err)
+	}
+
+	// Create a book with a known timestamp in the past.
+	book := makeTestBook("bump-test-1", "The Name of the Wind", "/books/notw")
+	book.UpdatedAt = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	book.CreatedAt = book.UpdatedAt
+	if err := s.CreateBook(ctx, book); err != nil {
+		t.Fatalf("CreateBook: %v", err)
+	}
+
+	// Record the original updated_at.
+	original, err := s.GetBook(ctx, "bump-test-1", "")
+	if err != nil {
+		t.Fatalf("GetBook before: %v", err)
+	}
+	originalUpdatedAt := original.UpdatedAt
+
+	// Call updateBookJunctionTables with contributor data.
+	book.Contributors = []domain.BookContributor{
+		{
+			ContributorID: contributor.ID,
+			Roles:         []domain.ContributorRole{domain.RoleAuthor},
+		},
+	}
+	if err := s.updateBookJunctionTables(ctx, book); err != nil {
+		t.Fatalf("updateBookJunctionTables: %v", err)
+	}
+
+	// Verify updated_at was bumped.
+	after, err := s.GetBook(ctx, "bump-test-1", "")
+	if err != nil {
+		t.Fatalf("GetBook after: %v", err)
+	}
+	if !after.UpdatedAt.After(originalUpdatedAt) {
+		t.Errorf("expected updated_at to be bumped: before=%v, after=%v", originalUpdatedAt, after.UpdatedAt)
+	}
+}
