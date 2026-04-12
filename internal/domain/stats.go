@@ -105,7 +105,7 @@ type UserStatsDetailed struct {
 }
 
 // UserStats represents pre-aggregated listening statistics for a user.
-// Stored in BadgerDB and updated incrementally on each listening event.
+// Persisted in the user_stats SQLite table and updated incrementally on each listening event.
 type UserStats struct {
 	UserID             string    `json:"user_id"`
 	TotalListenTimeMs  int64     `json:"total_listen_time_ms"`

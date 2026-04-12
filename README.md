@@ -8,7 +8,7 @@ A self-hosted audiobook server. Scan your library, enrich metadata, transcode au
 
 ## Features
 
-- **Zero-dependency storage** — BadgerDB embedded key-value store, no Postgres/MySQL/SQLite to manage
+- **Zero-dependency storage** — embedded SQLite (pure-Go `modernc.org/sqlite`), no Postgres/MySQL server to manage
 - **Full-text search** — Bleve search engine, also embedded
 - **Audio transcoding** — Librempeg (FFmpeg fork) with Dolby AC-4 and xHE-AAC support, automatic caching
 - **Metadata enrichment** — Pulls from Audible, Google Books, Open Library, and Hardcover
@@ -82,14 +82,14 @@ listenup/server
     ├── search/             # Bleve full-text search
     ├── service/            # Business logic
     ├── sse/                # Server-sent events
-    ├── store/              # BadgerDB persistence
+    ├── store/              # SQLite persistence
     └── watcher/            # File system watcher
 ```
 
 **Key tech choices:**
 - **Router:** chi v5 — lightweight, stdlib-compatible
 - **API framework:** Huma v2 — auto-generates OpenAPI spec from Go types
-- **Storage:** BadgerDB — embedded LSM-tree KV store, no server process needed
+- **Storage:** SQLite via `modernc.org/sqlite` — pure-Go driver, no CGO, no server process needed
 - **Auth:** PASETO v4 — modern alternative to JWT, no algorithm confusion attacks
 - **DI:** samber/do v2 — compile-time-safe dependency injection
 - **Transcoding:** Librempeg — FFmpeg fork with extended codec support
