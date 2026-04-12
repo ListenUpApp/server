@@ -408,3 +408,105 @@ func TestGetContinueListening(t *testing.T) {
 		t.Errorf("CurrentPositionMs: got %d, want %d", results[0].CurrentPositionMs, 50000)
 	}
 }
+
+// TestGetStateForUserUpdatedAfter verifies delta-sync filtering on the playback_state
+// table returns only records with updated_at strictly greater than the cutoff.
+// Pairs with the api-layer updated_after query param unblocking client W6.
+func TestGetStateForUserUpdatedAfter(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	userID := "user-delta"
+	otherUserID := "user-other"
+	insertTestUser(t, s, userID)
+	insertTestUser(t, s, otherUserID)
+	insertTestBook(t, s, "book-old", "Old Book", "/books/old")
+	insertTestBook(t, s, "book-edge", "Edge Book", "/books/edge")
+	insertTestBook(t, s, "book-new", "New Book", "/books/new")
+	insertTestBook(t, s, "book-other", "Other User Book", "/books/other")
+
+	base := time.Date(2026, 4, 11, 12, 0, 0, 0, time.UTC)
+	cutoff := base.Add(1 * time.Hour)
+
+	stateBefore := &domain.PlaybackState{
+		UserID:       userID,
+		BookID:       "book-old",
+		StartedAt:    base,
+		LastPlayedAt: base,
+		UpdatedAt:    base, // before cutoff
+	}
+	stateAtCutoff := &domain.PlaybackState{
+		UserID:       userID,
+		BookID:       "book-edge",
+		StartedAt:    base,
+		LastPlayedAt: cutoff,
+		UpdatedAt:    cutoff, // equal to cutoff — excluded by strict >
+	}
+	stateAfter := &domain.PlaybackState{
+		UserID:       userID,
+		BookID:       "book-new",
+		StartedAt:    base,
+		LastPlayedAt: cutoff.Add(30 * time.Minute),
+		UpdatedAt:    cutoff.Add(30 * time.Minute), // after cutoff
+	}
+	stateOtherUser := &domain.PlaybackState{
+		UserID:       otherUserID,
+		BookID:       "book-other",
+		StartedAt:    base,
+		LastPlayedAt: cutoff.Add(1 * time.Hour),
+		UpdatedAt:    cutoff.Add(1 * time.Hour), // after cutoff, but different user
+	}
+
+	for _, st := range []*domain.PlaybackState{stateBefore, stateAtCutoff, stateAfter, stateOtherUser} {
+		if err := s.UpsertPlaybackState(ctx, st); err != nil {
+			t.Fatalf("UpsertPlaybackState(%s): %v", st.BookID, err)
+		}
+	}
+
+	results, err := s.GetStateForUserUpdatedAfter(ctx, userID, cutoff)
+	if err != nil {
+		t.Fatalf("GetStateForUserUpdatedAfter: %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result (strictly after cutoff, same user), got %d", len(results))
+	}
+	if results[0].BookID != "book-new" {
+		t.Errorf("BookID: got %q, want %q", results[0].BookID, "book-new")
+	}
+}
+
+// TestGetStateForUserUpdatedAfter_ZeroCutoff verifies a zero-time cutoff returns all
+// records for the user, matching the baseline behaviour of GetStateForUser. This lets
+// the handler layer pass a zero time.Time as a sentinel for "no filter".
+func TestGetStateForUserUpdatedAfter_ZeroCutoff(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	userID := "user-zero"
+	insertTestUser(t, s, userID)
+	insertTestBook(t, s, "book-z1", "Book 1", "/books/z1")
+	insertTestBook(t, s, "book-z2", "Book 2", "/books/z2")
+
+	base := time.Date(2026, 4, 11, 12, 0, 0, 0, time.UTC)
+	for _, bookID := range []string{"book-z1", "book-z2"} {
+		st := &domain.PlaybackState{
+			UserID:       userID,
+			BookID:       bookID,
+			StartedAt:    base,
+			LastPlayedAt: base,
+			UpdatedAt:    base,
+		}
+		if err := s.UpsertPlaybackState(ctx, st); err != nil {
+			t.Fatalf("UpsertPlaybackState(%s): %v", bookID, err)
+		}
+	}
+
+	results, err := s.GetStateForUserUpdatedAfter(ctx, userID, time.Time{})
+	if err != nil {
+		t.Fatalf("GetStateForUserUpdatedAfter(zero): %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results with zero cutoff, got %d", len(results))
+	}
+}

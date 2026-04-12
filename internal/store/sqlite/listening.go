@@ -402,10 +402,28 @@ func (s *Store) DeleteState(ctx context.Context, userID, bookID string) error {
 
 // GetStateForUser retrieves all playback states for a user, ordered by last_played_at descending.
 func (s *Store) GetStateForUser(ctx context.Context, userID string) ([]*domain.PlaybackState, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+playbackStateColumns+` FROM playback_state
-		 WHERE user_id = ?
-		 ORDER BY last_played_at DESC`, userID)
+	return s.GetStateForUserUpdatedAfter(ctx, userID, time.Time{})
+}
+
+// GetStateForUserUpdatedAfter retrieves playback states for a user whose updated_at
+// is strictly greater than since, ordered by last_played_at descending. A zero-value
+// since returns all records — enabling this method to back full and delta sync.
+func (s *Store) GetStateForUserUpdatedAfter(ctx context.Context, userID string, since time.Time) ([]*domain.PlaybackState, error) {
+	var (
+		rows *sql.Rows
+		err  error
+	)
+	if since.IsZero() {
+		rows, err = s.db.QueryContext(ctx,
+			`SELECT `+playbackStateColumns+` FROM playback_state
+			 WHERE user_id = ?
+			 ORDER BY last_played_at DESC`, userID)
+	} else {
+		rows, err = s.db.QueryContext(ctx,
+			`SELECT `+playbackStateColumns+` FROM playback_state
+			 WHERE user_id = ? AND updated_at > ?
+			 ORDER BY last_played_at DESC`, userID, formatTime(since))
+	}
 	if err != nil {
 		return nil, err
 	}

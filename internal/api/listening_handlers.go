@@ -303,6 +303,7 @@ type ContinueListeningOutput struct {
 // GetAllProgressInput contains parameters for getting all progress.
 type GetAllProgressInput struct {
 	Authorization string `header:"Authorization"`
+	UpdatedAfter  string `query:"updated_after" doc:"For delta sync, only return items updated after this time (RFC3339)"`
 }
 
 // ProgressSyncItem represents a single progress record for sync.
@@ -640,9 +641,18 @@ func (s *Server) handleGetAllProgress(ctx context.Context, input *GetAllProgress
 		return nil, err
 	}
 
-	slog.Info("fetching all state for sync", "user_id", userID)
+	var updatedAfter time.Time
+	if input.UpdatedAfter != "" {
+		t, err := time.Parse(time.RFC3339, input.UpdatedAfter)
+		if err != nil {
+			return nil, huma.Error400BadRequest("invalid updated_after format, expected RFC3339")
+		}
+		updatedAfter = t
+	}
 
-	progressRecords, err := s.store.GetStateForUser(ctx, userID)
+	slog.Info("fetching all state for sync", "user_id", userID, "updated_after", input.UpdatedAfter)
+
+	progressRecords, err := s.store.GetStateForUserUpdatedAfter(ctx, userID, updatedAfter)
 	if err != nil {
 		slog.Error("get all progress failed", "error", err)
 		return nil, err

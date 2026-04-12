@@ -254,6 +254,7 @@ type Store interface {
 	UpsertState(ctx context.Context, progress *domain.PlaybackState) error
 	DeleteState(ctx context.Context, userID, bookID string) error
 	GetStateForUser(ctx context.Context, userID string) ([]*domain.PlaybackState, error)
+	GetStateForUserUpdatedAfter(ctx context.Context, userID string, since time.Time) ([]*domain.PlaybackState, error)
 	GetStateFinishedInRange(ctx context.Context, userID string, start, end time.Time) ([]*domain.PlaybackState, error)
 	GetContinueListening(ctx context.Context, userID string, limit int) ([]*domain.PlaybackState, error)
 
