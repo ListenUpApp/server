@@ -716,18 +716,23 @@ func NewInboxBookReleasedEvent(bookID string) Event {
 }
 
 // ProgressUpdatedEventData is the data payload for listening.progress_updated events.
+// FinishedAt and StartedAt are included so client stateful-merge handlers preserve
+// completion and start timestamps on cross-device echoes; omitted when absent.
 type ProgressUpdatedEventData struct {
-	BookID            string    `json:"book_id"`
-	CurrentPositionMs int64     `json:"current_position_ms"`
-	Progress          float64   `json:"progress"`
-	TotalListenTimeMs int64     `json:"total_listen_time_ms"`
-	IsFinished        bool      `json:"is_finished"`
-	LastPlayedAt      time.Time `json:"last_played_at"`
+	BookID            string     `json:"book_id"`
+	CurrentPositionMs int64      `json:"current_position_ms"`
+	Progress          float64    `json:"progress"`
+	TotalListenTimeMs int64      `json:"total_listen_time_ms"`
+	IsFinished        bool       `json:"is_finished"`
+	FinishedAt        *time.Time `json:"finished_at,omitempty"`
+	StartedAt         *time.Time `json:"started_at,omitempty"`
+	LastPlayedAt      time.Time  `json:"last_played_at"`
 }
 
 // NewProgressUpdatedEvent creates a listening.progress_updated event for a specific user.
 // bookDurationMs is used to compute progress percentage on-demand.
 func NewProgressUpdatedEvent(userID string, progress *domain.PlaybackState, bookDurationMs int64) Event {
+	startedAt := progress.StartedAt
 	return Event{
 		Type: EventProgressUpdated,
 		Data: ProgressUpdatedEventData{
@@ -736,6 +741,8 @@ func NewProgressUpdatedEvent(userID string, progress *domain.PlaybackState, book
 			Progress:          progress.ComputeProgress(bookDurationMs),
 			TotalListenTimeMs: progress.TotalListenTimeMs,
 			IsFinished:        progress.IsFinished,
+			FinishedAt:        progress.FinishedAt,
+			StartedAt:         &startedAt,
 			LastPlayedAt:      progress.LastPlayedAt,
 		},
 		UserID:    userID, // Only send to this user
