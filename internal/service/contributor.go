@@ -80,6 +80,11 @@ func (s *ContributorService) GetAccessibleBookIDSet(ctx context.Context, userID 
 	return s.store.GetAccessibleBookIDSet(ctx, userID)
 }
 
+// GetContributorsByIDs returns contributors for the given list of IDs.
+func (s *ContributorService) GetContributorsByIDs(ctx context.Context, ids []string) ([]*domain.Contributor, error) {
+	return s.store.GetContributorsByIDs(ctx, ids)
+}
+
 // MergeContributors merges the source contributor into the target contributor.
 // The source is deleted from the index; the merged target is re-indexed.
 func (s *ContributorService) MergeContributors(ctx context.Context, sourceID, targetID string) (*domain.Contributor, error) {

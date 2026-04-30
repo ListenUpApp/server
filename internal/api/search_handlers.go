@@ -175,7 +175,7 @@ func (s *Server) handleSearch(ctx context.Context, input *SearchInput) (*SearchO
 
 		// For book results, verify user has access
 		if hit.Type == search.DocTypeBook {
-			if canAccess, err := s.store.CanUserAccessBook(ctx, userID, hit.ID); err != nil || !canAccess {
+			if canAccess, err := s.services.Search.CanUserAccessBook(ctx, userID, hit.ID); err != nil || !canAccess {
 				continue
 			}
 		}
@@ -212,7 +212,7 @@ func (s *Server) handleReindexSearch(ctx context.Context, _ *struct{}) (*struct 
 		return nil, err
 	}
 
-	user, err := s.store.GetUser(ctx, userID)
+	user, err := s.services.Search.GetUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}

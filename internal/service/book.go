@@ -176,6 +176,12 @@ func (s *BookService) GetBook(ctx context.Context, userID, id string) (*domain.B
 	return s.store.GetBook(ctx, id, userID)
 }
 
+// GetBookByID retrieves a book by ID without ACL enforcement.
+// Use only for admin or public-facing paths (e.g. share pages).
+func (s *BookService) GetBookByID(ctx context.Context, id string) (*domain.Book, error) {
+	return s.store.GetBookByID(ctx, id)
+}
+
 // BookUpdate captures the optional book fields a user-edit request can mutate.
 // nil fields are left untouched on the existing book; non-nil fields replace
 // the corresponding column.

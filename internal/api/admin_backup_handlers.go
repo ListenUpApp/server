@@ -445,7 +445,7 @@ func (s *Server) handleRestore(ctx context.Context, input *RestoreInput) (*Resto
 
 	// Invalidate pre-aggregated user stats after restore (they are now stale)
 	if !opts.DryRun {
-		if err := s.store.ClearAllUserStats(ctx); err != nil {
+		if err := s.services.Stats.ClearAllUserStats(ctx); err != nil {
 			s.logger.Error("failed to clear user stats after restore", "error", err)
 		} else {
 			s.logger.Info("cleared user stats after restore, will rebuild lazily")

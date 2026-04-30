@@ -390,7 +390,7 @@ func (s *Server) handleGetGenreBooks(ctx context.Context, input *GetGenreBooksIn
 		return nil, err
 	}
 
-	accessible, err := s.store.GetAccessibleBookIDSet(ctx, userID)
+	accessible, err := s.services.Genre.GetAccessibleBookIDSet(ctx, userID)
 	if err != nil {
 		return nil, err
 	}

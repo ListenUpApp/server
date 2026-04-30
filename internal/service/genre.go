@@ -19,6 +19,7 @@ import (
 type genreServiceStore interface {
 	store.GenreStore
 	SetBookGenres(ctx context.Context, bookID string, genreIDs []string) error
+	GetAccessibleBookIDSet(ctx context.Context, userID string) (map[string]bool, error)
 }
 
 // GenreService orchestrates genre operations.
@@ -251,4 +252,9 @@ func (s *GenreService) GetGenresForBook(ctx context.Context, bookID string) ([]*
 // SeedDefaultGenres creates the default genre hierarchy if not already seeded.
 func (s *GenreService) SeedDefaultGenres(ctx context.Context) error {
 	return s.store.SeedDefaultGenres(ctx)
+}
+
+// GetAccessibleBookIDSet returns the set of book IDs the given user can access.
+func (s *GenreService) GetAccessibleBookIDSet(ctx context.Context, userID string) (map[string]bool, error) {
+	return s.store.GetAccessibleBookIDSet(ctx, userID)
 }

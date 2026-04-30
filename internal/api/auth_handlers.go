@@ -357,7 +357,7 @@ func (s *Server) handleLogout(ctx context.Context, input *LogoutInput) (*Message
 }
 
 func (s *Server) handleCheckRegistrationStatus(ctx context.Context, input *CheckRegistrationStatusInput) (*RegistrationStatusOutput, error) {
-	user, err := s.store.GetUser(ctx, input.UserID)
+	user, err := s.services.Auth.GetUser(ctx, input.UserID)
 	if err != nil {
 		// Return "denied" for not found (could be deleted/denied).
 		// This is intentional - we return a valid API response, not an error.
@@ -393,7 +393,7 @@ func (s *Server) mapAuthResponse(ctx context.Context, resp *service.AuthResponse
 	// Get avatar info from profile (optional - may not exist)
 	avatarType := "auto"
 	avatarValue := ""
-	profile, err := s.store.GetUserProfile(ctx, resp.User.ID)
+	profile, err := s.services.Auth.GetUserProfile(ctx, resp.User.ID)
 	if err == nil && profile != nil {
 		avatarType = string(profile.AvatarType)
 		avatarValue = profile.AvatarValue

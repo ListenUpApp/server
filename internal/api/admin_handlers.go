@@ -433,7 +433,7 @@ func (s *Server) handleGetAdminUser(ctx context.Context, input *GetAdminUserInpu
 		return nil, err
 	}
 
-	user, err := s.store.GetUser(ctx, input.ID)
+	user, err := s.services.Admin.GetUser(ctx, input.ID)
 	if err != nil {
 		return nil, err
 	}

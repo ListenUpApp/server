@@ -63,7 +63,7 @@ func (s *Server) handleStreamAudio(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get book to verify access
-	book, err := s.store.GetBook(r.Context(), bookID, user.ID)
+	book, err := s.services.Book.GetBook(r.Context(), user.ID, bookID)
 	if err != nil {
 		http.Error(w, "book not found", http.StatusNotFound)
 		return
@@ -125,7 +125,7 @@ func (s *Server) handleTranscodedAudio(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify book access
-	_, err = s.store.GetBook(r.Context(), bookID, user.ID)
+	_, err = s.services.Book.GetBook(r.Context(), user.ID, bookID)
 	if err != nil {
 		http.Error(w, "book not found", http.StatusNotFound)
 		return

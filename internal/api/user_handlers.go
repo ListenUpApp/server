@@ -37,7 +37,7 @@ func (s *Server) handleGetCurrentUser(ctx context.Context, _ *AuthenticatedInput
 		return nil, err
 	}
 
-	user, err := s.store.GetUser(ctx, userID)
+	user, err := s.services.Profile.GetUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +45,7 @@ func (s *Server) handleGetCurrentUser(ctx context.Context, _ *AuthenticatedInput
 	// Get avatar info from profile (optional - may not exist)
 	avatarType := "auto"
 	avatarValue := ""
-	profile, err := s.store.GetUserProfile(ctx, userID)
+	profile, err := s.services.Auth.GetUserProfile(ctx, userID)
 	if err == nil && profile != nil {
 		avatarType = string(profile.AvatarType)
 		avatarValue = profile.AvatarValue

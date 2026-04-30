@@ -66,7 +66,7 @@ func (s *Server) RequireAdmin(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	user, err := s.store.GetUser(ctx, userID)
+	user, err := s.services.Auth.GetUser(ctx, userID)
 	if err != nil {
 		return "", huma.Error401Unauthorized("User not found")
 	}
@@ -86,7 +86,7 @@ func (s *Server) RequireUser(ctx context.Context) (*domain.User, error) {
 		return nil, err
 	}
 
-	user, err := s.store.GetUser(ctx, userID)
+	user, err := s.services.Auth.GetUser(ctx, userID)
 	if err != nil {
 		return nil, huma.Error401Unauthorized("User not found")
 	}

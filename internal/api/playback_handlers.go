@@ -279,7 +279,7 @@ func (s *Server) handlePreparePlayback(ctx context.Context, input *PreparePlayba
 	}
 
 	// Get the book
-	book, err := s.store.GetBook(ctx, input.Body.BookID, userID)
+	book, err := s.services.Listening.GetBook(ctx, input.Body.BookID, userID)
 	if err != nil {
 		return nil, huma.Error404NotFound("book not found")
 	}

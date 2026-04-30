@@ -18,6 +18,7 @@ type statsServiceStore interface {
 	store.ListeningStore
 	GetBook(ctx context.Context, id string, userID string) (*domain.Book, error)
 	GetGenresByIDs(ctx context.Context, ids []string) ([]*domain.Genre, error)
+	ClearAllUserStats(ctx context.Context) error
 }
 
 // StatsService provides detailed listening statistics.
@@ -344,6 +345,11 @@ func (s *StatsService) buildStreakCalendar(ctx context.Context, userID string, n
 	}
 
 	return calendar
+}
+
+// ClearAllUserStats wipes all pre-aggregated user stats (e.g. after a backup restore).
+func (s *StatsService) ClearAllUserStats(ctx context.Context) error {
+	return s.store.ClearAllUserStats(ctx)
 }
 
 // genreDisplayName converts a slug to display name.

@@ -374,6 +374,16 @@ func (s *AuthService) VerifyAccessToken(ctx context.Context, tokenString string)
 	return user, claims, nil
 }
 
+// GetUser returns the domain user by ID.
+func (s *AuthService) GetUser(ctx context.Context, userID string) (*domain.User, error) {
+	return s.store.GetUser(ctx, userID)
+}
+
+// GetUserProfile returns the profile for the given user ID.
+func (s *AuthService) GetUserProfile(ctx context.Context, userID string) (*domain.UserProfile, error) {
+	return s.store.GetUserProfile(ctx, userID)
+}
+
 // formatValidationError converts validator errors to user-friendly domain errors.
 func formatValidationError(err error) error {
 	var validationErrs validator.ValidationErrors

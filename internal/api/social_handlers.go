@@ -319,7 +319,7 @@ func (s *Server) handleGetBookReaders(ctx context.Context, input *GetBookReaders
 	}
 
 	// ACL check - verify user can access this book
-	_, err = s.store.GetBook(ctx, input.ID, userID)
+	_, err = s.services.Book.GetBook(ctx, userID, input.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -719,7 +719,7 @@ func (s *Server) handleGetDiscoverBooks(ctx context.Context, input *GetDiscoverB
 		var seriesName *string
 		if len(book.Series) > 0 {
 			// Get the first series name
-			series, err := s.store.GetSeries(ctx, book.Series[0].SeriesID)
+			series, err := s.services.Series.GetSeries(ctx, book.Series[0].SeriesID)
 			if err == nil && series != nil {
 				seriesName = &series.Name
 			}
@@ -758,7 +758,7 @@ func (s *Server) getAuthorNameFromBook(ctx context.Context, book *domain.Book) s
 	}
 
 	// Fetch contributor details
-	contributors, err := s.store.GetContributorsByIDs(ctx, authorIDs)
+	contributors, err := s.services.Contributor.GetContributorsByIDs(ctx, authorIDs)
 	if err != nil || len(contributors) == 0 {
 		return ""
 	}

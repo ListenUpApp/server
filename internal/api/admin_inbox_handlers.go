@@ -167,7 +167,7 @@ func (s *Server) handleListInboxBooks(ctx context.Context, _ *ListInboxBooksInpu
 	// Batch fetch contributors
 	contributorMap := make(map[string]string) // id -> name
 	for id := range contributorIDs {
-		if contributor, err := s.store.GetContributor(ctx, id); err == nil {
+		if contributor, err := s.services.Contributor.GetContributor(ctx, id); err == nil {
 			contributorMap[id] = contributor.Name
 		}
 	}
@@ -175,7 +175,7 @@ func (s *Server) handleListInboxBooks(ctx context.Context, _ *ListInboxBooksInpu
 	// Batch fetch collections
 	collectionMap := make(map[string]CollectionRef) // id -> ref
 	for id := range collectionIDs {
-		if coll, err := s.store.AdminGetCollection(ctx, id); err == nil {
+		if coll, err := s.services.Collection.AdminGetCollection(ctx, id); err == nil {
 			collectionMap[id] = CollectionRef{ID: coll.ID, Name: coll.Name}
 		}
 	}

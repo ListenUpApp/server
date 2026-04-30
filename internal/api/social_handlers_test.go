@@ -361,6 +361,11 @@ func setupTestServerWithReadingSession(t *testing.T) *testServer {
 		ts.services.ReadingSession = readingSessionService
 	}
 
+	// Add Book service (minimal — scanner/indexer are nil, only store-backed methods used in tests).
+	if ts.services.Book == nil {
+		ts.services.Book = service.NewBookService(ts.store, nil, nil, nil, nil, nil, ts.logger)
+	}
+
 	// Re-register social routes to include the new endpoints
 	ts.registerSocialRoutes()
 

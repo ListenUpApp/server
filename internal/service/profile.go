@@ -48,6 +48,12 @@ func NewProfileService(
 	}
 }
 
+// GetUser returns the domain user by ID. Used by handlers that need both user
+// and profile data in the same response without going to the store directly.
+func (s *ProfileService) GetUser(ctx context.Context, userID string) (*domain.User, error) {
+	return s.store.GetUser(ctx, userID)
+}
+
 // GetOrCreateProfile returns a user's profile, creating a default if none exists.
 func (s *ProfileService) GetOrCreateProfile(ctx context.Context, userID string) (*domain.UserProfile, error) {
 	if err := ctx.Err(); err != nil {

@@ -153,7 +153,7 @@ func (s *Server) handleGetMyProfile(ctx context.Context, _ *AuthenticatedInput) 
 		return nil, err
 	}
 
-	user, err := s.store.GetUser(ctx, userID)
+	user, err := s.services.Profile.GetUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +205,7 @@ func (s *Server) handleUpdateMyProfile(ctx context.Context, input *UpdateProfile
 		return nil, err
 	}
 
-	user, err := s.store.GetUser(ctx, userID)
+	user, err := s.services.Profile.GetUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +252,7 @@ func (s *Server) handleUploadAvatar(ctx context.Context, input *UploadAvatarInpu
 		return nil, err
 	}
 
-	user, err := s.store.GetUser(ctx, userID)
+	user, err := s.services.Profile.GetUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}

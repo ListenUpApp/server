@@ -125,6 +125,16 @@ func (s *SearchService) UpdateBookTags(ctx context.Context, bookID string, tagSl
 	return nil
 }
 
+// CanUserAccessBook reports whether userID may see bookID.
+func (s *SearchService) CanUserAccessBook(ctx context.Context, userID, bookID string) (bool, error) {
+	return s.store.CanUserAccessBook(ctx, userID, bookID)
+}
+
+// GetUser returns the domain user by ID. Used for admin checks in search handlers.
+func (s *SearchService) GetUser(ctx context.Context, userID string) (*domain.User, error) {
+	return s.store.GetUser(ctx, userID)
+}
+
 // DocumentCount returns the number of indexed documents.
 func (s *SearchService) DocumentCount() (uint64, error) {
 	return s.index.DocumentCount()
