@@ -273,19 +273,13 @@ func (s *Server) handleGetBookTags(ctx context.Context, input *GetBookTagsInput)
 		return nil, err
 	}
 
-	// Check if user can access this book
-	canAccess, err := s.store.CanUserAccessBook(ctx, userID, input.BookID)
+	tags, err := s.services.Tag.GetTagsForBookWithAccess(ctx, userID, input.BookID)
 	if errors.Is(err, store.ErrBookNotFound) {
 		return nil, huma.Error404NotFound("book not found")
 	}
-	if err != nil {
-		return nil, err
-	}
-	if !canAccess {
+	if errors.Is(err, service.ErrForbidden) {
 		return nil, huma.Error403Forbidden("access denied")
 	}
-
-	tags, err := s.services.Tag.GetTagsForBook(ctx, input.BookID)
 	if err != nil {
 		return nil, err
 	}

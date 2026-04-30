@@ -448,6 +448,97 @@ func (s *SyncService) GetSeriesForSync(ctx context.Context, userID string, param
 	return response, nil
 }
 
+// SessionWithUser bundles a reading session with its associated user and profile.
+// Used as the return type for GetActiveSessionsForUser and GetReadingSessionsForUser
+// so callers do not need to perform secondary lookups against the store.
+type SessionWithUser struct {
+	Session  *domain.BookReadingSession
+	User     *domain.User
+	Profile  *domain.UserProfile
+}
+
+// GetActiveSessionsForUser returns all currently active reading sessions for books
+// the given user can access, enriched with user and profile data.
+func (s *SyncService) GetActiveSessionsForUser(ctx context.Context, userID string) ([]*SessionWithUser, error) {
+	allSessions, err := s.store.GetAllActiveSessions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return s.filterAndEnrichSessions(ctx, userID, allSessions)
+}
+
+// GetReadingSessionsForUser returns all reading sessions (active, completed, and
+// abandoned) for books the given user can access, enriched with user and profile data.
+func (s *SyncService) GetReadingSessionsForUser(ctx context.Context, userID string) ([]*SessionWithUser, error) {
+	allSessions, err := s.store.GetAllReadingSessions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return s.filterAndEnrichSessions(ctx, userID, allSessions)
+}
+
+// filterAndEnrichSessions filters sessions to only those the user can access, then
+// batch-fetches user and profile data to avoid N+1 queries.
+func (s *SyncService) filterAndEnrichSessions(ctx context.Context, userID string, allSessions []*domain.BookReadingSession) ([]*SessionWithUser, error) {
+	// Filter to books the user can access.
+	accessible := make([]*domain.BookReadingSession, 0, len(allSessions))
+	for _, session := range allSessions {
+		canAccess, err := s.store.CanUserAccessBook(ctx, userID, session.BookID)
+		if err != nil {
+			continue // Skip sessions we can't verify access for.
+		}
+		if canAccess {
+			accessible = append(accessible, session)
+		}
+	}
+
+	// Collect unique user IDs for batch fetching.
+	userIDSet := make(map[string]bool, len(accessible))
+	for _, session := range accessible {
+		userIDSet[session.UserID] = true
+	}
+	userIDs := make([]string, 0, len(userIDSet))
+	for id := range userIDSet {
+		userIDs = append(userIDs, id)
+	}
+
+	// Batch fetch users and profiles.
+	users, err := s.store.GetUsersByIDs(ctx, userIDs)
+	if err != nil {
+		return nil, err
+	}
+	userMap := make(map[string]*domain.User, len(users))
+	for _, u := range users {
+		userMap[u.ID] = u
+	}
+
+	profiles, err := s.store.GetUserProfilesByIDs(ctx, userIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	// Assemble results, skipping sessions for users we can't find.
+	result := make([]*SessionWithUser, 0, len(accessible))
+	for _, session := range accessible {
+		user, ok := userMap[session.UserID]
+		if !ok {
+			continue
+		}
+		profile, ok := profiles[session.UserID]
+		if !ok {
+			profile = &domain.UserProfile{
+				AvatarType: domain.AvatarTypeAuto,
+			}
+		}
+		result = append(result, &SessionWithUser{
+			Session: session,
+			User:    user,
+			Profile: profile,
+		})
+	}
+	return result, nil
+}
+
 // filterContributorsByAccessibleBooks filters contributors to only those linked
 // to at least one book the user can access.
 // Uses a single batch query instead of per-contributor queries to avoid N+1.

@@ -407,73 +407,22 @@ func (s *Server) handleGetSyncActiveSessions(ctx context.Context, _ *GetSyncActi
 		return nil, err
 	}
 
-	allSessions, err := s.store.GetAllActiveSessions(ctx)
+	sessions, err := s.services.Sync.GetActiveSessionsForUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Filter sessions to only include books the user can access
-	activeSessions := make([]*domain.BookReadingSession, 0, len(allSessions))
-	for _, session := range allSessions {
-		canAccess, err := s.store.CanUserAccessBook(ctx, userID, session.BookID)
-		if err != nil {
-			continue // Skip sessions we can't verify access for
-		}
-		if canAccess {
-			activeSessions = append(activeSessions, session)
-		}
-	}
-
-	// Collect unique user IDs for batch fetching
-	userIDSet := make(map[string]bool, len(activeSessions))
-	for _, session := range activeSessions {
-		userIDSet[session.UserID] = true
-	}
-	userIDs := make([]string, 0, len(userIDSet))
-	for id := range userIDSet {
-		userIDs = append(userIDs, id)
-	}
-
-	// Batch fetch all users and profiles
-	users, err := s.store.GetUsersByIDs(ctx, userIDs)
-	if err != nil {
-		return nil, err
-	}
-	userMap := make(map[string]*domain.User, len(users))
-	for _, user := range users {
-		userMap[user.ID] = user
-	}
-
-	profiles, err := s.store.GetUserProfilesByIDs(ctx, userIDs)
-	if err != nil {
-		return nil, err
-	}
-
-	resp := make([]SyncActiveSessionResponse, 0, len(activeSessions))
-	for _, session := range activeSessions {
-		user, ok := userMap[session.UserID]
-		if !ok {
-			// Skip sessions for users we can't find (deleted, etc.)
-			continue
-		}
-
-		// Get user profile for avatar settings, use defaults if not found
-		profile, ok := profiles[session.UserID]
-		if !ok {
-			profile = &domain.UserProfile{
-				AvatarType: domain.AvatarTypeAuto,
-			}
-		}
-
+	resp := make([]SyncActiveSessionResponse, 0, len(sessions))
+	for _, sw := range sessions {
 		resp = append(resp, SyncActiveSessionResponse{
-			SessionID:   session.ID,
-			UserID:      session.UserID,
-			BookID:      session.BookID,
-			StartedAt:   session.StartedAt,
-			DisplayName: user.DisplayName,
-			AvatarType:  string(profile.AvatarType),
-			AvatarValue: profile.AvatarValue,
-			AvatarColor: color.ForUser(session.UserID),
+			SessionID:   sw.Session.ID,
+			UserID:      sw.Session.UserID,
+			BookID:      sw.Session.BookID,
+			StartedAt:   sw.Session.StartedAt,
+			DisplayName: sw.User.DisplayName,
+			AvatarType:  string(sw.Profile.AvatarType),
+			AvatarValue: sw.Profile.AvatarValue,
+			AvatarColor: color.ForUser(sw.Session.UserID),
 		})
 	}
 
@@ -502,71 +451,22 @@ func (s *Server) handleGetSyncReadingSessions(ctx context.Context, _ *GetSyncRea
 		return nil, err
 	}
 
-	allSessions, err := s.store.GetAllReadingSessions(ctx)
+	sessions, err := s.services.Sync.GetReadingSessionsForUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Filter sessions to only include books the user can access
-	accessibleSessions := make([]*domain.BookReadingSession, 0, len(allSessions))
-	for _, session := range allSessions {
-		canAccess, err := s.store.CanUserAccessBook(ctx, userID, session.BookID)
-		if err != nil {
-			continue // Skip sessions we can't verify access for
-		}
-		if canAccess {
-			accessibleSessions = append(accessibleSessions, session)
-		}
-	}
-
-	// Collect unique user IDs for batch fetching
-	userIDSet := make(map[string]bool, len(accessibleSessions))
-	for _, session := range accessibleSessions {
-		userIDSet[session.UserID] = true
-	}
-	userIDs := make([]string, 0, len(userIDSet))
-	for id := range userIDSet {
-		userIDs = append(userIDs, id)
-	}
-
-	// Batch fetch all users and profiles
-	users, err := s.store.GetUsersByIDs(ctx, userIDs)
-	if err != nil {
-		return nil, err
-	}
-	userMap := make(map[string]*domain.User, len(users))
-	for _, user := range users {
-		userMap[user.ID] = user
-	}
-
-	profiles, err := s.store.GetUserProfilesByIDs(ctx, userIDs)
-	if err != nil {
-		return nil, err
-	}
-
-	resp := make([]SyncActiveSessionResponse, 0, len(accessibleSessions))
-	for _, session := range accessibleSessions {
-		user, ok := userMap[session.UserID]
-		if !ok {
-			continue
-		}
-
-		profile, ok := profiles[session.UserID]
-		if !ok {
-			profile = &domain.UserProfile{
-				AvatarType: domain.AvatarTypeAuto,
-			}
-		}
-
+	resp := make([]SyncActiveSessionResponse, 0, len(sessions))
+	for _, sw := range sessions {
 		resp = append(resp, SyncActiveSessionResponse{
-			SessionID:   session.ID,
-			UserID:      session.UserID,
-			BookID:      session.BookID,
-			StartedAt:   session.StartedAt,
-			DisplayName: user.DisplayName,
-			AvatarType:  string(profile.AvatarType),
-			AvatarValue: profile.AvatarValue,
-			AvatarColor: color.ForUser(session.UserID),
+			SessionID:   sw.Session.ID,
+			UserID:      sw.Session.UserID,
+			BookID:      sw.Session.BookID,
+			StartedAt:   sw.Session.StartedAt,
+			DisplayName: sw.User.DisplayName,
+			AvatarType:  string(sw.Profile.AvatarType),
+			AvatarValue: sw.Profile.AvatarValue,
+			AvatarColor: color.ForUser(sw.Session.UserID),
 		})
 	}
 

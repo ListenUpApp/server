@@ -56,6 +56,20 @@ func (s *TagService) GetTagsForBook(ctx context.Context, bookID string) ([]*doma
 	return s.store.GetTagsForBook(ctx, bookID)
 }
 
+// GetTagsForBookWithAccess returns all tags on a book after verifying the user
+// has read access. Returns (nil, ErrForbidden) if the user cannot access the book,
+// or (nil, store.ErrBookNotFound) if the book does not exist.
+func (s *TagService) GetTagsForBookWithAccess(ctx context.Context, userID, bookID string) ([]*domain.Tag, error) {
+	canAccess, err := s.store.CanUserAccessBook(ctx, userID, bookID)
+	if err != nil {
+		return nil, err
+	}
+	if !canAccess {
+		return nil, ErrForbidden
+	}
+	return s.store.GetTagsForBook(ctx, bookID)
+}
+
 // AddTagToBook adds a tag to a book.
 // Creates the tag if it doesn't exist.
 // Requires user to have read access to the book.

@@ -95,7 +95,7 @@ func (s *Server) checkDatabase(ctx context.Context) ComponentHealth {
 
 	start := time.Now()
 
-	// Quick read operation to verify DB is accessible.
+	// Health check pings the DB directly: a HealthService wrapper would add no value here.
 	// ErrServerNotFound is fine - DB is accessible, just not setup yet.
 	_, err := s.store.GetInstance(ctx)
 	latency := time.Since(start)
