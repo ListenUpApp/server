@@ -25,6 +25,7 @@ func getFixturePath(t *testing.T) string {
 // TestEnvelopeContract_SuccessMatchesFixture verifies the server produces
 // exactly the same JSON structure as defined in the shared fixture.
 func TestEnvelopeContract_SuccessMatchesFixture(t *testing.T) {
+	t.Parallel()
 	fixturePath := filepath.Join(getFixturePath(t), "success.json")
 	fixtureBytes, err := os.ReadFile(fixturePath)
 	require.NoError(t, err, "Failed to read fixture file - contract tests require shared fixtures")
@@ -61,6 +62,7 @@ func TestEnvelopeContract_SuccessMatchesFixture(t *testing.T) {
 // TestEnvelopeContract_SuccessNullDataMatchesFixture verifies success responses
 // without data match the fixture structure.
 func TestEnvelopeContract_SuccessNullDataMatchesFixture(t *testing.T) {
+	t.Parallel()
 	fixturePath := filepath.Join(getFixturePath(t), "success_null_data.json")
 	fixtureBytes, err := os.ReadFile(fixturePath)
 	require.NoError(t, err, "Failed to read fixture file")
@@ -88,6 +90,7 @@ func TestEnvelopeContract_SuccessNullDataMatchesFixture(t *testing.T) {
 // TestEnvelopeContract_SimpleErrorMatchesFixture verifies simple error responses
 // match the fixture structure.
 func TestEnvelopeContract_SimpleErrorMatchesFixture(t *testing.T) {
+	t.Parallel()
 	fixturePath := filepath.Join(getFixturePath(t), "error_simple.json")
 	fixtureBytes, err := os.ReadFile(fixturePath)
 	require.NoError(t, err, "Failed to read fixture file")
@@ -117,6 +120,7 @@ func TestEnvelopeContract_SimpleErrorMatchesFixture(t *testing.T) {
 // TestEnvelopeContract_DetailedErrorMatchesFixture verifies detailed error responses
 // with code/message/details match the fixture structure.
 func TestEnvelopeContract_DetailedErrorMatchesFixture(t *testing.T) {
+	t.Parallel()
 	fixturePath := filepath.Join(getFixturePath(t), "error_detailed.json")
 	fixtureBytes, err := os.ReadFile(fixturePath)
 	require.NoError(t, err, "Failed to read fixture file")
@@ -154,6 +158,7 @@ func TestEnvelopeContract_DetailedErrorMatchesFixture(t *testing.T) {
 // TestEnvelopeContract_VersionFieldName verifies the version field is named exactly 'v'.
 // This is critical - if renamed to 'version', client will break silently.
 func TestEnvelopeContract_VersionFieldName(t *testing.T) {
+	t.Parallel()
 	result, err := EnvelopeTransformer(nil, "200", nil)
 	require.NoError(t, err)
 

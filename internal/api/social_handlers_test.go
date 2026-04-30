@@ -88,8 +88,8 @@ func createTestUser(userID, email, firstName, lastName string, role domain.Role)
 }
 
 func TestGetBookReaders_Success(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServerWithReadingSession(t)
-	defer ts.cleanup()
 
 	// Create users and auth token
 	token, userID := createTestUserAndLoginWithID(t, ts)
@@ -128,8 +128,8 @@ func TestGetBookReaders_Success(t *testing.T) {
 }
 
 func TestGetBookReaders_Unauthorized(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServerWithReadingSession(t)
-	defer ts.cleanup()
 
 	// Create a book
 	bookID, err := id.Generate("book")
@@ -145,8 +145,8 @@ func TestGetBookReaders_Unauthorized(t *testing.T) {
 }
 
 func TestGetBookReaders_BookNotFound(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServerWithReadingSession(t)
-	defer ts.cleanup()
 
 	token := ts.createTestUserAndLogin(t)
 
@@ -158,8 +158,8 @@ func TestGetBookReaders_BookNotFound(t *testing.T) {
 }
 
 func TestGetBookReaders_MultipleReaders(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServerWithReadingSession(t)
-	defer ts.cleanup()
 
 	// Create first user (admin)
 	token1, user1ID := createTestUserAndLoginWithID(t, ts)
@@ -216,8 +216,8 @@ func TestGetBookReaders_MultipleReaders(t *testing.T) {
 }
 
 func TestGetUserReadingHistory_Success(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServerWithReadingSession(t)
-	defer ts.cleanup()
 
 	token, userID := createTestUserAndLoginWithID(t, ts)
 
@@ -278,8 +278,8 @@ func TestGetUserReadingHistory_Success(t *testing.T) {
 }
 
 func TestGetUserReadingHistory_Unauthorized(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServerWithReadingSession(t)
-	defer ts.cleanup()
 
 	// Try to get reading history without auth
 	resp := ts.api.Get("/api/v1/users/me/reading-sessions")
@@ -288,8 +288,8 @@ func TestGetUserReadingHistory_Unauthorized(t *testing.T) {
 }
 
 func TestGetUserReadingHistory_EmptyHistory(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServerWithReadingSession(t)
-	defer ts.cleanup()
 
 	token := ts.createTestUserAndLogin(t)
 
@@ -310,8 +310,8 @@ func TestGetUserReadingHistory_EmptyHistory(t *testing.T) {
 }
 
 func TestGetUserReadingHistory_LimitParameter(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServerWithReadingSession(t)
-	defer ts.cleanup()
 
 	token, userID := createTestUserAndLoginWithID(t, ts)
 

@@ -10,8 +10,8 @@ import (
 )
 
 func TestHealthCheck_Success(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
-	defer ts.cleanup()
 
 	resp := ts.api.Get("/health")
 

@@ -10,8 +10,8 @@ import (
 )
 
 func TestSetup_Success(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
-	defer ts.cleanup()
 
 	resp := ts.api.Post("/api/v1/auth/setup", map[string]any{
 		"email":      "admin@example.com",
@@ -36,8 +36,8 @@ func TestSetup_Success(t *testing.T) {
 }
 
 func TestSetup_AlreadyConfigured(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
-	defer ts.cleanup()
 
 	// First setup succeeds
 	resp := ts.api.Post("/api/v1/auth/setup", map[string]any{
@@ -60,8 +60,8 @@ func TestSetup_AlreadyConfigured(t *testing.T) {
 }
 
 func TestSetup_ValidationErrors(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
-	defer ts.cleanup()
 
 	tests := []struct {
 		name       string
@@ -111,6 +111,7 @@ func TestSetup_ValidationErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			resp := ts.api.Post("/api/v1/auth/setup", tt.body)
 			assert.Equal(t, tt.wantStatus, resp.Code)
 		})
@@ -118,8 +119,8 @@ func TestSetup_ValidationErrors(t *testing.T) {
 }
 
 func TestLogin_Success(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
-	defer ts.cleanup()
 
 	// First setup the server
 	resp := ts.api.Post("/api/v1/auth/setup", map[string]any{
@@ -153,8 +154,8 @@ func TestLogin_Success(t *testing.T) {
 }
 
 func TestLogin_InvalidCredentials(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
-	defer ts.cleanup()
 
 	// Setup first
 	resp := ts.api.Post("/api/v1/auth/setup", map[string]any{
@@ -184,6 +185,7 @@ func TestLogin_InvalidCredentials(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			resp := ts.api.Post("/api/v1/auth/login", map[string]any{
 				"email":    tt.email,
 				"password": tt.password,
@@ -199,8 +201,8 @@ func TestLogin_InvalidCredentials(t *testing.T) {
 }
 
 func TestLogin_MissingDeviceInfo(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
-	defer ts.cleanup()
 
 	// Setup first
 	resp := ts.api.Post("/api/v1/auth/setup", map[string]any{
@@ -221,8 +223,8 @@ func TestLogin_MissingDeviceInfo(t *testing.T) {
 }
 
 func TestRefresh_Success(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
-	defer ts.cleanup()
 
 	// Setup and login
 	resp := ts.api.Post("/api/v1/auth/setup", map[string]any{
@@ -261,8 +263,8 @@ func TestRefresh_Success(t *testing.T) {
 }
 
 func TestRefresh_InvalidToken(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
-	defer ts.cleanup()
 
 	resp := ts.api.Post("/api/v1/auth/refresh", map[string]any{
 		"refresh_token": "invalid-token-12345",
@@ -272,8 +274,8 @@ func TestRefresh_InvalidToken(t *testing.T) {
 }
 
 func TestLogout_Success(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
-	defer ts.cleanup()
 
 	// Setup first
 	resp := ts.api.Post("/api/v1/auth/setup", map[string]any{

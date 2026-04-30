@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/danielgtaylor/huma/v2"
 	domainerrors "github.com/listenupapp/listenup-server/internal/errors"
@@ -36,7 +37,14 @@ func (e *APIError) ContentType(_ string) string {
 
 // RegisterErrorHandler configures huma to use domain errors.
 // Call this after creating the huma.API but before registering routes.
-func RegisterErrorHandler() {
+//
+// Safe to call from multiple test goroutines: the underlying assignment
+// to huma.NewError happens exactly once via sync.OnceFunc, so the
+// data-race that previously prevented internal/api tests from running
+// in parallel is gone.
+var RegisterErrorHandler = sync.OnceFunc(registerErrorHandler)
+
+func registerErrorHandler() {
 	huma.NewError = func(status int, message string, errs ...error) huma.StatusError {
 		// Check if any of the errors are domain errors
 		for _, err := range errs {

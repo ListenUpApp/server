@@ -10,8 +10,8 @@ import (
 )
 
 func TestGetSyncManifest_Success(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
-	defer ts.cleanup()
 
 	// Get auth token
 	token := ts.createTestUserAndLogin(t)
@@ -34,8 +34,8 @@ func TestGetSyncManifest_Success(t *testing.T) {
 }
 
 func TestGetSyncManifest_Unauthorized(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
-	defer ts.cleanup()
 
 	resp := ts.api.Get("/api/v1/sync/manifest")
 
@@ -43,8 +43,8 @@ func TestGetSyncManifest_Unauthorized(t *testing.T) {
 }
 
 func TestGetSyncManifest_InvalidToken(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
-	defer ts.cleanup()
 
 	resp := ts.api.Get("/api/v1/sync/manifest",
 		"Authorization: Bearer invalid-token")
@@ -53,8 +53,8 @@ func TestGetSyncManifest_InvalidToken(t *testing.T) {
 }
 
 func TestGetSyncBooks_Success(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
-	defer ts.cleanup()
 
 	token := ts.createTestUserAndLogin(t)
 
@@ -74,8 +74,8 @@ func TestGetSyncBooks_Success(t *testing.T) {
 }
 
 func TestGetSyncBooks_WithPagination(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
-	defer ts.cleanup()
 
 	token := ts.createTestUserAndLogin(t)
 
@@ -93,8 +93,8 @@ func TestGetSyncBooks_WithPagination(t *testing.T) {
 }
 
 func TestGetSyncBooks_Unauthorized(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
-	defer ts.cleanup()
 
 	resp := ts.api.Get("/api/v1/sync/books")
 
@@ -102,8 +102,8 @@ func TestGetSyncBooks_Unauthorized(t *testing.T) {
 }
 
 func TestGetSyncContributors_Success(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
-	defer ts.cleanup()
 
 	token := ts.createTestUserAndLogin(t)
 
@@ -123,8 +123,8 @@ func TestGetSyncContributors_Success(t *testing.T) {
 }
 
 func TestGetSyncContributors_Unauthorized(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
-	defer ts.cleanup()
 
 	resp := ts.api.Get("/api/v1/sync/contributors")
 
@@ -132,8 +132,8 @@ func TestGetSyncContributors_Unauthorized(t *testing.T) {
 }
 
 func TestGetSyncSeries_Success(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
-	defer ts.cleanup()
 
 	token := ts.createTestUserAndLogin(t)
 
@@ -153,8 +153,8 @@ func TestGetSyncSeries_Success(t *testing.T) {
 }
 
 func TestGetSyncSeries_Unauthorized(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
-	defer ts.cleanup()
 
 	resp := ts.api.Get("/api/v1/sync/series")
 
@@ -162,8 +162,8 @@ func TestGetSyncSeries_Unauthorized(t *testing.T) {
 }
 
 func TestGetSyncReadingSessions_Success(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
-	defer ts.cleanup()
 
 	token := ts.createTestUserAndLogin(t)
 
@@ -182,8 +182,8 @@ func TestGetSyncReadingSessions_Success(t *testing.T) {
 }
 
 func TestGetSyncReadingSessions_Unauthorized(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
-	defer ts.cleanup()
 
 	resp := ts.api.Get("/api/v1/sync/reading-sessions")
 

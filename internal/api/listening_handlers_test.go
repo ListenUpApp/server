@@ -47,6 +47,7 @@ import (
 //	  "failed": []
 //	}
 func TestListeningEventsContractMatch(t *testing.T) {
+	t.Parallel()
 	// This is the EXACT JSON the Kotlin client sends
 	clientRequest := `{
 		"events": [
@@ -102,6 +103,7 @@ func TestListeningEventsContractMatch(t *testing.T) {
 
 // TestListeningEventsBatchSubmission tests the full handler flow with multiple events.
 func TestListeningEventsBatchSubmission(t *testing.T) {
+	t.Parallel()
 	clientRequest := `{
 		"events": [
 			{
@@ -139,6 +141,7 @@ func TestListeningEventsBatchSubmission(t *testing.T) {
 
 // TestListeningEventsEmptyBatchRejected ensures empty batches are rejected.
 func TestListeningEventsEmptyBatchRejected(t *testing.T) {
+	t.Parallel()
 	clientRequest := `{"events": []}`
 
 	var req BatchListeningEventsRequest
@@ -152,6 +155,7 @@ func TestListeningEventsEmptyBatchRejected(t *testing.T) {
 // TestFlexTimeAcceptsEpochMilliseconds verifies FlexTime handles epoch ms format
 // that the Kotlin client sends.
 func TestFlexTimeAcceptsEpochMilliseconds(t *testing.T) {
+	t.Parallel()
 	// Client sends timestamps as epoch milliseconds (Long in Kotlin)
 	jsonWithEpochMs := `{"started_at": 1704067200000, "ended_at": 1704067260000}`
 
@@ -171,6 +175,7 @@ func TestFlexTimeAcceptsEpochMilliseconds(t *testing.T) {
 // TestFlexTimeAcceptsRFC3339 verifies FlexTime also handles RFC3339 format
 // for backwards compatibility.
 func TestFlexTimeAcceptsRFC3339(t *testing.T) {
+	t.Parallel()
 	jsonWithRFC3339 := `{"started_at": "2024-01-01T00:00:00Z", "ended_at": "2024-01-01T00:01:00Z"}`
 
 	var payload struct {
@@ -189,6 +194,7 @@ func TestFlexTimeAcceptsRFC3339(t *testing.T) {
 // pattern established by sync/books, sync/contributors, sync/series. The client's
 // ProgressPuller depends on this exact name.
 func TestGetAllProgressInput_HasUpdatedAfterQueryTag(t *testing.T) {
+	t.Parallel()
 	typ := reflect.TypeOf(GetAllProgressInput{})
 	field, ok := typ.FieldByName("UpdatedAfter")
 	require.True(t, ok, "GetAllProgressInput must have field UpdatedAfter")
@@ -200,20 +206,19 @@ func TestGetAllProgressInput_HasUpdatedAfterQueryTag(t *testing.T) {
 // newListeningHandlerServer builds a minimal *Server suitable for testing
 // handleGetAllProgress in isolation. No services are wired — the handler only
 // needs s.store.
-func newListeningHandlerServer(t *testing.T) (*Server, func()) {
+func newListeningHandlerServer(t *testing.T) *Server {
 	t.Helper()
 	tmpDir, err := os.MkdirTemp("", "listening-handler-test-*")
 	require.NoError(t, err)
 	dbPath := filepath.Join(tmpDir, "test.db")
 	st, err := sqlite.Open(dbPath, nil)
 	require.NoError(t, err)
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	s := &Server{store: st, logger: logger}
-	cleanup := func() {
+	t.Cleanup(func() {
 		_ = st.Close()
 		_ = os.RemoveAll(tmpDir)
-	}
-	return s, cleanup
+	})
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	return &Server{store: st, logger: logger}
 }
 
 // TestHandleGetAllProgress_InvalidUpdatedAfter_Returns400 verifies the handler
@@ -221,8 +226,8 @@ func newListeningHandlerServer(t *testing.T) (*Server, func()) {
 // (sync_handlers.go:246). This prevents silent fallthrough to full sync on
 // client bugs.
 func TestHandleGetAllProgress_InvalidUpdatedAfter_Returns400(t *testing.T) {
-	s, cleanup := newListeningHandlerServer(t)
-	defer cleanup()
+	t.Parallel()
+	s := newListeningHandlerServer(t)
 
 	ctx := setUserID(context.Background(), "user-1")
 	_, err := s.handleGetAllProgress(ctx, &GetAllProgressInput{UpdatedAfter: "not-a-date"})
@@ -238,8 +243,8 @@ func TestHandleGetAllProgress_InvalidUpdatedAfter_Returns400(t *testing.T) {
 // is preserved: when updated_after is empty the handler returns all of the user's
 // playback states (existing behavior, so a bad client release doesn't break sync).
 func TestHandleGetAllProgress_EmptyUpdatedAfter_ReturnsAll(t *testing.T) {
-	s, cleanup := newListeningHandlerServer(t)
-	defer cleanup()
+	t.Parallel()
+	s := newListeningHandlerServer(t)
 
 	ctx := context.Background()
 	userID := "user-empty"
@@ -257,8 +262,8 @@ func TestHandleGetAllProgress_EmptyUpdatedAfter_ReturnsAll(t *testing.T) {
 // param reaches the store: a cutoff strictly before book-b's updated_at must
 // return only book-b.
 func TestHandleGetAllProgress_ValidUpdatedAfter_FiltersResults(t *testing.T) {
-	s, cleanup := newListeningHandlerServer(t)
-	defer cleanup()
+	t.Parallel()
+	s := newListeningHandlerServer(t)
 
 	ctx := context.Background()
 	userID := "user-delta"

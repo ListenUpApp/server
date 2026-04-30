@@ -10,8 +10,8 @@ import (
 )
 
 func TestGetInstance_BeforeSetup(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
-	defer ts.cleanup()
 
 	resp := ts.api.Get("/api/v1/instance")
 
@@ -28,8 +28,8 @@ func TestGetInstance_BeforeSetup(t *testing.T) {
 }
 
 func TestGetInstance_AfterSetup(t *testing.T) {
+	t.Parallel()
 	ts := setupTestServer(t)
-	defer ts.cleanup()
 
 	// Complete setup
 	_ = ts.createTestUserAndLogin(t)

@@ -27,8 +27,7 @@ import (
 // testServer wraps the API server for testing with humatest.
 type testServer struct {
 	*Server
-	api     humatest.TestAPI
-	cleanup func()
+	api humatest.TestAPI
 }
 
 // setupTestServer creates a test server with a temporary database.
@@ -143,15 +142,14 @@ func setupTestServer(t *testing.T) *testServer {
 	// Wrap with humatest
 	testAPI := humatest.Wrap(t, api)
 
-	cleanup := func() {
+	t.Cleanup(func() {
 		_ = st.Close()
 		_ = os.RemoveAll(tmpDir)
-	}
+	})
 
 	return &testServer{
-		Server:  s,
-		api:     testAPI,
-		cleanup: cleanup,
+		Server: s,
+		api:    testAPI,
 	}
 }
 

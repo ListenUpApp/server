@@ -20,6 +20,7 @@ func strPtr(s string) *string {
 // the code checked err.Error() != "progress not found" but the actual error message was
 // "playback progress not found".
 func TestRebuildProgressFromEvents_ErrorHandling(t *testing.T) {
+	t.Parallel()
 	// This test documents the error types that rebuildProgressFromEvents must handle
 	// and ensures we use errors.Is() for error comparison.
 
@@ -42,6 +43,7 @@ func TestRebuildProgressFromEvents_ErrorHandling(t *testing.T) {
 // TestRebuildProgressFromEvents_UsesErrorsIs verifies that the fix correctly uses
 // errors.Is() instead of string comparison for error checking.
 func TestRebuildProgressFromEvents_UsesErrorsIs(t *testing.T) {
+	t.Parallel()
 	// errors.Is() should match ErrProgressNotFound
 	err := store.ErrProgressNotFound
 
@@ -64,6 +66,7 @@ func TestRebuildProgressFromEvents_UsesErrorsIs(t *testing.T) {
 // TestABSImportBookResponse_DisplayFields verifies that when a book is mapped,
 // the response includes listenup_title and listenup_author display fields.
 func TestABSImportBookResponse_DisplayFields(t *testing.T) {
+	t.Parallel()
 	// When mapped, display fields should be populated
 	title := "The Great Gatsby"
 	author := "F. Scott Fitzgerald"
@@ -88,6 +91,7 @@ func TestABSImportBookResponse_DisplayFields(t *testing.T) {
 // TestABSImportBookResponse_DisplayFieldsClearedOnUnmap verifies that when a book
 // mapping is cleared, the display fields are also cleared.
 func TestABSImportBookResponse_DisplayFieldsClearedOnUnmap(t *testing.T) {
+	t.Parallel()
 	book := &domain.ABSImportBook{
 		ImportID:       "import_123",
 		ABSMediaID:     "book_1",
@@ -107,6 +111,7 @@ func TestABSImportBookResponse_DisplayFieldsClearedOnUnmap(t *testing.T) {
 // TestABSImportUserResponse_DisplayFields verifies that when a user is mapped,
 // the response includes listenup_email and listenup_display_name.
 func TestABSImportUserResponse_DisplayFields(t *testing.T) {
+	t.Parallel()
 	email := "gatsby@example.com"
 	displayName := "Jay Gatsby"
 	user := &domain.ABSImportUser{
@@ -129,6 +134,7 @@ func TestABSImportUserResponse_DisplayFields(t *testing.T) {
 // TestABSImportUserResponse_DisplayFieldsClearedOnUnmap verifies that when a user
 // mapping is cleared, the display fields are also cleared.
 func TestABSImportUserResponse_DisplayFieldsClearedOnUnmap(t *testing.T) {
+	t.Parallel()
 	user := &domain.ABSImportUser{
 		ImportID:            "import_123",
 		ABSUserID:           "user_1",
@@ -149,6 +155,7 @@ func TestABSImportUserResponse_DisplayFieldsClearedOnUnmap(t *testing.T) {
 // includes fields for tracking failures. This is important for observability -
 // callers should be able to see how many operations failed.
 func TestImportABSSessionsOutput_HasFailureFields(t *testing.T) {
+	t.Parallel()
 	// Create a response with failure counts
 	output := ImportABSSessionsOutput{
 		Body: struct {
@@ -185,6 +192,7 @@ func TestImportABSSessionsOutput_HasFailureFields(t *testing.T) {
 // TestUserBookKeyUniqueness verifies that the userBookKey correctly identifies
 // unique user+book combinations for progress tracking.
 func TestUserBookKeyUniqueness(t *testing.T) {
+	t.Parallel()
 	type userBookKey struct {
 		userID string
 		bookID string
@@ -209,6 +217,7 @@ func TestUserBookKeyUniqueness(t *testing.T) {
 
 // TestSessionStatusValues documents the valid session status values.
 func TestSessionStatusValues(t *testing.T) {
+	t.Parallel()
 	// Document valid session statuses
 	statuses := []domain.SessionImportStatus{
 		domain.SessionStatusPendingUser,
@@ -225,6 +234,7 @@ func TestSessionStatusValues(t *testing.T) {
 
 // TestMappingFilterValues documents the valid mapping filter values.
 func TestMappingFilterValues(t *testing.T) {
+	t.Parallel()
 	// Document valid mapping filters
 	filters := []domain.MappingFilter{
 		domain.MappingFilterAll,
@@ -239,6 +249,7 @@ func TestMappingFilterValues(t *testing.T) {
 
 // TestDurationClamping verifies that positions exceeding book duration are clamped.
 func TestDurationClamping(t *testing.T) {
+	t.Parallel()
 	// This tests the logic in rebuildProgressFromEvents that clamps positions
 	// when ABS duration differs from ListenUp duration.
 
@@ -260,6 +271,7 @@ func TestDurationClamping(t *testing.T) {
 
 // TestListeningEventCreation verifies listening event structure for ABS imports.
 func TestListeningEventCreation(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	durationMs := int64(60000) // 1 minute
 
@@ -285,6 +297,7 @@ func TestListeningEventCreation(t *testing.T) {
 
 // TestProgressCalculation verifies progress percentage calculation.
 func TestProgressCalculation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name              string
 		currentPositionMs int64
@@ -319,6 +332,7 @@ func TestProgressCalculation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			percent := (float64(tt.currentPositionMs) / float64(tt.bookDurationMs)) * 100
 			assert.InDelta(t, tt.expectedPercent, percent, 0.1)
 		})
@@ -329,6 +343,7 @@ func TestProgressCalculation(t *testing.T) {
 // after successful store operations. This documents the fix for the bug where
 // counters were incremented BEFORE store, causing incorrect counts on failure.
 func TestCounterIncrementAfterStore(t *testing.T) {
+	t.Parallel()
 	// Simulate the BUGGY pattern: increment before store
 	buggyCounter := 0
 	items := []string{"a", "b", "c"}
@@ -359,6 +374,7 @@ func TestCounterIncrementAfterStore(t *testing.T) {
 // TestErrorsIsVsStringComparison demonstrates why errors.Is() is correct
 // and string comparison is fragile.
 func TestErrorsIsVsStringComparison(t *testing.T) {
+	t.Parallel()
 	// String comparison is fragile - exact message matters
 	// The BUG was checking: err.Error() != "progress not found"
 	// But the actual message was: "playback progress not found"
@@ -378,6 +394,7 @@ func TestErrorsIsVsStringComparison(t *testing.T) {
 
 // TestImportStatsUpdate documents that stats updates should log errors but not fail.
 func TestImportStatsUpdate(t *testing.T) {
+	t.Parallel()
 	// This test documents the behavior: stats updates are best-effort.
 	// If they fail, we log the error but don't fail the operation.
 	//
@@ -410,6 +427,7 @@ func TestImportStatsUpdate(t *testing.T) {
 
 // TestABSImportStatusAnalyzing verifies the new analyzing status constant.
 func TestABSImportStatusAnalyzing(t *testing.T) {
+	t.Parallel()
 	assert.Equal(t, domain.ABSImportStatus("analyzing"), domain.ABSImportStatusAnalyzing)
 
 	// Verify it serializes correctly in responses
@@ -424,6 +442,7 @@ func TestABSImportStatusAnalyzing(t *testing.T) {
 
 // TestABSImportStatusFailed verifies the new failed status constant.
 func TestABSImportStatusFailed(t *testing.T) {
+	t.Parallel()
 	assert.Equal(t, domain.ABSImportStatus("failed"), domain.ABSImportStatusFailed)
 
 	imp := &domain.ABSImport{
@@ -438,6 +457,7 @@ func TestABSImportStatusFailed(t *testing.T) {
 // TestCreateABSImport_ReturnsAnalyzingStatus verifies that the handler creates
 // an import with "analyzing" status (not "active") for async processing.
 func TestCreateABSImport_ReturnsAnalyzingStatus(t *testing.T) {
+	t.Parallel()
 	// The handler now creates the import record with ABSImportStatusAnalyzing
 	// and returns immediately. The heavy analysis runs in a background goroutine.
 	imp := &domain.ABSImport{
@@ -464,6 +484,7 @@ func TestCreateABSImport_ReturnsAnalyzingStatus(t *testing.T) {
 // still in "analyzing" status. This lets polling clients show scope context
 // (e.g. "Matching 1,011 books…") before the full storage phase completes.
 func TestAnalysisCountsWrittenBeforeSessionStorage(t *testing.T) {
+	t.Parallel()
 	imp := &domain.ABSImport{
 		ID:            "import-analysis-counts",
 		Name:          "ABS Import 2024-12-01",
@@ -497,6 +518,7 @@ func TestAnalysisCountsWrittenBeforeSessionStorage(t *testing.T) {
 // TestAutoMatchedBookDisplayName verifies that when a book is auto-matched,
 // the display name (ListenUpTitle) is populated from the store lookup.
 func TestAutoMatchedBookDisplayName(t *testing.T) {
+	t.Parallel()
 	// This documents the fix: auto-matched books should have ListenUpTitle set
 	// Previously, only ListenUpID was set but ListenUpTitle was left nil
 	title := "The Name of the Wind"
@@ -519,6 +541,7 @@ func TestAutoMatchedBookDisplayName(t *testing.T) {
 // TestAutoMatchedUserDisplayName verifies that when a user is auto-matched,
 // the display info (ListenUpEmail, ListenUpDisplayName) is populated.
 func TestAutoMatchedUserDisplayName(t *testing.T) {
+	t.Parallel()
 	// This documents the fix: auto-matched users should have display info set
 	email := "simon@example.com"
 	displayName := "Simon Hull"

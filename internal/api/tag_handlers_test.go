@@ -31,7 +31,6 @@ import (
 type tagTestServer struct {
 	*Server
 	api          humatest.TestAPI
-	cleanup      func()
 	sseManager   *sse.Manager
 	tokenService *auth.TokenService
 }
@@ -136,15 +135,14 @@ func setupTagTestServer(t *testing.T) *tagTestServer {
 
 	testAPI := humatest.Wrap(t, api)
 
-	cleanup := func() {
+	t.Cleanup(func() {
 		_ = st.Close()
 		_ = os.RemoveAll(tmpDir)
-	}
+	})
 
 	return &tagTestServer{
 		Server:       s,
 		api:          testAPI,
-		cleanup:      cleanup,
 		sseManager:   sseManager,
 		tokenService: tokenService,
 	}
@@ -257,8 +255,8 @@ func (ts *tagTestServer) createBookInCollection(t *testing.T, bookID, collection
 // === Tests ===
 
 func TestListTags_EmptyInitially(t *testing.T) {
+	t.Parallel()
 	ts := setupTagTestServer(t)
-	defer ts.cleanup()
 
 	token, _ := ts.createTagTestUser(t)
 
@@ -274,8 +272,8 @@ func TestListTags_EmptyInitially(t *testing.T) {
 }
 
 func TestListTags_SortedByBookCount(t *testing.T) {
+	t.Parallel()
 	ts := setupTagTestServer(t)
-	defer ts.cleanup()
 
 	token, _ := ts.createTagTestUser(t)
 
@@ -315,8 +313,8 @@ func TestListTags_SortedByBookCount(t *testing.T) {
 }
 
 func TestAddTagToBook_NormalizesInput(t *testing.T) {
+	t.Parallel()
 	ts := setupTagTestServer(t)
-	defer ts.cleanup()
 
 	token, _ := ts.createTagTestUser(t)
 	ts.createTestBook(t, "book-1")
@@ -335,6 +333,7 @@ func TestAddTagToBook_NormalizesInput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
 			resp := ts.api.Post("/api/v1/books/book-1/tags",
 				map[string]any{"tag": tt.input},
 				"Authorization: Bearer "+token)
@@ -350,8 +349,8 @@ func TestAddTagToBook_NormalizesInput(t *testing.T) {
 }
 
 func TestAddTagToBook_CreatesNewOrFindsExisting(t *testing.T) {
+	t.Parallel()
 	ts := setupTagTestServer(t)
-	defer ts.cleanup()
 
 	token, _ := ts.createTagTestUser(t)
 	ts.createTestBook(t, "book-1")
@@ -391,8 +390,8 @@ func TestAddTagToBook_CreatesNewOrFindsExisting(t *testing.T) {
 }
 
 func TestAddTagToBook_Idempotent(t *testing.T) {
+	t.Parallel()
 	ts := setupTagTestServer(t)
-	defer ts.cleanup()
 
 	token, _ := ts.createTagTestUser(t)
 	ts.createTestBook(t, "book-1")
@@ -417,8 +416,8 @@ func TestAddTagToBook_Idempotent(t *testing.T) {
 }
 
 func TestRemoveTagFromBook_Idempotent(t *testing.T) {
+	t.Parallel()
 	ts := setupTagTestServer(t)
-	defer ts.cleanup()
 
 	token, _ := ts.createTagTestUser(t)
 	ts.createTestBook(t, "book-1")
@@ -441,8 +440,8 @@ func TestRemoveTagFromBook_Idempotent(t *testing.T) {
 }
 
 func TestRemoveTagFromBook_TagNotFound(t *testing.T) {
+	t.Parallel()
 	ts := setupTagTestServer(t)
-	defer ts.cleanup()
 
 	token, _ := ts.createTagTestUser(t)
 	ts.createTestBook(t, "book-1")
@@ -454,8 +453,8 @@ func TestRemoveTagFromBook_TagNotFound(t *testing.T) {
 }
 
 func TestGetTagBooks_FiltersByUserAccess(t *testing.T) {
+	t.Parallel()
 	ts := setupTagTestServer(t)
-	defer ts.cleanup()
 
 	token, userID := ts.createTagTestUser(t)
 
@@ -496,8 +495,8 @@ func TestGetTagBooks_FiltersByUserAccess(t *testing.T) {
 }
 
 func TestAddTagToBook_AccessDenied(t *testing.T) {
+	t.Parallel()
 	ts := setupTagTestServer(t)
-	defer ts.cleanup()
 
 	token, _ := ts.createTagTestUser(t)
 
@@ -512,8 +511,8 @@ func TestAddTagToBook_AccessDenied(t *testing.T) {
 }
 
 func TestGetBookTags_Success(t *testing.T) {
+	t.Parallel()
 	ts := setupTagTestServer(t)
-	defer ts.cleanup()
 
 	token, _ := ts.createTagTestUser(t)
 	ts.createTestBook(t, "book-1")
@@ -538,8 +537,8 @@ func TestGetBookTags_Success(t *testing.T) {
 }
 
 func TestGetTagBySlug_Success(t *testing.T) {
+	t.Parallel()
 	ts := setupTagTestServer(t)
-	defer ts.cleanup()
 
 	token, _ := ts.createTagTestUser(t)
 	ts.createTestBook(t, "book-1")
@@ -563,8 +562,8 @@ func TestGetTagBySlug_Success(t *testing.T) {
 }
 
 func TestGetTagBySlug_NotFound(t *testing.T) {
+	t.Parallel()
 	ts := setupTagTestServer(t)
-	defer ts.cleanup()
 
 	token, _ := ts.createTagTestUser(t)
 
@@ -573,8 +572,8 @@ func TestGetTagBySlug_NotFound(t *testing.T) {
 }
 
 func TestAddTagToBook_EmptyAfterNormalization(t *testing.T) {
+	t.Parallel()
 	ts := setupTagTestServer(t)
-	defer ts.cleanup()
 
 	token, _ := ts.createTagTestUser(t)
 	ts.createTestBook(t, "book-1")
@@ -587,8 +586,8 @@ func TestAddTagToBook_EmptyAfterNormalization(t *testing.T) {
 }
 
 func TestAddTagToBook_BookNotFound(t *testing.T) {
+	t.Parallel()
 	ts := setupTagTestServer(t)
-	defer ts.cleanup()
 
 	token, _ := ts.createTagTestUser(t)
 

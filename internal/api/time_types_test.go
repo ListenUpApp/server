@@ -10,6 +10,7 @@ import (
 )
 
 func TestFlexTime_UnmarshalJSON_RFC3339(t *testing.T) {
+	t.Parallel()
 	input := `"2024-01-15T10:30:00Z"`
 	var ft FlexTime
 	err := json.Unmarshal([]byte(input), &ft)
@@ -20,6 +21,7 @@ func TestFlexTime_UnmarshalJSON_RFC3339(t *testing.T) {
 }
 
 func TestFlexTime_UnmarshalJSON_RFC3339Nano(t *testing.T) {
+	t.Parallel()
 	input := `"2024-01-15T10:30:00.123456789Z"`
 	var ft FlexTime
 	err := json.Unmarshal([]byte(input), &ft)
@@ -30,6 +32,7 @@ func TestFlexTime_UnmarshalJSON_RFC3339Nano(t *testing.T) {
 }
 
 func TestFlexTime_UnmarshalJSON_EpochMs_Number(t *testing.T) {
+	t.Parallel()
 	// 2024-01-15T10:30:00Z in epoch milliseconds
 	input := `1705314600000`
 	var ft FlexTime
@@ -41,6 +44,7 @@ func TestFlexTime_UnmarshalJSON_EpochMs_Number(t *testing.T) {
 }
 
 func TestFlexTime_UnmarshalJSON_EpochMs_String(t *testing.T) {
+	t.Parallel()
 	// Same time as above, but as string
 	input := `"1705314600000"`
 	var ft FlexTime
@@ -52,6 +56,7 @@ func TestFlexTime_UnmarshalJSON_EpochMs_String(t *testing.T) {
 }
 
 func TestFlexTime_MarshalJSON(t *testing.T) {
+	t.Parallel()
 	ft := FlexTime{Time: time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC)}
 	data, err := json.Marshal(ft)
 	require.NoError(t, err)
@@ -60,6 +65,7 @@ func TestFlexTime_MarshalJSON(t *testing.T) {
 }
 
 func TestFlexTime_InStruct(t *testing.T) {
+	t.Parallel()
 	type TestStruct struct {
 		StartedAt FlexTime `json:"started_at"`
 		EndedAt   FlexTime `json:"ended_at"`

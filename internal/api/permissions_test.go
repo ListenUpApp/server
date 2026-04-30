@@ -31,7 +31,6 @@ import (
 type permTestServer struct {
 	*Server
 	api          humatest.TestAPI
-	cleanup      func()
 	tokenService *auth.TokenService
 }
 
@@ -137,15 +136,14 @@ func setupPermTestServer(t *testing.T) *permTestServer {
 
 	testAPI := humatest.Wrap(t, api)
 
-	cleanup := func() {
+	t.Cleanup(func() {
 		_ = st.Close()
 		_ = os.RemoveAll(tmpDir)
-	}
+	})
 
 	return &permTestServer{
 		Server:       s,
 		api:          testAPI,
-		cleanup:      cleanup,
 		tokenService: tokenService,
 	}
 }
@@ -219,8 +217,8 @@ func (ts *permTestServer) createBook(t *testing.T, bookID, ownerID string) {
 }
 
 func TestCanEdit_UpdateBook_Forbidden(t *testing.T) {
+	t.Parallel()
 	ts := setupPermTestServer(t)
-	defer ts.cleanup()
 
 	token, userID := ts.createPermUser(t)
 	ts.createBook(t, "book-1", userID)
@@ -240,8 +238,8 @@ func TestCanEdit_UpdateBook_Forbidden(t *testing.T) {
 }
 
 func TestCanEdit_UpdateBook_Allowed(t *testing.T) {
+	t.Parallel()
 	ts := setupPermTestServer(t)
-	defer ts.cleanup()
 
 	token, userID := ts.createPermUser(t)
 	ts.createBook(t, "book-1", userID)
@@ -256,8 +254,8 @@ func TestCanEdit_UpdateBook_Allowed(t *testing.T) {
 }
 
 func TestCanEdit_SetBookContributors_Forbidden(t *testing.T) {
+	t.Parallel()
 	ts := setupPermTestServer(t)
-	defer ts.cleanup()
 
 	token, userID := ts.createPermUser(t)
 	ts.createBook(t, "book-1", userID)
@@ -278,8 +276,8 @@ func TestCanEdit_SetBookContributors_Forbidden(t *testing.T) {
 }
 
 func TestCanEdit_SetBookSeries_Forbidden(t *testing.T) {
+	t.Parallel()
 	ts := setupPermTestServer(t)
-	defer ts.cleanup()
 
 	token, userID := ts.createPermUser(t)
 	ts.createBook(t, "book-1", userID)
@@ -300,8 +298,8 @@ func TestCanEdit_SetBookSeries_Forbidden(t *testing.T) {
 }
 
 func TestCanShare_ShareCollection_Forbidden(t *testing.T) {
+	t.Parallel()
 	ts := setupPermTestServer(t)
-	defer ts.cleanup()
 
 	token, userID := ts.createPermUser(t)
 
@@ -347,12 +345,14 @@ func TestCanShare_ShareCollection_Forbidden(t *testing.T) {
 }
 
 func TestDefaultPermissions_AllEnabled(t *testing.T) {
+	t.Parallel()
 	perms := domain.DefaultPermissions()
 	assert.True(t, perms.CanShare)
 	assert.True(t, perms.CanEdit)
 }
 
 func TestUser_CanEdit_Method(t *testing.T) {
+	t.Parallel()
 	user := &domain.User{
 		Permissions: domain.UserPermissions{CanEdit: true},
 	}

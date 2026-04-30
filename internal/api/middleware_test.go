@@ -10,6 +10,7 @@ import (
 )
 
 func TestEnvelopeTransformer_AlwaysIncludesVersion(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		status string
@@ -58,6 +59,7 @@ func TestEnvelopeTransformer_AlwaysIncludesVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := EnvelopeTransformer(nil, tt.status, tt.input)
 			require.NoError(t, err)
 
@@ -77,6 +79,7 @@ func TestEnvelopeTransformer_AlwaysIncludesVersion(t *testing.T) {
 }
 
 func TestEnvelopeTransformer_SuccessResponse(t *testing.T) {
+	t.Parallel()
 	data := map[string]string{"name": "Test Book"}
 
 	result, err := EnvelopeTransformer(nil, "200", data)
@@ -92,6 +95,7 @@ func TestEnvelopeTransformer_SuccessResponse(t *testing.T) {
 }
 
 func TestEnvelopeTransformer_ErrorResponse(t *testing.T) {
+	t.Parallel()
 	result, err := EnvelopeTransformer(nil, "400", errors.New("validation failed"))
 	require.NoError(t, err)
 
@@ -105,6 +109,7 @@ func TestEnvelopeTransformer_ErrorResponse(t *testing.T) {
 }
 
 func TestEnvelopeTransformer_ErrorWithDetails(t *testing.T) {
+	t.Parallel()
 	apiErr := &APIError{
 		Code:    "disambiguation_required",
 		Message: "Multiple matches found",
