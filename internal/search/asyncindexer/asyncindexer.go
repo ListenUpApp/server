@@ -7,13 +7,23 @@ package asyncindexer
 import (
 	"context"
 	"errors"
+	"expvar"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
+
+// indexerDropsTotal counts the total number of jobs dropped across all Indexer
+// instances due to a full queue. Exported via expvar.
+var indexerDropsTotal = expvar.NewInt("asyncindexer_drops_total")
+
+// publishOnce ensures the expvar Func gauges are registered exactly once,
+// even if New is called multiple times in tests.
+var publishOnce sync.Once
 
 // queueDepth is the buffered channel capacity for pending index jobs.
 // Submit drops jobs (with a logged warning) when the queue is full.
@@ -62,16 +72,31 @@ type Indexer struct {
 
 	startOnce sync.Once
 	stopOnce  sync.Once
+
+	lastTickUnix int64        // updated atomically at the top of each work iteration
+	drops        atomic.Int64 // cumulative count of dropped jobs due to a full queue
 }
 
 // New constructs an Indexer wrapping the given SearchIndexer.
 // Call Start to launch its workers and Shutdown to drain and stop.
 func New(indexer store.SearchIndexer, logger *slog.Logger) *Indexer {
-	return &Indexer{
+	i := &Indexer{
 		indexer: indexer,
 		logger:  logger,
 		jobs:    make(chan Job, queueDepth),
 	}
+
+	publishOnce.Do(func() {
+		pinned := i
+		expvar.Publish("asyncindexer_queue_depth", expvar.Func(func() any {
+			return len(pinned.jobs)
+		}))
+		expvar.Publish("asyncindexer_last_tick_unix", expvar.Func(func() any {
+			return atomic.LoadInt64(&pinned.lastTickUnix)
+		}))
+	})
+
+	return i
 }
 
 // Start launches the worker goroutines. It is safe to call multiple times;
@@ -94,6 +119,8 @@ func (a *Indexer) Submit(job Job) {
 	select {
 	case a.jobs <- job:
 	default:
+		a.drops.Add(1)
+		indexerDropsTotal.Add(1)
 		a.logger.Warn("search index queue full, dropping job",
 			"op", job.Op,
 			"id", a.jobIdentifier(job),
@@ -179,6 +206,7 @@ func (a *Indexer) run() {
 			if !ok {
 				return
 			}
+			atomic.StoreInt64(&a.lastTickUnix, time.Now().Unix())
 			a.execute(job)
 		}
 	}
@@ -224,6 +252,22 @@ func (a *Indexer) execute(job Job) {
 			"error", err,
 		)
 	}
+}
+
+// LastTick returns the wall-clock time of the most recently processed job.
+// Used by /health to surface worker liveness.
+func (a *Indexer) LastTick() time.Time {
+	return time.Unix(atomic.LoadInt64(&a.lastTickUnix), 0)
+}
+
+// Drops returns the cumulative number of jobs dropped due to a full queue.
+func (a *Indexer) Drops() int64 {
+	return a.drops.Load()
+}
+
+// QueueDepth returns the current number of pending jobs in the queue.
+func (a *Indexer) QueueDepth() int {
+	return len(a.jobs)
 }
 
 // jobIdentifier returns a best-effort identifier for logging.
