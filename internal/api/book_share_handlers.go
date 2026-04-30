@@ -69,7 +69,7 @@ func (s *Server) handleGetBookSharePage(ctx context.Context, input *GetBookShare
 	description := html.EscapeString(truncate(enriched.Description, 200))
 
 	coverURL := fmt.Sprintf("%s/api/v1/books/%s/cover", baseURL, input.ID)
-	deepLink := fmt.Sprintf("listenup://book/%s", input.ID)
+	deepLink := "listenup://book/" + input.ID
 	playStoreURL := "https://play.google.com/store/apps/details?id=com.calypsan.listenup"
 	appStoreURL := "https://apps.apple.com/app/listenup/id0000000000"
 
@@ -154,7 +154,7 @@ func buildOGDescription(author, description string) string {
 		return fmt.Sprintf("by %s — %s", author, description)
 	}
 	if author != "" {
-		return fmt.Sprintf("by %s", author)
+		return "by " + author
 	}
 	return description
 }

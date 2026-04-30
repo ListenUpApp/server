@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -294,7 +295,7 @@ func (s *Server) handleGetBackup(ctx context.Context, input *GetBackupInput) (*G
 
 	b, err := s.backupService.Get(ctx, input.ID)
 	if err != nil {
-		if err == backup.ErrBackupNotFound {
+		if errors.Is(err, backup.ErrBackupNotFound) {
 			return nil, huma.Error404NotFound("backup not found")
 		}
 		return nil, huma.Error500InternalServerError("failed to get backup", err)
@@ -318,7 +319,7 @@ func (s *Server) handleDownloadBackup(ctx context.Context, input *DownloadBackup
 
 	b, err := s.backupService.Get(ctx, input.ID)
 	if err != nil {
-		if err == backup.ErrBackupNotFound {
+		if errors.Is(err, backup.ErrBackupNotFound) {
 			return nil, huma.Error404NotFound("backup not found")
 		}
 		return nil, huma.Error500InternalServerError("failed to get backup", err)
@@ -346,7 +347,7 @@ func (s *Server) handleDeleteBackup(ctx context.Context, input *DeleteBackupInpu
 	}
 
 	if err := s.backupService.Delete(ctx, input.ID); err != nil {
-		if err == backup.ErrBackupNotFound {
+		if errors.Is(err, backup.ErrBackupNotFound) {
 			return nil, huma.Error404NotFound("backup not found")
 		}
 		return nil, huma.Error500InternalServerError("failed to delete backup", err)

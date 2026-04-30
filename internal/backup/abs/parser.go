@@ -2,6 +2,7 @@ package abs
 
 import (
 	"archive/zip"
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -30,14 +31,17 @@ var (
 //	├── absdatabase.sqlite   (all data)
 //	├── metadata-items/      (per-item JSON)
 //	└── metadata-authors/    (author images)
-func Parse(path string) (*Backup, error) {
+func Parse(ctx context.Context, path string) (*Backup, error) {
 	start := time.Now()
 	slog.Info("parsing ABS backup", "path", path)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	// Try to open as ZIP first (modern ABS format)
 	zr, err := zip.OpenReader(path)
 	if err != nil {
-		return nil, fmt.Errorf("%w: not a valid ZIP archive: %v", ErrNotABSBackup, err)
+		return nil, fmt.Errorf("%w: not a valid ZIP archive: %w", ErrNotABSBackup, err)
 	}
 	defer zr.Close()
 
@@ -89,34 +93,34 @@ func Parse(path string) (*Backup, error) {
 	// Parse all data from SQLite
 	backup := &Backup{Path: path}
 
-	if err := parseUsers(db, backup); err != nil {
+	if err := parseUsers(ctx, db, backup); err != nil {
 		return nil, fmt.Errorf("parse users: %w", err)
 	}
 	slog.Info("parsed users", "count", len(backup.Users), "duration", time.Since(start))
 
-	if err := parseLibraries(db, backup); err != nil {
+	if err := parseLibraries(ctx, db, backup); err != nil {
 		return nil, fmt.Errorf("parse libraries: %w", err)
 	}
 
-	if err := parseLibraryItems(db, backup); err != nil {
+	if err := parseLibraryItems(ctx, db, backup); err != nil {
 		return nil, fmt.Errorf("parse library items: %w", err)
 	}
 	slog.Info("parsed library items", "count", len(backup.Items), "duration", time.Since(start))
 
-	if err := parseAuthors(db, backup); err != nil {
+	if err := parseAuthors(ctx, db, backup); err != nil {
 		return nil, fmt.Errorf("parse authors: %w", err)
 	}
 
-	if err := parseSeries(db, backup); err != nil {
+	if err := parseSeries(ctx, db, backup); err != nil {
 		return nil, fmt.Errorf("parse series: %w", err)
 	}
 
-	if err := parseSessions(db, backup); err != nil {
+	if err := parseSessions(ctx, db, backup); err != nil {
 		return nil, fmt.Errorf("parse sessions: %w", err)
 	}
 	slog.Info("parsed sessions", "count", len(backup.Sessions), "duration", time.Since(start))
 
-	if err := parseMediaProgress(db, backup); err != nil {
+	if err := parseMediaProgress(ctx, db, backup); err != nil {
 		return nil, fmt.Errorf("parse media progress: %w", err)
 	}
 
@@ -132,8 +136,8 @@ func Parse(path string) (*Backup, error) {
 	return backup, nil
 }
 
-func parseUsers(db *sql.DB, backup *Backup) error {
-	rows, err := db.Query(`SELECT id, username, COALESCE(email, ''), COALESCE(type, 'user') FROM users`)
+func parseUsers(ctx context.Context, db *sql.DB, backup *Backup) error {
+	rows, err := db.QueryContext(ctx, `SELECT id, username, COALESCE(email, ''), COALESCE(type, 'user') FROM users`)
 	if err != nil {
 		return err
 	}
@@ -149,8 +153,8 @@ func parseUsers(db *sql.DB, backup *Backup) error {
 	return rows.Err()
 }
 
-func parseLibraries(db *sql.DB, backup *Backup) error {
-	rows, err := db.Query(`SELECT id, COALESCE(name, ''), COALESCE(mediaType, 'book') FROM libraries`)
+func parseLibraries(ctx context.Context, db *sql.DB, backup *Backup) error {
+	rows, err := db.QueryContext(ctx, `SELECT id, COALESCE(name, ''), COALESCE(mediaType, 'book') FROM libraries`)
 	if err != nil {
 		return err
 	}
@@ -166,7 +170,7 @@ func parseLibraries(db *sql.DB, backup *Backup) error {
 	return rows.Err()
 }
 
-func parseLibraryItems(db *sql.DB, backup *Backup) error {
+func parseLibraryItems(ctx context.Context, db *sql.DB, backup *Backup) error {
 	// Join libraryItems with books to get full metadata
 	// Important: li.mediaId references books.id - this is what sessions use for matching
 	query := `
@@ -194,7 +198,7 @@ func parseLibraryItems(db *sql.DB, backup *Backup) error {
 		WHERE li.mediaType = 'book' OR li.mediaType IS NULL
 	`
 
-	rows, err := db.Query(query)
+	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
 		return err
 	}
@@ -272,8 +276,8 @@ func parseNarratorsJSON(jsonStr string) []PersonRef {
 	return narrators
 }
 
-func parseAuthors(db *sql.DB, backup *Backup) error {
-	rows, err := db.Query(`SELECT id, COALESCE(name, ''), COALESCE(asin, ''), COALESCE(description, '') FROM authors`)
+func parseAuthors(ctx context.Context, db *sql.DB, backup *Backup) error {
+	rows, err := db.QueryContext(ctx, `SELECT id, COALESCE(name, ''), COALESCE(asin, ''), COALESCE(description, '') FROM authors`)
 	if err != nil {
 		return err
 	}
@@ -289,8 +293,8 @@ func parseAuthors(db *sql.DB, backup *Backup) error {
 	return rows.Err()
 }
 
-func parseSeries(db *sql.DB, backup *Backup) error {
-	rows, err := db.Query(`SELECT id, COALESCE(name, ''), COALESCE(description, '') FROM series`)
+func parseSeries(ctx context.Context, db *sql.DB, backup *Backup) error {
+	rows, err := db.QueryContext(ctx, `SELECT id, COALESCE(name, ''), COALESCE(description, '') FROM series`)
 	if err != nil {
 		return err
 	}
@@ -306,9 +310,9 @@ func parseSeries(db *sql.DB, backup *Backup) error {
 	return rows.Err()
 }
 
-func parseSessions(db *sql.DB, backup *Backup) error {
+func parseSessions(ctx context.Context, db *sql.DB, backup *Backup) error {
 	// DEBUG: Log the actual schema to verify column names
-	schemaRows, err := db.Query(`PRAGMA table_info(playbackSessions)`)
+	schemaRows, err := db.QueryContext(ctx, `PRAGMA table_info(playbackSessions)`)
 	if err == nil {
 		defer schemaRows.Close()
 		slog.Debug("playbackSessions schema:")
@@ -355,7 +359,7 @@ func parseSessions(db *sql.DB, backup *Backup) error {
 		WHERE ps.mediaItemType = 'book' OR ps.mediaItemType IS NULL
 	`
 
-	rows, err := db.Query(query)
+	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
 		return err
 	}
@@ -424,12 +428,12 @@ func parseSessions(db *sql.DB, backup *Backup) error {
 	return rows.Err()
 }
 
-func parseMediaProgress(db *sql.DB, backup *Backup) error {
+func parseMediaProgress(ctx context.Context, db *sql.DB, backup *Backup) error {
 	// Detect schema version by checking for libraryItemId column.
 	// Newer ABS versions (2.17+) removed libraryItemId from mediaProgresses
 	// since mediaItemId now directly references the book/media item.
 	hasLibraryItemID := false
-	schemaRows, err := db.Query(`PRAGMA table_info(mediaProgresses)`)
+	schemaRows, err := db.QueryContext(ctx, `PRAGMA table_info(mediaProgresses)`)
 	if err == nil {
 		defer schemaRows.Close()
 		for schemaRows.Next() {
@@ -495,7 +499,7 @@ func parseMediaProgress(db *sql.DB, backup *Backup) error {
 		`
 	}
 
-	rows, err := db.Query(query)
+	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
 		return err
 	}

@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 	"time"
 
@@ -141,7 +142,7 @@ func (s *Store) GetActivity(ctx context.Context, id string) (*domain.Activity, e
 		`SELECT `+activityColumns+` FROM activities WHERE id = ?`, id)
 
 	a, err := scanActivity(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -268,7 +269,7 @@ func (s *Store) GetUserMilestoneState(ctx context.Context, userID string) (*doma
 		&state.LastListenHoursTotal,
 		&updatedAt,
 	)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil // No state yet, not an error
 	}
 	if err != nil {

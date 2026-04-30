@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json/v2"
+	"errors"
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/metadata/audible"
@@ -30,7 +31,7 @@ func (s *Store) GetCachedBook(ctx context.Context, region audible.Region, asin s
 	err := s.db.QueryRowContext(ctx,
 		`SELECT data, fetched_at FROM audible_cache_books WHERE region = ? AND asin = ?`,
 		string(region), asin).Scan(&data, &fetchedAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -92,7 +93,7 @@ func (s *Store) GetCachedChapters(ctx context.Context, region audible.Region, as
 	err := s.db.QueryRowContext(ctx,
 		`SELECT data, fetched_at FROM audible_cache_chapters WHERE region = ? AND asin = ?`,
 		string(region), asin).Scan(&data, &fetchedAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -163,7 +164,7 @@ func (s *Store) GetCachedSearch(ctx context.Context, region audible.Region, quer
 	err := s.db.QueryRowContext(ctx,
 		`SELECT data, fetched_at FROM audible_cache_search WHERE region = ? AND query = ?`,
 		string(region), queryKey).Scan(&data, &fetchedAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {

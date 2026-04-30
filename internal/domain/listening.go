@@ -2,7 +2,7 @@ package domain
 
 import "time"
 
-// Event source constants
+// Event source constants.
 const (
 	EventSourcePlayback = "playback" // Normal listening activity
 	EventSourceImport   = "import"   // Imported from external system

@@ -242,7 +242,7 @@ func TestParseRealBackup(t *testing.T) {
 	start := time.Now()
 	t.Logf("Starting parse of %s", backupPath)
 
-	backup, err := Parse(backupPath)
+	backup, err := Parse(t.Context(), backupPath)
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -343,7 +343,7 @@ func TestParseMediaProgressModernSchema(t *testing.T) {
 		Users: []User{{ID: "user-1", Username: "testuser"}},
 	}
 
-	err = parseMediaProgress(db, backup)
+	err = parseMediaProgress(t.Context(), db, backup)
 	if err != nil {
 		t.Fatalf("parseMediaProgress failed: %v", err)
 	}
@@ -429,7 +429,7 @@ func TestParseMediaProgressLegacySchema(t *testing.T) {
 		Users: []User{{ID: "user-1", Username: "testuser"}},
 	}
 
-	err = parseMediaProgress(db, backup)
+	err = parseMediaProgress(t.Context(), db, backup)
 	if err != nil {
 		t.Fatalf("parseMediaProgress failed: %v", err)
 	}

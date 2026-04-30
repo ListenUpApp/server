@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"iter"
 	"strings"
 
@@ -113,7 +114,7 @@ func (s *Store) GetTranscodeJob(ctx context.Context, id string) (*domain.Transco
 		`SELECT `+transcodeJobColumns+` FROM transcode_jobs WHERE id = ?`, id)
 
 	job, err := scanTranscodeJob(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -202,7 +203,7 @@ func (s *Store) GetTranscodeJobByAudioFile(ctx context.Context, audioFileID stri
 		audioFileID)
 
 	job, err := scanTranscodeJob(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -220,7 +221,7 @@ func (s *Store) GetTranscodeJobByAudioFileAndVariant(ctx context.Context, audioF
 		audioFileID, string(variant))
 
 	job, err := scanTranscodeJob(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {

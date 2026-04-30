@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -138,7 +139,7 @@ func (s *Store) GetLens(ctx context.Context, id string) (*domain.Shelf, error) {
 		`SELECT `+shelfColumns+` FROM shelves WHERE id = ?`, id)
 
 	l, err := scanShelf(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {

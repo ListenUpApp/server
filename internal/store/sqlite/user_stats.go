@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
@@ -27,7 +28,7 @@ func (s *Store) GetUserStats(ctx context.Context, userID string) (*domain.UserSt
 		&lastListenedDate,
 		&updatedAt,
 	)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {

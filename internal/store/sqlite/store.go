@@ -46,8 +46,8 @@ func Open(path string, logger *slog.Logger) (*Store, error) {
 	db.SetMaxIdleConns(2)
 	db.SetConnMaxLifetime(time.Hour)
 
-	// Run schema migration.
-	if _, err := db.Exec(schemaSQL); err != nil {
+	// Run schema migration. No parent context here — this is startup code.
+	if _, err := db.Exec(schemaSQL); err != nil { //nolint:noctx // startup-time migration; no caller context
 		db.Close()
 		return nil, fmt.Errorf("exec schema: %w", err)
 	}

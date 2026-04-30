@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -57,7 +58,7 @@ func (s *Store) GetUserProfile(ctx context.Context, userID string) (*domain.User
 		`SELECT `+profileColumns+` FROM user_profiles WHERE user_id = ?`, userID)
 
 	p, err := scanProfile(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {

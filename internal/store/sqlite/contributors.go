@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -149,7 +150,7 @@ func (s *Store) GetContributor(ctx context.Context, id string) (*domain.Contribu
 		`SELECT `+contributorColumns+` FROM contributors WHERE id = ? AND deleted_at IS NULL`, id)
 
 	c, err := scanContributor(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -183,7 +184,7 @@ func (s *Store) ListContributors(ctx context.Context, params store.PaginationPar
 		// Cursor format: "sort_name|id"
 		parts := strings.SplitN(cursorKey, "|", 2)
 		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid cursor format")
+			return nil, errors.New("invalid cursor format")
 		}
 		cursorSortName := parts[0]
 		cursorID := parts[1]
@@ -294,7 +295,7 @@ func (s *Store) GetOrCreateContributor(ctx context.Context, name string) (*domai
 	if err == nil {
 		return c, nil
 	}
-	if err != sql.ErrNoRows {
+	if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
 
@@ -324,7 +325,7 @@ func (s *Store) GetContributorByASIN(ctx context.Context, asin string) (*domain.
 		`SELECT `+contributorColumns+` FROM contributors WHERE asin = ? AND deleted_at IS NULL`, asin)
 
 	c, err := scanContributor(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -387,7 +388,7 @@ func (s *Store) GetOrCreateContributorByNameWithAlias(ctx context.Context, name 
 	if err == nil {
 		return c, false, nil
 	}
-	if err != sql.ErrNoRows {
+	if !errors.Is(err, sql.ErrNoRows) {
 		return nil, false, err
 	}
 
@@ -706,7 +707,7 @@ func (s *Store) GetContributorsDeletedAfter(ctx context.Context, timestamp time.
 // Returns the updated target contributor.
 func (s *Store) MergeContributors(ctx context.Context, sourceID, targetID string) (*domain.Contributor, error) {
 	if sourceID == targetID {
-		return nil, fmt.Errorf("merge contributor: source and target must be different")
+		return nil, errors.New("merge contributor: source and target must be different")
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -719,7 +720,7 @@ func (s *Store) MergeContributors(ctx context.Context, sourceID, targetID string
 	sourceRow := tx.QueryRowContext(ctx,
 		`SELECT `+contributorColumns+` FROM contributors WHERE id = ? AND deleted_at IS NULL`, sourceID)
 	source, err := scanContributor(sourceRow)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -730,7 +731,7 @@ func (s *Store) MergeContributors(ctx context.Context, sourceID, targetID string
 	targetRow := tx.QueryRowContext(ctx,
 		`SELECT `+contributorColumns+` FROM contributors WHERE id = ? AND deleted_at IS NULL`, targetID)
 	target, err := scanContributor(targetRow)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -832,7 +833,7 @@ func (s *Store) UnmergeContributor(ctx context.Context, sourceID, aliasName stri
 	sourceRow := tx.QueryRowContext(ctx,
 		`SELECT `+contributorColumns+` FROM contributors WHERE id = ? AND deleted_at IS NULL`, sourceID)
 	source, err := scanContributor(sourceRow)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {

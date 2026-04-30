@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -80,7 +81,7 @@ func (s *Store) GetTagByID(ctx context.Context, tagID string) (*domain.Tag, erro
 		FROM tags t WHERE t.id = ?`, tagID).Scan(
 		&t.ID, &t.Slug, &createdAt, &updatedAt, &t.BookCount,
 	)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -110,7 +111,7 @@ func (s *Store) GetTagBySlug(ctx context.Context, slug string) (*domain.Tag, err
 		FROM tags t WHERE t.slug = ?`, slug).Scan(
 		&t.ID, &t.Slug, &createdAt, &updatedAt, &t.BookCount,
 	)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -177,7 +178,7 @@ func (s *Store) FindOrCreateTagBySlug(ctx context.Context, slug string) (*domain
 	if err == nil {
 		return existing, false, nil
 	}
-	if err != store.ErrNotFound {
+	if !errors.Is(err, store.ErrNotFound) {
 		return nil, false, err
 	}
 
@@ -196,7 +197,7 @@ func (s *Store) FindOrCreateTagBySlug(ctx context.Context, slug string) (*domain
 	}
 
 	if err := s.CreateTag(ctx, t); err != nil {
-		if err == store.ErrAlreadyExists {
+		if errors.Is(err, store.ErrAlreadyExists) {
 			// Race condition: another goroutine created it.
 			existing, err := s.GetTagBySlug(ctx, slug)
 			if err != nil {

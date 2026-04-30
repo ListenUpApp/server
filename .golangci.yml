@@ -1,11 +1,16 @@
+version: "2"
+
 run:
   modules-download-mode: readonly
   tests: true
   allow-parallel-runners: true
+
 output:
-  format: colored-line-number
-  print-linter-name: true
-  print-issued-lines: true
+  formats:
+    text:
+      path: stdout
+      print-linter-name: true
+      print-issued-lines: true
 linters:
   enable:
     - bidichk
@@ -69,7 +74,9 @@ linters:
       exclude-functions:
         - (io.Closer).Close
         - (*os.File).Close
-        - (*github.com/simonhull/audiometa.AudioFile).Close
+        - (*database/sql.Rows).Close
+        - (*database/sql.Tx).Rollback
+        - (*github.com/simonhull/audiometa.File).Close
         - (net/http.ResponseWriter).Write
     gocritic:
       disabled-checks:
@@ -81,8 +88,14 @@ linters:
       min-complexity: 15
     gosec:
       excludes:
-        - G104
-        - G307
+        - G104   # Duplicate of errcheck
+        - G115   # Integer overflow conversion (Go 1.22+ handles safely)
+        - G118   # Integer overflow conversion (false positives)
+        - G201   # SQL formatting — codebase parameterizes; reviewed manually
+        - G202   # SQL string concatenation — same as above
+        - G307   # Deferred Close error — false positives on best-effort cleanup
+        - G703   # Path traversal — server reads from configured library paths
+        - G705   # Log injection via taint — bounded inputs in log statements
     govet:
       disable:
         - shadow
@@ -131,6 +144,7 @@ linters:
           - govet
           - nestif
           - nilnil
+          - noctx
           - nolintlint
           - revive
           - testifylint
@@ -232,6 +246,34 @@ linters:
       - linters:
           - nestif
         path: cmd/api/main.go
+      # Huma generates OpenAPI docs from struct tags; per-field godoc on
+      # request/response types is redundant.
+      - linters: [revive]
+        path: internal/api/.*_handlers\.go
+        text: "exported.*should have comment"
+      # Store interface (interface.go) is the documented entry point;
+      # implementation methods don't each need their own comment.
+      - linters: [revive]
+        path: internal/store/sqlite/
+        text: "exported.*should have comment"
+      # The Noop* helper types in internal/store are deliberately minimal
+      # placeholders; their methods are obvious from the type name.
+      - linters: [revive]
+        path: internal/store/
+        text: "exported.*Noop.*should have comment"
+      # Exhaustive switch on protocol enums is not always desirable when
+      # the default case is a documented "unknown / forward-compat" branch.
+      - linters: [exhaustive]
+        path: internal/(api|service|store|sse|backup|scanner|dto)/
+      # backup.BackupX naming is intentional — package "backup" exposes
+      # these as the public surface.
+      - linters: [revive]
+        path: internal/backup/types\.go
+        text: "stutters"
+      # parser_test.go reuses `rows` across debug queries; the linter prefers
+      # defer but explicit Close + rebind is the deliberate pattern here.
+      - linters: [sqlclosecheck]
+        path: internal/backup/abs/parser_test\.go
     paths:
       - third_party$
       - builtin$

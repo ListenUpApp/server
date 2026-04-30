@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 	"time"
 
@@ -117,7 +118,7 @@ func (s *Store) GetInvite(ctx context.Context, id string) (*domain.Invite, error
 		`SELECT `+inviteColumns+` FROM invites WHERE id = ? AND deleted_at IS NULL`, id)
 
 	inv, err := scanInvite(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -133,7 +134,7 @@ func (s *Store) GetInviteByToken(ctx context.Context, code string) (*domain.Invi
 		`SELECT `+inviteColumns+` FROM invites WHERE code = ? AND deleted_at IS NULL`, code)
 
 	inv, err := scanInvite(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {

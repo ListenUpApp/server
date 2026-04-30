@@ -4,8 +4,9 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/listenupapp/listenup-server/internal/service"
 	"time"
+
+	"github.com/listenupapp/listenup-server/internal/service"
 
 	"github.com/danielgtaylor/huma/v2"
 )

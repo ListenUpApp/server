@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/store"
@@ -58,7 +59,7 @@ func (s *Store) GetUserSettings(ctx context.Context, userID string) (*domain.Use
 		`SELECT `+settingsColumns+` FROM user_settings WHERE user_id = ?`, userID)
 
 	us, err := scanSettings(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -117,7 +118,7 @@ func (s *Store) GetOrCreateUserSettings(ctx context.Context, userID string) (*do
 	if err == nil {
 		return us, nil
 	}
-	if err != store.ErrNotFound {
+	if !errors.Is(err, store.ErrNotFound) {
 		return nil, err
 	}
 

@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -133,7 +134,7 @@ func (s *Store) GetCollection(ctx context.Context, id string, _ string) (*domain
 		`SELECT `+collectionColumns+` FROM collections WHERE id = ?`, id)
 
 	coll, err := scanCollection(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -439,7 +440,7 @@ func (s *Store) GetShare(ctx context.Context, id string) (*domain.CollectionShar
 		`SELECT `+shareColumns+` FROM collection_shares WHERE id = ? AND deleted_at IS NULL`, id)
 
 	share, err := scanShare(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -528,7 +529,7 @@ func (s *Store) GetShareForUserAndCollection(ctx context.Context, userID, collec
 		userID, collectionID)
 
 	share, err := scanShare(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {

@@ -230,7 +230,6 @@ func (m *Matcher) PreloadBooks(ctx context.Context) {
 	}
 
 	for _, book := range books {
-
 		cached := &CachedBook{
 			ID:            book.ID,
 			Title:         book.Title,

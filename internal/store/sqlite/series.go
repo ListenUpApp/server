@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -143,7 +144,7 @@ func (s *Store) GetSeries(ctx context.Context, id string) (*domain.Series, error
 		`SELECT `+seriesColumns+` FROM series WHERE id = ? AND deleted_at IS NULL`, id)
 
 	series, err := scanSeries(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -166,7 +167,7 @@ func (s *Store) ListSeries(ctx context.Context, params store.PaginationParams) (
 		}
 		parts := strings.SplitN(decoded, "|", 2)
 		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid cursor format")
+			return nil, errors.New("invalid cursor format")
 		}
 		cursorName = parts[0]
 		cursorID = parts[1]
@@ -297,7 +298,7 @@ func (s *Store) GetOrCreateSeries(ctx context.Context, name string) (*domain.Ser
 	if err == nil {
 		return series, nil
 	}
-	if err != sql.ErrNoRows {
+	if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
 
@@ -362,7 +363,7 @@ func (s *Store) GetSeriesByASIN(ctx context.Context, asin string) (*domain.Serie
 		`SELECT `+seriesColumns+` FROM series WHERE asin = ? AND deleted_at IS NULL`, asin)
 
 	sr, err := scanSeries(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -560,7 +561,7 @@ func (s *Store) GetBookIDsBySeries(ctx context.Context, seriesID string) ([]stri
 // then soft-deletes the source. Returns the updated target series.
 func (s *Store) MergeSeries(ctx context.Context, sourceID, targetID string) (*domain.Series, error) {
 	if sourceID == targetID {
-		return nil, fmt.Errorf("merge series: source and target must be different")
+		return nil, errors.New("merge series: source and target must be different")
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -572,7 +573,7 @@ func (s *Store) MergeSeries(ctx context.Context, sourceID, targetID string) (*do
 	// Verify source exists.
 	sourceRow := tx.QueryRowContext(ctx,
 		`SELECT `+seriesColumns+` FROM series WHERE id = ? AND deleted_at IS NULL`, sourceID)
-	if _, err := scanSeries(sourceRow); err == sql.ErrNoRows {
+	if _, err := scanSeries(sourceRow); errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	} else if err != nil {
 		return nil, fmt.Errorf("get source series: %w", err)
@@ -582,7 +583,7 @@ func (s *Store) MergeSeries(ctx context.Context, sourceID, targetID string) (*do
 	targetRow := tx.QueryRowContext(ctx,
 		`SELECT `+seriesColumns+` FROM series WHERE id = ? AND deleted_at IS NULL`, targetID)
 	target, err := scanSeries(targetRow)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {

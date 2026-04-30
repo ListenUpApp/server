@@ -477,7 +477,7 @@ func TestGetStateForUserUpdatedAfter(t *testing.T) {
 }
 
 // TestGetStateForUserUpdatedAfter_ZeroCutoff verifies a zero-time cutoff returns all
-// records for the user, matching the baseline behaviour of GetStateForUser. This lets
+// records for the user, matching the baseline behavior of GetStateForUser. This lets
 // the handler layer pass a zero time.Time as a sentinel for "no filter".
 func TestGetStateForUserUpdatedAfter_ZeroCutoff(t *testing.T) {
 	s := newTestStore(t)

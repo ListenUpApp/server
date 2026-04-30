@@ -47,7 +47,7 @@ func (p *Processor) ExtractAndProcess(ctx context.Context, audioFilePath, bookID
 	defer file.Close() //nolint:errcheck // Defer close, nothing we can do about errors here
 
 	// Extract artwork.
-	artworks, err := file.ExtractArtwork()
+	artworks, err := file.ExtractArtworkContext(ctx)
 	if err != nil {
 		p.logger.Warn("failed to extract artwork",
 			"path", audioFilePath,

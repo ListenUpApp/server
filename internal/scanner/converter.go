@@ -501,7 +501,10 @@ func extractGenres(ctx context.Context, rawGenres []string, bookID string, store
 //
 // User metadata is NEVER overwritten by rescan. The database is truth for metadata.
 // Cover is only updated if the book doesn't have one yet.
-func UpdateBookFromScan(_ context.Context, existingBook *domain.Book, item *LibraryItemData, _ Storer) error {
+func UpdateBookFromScan(ctx context.Context, existingBook *domain.Book, item *LibraryItemData, _ Storer) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	now := time.Now()
 
 	// Update path if the folder was moved

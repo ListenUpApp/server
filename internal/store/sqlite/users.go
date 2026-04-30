@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -187,7 +188,7 @@ func (s *Store) GetUser(ctx context.Context, id string) (*domain.User, error) {
 		`SELECT `+userColumns+` FROM users WHERE id = ? AND deleted_at IS NULL`, id)
 
 	u, err := scanUser(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrUserNotFound
 	}
 	if err != nil {
@@ -203,7 +204,7 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (*domain.User,
 		`SELECT `+userColumns+` FROM users WHERE email = ? AND deleted_at IS NULL`, email)
 
 	u, err := scanUser(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrUserNotFound
 	}
 	if err != nil {
@@ -220,7 +221,7 @@ func (s *Store) GetUserByEmailLower(ctx context.Context, email string) (*domain.
 		`SELECT `+userColumns+` FROM users WHERE email_lower = ? AND deleted_at IS NULL`, lower)
 
 	u, err := scanUser(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrUserNotFound
 	}
 	if err != nil {

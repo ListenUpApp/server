@@ -127,7 +127,7 @@ func (s *RestoreService) Validate(ctx context.Context, path string) (*Validation
 	for _, path := range requiredFiles {
 		if _, err := stream.OpenFile(zr, path); err != nil {
 			result.Warnings = append(result.Warnings,
-				fmt.Sprintf("missing file: %s", path))
+				"missing file: "+path)
 		}
 	}
 

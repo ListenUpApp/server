@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -104,7 +105,7 @@ func (s *Store) GetLibrary(ctx context.Context, id string) (*domain.Library, err
 		`SELECT `+libraryColumns+` FROM libraries WHERE id = ?`, id)
 
 	lib, err := scanLibrary(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -266,7 +267,7 @@ func (s *Store) EnsureLibrary(ctx context.Context, scanPath string, userID strin
 	row := tx.QueryRowContext(ctx, `SELECT `+libraryColumns+` FROM libraries ORDER BY created_at ASC LIMIT 1`)
 	library, err := scanLibrary(row)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		// No library exists - create everything from scratch.
 		now := time.Now()
 

@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"iter"
 	"strings"
 	"time"
@@ -176,7 +177,7 @@ func (s *Store) GetActiveReadingSession(ctx context.Context, userID, bookID stri
 	)
 
 	rs, err := scanReadingSession(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -192,7 +193,7 @@ func (s *Store) GetReadingSession(ctx context.Context, id string) (*domain.BookR
 		`SELECT `+readingSessionColumns+` FROM book_reading_sessions WHERE id = ?`, id)
 
 	rs, err := scanReadingSession(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {

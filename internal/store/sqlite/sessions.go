@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 	"time"
 
@@ -161,7 +162,7 @@ func (s *Store) GetSession(ctx context.Context, id string) (*domain.Session, err
 		`SELECT `+sessionColumns+` FROM sessions WHERE id = ?`, id)
 
 	sess, err := scanSession(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -303,7 +304,7 @@ func (s *Store) GetSessionByRefreshToken(ctx context.Context, tokenHash string) 
 		`SELECT `+sessionColumns+` FROM sessions WHERE refresh_token_hash = ?`, tokenHash)
 
 	sess, err := scanSession(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {

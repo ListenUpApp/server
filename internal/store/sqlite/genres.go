@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -127,7 +128,7 @@ func (s *Store) GetGenre(ctx context.Context, id string) (*domain.Genre, error) 
 		`SELECT `+genreColumns+` FROM genres WHERE id = ? AND deleted_at IS NULL`, id)
 
 	g, err := scanGenre(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -143,7 +144,7 @@ func (s *Store) GetGenreBySlug(ctx context.Context, slug string) (*domain.Genre,
 		`SELECT `+genreColumns+` FROM genres WHERE slug = ? AND deleted_at IS NULL`, slug)
 
 	g, err := scanGenre(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -160,7 +161,7 @@ func (s *Store) GetOrCreateGenreBySlug(ctx context.Context, slug, name, parentID
 	if err == nil {
 		return existing, nil
 	}
-	if err != store.ErrNotFound {
+	if !errors.Is(err, store.ErrNotFound) {
 		return nil, err
 	}
 
@@ -710,7 +711,7 @@ func (s *Store) GetGenreAliasByRaw(ctx context.Context, raw string) (*domain.Gen
 	)
 
 	err := row.Scan(&alias.ID, &alias.RawValue, &genreIDsStr, &alias.CreatedBy, &createdAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -742,7 +743,7 @@ func (s *Store) TrackUnmappedGenre(ctx context.Context, raw string, bookID strin
 		SELECT book_count, book_ids FROM unmapped_genres WHERE raw_slug = ?`, slug).
 		Scan(&existingCount, &existingBookIDs)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		// New unmapped genre.
 		bookIDsJSON, _ := json.Marshal([]string{bookID})
 		_, err = s.db.ExecContext(ctx, `

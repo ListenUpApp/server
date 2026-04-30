@@ -3,6 +3,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -55,7 +56,7 @@ func (s *CollectionService) CreateCollectionWithOptions(ctx context.Context, use
 			return nil, fmt.Errorf("get user: %w", err)
 		}
 		if !user.IsAdmin() {
-			return nil, fmt.Errorf("only admins can create global access collections")
+			return nil, errors.New("only admins can create global access collections")
 		}
 	}
 

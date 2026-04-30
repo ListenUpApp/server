@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -104,7 +105,7 @@ func (s *Store) GetABSImport(ctx context.Context, id string) (*domain.ABSImport,
 		`SELECT `+absImportColumns+` FROM abs_imports WHERE id = ?`, id)
 
 	imp, err := scanABSImport(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -313,7 +314,7 @@ func (s *Store) GetABSImportUser(ctx context.Context, importID, absUserID string
 		importID, absUserID)
 
 	u, err := scanABSImportUser(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -500,7 +501,7 @@ func (s *Store) GetABSImportBook(ctx context.Context, importID, absMediaID strin
 		importID, absMediaID)
 
 	b, err := scanABSImportBook(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -667,7 +668,7 @@ func (s *Store) GetABSImportSession(ctx context.Context, importID, sessionID str
 		importID, sessionID)
 
 	sess, err := scanABSImportSession(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -956,7 +957,7 @@ func (s *Store) GetABSImportProgress(ctx context.Context, importID, absUserID, a
 		importID, absUserID, absMediaID)
 
 	p, err := scanABSImportProgress(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -1002,7 +1003,7 @@ func (s *Store) FindABSImportProgressByListenUpBook(ctx context.Context, importI
 		importID, absUserID, listenUpBookID)
 
 	p, err := scanABSImportProgress(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {

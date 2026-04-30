@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -402,7 +403,7 @@ func (s *Store) GetBook(ctx context.Context, id string, _ string) (*domain.Book,
 		`SELECT `+bookColumns+` FROM books WHERE id = ? AND deleted_at IS NULL`, id)
 
 	b, err := scanBook(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -434,7 +435,7 @@ func (s *Store) GetBookByPath(ctx context.Context, path string) (*domain.Book, e
 		`SELECT `+bookColumns+` FROM books WHERE path = ? AND deleted_at IS NULL`, path)
 
 	b, err := scanBook(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -468,7 +469,7 @@ func (s *Store) ListBooks(ctx context.Context, params store.PaginationParams) (*
 		}
 		parts := strings.SplitN(decoded, "|", 2)
 		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid cursor format")
+			return nil, errors.New("invalid cursor format")
 		}
 		cursorTime = parts[0]
 		cursorID = parts[1]
@@ -804,7 +805,7 @@ func (s *Store) GetBookByASIN(ctx context.Context, asin string) (*domain.Book, e
 		`SELECT `+bookColumns+` FROM books WHERE asin = ? AND deleted_at IS NULL`, asin)
 
 	b, err := scanBook(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -835,7 +836,7 @@ func (s *Store) GetBookByISBN(ctx context.Context, isbn string) (*domain.Book, e
 		`SELECT `+bookColumns+` FROM books WHERE isbn = ? AND deleted_at IS NULL`, isbn)
 
 	b, err := scanBook(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {

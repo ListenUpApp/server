@@ -87,7 +87,7 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 	shelfService.SetActivityRecorder(activityService)
 
 	tokenVerifier := &sseTokenVerifier{authService: authService}
-	sseHandler := sse.NewHandler(sseHandle.Manager, log.Logger, tokenVerifier, sseHandle.Manager.GetEventLogger())
+	sseHandler := sse.NewHandler(sseHandle.Manager, log.Logger, tokenVerifier, sseHandle.GetEventLogger())
 
 	services := &api.Services{
 		Instance:       instanceService,
@@ -138,7 +138,7 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 		port := 8080
 		fmt.Sscanf(cfg.Server.Port, "%d", &port)
 		handler.SetOnInstanceUpdated(func(instance *domain.Instance) {
-			if err := mdnsHandle.Service.Refresh(instance, port); err != nil {
+			if err := mdnsHandle.Refresh(instance, port); err != nil {
 				log.Warn("Failed to refresh mDNS after instance update", "error", err)
 			}
 		})

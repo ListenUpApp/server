@@ -450,7 +450,7 @@ func (s *Server) runImportAnalysis(importID, backupPath string) {
 	}
 
 	// Parse the backup
-	backup, err := abs.Parse(backupPath)
+	backup, err := abs.Parse(bgCtx, backupPath)
 	if err != nil {
 		setFailed(fmt.Errorf("failed to parse ABS backup: %w", err))
 		return

@@ -726,7 +726,7 @@ func (s *ListeningService) RestartBook(ctx context.Context, userID, bookID strin
 // updateUserStatsWithRetry atomically updates user stats with retry on conflict.
 func (s *ListeningService) updateUserStatsWithRetry(ctx context.Context, userID string, deltaMs int64, lastListenedDate string) error {
 	var err error
-	for attempt := 0; attempt < 3; attempt++ {
+	for attempt := range 3 {
 		err = s.store.UpdateUserStatsFromEvent(ctx, userID, deltaMs, lastListenedDate)
 		if err == nil {
 			return nil
@@ -739,7 +739,7 @@ func (s *ListeningService) updateUserStatsWithRetry(ctx context.Context, userID 
 // incrementBooksFinishedWithRetry atomically increments books finished with retry on conflict.
 func (s *ListeningService) incrementBooksFinishedWithRetry(ctx context.Context, userID string, delta int) error {
 	var err error
-	for attempt := 0; attempt < 3; attempt++ {
+	for attempt := range 3 {
 		err = s.store.IncrementBooksFinishedAtomic(ctx, userID, delta)
 		if err == nil {
 			return nil

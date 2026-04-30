@@ -240,7 +240,7 @@ func (s *Server) handleAnalyzeABSBackup(ctx context.Context, input *AnalyzeABSIn
 	}
 
 	// Parse the backup
-	backup, err := abs.Parse(input.Body.BackupPath)
+	backup, err := abs.Parse(ctx, input.Body.BackupPath)
 	if err != nil {
 		return nil, huma.Error400BadRequest("failed to parse ABS backup: " + err.Error())
 	}
@@ -385,7 +385,7 @@ func (s *Server) handleAnalyzeABSBackupAsync(ctx context.Context, input *Analyze
 
 	go func() {
 		// Parse the backup
-		backup, err := abs.Parse(input.Body.BackupPath)
+		backup, err := abs.Parse(ctx, input.Body.BackupPath)
 		if err != nil {
 			progress.Fail("failed to parse ABS backup: " + err.Error())
 			return
@@ -397,7 +397,7 @@ func (s *Server) handleAnalyzeABSBackupAsync(ctx context.Context, input *Analyze
 			progress.Update(phase, current, total)
 		})
 
-		// Run analysis (use background context since the HTTP request context will be cancelled)
+		// Run analysis (use background context since the HTTP request context will be canceled)
 		result, err := analyzer.Analyze(context.Background(), backup)
 		if err != nil {
 			progress.Fail("analysis failed: " + err.Error())
@@ -471,7 +471,7 @@ func (s *Server) handleImportABSBackup(ctx context.Context, input *ImportABSInpu
 	}
 
 	// Parse the backup
-	backup, err := abs.Parse(input.Body.BackupPath)
+	backup, err := abs.Parse(ctx, input.Body.BackupPath)
 	if err != nil {
 		return nil, huma.Error400BadRequest("failed to parse ABS backup: " + err.Error())
 	}

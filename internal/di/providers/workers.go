@@ -215,7 +215,7 @@ func ProvideEventLogCleanupJob(i do.Injector) (*EventLogCleanupJob, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	go func() {
-		eventLogger := sseHandle.Manager.GetEventLogger()
+		eventLogger := sseHandle.GetEventLogger()
 		if eventLogger == nil {
 			return
 		}

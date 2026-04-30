@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/store"
@@ -64,7 +65,7 @@ func (s *Store) GetBookPreferences(ctx context.Context, userID, bookID string) (
 		userID, bookID)
 
 	prefs, err := scanBookPreferences(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrBookPreferencesNotFound
 	}
 	if err != nil {

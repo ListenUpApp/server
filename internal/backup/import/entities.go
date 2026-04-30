@@ -17,11 +17,11 @@ import (
 func (i *Importer) importUsers(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
 	rc, err := stream.OpenFile(zr, "entities/users.jsonl")
 	if err != nil {
-		if err == stream.ErrFileNotFound {
+		if errors.Is(err, stream.ErrFileNotFound) {
 			return 0, 0, nil
 		}
 		errs = append(errs, RestoreError{EntityType: "users", Error: err.Error()})
-		return
+		return imported, skipped, errs
 	}
 
 	reader := stream.NewReader[export.UserExport](rc)
@@ -106,17 +106,17 @@ func (i *Importer) importUsers(ctx context.Context, zr *zip.ReadCloser, opts Res
 		imported++
 	}
 
-	return
+	return imported, skipped, errs
 }
 
 func (i *Importer) importProfiles(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
 	rc, err := stream.OpenFile(zr, "entities/profiles.jsonl")
 	if err != nil {
-		if err == stream.ErrFileNotFound {
+		if errors.Is(err, stream.ErrFileNotFound) {
 			return 0, 0, nil
 		}
 		errs = append(errs, RestoreError{EntityType: "profiles", Error: err.Error()})
-		return
+		return imported, skipped, errs
 	}
 
 	reader := stream.NewReader[domain.UserProfile](rc)
@@ -147,17 +147,17 @@ func (i *Importer) importProfiles(ctx context.Context, zr *zip.ReadCloser, opts 
 		imported++
 	}
 
-	return
+	return imported, skipped, errs
 }
 
 func (i *Importer) importLibraries(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
 	rc, err := stream.OpenFile(zr, "entities/libraries.jsonl")
 	if err != nil {
-		if err == stream.ErrFileNotFound {
+		if errors.Is(err, stream.ErrFileNotFound) {
 			return 0, 0, nil
 		}
 		errs = append(errs, RestoreError{EntityType: "libraries", Error: err.Error()})
-		return
+		return imported, skipped, errs
 	}
 
 	reader := stream.NewReader[domain.Library](rc)
@@ -215,17 +215,17 @@ func (i *Importer) importLibraries(ctx context.Context, zr *zip.ReadCloser, opts
 		imported++
 	}
 
-	return
+	return imported, skipped, errs
 }
 
 func (i *Importer) importContributors(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
 	rc, err := stream.OpenFile(zr, "entities/contributors.jsonl")
 	if err != nil {
-		if err == stream.ErrFileNotFound {
+		if errors.Is(err, stream.ErrFileNotFound) {
 			return 0, 0, nil
 		}
 		errs = append(errs, RestoreError{EntityType: "contributors", Error: err.Error()})
-		return
+		return imported, skipped, errs
 	}
 
 	reader := stream.NewReader[domain.Contributor](rc)
@@ -286,17 +286,17 @@ func (i *Importer) importContributors(ctx context.Context, zr *zip.ReadCloser, o
 		imported++
 	}
 
-	return
+	return imported, skipped, errs
 }
 
 func (i *Importer) importSeries(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
 	rc, err := stream.OpenFile(zr, "entities/series.jsonl")
 	if err != nil {
-		if err == stream.ErrFileNotFound {
+		if errors.Is(err, stream.ErrFileNotFound) {
 			return 0, 0, nil
 		}
 		errs = append(errs, RestoreError{EntityType: "series", Error: err.Error()})
-		return
+		return imported, skipped, errs
 	}
 
 	reader := stream.NewReader[domain.Series](rc)
@@ -357,17 +357,17 @@ func (i *Importer) importSeries(ctx context.Context, zr *zip.ReadCloser, opts Re
 		imported++
 	}
 
-	return
+	return imported, skipped, errs
 }
 
 func (i *Importer) importGenres(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
 	rc, err := stream.OpenFile(zr, "entities/genres.json")
 	if err != nil {
-		if err == stream.ErrFileNotFound {
+		if errors.Is(err, stream.ErrFileNotFound) {
 			return 0, 0, nil
 		}
 		errs = append(errs, RestoreError{EntityType: "genres", Error: err.Error()})
-		return
+		return imported, skipped, errs
 	}
 	defer rc.Close()
 
@@ -377,7 +377,7 @@ func (i *Importer) importGenres(ctx context.Context, zr *zip.ReadCloser, opts Re
 			EntityType: "genres",
 			Error:      fmt.Sprintf("parse error: %v", err),
 		})
-		return
+		return imported, skipped, errs
 	}
 
 	for _, genre := range genres {
@@ -428,17 +428,17 @@ func (i *Importer) importGenres(ctx context.Context, zr *zip.ReadCloser, opts Re
 		imported++
 	}
 
-	return
+	return imported, skipped, errs
 }
 
 func (i *Importer) importTags(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
 	rc, err := stream.OpenFile(zr, "entities/tags.jsonl")
 	if err != nil {
-		if err == stream.ErrFileNotFound {
+		if errors.Is(err, stream.ErrFileNotFound) {
 			return 0, 0, nil
 		}
 		errs = append(errs, RestoreError{EntityType: "tags", Error: err.Error()})
-		return
+		return imported, skipped, errs
 	}
 
 	reader := stream.NewReader[domain.Tag](rc)
@@ -496,17 +496,17 @@ func (i *Importer) importTags(ctx context.Context, zr *zip.ReadCloser, opts Rest
 		imported++
 	}
 
-	return
+	return imported, skipped, errs
 }
 
 func (i *Importer) importBooks(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
 	rc, err := stream.OpenFile(zr, "entities/books.jsonl")
 	if err != nil {
-		if err == stream.ErrFileNotFound {
+		if errors.Is(err, stream.ErrFileNotFound) {
 			return 0, 0, nil
 		}
 		errs = append(errs, RestoreError{EntityType: "books", Error: err.Error()})
-		return
+		return imported, skipped, errs
 	}
 
 	reader := stream.NewReader[domain.Book](rc)
@@ -567,17 +567,17 @@ func (i *Importer) importBooks(ctx context.Context, zr *zip.ReadCloser, opts Res
 		imported++
 	}
 
-	return
+	return imported, skipped, errs
 }
 
 func (i *Importer) importCollections(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
 	rc, err := stream.OpenFile(zr, "entities/collections.jsonl")
 	if err != nil {
-		if err == stream.ErrFileNotFound {
+		if errors.Is(err, stream.ErrFileNotFound) {
 			return 0, 0, nil
 		}
 		errs = append(errs, RestoreError{EntityType: "collections", Error: err.Error()})
-		return
+		return imported, skipped, errs
 	}
 
 	reader := stream.NewReader[domain.Collection](rc)
@@ -635,17 +635,17 @@ func (i *Importer) importCollections(ctx context.Context, zr *zip.ReadCloser, op
 		imported++
 	}
 
-	return
+	return imported, skipped, errs
 }
 
 func (i *Importer) importCollectionShares(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
 	rc, err := stream.OpenFile(zr, "entities/collection_shares.jsonl")
 	if err != nil {
-		if err == stream.ErrFileNotFound {
+		if errors.Is(err, stream.ErrFileNotFound) {
 			return 0, 0, nil
 		}
 		errs = append(errs, RestoreError{EntityType: "collection_shares", Error: err.Error()})
-		return
+		return imported, skipped, errs
 	}
 
 	reader := stream.NewReader[domain.CollectionShare](rc)
@@ -706,17 +706,17 @@ func (i *Importer) importCollectionShares(ctx context.Context, zr *zip.ReadClose
 		imported++
 	}
 
-	return
+	return imported, skipped, errs
 }
 
 func (i *Importer) importShelves(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
 	rc, err := stream.OpenFile(zr, "entities/shelves.jsonl")
 	if err != nil {
-		if err == stream.ErrFileNotFound {
+		if errors.Is(err, stream.ErrFileNotFound) {
 			return 0, 0, nil
 		}
 		errs = append(errs, RestoreError{EntityType: "shelves", Error: err.Error()})
-		return
+		return imported, skipped, errs
 	}
 
 	reader := stream.NewReader[domain.Shelf](rc)
@@ -774,17 +774,17 @@ func (i *Importer) importShelves(ctx context.Context, zr *zip.ReadCloser, opts R
 		imported++
 	}
 
-	return
+	return imported, skipped, errs
 }
 
 func (i *Importer) importActivities(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
 	rc, err := stream.OpenFile(zr, "entities/activities.jsonl")
 	if err != nil {
-		if err == stream.ErrFileNotFound {
+		if errors.Is(err, stream.ErrFileNotFound) {
 			return 0, 0, nil
 		}
 		errs = append(errs, RestoreError{EntityType: "activities", Error: err.Error()})
-		return
+		return imported, skipped, errs
 	}
 
 	reader := stream.NewReader[domain.Activity](rc)
@@ -813,17 +813,17 @@ func (i *Importer) importActivities(ctx context.Context, zr *zip.ReadCloser, opt
 		imported++
 	}
 
-	return
+	return imported, skipped, errs
 }
 
 func (i *Importer) importListeningEvents(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
 	rc, err := stream.OpenFile(zr, "listening/events.jsonl")
 	if err != nil {
-		if err == stream.ErrFileNotFound {
+		if errors.Is(err, stream.ErrFileNotFound) {
 			return 0, 0, nil
 		}
 		errs = append(errs, RestoreError{EntityType: "listening_events", Error: err.Error()})
-		return
+		return imported, skipped, errs
 	}
 
 	reader := stream.NewReader[domain.ListeningEvent](rc)
@@ -851,17 +851,17 @@ func (i *Importer) importListeningEvents(ctx context.Context, zr *zip.ReadCloser
 		imported++
 	}
 
-	return
+	return imported, skipped, errs
 }
 
 func (i *Importer) importReadingSessions(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
 	rc, err := stream.OpenFile(zr, "listening/sessions.jsonl")
 	if err != nil {
-		if err == stream.ErrFileNotFound {
+		if errors.Is(err, stream.ErrFileNotFound) {
 			return 0, 0, nil
 		}
 		errs = append(errs, RestoreError{EntityType: "reading_sessions", Error: err.Error()})
-		return
+		return imported, skipped, errs
 	}
 
 	reader := stream.NewReader[domain.BookReadingSession](rc)
@@ -917,7 +917,7 @@ func (i *Importer) importReadingSessions(ctx context.Context, zr *zip.ReadCloser
 		imported++
 	}
 
-	return
+	return imported, skipped, errs
 }
 
 func (i *Importer) importServer(ctx context.Context, zr *zip.ReadCloser) error {

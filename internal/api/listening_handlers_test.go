@@ -217,7 +217,7 @@ func newListeningHandlerServer(t *testing.T) (*Server, func()) {
 }
 
 // TestHandleGetAllProgress_InvalidUpdatedAfter_Returns400 verifies the handler
-// rejects malformed RFC3339 with a 400, matching the behaviour of sync/books
+// rejects malformed RFC3339 with a 400, matching the behavior of sync/books
 // (sync_handlers.go:246). This prevents silent fallthrough to full sync on
 // client bugs.
 func TestHandleGetAllProgress_InvalidUpdatedAfter_Returns400(t *testing.T) {
@@ -236,7 +236,7 @@ func TestHandleGetAllProgress_InvalidUpdatedAfter_Returns400(t *testing.T) {
 
 // TestHandleGetAllProgress_EmptyUpdatedAfter_ReturnsAll verifies the fallback path
 // is preserved: when updated_after is empty the handler returns all of the user's
-// playback states (existing behaviour, so a bad client release doesn't break sync).
+// playback states (existing behavior, so a bad client release doesn't break sync).
 func TestHandleGetAllProgress_EmptyUpdatedAfter_ReturnsAll(t *testing.T) {
 	s, cleanup := newListeningHandlerServer(t)
 	defer cleanup()

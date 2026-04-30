@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 	"time"
 
@@ -165,7 +166,7 @@ func (s *Store) GetListeningEvent(ctx context.Context, id string) (*domain.Liste
 		`SELECT `+listeningEventColumns+` FROM listening_events WHERE id = ?`, id)
 
 	event, err := scanListeningEvent(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -248,7 +249,7 @@ func (s *Store) GetPlaybackState(ctx context.Context, userID, bookID string) (*d
 		userID, bookID)
 
 	state, err := scanPlaybackState(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrProgressNotFound
 	}
 	if err != nil {
