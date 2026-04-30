@@ -13,7 +13,7 @@ import (
 )
 
 // setupTestIndex creates a temporary search index for testing.
-func setupTestIndex(t *testing.T) (*SearchIndex, func()) {
+func setupTestIndex(t testing.TB) (*SearchIndex, func()) {
 	t.Helper()
 
 	tmpDir, err := os.MkdirTemp("", "search-test-*")
@@ -416,6 +416,53 @@ func TestSearchIndex_LargeBatch(t *testing.T) {
 	count, err := index.DocumentCount()
 	require.NoError(t, err)
 	assert.Equal(t, uint64(1000), count)
+}
+
+func BenchmarkSearchIndex_Search(b *testing.B) {
+	idx, cleanup := setupTestIndex(b)
+	defer cleanup()
+	ctx := context.Background()
+
+	// Seed mixed-type docs: 25 books, 15 contributors, 10 series (~50 total).
+	docs := make([]*SearchDocument, 0, 50)
+	for i := range 25 {
+		docs = append(docs, &SearchDocument{
+			ID:     fmt.Sprintf("bench-book-%d", i),
+			Type:   DocTypeBook,
+			Name:   fmt.Sprintf("Bench Book Title %d", i),
+			Author: fmt.Sprintf("Author %d", i),
+		})
+	}
+	for i := range 15 {
+		docs = append(docs, &SearchDocument{
+			ID:   fmt.Sprintf("bench-contrib-%d", i),
+			Type: DocTypeContributor,
+			Name: fmt.Sprintf("Contributor Name %d", i),
+		})
+	}
+	for i := range 10 {
+		docs = append(docs, &SearchDocument{
+			ID:   fmt.Sprintf("bench-series-%d", i),
+			Type: DocTypeSeries,
+			Name: fmt.Sprintf("Series Arc %d", i),
+		})
+	}
+
+	if err := idx.IndexDocuments(docs); err != nil {
+		b.Fatalf("IndexDocuments: %v", err)
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		results, err := idx.Search(ctx, SearchParams{Query: "Bench Book", Limit: 20})
+		if err != nil {
+			b.Fatalf("Search: %v", err)
+		}
+		if len(results.Hits) == 0 {
+			b.Fatal("Search: no hits")
+		}
+	}
 }
 
 func TestSearchParams_Defaults(t *testing.T) {

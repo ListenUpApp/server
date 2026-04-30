@@ -696,6 +696,40 @@ func TestBook_NilCoverImage(t *testing.T) {
 	}
 }
 
+func BenchmarkListBooks_Pagination(b *testing.B) {
+	s := newTestStore(b)
+	ctx := context.Background()
+
+	// Seed 200 books — large enough that pagination has work to do but small
+	// enough to keep the benchmark fast.
+	const seed = 200
+	for i := range seed {
+		bk := makeTestBook(
+			fmt.Sprintf("bench-book-%d", i),
+			fmt.Sprintf("Bench Book %d", i),
+			fmt.Sprintf("/audiobooks/bench-%d", i),
+		)
+		bk.UpdatedAt = bk.UpdatedAt.Add(time.Duration(i) * time.Second)
+		if err := s.CreateBook(ctx, bk); err != nil {
+			b.Fatalf("seed CreateBook(%d): %v", i, err)
+		}
+	}
+
+	params := store.PaginationParams{Limit: 50}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		page, err := s.ListBooks(ctx, params)
+		if err != nil {
+			b.Fatalf("ListBooks: %v", err)
+		}
+		if len(page.Items) == 0 {
+			b.Fatal("ListBooks: empty page")
+		}
+	}
+}
+
 func TestBook_StagedCollectionIDs(t *testing.T) {
 	t.Parallel()
 	s := newTestStore(t)

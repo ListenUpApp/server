@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -15,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestListening(t *testing.T) (*ListeningService, store.Store, func()) {
+func setupTestListening(t testing.TB) (*ListeningService, store.Store, func()) {
 	t.Helper()
 
 	tmpDir, err := os.MkdirTemp("", "listening-service-test-*")
@@ -37,7 +38,7 @@ func setupTestListening(t *testing.T) (*ListeningService, store.Store, func()) {
 	return svc, testStore, cleanup
 }
 
-func ensureTestUserForListening(t *testing.T, s store.Store, userID string) {
+func ensureTestUserForListening(t testing.TB, s store.Store, userID string) {
 	t.Helper()
 	now := time.Now()
 	_ = s.CreateUser(context.Background(), &domain.User{
@@ -49,7 +50,7 @@ func ensureTestUserForListening(t *testing.T, s store.Store, userID string) {
 	}) // Ignore error if user already exists.
 }
 
-func createTestBookForListening(t *testing.T, s store.Store, bookID string, durationMs int64) {
+func createTestBookForListening(t testing.TB, s store.Store, bookID string, durationMs int64) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -501,4 +502,34 @@ func TestGetUserStats(t *testing.T) {
 	assert.Equal(t, int64(1800000+3564000), stats.TotalListenTimeMs)
 	assert.Equal(t, 2, stats.BooksStarted)
 	assert.Equal(t, 1, stats.BooksFinished)
+}
+
+func BenchmarkRecordEvent(b *testing.B) {
+	svc, testStore, cleanup := setupTestListening(b)
+	defer cleanup()
+	ctx := context.Background()
+
+	// Seed required entities once before timing.
+	ensureTestUserForListening(b, testStore, "bench-user")
+	createTestBookForListening(b, testStore, "bench-book", 3600000) // 1 hour
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := range b.N {
+		req := RecordEventRequest{
+			EventID:         fmt.Sprintf("bench-evt-%d", i),
+			BookID:          "bench-book",
+			StartPositionMs: int64(i * 1000),
+			EndPositionMs:   int64(i*1000) + 60000, // advance 60 s each iteration
+			StartedAt:       time.Now().Add(-time.Minute),
+			EndedAt:         time.Now(),
+			PlaybackSpeed:   1.0,
+			DeviceID:        "bench-device",
+			DeviceName:      "Bench Device",
+		}
+		_, err := svc.RecordEvent(ctx, "bench-user", req)
+		if err != nil {
+			b.Fatalf("RecordEvent: %v", err)
+		}
+	}
 }
