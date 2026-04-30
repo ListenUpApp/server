@@ -369,7 +369,7 @@ func (s *Server) handleGetShelf(ctx context.Context, input *GetShelfInput) (*She
 		}
 
 		// Enrich book to get author names
-		enriched, err := s.store.EnrichBook(ctx, book)
+		enriched, err := s.enricher.EnrichBook(ctx, book)
 		if err != nil {
 			s.logger.Warn("failed to enrich book for shelf",
 				"shelf_id", input.ID,

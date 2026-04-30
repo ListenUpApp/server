@@ -81,6 +81,10 @@ func setupPermTestServer(t *testing.T) *permTestServer {
 	sharingService := service.NewSharingService(st, logger)
 	shelfService := service.NewShelfService(st, sseManager, logger)
 	inboxService := service.NewInboxService(st, enricher, sseManager, logger)
+	// BookService is needed for the update-book handler under permission tests.
+	// Pass nil scanner/metadata/cover/storage — the update path doesn't touch
+	// them. logger keeps panics legible if a code path ever does.
+	bookService := service.NewBookService(st, nil, nil, nil, nil, logger)
 
 	services := &Services{
 		Instance: instanceService,
@@ -89,6 +93,7 @@ func setupPermTestServer(t *testing.T) *permTestServer {
 		Sharing:  sharingService,
 		Shelf:    shelfService,
 		Inbox:    inboxService,
+		Book:     bookService,
 	}
 
 	router := chi.NewRouter()
@@ -109,6 +114,7 @@ func setupPermTestServer(t *testing.T) *permTestServer {
 
 	s := &Server{
 		store:           st,
+		enricher:        enricher,
 		services:        services,
 		router:          router,
 		api:             api,

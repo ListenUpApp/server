@@ -1114,21 +1114,6 @@ func (s *Store) TouchEntity(ctx context.Context, entityType, id string) error {
 	return nil
 }
 
-// EnrichBook denormalizes a book with contributor names, series name, and genre names.
-// This is a convenience wrapper around the enricher for API handlers.
-func (s *Store) EnrichBook(ctx context.Context, book *domain.Book) (*dto.Book, error) {
-	return s.enricher.EnrichBook(ctx, book)
-}
-
-// EnrichBooks denormalizes multiple books in a single batch operation.
-// Avoids N+1 queries against contributors, series, genres, and tags stores by
-// collecting all referenced IDs across the input slice and fetching them in
-// one query per entity type. Use this for paginated list endpoints; use
-// EnrichBook for single-book operations.
-func (s *Store) EnrichBooks(ctx context.Context, books []*domain.Book) ([]*dto.Book, error) {
-	return s.enricher.EnrichBooks(ctx, books)
-}
-
 // SetBookContributors replaces all contributors for a book using store.ContributorInput.
 // For each contributor:
 //   - If name matches existing (case-insensitive) -> link to that contributor

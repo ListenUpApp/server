@@ -26,11 +26,10 @@ type Store struct {
 	db     *sql.DB
 	logger *slog.Logger
 
-	enricher         *dto.Enricher
-	emitter          store.EventEmitter
-	searchIndexer    store.SearchIndexer
-	indexer          *asyncIndexer
-	transcodeDeleter store.TranscodeDeleter
+	enricher      *dto.Enricher
+	emitter       store.EventEmitter
+	searchIndexer store.SearchIndexer
+	indexer       *asyncIndexer
 
 	mu       sync.RWMutex
 	bulkMode bool
@@ -56,11 +55,10 @@ func Open(path string, logger *slog.Logger) (*Store, error) {
 	}
 
 	s := &Store{
-		db:               db,
-		logger:           logger,
-		emitter:          store.NewNoopEmitter(),
-		searchIndexer:    store.NewNoopSearchIndexer(),
-		transcodeDeleter: store.NewNoopTranscodeDeleter(),
+		db:            db,
+		logger:        logger,
+		emitter:       store.NewNoopEmitter(),
+		searchIndexer: store.NewNoopSearchIndexer(),
 	}
 
 	// Wrap the (initially no-op) indexer in the async queue so that store
@@ -105,11 +103,6 @@ func (s *Store) SetSearchIndexer(indexer store.SearchIndexer) {
 	s.searchIndexer = indexer
 	s.indexer = newAsyncIndexer(indexer, s.logger)
 	s.indexer.Start(context.Background())
-}
-
-// SetTranscodeDeleter sets the transcode deleter used for cleaning up transcoded files.
-func (s *Store) SetTranscodeDeleter(deleter store.TranscodeDeleter) {
-	s.transcodeDeleter = deleter
 }
 
 // SetBulkMode enables or disables bulk mode, which suppresses indexing and

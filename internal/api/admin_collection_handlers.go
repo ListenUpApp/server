@@ -373,7 +373,7 @@ func (s *Server) handleDeleteAdminCollection(ctx context.Context, input *DeleteA
 		if err != nil {
 			continue
 		}
-		enrichedBook, err := s.store.EnrichBook(ctx, book)
+		enrichedBook, err := s.enricher.EnrichBook(ctx, book)
 		if err != nil {
 			continue
 		}
@@ -494,7 +494,7 @@ func (s *Server) handleRemoveBookFromAdminCollection(ctx context.Context, input 
 		// Use collection owner as userID for access (admin has global access)
 		book, err := s.store.GetBook(ctx, input.BookID, coll.OwnerID)
 		if err == nil {
-			enrichedBook, err := s.store.EnrichBook(ctx, book)
+			enrichedBook, err := s.enricher.EnrichBook(ctx, book)
 			if err == nil {
 				createEvent := sse.NewBookCreatedEvent(enrichedBook)
 				s.sseManager.EmitToNonMembers(memberUserIDs, createEvent)

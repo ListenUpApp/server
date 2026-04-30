@@ -54,9 +54,36 @@ type SeriesMatchEntry struct {
 	ApplySequence bool
 }
 
+// bookServiceStore is the narrow store surface BookService needs. It combines
+// BookStore (book CRUD + per-book user-access reads) with read/write paths
+// for contributors, series, genres, and libraries that are used during the
+// scan/match flows. The BookService is a heavy writer, so it touches several
+// repositories — but it does not need the kitchen-sink Store interface.
+type bookServiceStore interface {
+	store.BookStore
+	store.LibraryStore
+	GetBooksForUser(ctx context.Context, userID string) ([]*domain.Book, error)
+	// Contributors
+	GetContributorByASIN(ctx context.Context, asin string) (*domain.Contributor, error)
+	GetOrCreateContributorByName(ctx context.Context, name string) (*domain.Contributor, error)
+	UpdateContributor(ctx context.Context, contributor *domain.Contributor) error
+	// Series
+	GetSeriesByASIN(ctx context.Context, asin string) (*domain.Series, error)
+	GetOrCreateSeriesByName(ctx context.Context, name string) (*domain.Series, error)
+	UpdateSeries(ctx context.Context, series *domain.Series) error
+	// Genres
+	GetOrCreateGenreBySlug(ctx context.Context, slug, name, parentID string) (*domain.Genre, error)
+	GetGenreIDsForBook(ctx context.Context, bookID string) ([]string, error)
+	// Required by scanner.ConvertToBook (scanner.Storer interface).
+	GetGenreBySlug(ctx context.Context, slug string) (*domain.Genre, error)
+	GetGenreAliasByRaw(ctx context.Context, raw string) (*domain.GenreAlias, error)
+	TrackUnmappedGenre(ctx context.Context, raw string, bookID string) error
+	AddBookGenre(ctx context.Context, bookID, genreID string) error
+}
+
 // BookService orchestrates book operations.
 type BookService struct {
-	store           store.Store
+	store           bookServiceStore
 	scanner         *scanner.Scanner
 	metadataService *MetadataService
 	coverService    *CoverService
@@ -66,7 +93,7 @@ type BookService struct {
 
 // NewBookService creates a new book service.
 func NewBookService(
-	store store.Store,
+	books bookServiceStore,
 	scanner *scanner.Scanner,
 	metadataService *MetadataService,
 	coverService *CoverService,
@@ -74,7 +101,7 @@ func NewBookService(
 	logger *slog.Logger,
 ) *BookService {
 	return &BookService{
-		store:           store,
+		store:           books,
 		scanner:         scanner,
 		metadataService: metadataService,
 		coverService:    coverService,
@@ -143,6 +170,102 @@ func (s *BookService) ListBooks(ctx context.Context, userID string, params store
 // Returns ErrBookNotFound if user doesn't have access to the book.
 func (s *BookService) GetBook(ctx context.Context, userID, id string) (*domain.Book, error) {
 	return s.store.GetBook(ctx, id, userID)
+}
+
+// BookUpdate captures the optional book fields a user-edit request can mutate.
+// nil fields are left untouched on the existing book; non-nil fields replace
+// the corresponding column.
+type BookUpdate struct {
+	Title       *string
+	Subtitle    *string
+	Description *string
+	Publisher   *string
+	PublishYear *string
+	Language    *string
+	ASIN        *string
+	ISBN        *string
+	Abridged    *bool
+	CreatedAt   *time.Time
+}
+
+// SetContributors replaces the contributors on a book the user can access.
+// ACL is enforced before the write.
+func (s *BookService) SetContributors(ctx context.Context, userID, bookID string, contributors []store.ContributorInput) (*domain.Book, error) {
+	if _, err := s.store.GetBook(ctx, bookID, userID); err != nil {
+		return nil, err
+	}
+	return s.store.SetBookContributors(ctx, bookID, contributors)
+}
+
+// SetSeries replaces the series memberships on a book the user can access.
+// ACL is enforced before the write.
+func (s *BookService) SetSeries(ctx context.Context, userID, bookID string, series []store.SeriesInput) (*domain.Book, error) {
+	if _, err := s.store.GetBook(ctx, bookID, userID); err != nil {
+		return nil, err
+	}
+	return s.store.SetBookSeries(ctx, bookID, series)
+}
+
+// SetGenres replaces the genre IDs on a book the user can access.
+// ACL is enforced before the write.
+func (s *BookService) SetGenres(ctx context.Context, userID, bookID string, genreIDs []string) error {
+	if _, err := s.store.GetBook(ctx, bookID, userID); err != nil {
+		return err
+	}
+	return s.store.SetBookGenres(ctx, bookID, genreIDs)
+}
+
+// GetGenreIDs returns the genre IDs assigned to a book the user can access.
+func (s *BookService) GetGenreIDs(ctx context.Context, userID, bookID string) ([]string, error) {
+	if _, err := s.store.GetBook(ctx, bookID, userID); err != nil {
+		return nil, err
+	}
+	return s.store.GetGenreIDsForBook(ctx, bookID)
+}
+
+// UpdateBook applies the supplied patch to an existing book the user has
+// access to and persists it. ACL is enforced via GetBook(userID).
+func (s *BookService) UpdateBook(ctx context.Context, userID, bookID string, patch BookUpdate) (*domain.Book, error) {
+	book, err := s.store.GetBook(ctx, bookID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if patch.Title != nil {
+		book.Title = *patch.Title
+	}
+	if patch.Subtitle != nil {
+		book.Subtitle = *patch.Subtitle
+	}
+	if patch.Description != nil {
+		book.Description = *patch.Description
+	}
+	if patch.Publisher != nil {
+		book.Publisher = *patch.Publisher
+	}
+	if patch.PublishYear != nil {
+		book.PublishYear = *patch.PublishYear
+	}
+	if patch.Language != nil {
+		book.Language = *patch.Language
+	}
+	if patch.ASIN != nil {
+		book.ASIN = *patch.ASIN
+	}
+	if patch.ISBN != nil {
+		book.ISBN = *patch.ISBN
+	}
+	if patch.Abridged != nil {
+		book.Abridged = *patch.Abridged
+	}
+	if patch.CreatedAt != nil {
+		book.CreatedAt = *patch.CreatedAt
+	}
+
+	if err := s.store.UpdateBook(ctx, book); err != nil {
+		return nil, fmt.Errorf("update book: %w", err)
+	}
+	return book, nil
 }
 
 // TriggerScan initiates a full library scan.

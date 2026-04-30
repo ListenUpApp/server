@@ -21,6 +21,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/auth"
 	"github.com/listenupapp/listenup-server/internal/config"
 	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/dto"
 	"github.com/listenupapp/listenup-server/internal/service"
 	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store/sqlite"
@@ -115,6 +116,7 @@ func setupTagTestServer(t *testing.T) *tagTestServer {
 
 	s := &Server{
 		store:           st,
+		enricher:        dto.NewEnricher(st),
 		services:        services,
 		router:          router,
 		api:             api,

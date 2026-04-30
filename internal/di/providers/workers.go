@@ -38,9 +38,10 @@ func ProvideTranscodeService(i do.Injector) (*TranscodeServiceHandle, error) {
 		return nil, err
 	}
 
-	// Wire to scanner and store
+	// Wire transcode queueing into the scanner. Transcode-deletion cascades
+	// (e.g. when a book is removed) live at the service layer, not on the
+	// store, so there is no longer a SetTranscodeDeleter hook to invoke here.
 	fileScanner.SetTranscodeQueuer(svc)
-	storeHandle.SetTranscodeDeleter(svc)
 
 	// Start workers
 	svc.Start()

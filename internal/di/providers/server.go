@@ -11,6 +11,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/backup"
 	"github.com/listenupapp/listenup-server/internal/config"
 	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/dto"
 	"github.com/listenupapp/listenup-server/internal/logger"
 	"github.com/listenupapp/listenup-server/internal/mdns"
 	"github.com/listenupapp/listenup-server/internal/service"
@@ -143,7 +144,8 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 	backupSvc := backup.NewBackupService(storeHandle.Store, backupDir, dataDir, "dev", log.Logger)
 	restoreSvc := backup.NewRestoreService(storeHandle.Store, dataDir, log.Logger)
 
-	handler := api.NewServer(storeHandle.Store, services, storage, sseHandler, sseHandle.Manager, registrationBroadcaster, backupSvc, restoreSvc, log.Logger)
+	enricher := dto.NewEnricher(storeHandle.Store)
+	handler := api.NewServer(storeHandle.Store, enricher, services, storage, sseHandler, sseHandle.Manager, registrationBroadcaster, backupSvc, restoreSvc, log.Logger)
 
 	// Wire mDNS refresh callback for when instance settings change
 	mdnsHandle := do.MustInvoke[*MDNSServiceHandle](i)

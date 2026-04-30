@@ -13,17 +13,25 @@ import (
 	"github.com/listenupapp/listenup-server/internal/validation"
 )
 
+// genreServiceStore is the narrow store surface GenreService needs. It
+// combines GenreStore (genre CRUD + book-genre junction reads) with
+// BookStore.SetBookGenres for the book-write path.
+type genreServiceStore interface {
+	store.GenreStore
+	SetBookGenres(ctx context.Context, bookID string, genreIDs []string) error
+}
+
 // GenreService orchestrates genre operations.
 type GenreService struct {
-	store     store.Store
+	store     genreServiceStore
 	logger    *slog.Logger
 	validator *validation.Validator
 }
 
 // NewGenreService creates a new genre service.
-func NewGenreService(store store.Store, logger *slog.Logger) *GenreService {
+func NewGenreService(genres genreServiceStore, logger *slog.Logger) *GenreService {
 	return &GenreService{
-		store:     store,
+		store:     genres,
 		logger:    logger,
 		validator: validation.New(),
 	}

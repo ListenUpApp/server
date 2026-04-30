@@ -12,16 +12,26 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
+// collectionServiceStore is the narrow store surface CollectionService needs:
+// CollectionStore, plus library lookup, user lookup (for admin checks), and
+// book reads (for in-collection access checks).
+type collectionServiceStore interface {
+	store.CollectionStore
+	GetLibrary(ctx context.Context, id string) (*domain.Library, error)
+	GetUser(ctx context.Context, id string) (*domain.User, error)
+	GetBook(ctx context.Context, id string, userID string) (*domain.Book, error)
+}
+
 // CollectionService orchestrates collection operations with ACL enforcement.
 type CollectionService struct {
-	store  store.Store
+	store  collectionServiceStore
 	logger *slog.Logger
 }
 
 // NewCollectionService creates a new collection service.
-func NewCollectionService(store store.Store, logger *slog.Logger) *CollectionService {
+func NewCollectionService(s collectionServiceStore, logger *slog.Logger) *CollectionService {
 	return &CollectionService{
-		store:  store,
+		store:  s,
 		logger: logger,
 	}
 }

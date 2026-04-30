@@ -308,7 +308,7 @@ func (s *Server) emitBooksForShare(ctx context.Context, collectionID, userID str
 				continue
 			}
 
-			enrichedBook, err := s.store.EnrichBook(ctx, book)
+			enrichedBook, err := s.enricher.EnrichBook(ctx, book)
 			if err != nil {
 				s.logger.Error("failed to enrich book for share notification", "book_id", bookID, "error", err)
 				continue

@@ -11,16 +11,23 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
+// sharingServiceStore is the narrow store surface SharingService needs:
+// CollectionStore (for shares + access checks) plus user lookup.
+type sharingServiceStore interface {
+	store.CollectionStore
+	GetUser(ctx context.Context, id string) (*domain.User, error)
+}
+
 // SharingService orchestrates collection sharing operations with ACL enforcement.
 type SharingService struct {
-	store  store.Store
+	store  sharingServiceStore
 	logger *slog.Logger
 }
 
 // NewSharingService creates a new sharing service.
-func NewSharingService(store store.Store, logger *slog.Logger) *SharingService {
+func NewSharingService(s sharingServiceStore, logger *slog.Logger) *SharingService {
 	return &SharingService{
-		store:  store,
+		store:  s,
 		logger: logger,
 	}
 }

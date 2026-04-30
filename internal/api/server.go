@@ -15,6 +15,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/backup"
 	"github.com/listenupapp/listenup-server/internal/backup/abs"
 	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/dto"
 	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
@@ -22,6 +23,7 @@ import (
 // Server holds dependencies for HTTP handlers.
 type Server struct {
 	store                     store.Store
+	enricher                  *dto.Enricher
 	services                  *Services
 	storage                   *StorageServices
 	sseHandler                *sse.Handler
@@ -48,6 +50,7 @@ func (s *Server) SetOnInstanceUpdated(fn func(*domain.Instance)) {
 // NewServer creates a new HTTP server with all routes configured.
 func NewServer(
 	st store.Store,
+	enricher *dto.Enricher,
 	services *Services,
 	storage *StorageServices,
 	sseHandler *sse.Handler,
@@ -88,6 +91,7 @@ func NewServer(
 
 	s := &Server{
 		store:                     st,
+		enricher:                  enricher,
 		services:                  services,
 		storage:                   storage,
 		sseHandler:                sseHandler,

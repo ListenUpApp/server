@@ -23,9 +23,18 @@ const (
 	defaultInviteExpiry = 7 * 24 * time.Hour // 7 days
 )
 
+// inviteServiceStore is the narrow store surface InviteService needs:
+// InviteStore for invite rows, UserStore for the new user's account, and
+// InstanceStore for the server-name lookup that decorates invite links.
+type inviteServiceStore interface {
+	store.InviteStore
+	store.UserStore
+	store.InstanceStore
+}
+
 // InviteService handles invite creation, validation, and claiming.
 type InviteService struct {
-	store          store.Store
+	store          inviteServiceStore
 	sessionService *SessionService
 	logger         *slog.Logger
 	serverURL      string // Base URL for generating invite links
@@ -33,13 +42,13 @@ type InviteService struct {
 
 // NewInviteService creates a new invite service.
 func NewInviteService(
-	store store.Store,
+	s inviteServiceStore,
 	sessionService *SessionService,
 	logger *slog.Logger,
 	serverURL string,
 ) *InviteService {
 	return &InviteService{
-		store:          store,
+		store:          s,
 		sessionService: sessionService,
 		logger:         logger,
 		serverURL:      serverURL,

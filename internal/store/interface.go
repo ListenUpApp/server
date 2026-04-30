@@ -7,20 +7,28 @@ import (
 	"time"
 
 	"github.com/listenupapp/listenup-server/internal/domain"
-	"github.com/listenupapp/listenup-server/internal/dto"
 	"github.com/listenupapp/listenup-server/internal/metadata/audible"
 )
 
-// Store defines the interface for all persistence operations.
-type Store interface {
-	// Lifecycle
+// Lifecycle covers store-wide lifecycle and bulk-mode controls.
+//
+// SetSearchIndexer is a post-construction hook left over from the era when
+// the store emitted search side effects directly. It is retained because the
+// search index is wired up after the store boots (the store needs to exist
+// before bleve can be opened against the same data dir), but new code should
+// route search-index updates through the service layer instead. The
+// SetTranscodeDeleter sibling hook has already been removed.
+type Lifecycle interface {
 	Close() error
 	SetSearchIndexer(indexer SearchIndexer)
-	SetTranscodeDeleter(deleter TranscodeDeleter)
 	SetBulkMode(enabled bool)
 	IsBulkMode() bool
 	InvalidateGenreCache()
+}
 
+// UserStore covers users, sessions, profiles, settings, and the user-related
+// SSE broadcast helpers.
+type UserStore interface {
 	// Users
 	CreateUser(ctx context.Context, user *domain.User) error
 	GetUser(ctx context.Context, id string) (*domain.User, error)
@@ -55,8 +63,11 @@ type Store interface {
 	UpsertUserSettings(ctx context.Context, settings *domain.UserSettings) error
 	DeleteUserSettings(ctx context.Context, userID string) error
 	GetOrCreateUserSettings(ctx context.Context, userID string) (*domain.UserSettings, error)
+}
 
-	// Books
+// BookStore covers book CRUD, related queries, and book-junction
+// (contributor / series / genre) writes.
+type BookStore interface {
 	CreateBook(ctx context.Context, book *domain.Book) error
 	GetBook(ctx context.Context, id string, userID string) (*domain.Book, error)
 	GetBookByID(ctx context.Context, id string) (*domain.Book, error)
@@ -75,14 +86,14 @@ type Store interface {
 	GetBooksDeletedAfter(ctx context.Context, timestamp time.Time) ([]string, error)
 	SearchBooksByTitle(ctx context.Context, title string) ([]*domain.Book, error)
 	TouchEntity(ctx context.Context, entityType, id string) error
-	EnrichBook(ctx context.Context, book *domain.Book) (*dto.Book, error)
-	EnrichBooks(ctx context.Context, books []*domain.Book) ([]*dto.Book, error)
 	SetBookContributors(ctx context.Context, bookID string, contributors []ContributorInput) (*domain.Book, error)
 	SetBookSeries(ctx context.Context, bookID string, seriesInputs []SeriesInput) (*domain.Book, error)
 	SetBookGenres(ctx context.Context, bookID string, genreIDs []string) error
 	BroadcastBookCreated(ctx context.Context, book *domain.Book) error
+}
 
-	// Libraries
+// LibraryStore covers libraries.
+type LibraryStore interface {
 	CreateLibrary(ctx context.Context, lib *domain.Library) error
 	GetLibrary(ctx context.Context, id string) (*domain.Library, error)
 	GetDefaultLibrary(ctx context.Context) (*domain.Library, error)
@@ -90,7 +101,10 @@ type Store interface {
 	DeleteLibrary(ctx context.Context, id string) error
 	ListLibraries(ctx context.Context) ([]*domain.Library, error)
 	EnsureLibrary(ctx context.Context, scanPath string, userID string) (*BootstrapResult, error)
+}
 
+// CollectionStore covers collections, collection access, and collection shares.
+type CollectionStore interface {
 	// Collections
 	CreateCollection(ctx context.Context, coll *domain.Collection) error
 	GetCollection(ctx context.Context, id string, userID string) (*domain.Collection, error)
@@ -128,8 +142,10 @@ type Store interface {
 	DeleteShare(ctx context.Context, id string) error
 	UpdateShare(ctx context.Context, share *domain.CollectionShare) error
 	DeleteSharesForCollection(ctx context.Context, collectionID string) error
+}
 
-	// Contributors
+// ContributorStore covers contributors.
+type ContributorStore interface {
 	CreateContributor(ctx context.Context, contributor *domain.Contributor) error
 	GetContributor(ctx context.Context, id string) (*domain.Contributor, error)
 	GetContributorByASIN(ctx context.Context, asin string) (*domain.Contributor, error)
@@ -155,8 +171,10 @@ type Store interface {
 	// Only includes contributors with role "author".
 	ListAllBookContributorNames(ctx context.Context) (map[string][]string, error)
 	GetBookIDsByContributor(ctx context.Context, contributorID string) ([]string, error)
+}
 
-	// Series
+// SeriesStore covers series.
+type SeriesStore interface {
 	CreateSeries(ctx context.Context, series *domain.Series) error
 	GetSeries(ctx context.Context, id string) (*domain.Series, error)
 	GetSeriesByIDs(ctx context.Context, ids []string) ([]*domain.Series, error)
@@ -175,8 +193,13 @@ type Store interface {
 	GetSeriesDeletedAfter(ctx context.Context, timestamp time.Time) ([]string, error)
 	GetSeriesBookIDMap(ctx context.Context) (map[string][]string, error)
 	MergeSeries(ctx context.Context, sourceID, targetID string) (*domain.Series, error)
+}
 
-	// Genres
+// GenreStore covers genres, the book↔genre junction, genre aliases, and
+// unmapped-genre tracking. It also exposes batch lookups used for enrichment
+// (GetGenresByIDs, GetContributorsByBookIDs, GetSeriesByBookIDs,
+// GetGenreIDsByBookIDs) which the dto.Enricher consumes.
+type GenreStore interface {
 	CreateGenre(ctx context.Context, g *domain.Genre) error
 	GetGenre(ctx context.Context, id string) (*domain.Genre, error)
 	GetGenresByIDs(ctx context.Context, ids []string) ([]*domain.Genre, error)
@@ -202,8 +225,10 @@ type Store interface {
 	ListUnmappedGenres(ctx context.Context) ([]*domain.UnmappedGenre, error)
 	ResolveUnmappedGenre(ctx context.Context, raw string, genreIDs []string, userID string) error
 	SeedDefaultGenres(ctx context.Context) error
+}
 
-	// Tags
+// TagStore covers tags and the book↔tag junction.
+type TagStore interface {
 	CreateTag(ctx context.Context, t *domain.Tag) error
 	GetTagByID(ctx context.Context, tagID string) (*domain.Tag, error)
 	GetTagBySlug(ctx context.Context, slug string) (*domain.Tag, error)
@@ -219,7 +244,11 @@ type Store interface {
 	CleanupTagsForDeletedBook(ctx context.Context, bookID string) error
 	RecalculateTagBookCount(ctx context.Context, tagID string) error
 	GetTagSlugsForBook(ctx context.Context, bookID string) ([]string, error)
+}
 
+// ShelfStore covers shelves (and their lens-named aliases retained for
+// backwards compatibility during the rename).
+type ShelfStore interface {
 	// Shelves (née Lenses)
 	CreateLens(ctx context.Context, lens *domain.Shelf) error
 	GetLens(ctx context.Context, id string) (*domain.Shelf, error)
@@ -242,7 +271,12 @@ type Store interface {
 	AddBookToShelf(ctx context.Context, shelfID, bookID string) error
 	RemoveBookFromShelf(ctx context.Context, shelfID, bookID string) error
 	DeleteShelvesForUser(ctx context.Context, userID string) error
+}
 
+// ListeningStore covers listening events, playback state, book preferences,
+// reading sessions, activities, and user-stats accumulation. These all share
+// the "what a user has been doing with a book" concern.
+type ListeningStore interface {
 	// Listening
 	CreateListeningEvent(ctx context.Context, event *domain.ListeningEvent) error
 	GetListeningEvent(ctx context.Context, id string) (*domain.ListeningEvent, error)
@@ -299,8 +333,10 @@ type Store interface {
 	UpdateUserStatsFromEvent(ctx context.Context, userID string, deltaMs int64, lastListenedDate string) error
 	SetUserStats(ctx context.Context, stats *domain.UserStats) error
 	ClearAllUserStats(ctx context.Context) error
+}
 
-	// Invites
+// InviteStore covers invites.
+type InviteStore interface {
 	CreateInvite(ctx context.Context, invite *domain.Invite) error
 	GetInvite(ctx context.Context, id string) (*domain.Invite, error)
 	GetInviteByCode(ctx context.Context, code string) (*domain.Invite, error)
@@ -308,18 +344,24 @@ type Store interface {
 	DeleteInvite(ctx context.Context, inviteID string) error
 	ListInvites(ctx context.Context) ([]*domain.Invite, error)
 	ListInvitesByCreator(ctx context.Context, creatorID string) ([]*domain.Invite, error)
+}
 
-	// Instance
+// InstanceStore covers the singleton server instance row.
+type InstanceStore interface {
 	GetInstance(ctx context.Context) (*domain.Instance, error)
 	CreateInstance(ctx context.Context) (*domain.Instance, error)
 	UpdateInstance(ctx context.Context, instance *domain.Instance) error
 	InitializeInstance(ctx context.Context) (*domain.Instance, error)
+}
 
-	// Server Settings
+// SettingsStore covers server-wide settings.
+type SettingsStore interface {
 	GetServerSettings(ctx context.Context) (*domain.ServerSettings, error)
 	UpdateServerSettings(ctx context.Context, settings *domain.ServerSettings) error
+}
 
-	// Metadata Caching
+// MetadataCacheStore covers the Audible metadata response cache.
+type MetadataCacheStore interface {
 	GetCachedBook(ctx context.Context, region audible.Region, asin string) (*CachedBook, error)
 	SetCachedBook(ctx context.Context, region audible.Region, asin string, book *audible.Book) error
 	DeleteCachedBook(ctx context.Context, region audible.Region, asin string) error
@@ -329,8 +371,10 @@ type Store interface {
 	GetCachedSearch(ctx context.Context, region audible.Region, query string) (*CachedSearch, error)
 	SetCachedSearch(ctx context.Context, region audible.Region, query string, results []audible.SearchResult) error
 	DeleteCachedSearch(ctx context.Context, region audible.Region, query string) error
+}
 
-	// Transcoding
+// TranscodeStore covers transcode-job rows.
+type TranscodeStore interface {
 	CreateTranscodeJob(ctx context.Context, job *domain.TranscodeJob) error
 	GetTranscodeJob(ctx context.Context, id string) (*domain.TranscodeJob, error)
 	UpdateTranscodeJob(ctx context.Context, job *domain.TranscodeJob) error
@@ -342,8 +386,10 @@ type Store interface {
 	ListPendingTranscodeJobs(ctx context.Context) ([]*domain.TranscodeJob, error)
 	ListAllTranscodeJobs(ctx context.Context) iter.Seq2[*domain.TranscodeJob, error]
 	DeleteTranscodeJobsByBook(ctx context.Context, bookID string) (int, error)
+}
 
-	// ABS Import
+// ABSImportStore covers Audiobookshelf import staging tables.
+type ABSImportStore interface {
 	CreateABSImport(ctx context.Context, imp *domain.ABSImport) error
 	GetABSImport(ctx context.Context, id string) (*domain.ABSImport, error)
 	ListABSImports(ctx context.Context) ([]*domain.ABSImport, error)
@@ -370,8 +416,11 @@ type Store interface {
 	GetABSImportProgress(ctx context.Context, importID, absUserID, absMediaID string) (*domain.ABSImportProgress, error)
 	ListABSImportProgressForUser(ctx context.Context, importID, absUserID string) ([]*domain.ABSImportProgress, error)
 	FindABSImportProgressByListenUpBook(ctx context.Context, importID, absUserID, listenUpBookID string) (*domain.ABSImportProgress, error)
+}
 
-	// Export/Backup
+// BackupStore covers export/backup streams and the wholesale data-clearing
+// operations used by the restore service.
+type BackupStore interface {
 	StreamCollectionShares(ctx context.Context) iter.Seq2[*domain.CollectionShare, error]
 	StreamBooks(ctx context.Context) iter.Seq2[*domain.Book, error]
 	StreamContributors(ctx context.Context) iter.Seq2[*domain.Contributor, error]
@@ -388,12 +437,38 @@ type Store interface {
 	GetCollectionByID(ctx context.Context, id string) (*domain.Collection, error)
 	GetTagByIDForRestore(ctx context.Context, tagID string) (*domain.Tag, error)
 	UpdateTagForRestore(ctx context.Context, t *domain.Tag) error
+}
 
-	// Batch Operations
+// BatchStore covers the batch writer factory and library checkpoint queries.
+type BatchStore interface {
 	NewBatchWriter(maxSize int) BatchWriter
-
-	// Checkpoint
 	GetLibraryCheckpoint(ctx context.Context) (time.Time, error)
+}
+
+// Store is the kitchen-sink interface that aggregates every focused
+// sub-interface above. Existing callers that genuinely need a wide cross
+// section of operations (DI handles, restore service, scanner) keep using
+// Store; new code should depend on the narrowest sub-interface that suffices.
+type Store interface {
+	Lifecycle
+	UserStore
+	BookStore
+	LibraryStore
+	CollectionStore
+	ContributorStore
+	SeriesStore
+	GenreStore
+	TagStore
+	ShelfStore
+	ListeningStore
+	InviteStore
+	InstanceStore
+	SettingsStore
+	MetadataCacheStore
+	TranscodeStore
+	ABSImportStore
+	BackupStore
+	BatchStore
 }
 
 // BatchWriter provides efficient bulk write operations.
@@ -441,16 +516,3 @@ func (NoopSearchIndexer) DeleteSeries(context.Context, string) error            
 
 // NewNoopSearchIndexer creates a new no-op search indexer for testing.
 func NewNoopSearchIndexer() SearchIndexer { return NoopSearchIndexer{} }
-
-// TranscodeDeleter is the interface for cleaning up transcoded files.
-type TranscodeDeleter interface {
-	DeleteTranscodesForBook(ctx context.Context, bookID string) error
-}
-
-// NoopTranscodeDeleter is a no-op implementation for when transcoding is disabled.
-type NoopTranscodeDeleter struct{}
-
-func (NoopTranscodeDeleter) DeleteTranscodesForBook(context.Context, string) error { return nil }
-
-// NewNoopTranscodeDeleter creates a new no-op transcode deleter.
-func NewNoopTranscodeDeleter() TranscodeDeleter { return NoopTranscodeDeleter{} }

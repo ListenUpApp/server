@@ -601,7 +601,7 @@ func TestAuthService_Setup_ValidationErrors(t *testing.T) {
 // Helper function to create a test user.
 //
 //nolint:unparam // email parameter is kept for test flexibility despite current uniform usage
-func createTestUser(t *testing.T, s store.Store, email, passwordHash string) *domain.User {
+func createTestUser(t *testing.T, s store.UserStore, email, passwordHash string) *domain.User {
 	t.Helper()
 
 	userID, err := id.Generate("user")

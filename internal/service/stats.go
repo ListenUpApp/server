@@ -11,16 +11,25 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
+// statsServiceStore is the narrow store surface StatsService needs:
+// listening-side reads (events + state) plus a small slice of book/genre
+// metadata for grouping.
+type statsServiceStore interface {
+	store.ListeningStore
+	GetBook(ctx context.Context, id string, userID string) (*domain.Book, error)
+	GetGenresByIDs(ctx context.Context, ids []string) ([]*domain.Genre, error)
+}
+
 // StatsService provides detailed listening statistics.
 type StatsService struct {
-	store  store.Store
+	store  statsServiceStore
 	logger *slog.Logger
 }
 
 // NewStatsService creates a new stats service.
-func NewStatsService(store store.Store, logger *slog.Logger) *StatsService {
+func NewStatsService(s statsServiceStore, logger *slog.Logger) *StatsService {
 	return &StatsService{
-		store:  store,
+		store:  s,
 		logger: logger,
 	}
 }

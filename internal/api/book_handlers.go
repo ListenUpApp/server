@@ -341,7 +341,7 @@ func (s *Server) handleListBooks(ctx context.Context, input *ListBooksInput) (*L
 		return nil, err
 	}
 
-	enrichedBooks, err := s.store.EnrichBooks(ctx, result.Items)
+	enrichedBooks, err := s.enricher.EnrichBooks(ctx, result.Items)
 	if err != nil {
 		return nil, err
 	}
@@ -370,7 +370,7 @@ func (s *Server) handleGetBook(ctx context.Context, input *GetBookInput) (*BookO
 		return nil, err
 	}
 
-	enriched, err := s.store.EnrichBook(ctx, book)
+	enriched, err := s.enricher.EnrichBook(ctx, book)
 	if err != nil {
 		return nil, err
 	}
@@ -384,49 +384,23 @@ func (s *Server) handleUpdateBook(ctx context.Context, input *UpdateBookInput) (
 		return nil, err
 	}
 
-	// Get existing book
-	book, err := s.store.GetBook(ctx, input.ID, userID)
+	book, err := s.services.Book.UpdateBook(ctx, userID, input.ID, service.BookUpdate{
+		Title:       input.Body.Title,
+		Subtitle:    input.Body.Subtitle,
+		Description: input.Body.Description,
+		Publisher:   input.Body.Publisher,
+		PublishYear: input.Body.PublishYear,
+		Language:    input.Body.Language,
+		ASIN:        input.Body.ASIN,
+		ISBN:        input.Body.ISBN,
+		Abridged:    input.Body.Abridged,
+		CreatedAt:   input.Body.CreatedAt,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	// Apply updates
-	if input.Body.Title != nil {
-		book.Title = *input.Body.Title
-	}
-	if input.Body.Subtitle != nil {
-		book.Subtitle = *input.Body.Subtitle
-	}
-	if input.Body.Description != nil {
-		book.Description = *input.Body.Description
-	}
-	if input.Body.Publisher != nil {
-		book.Publisher = *input.Body.Publisher
-	}
-	if input.Body.PublishYear != nil {
-		book.PublishYear = *input.Body.PublishYear
-	}
-	if input.Body.Language != nil {
-		book.Language = *input.Body.Language
-	}
-	if input.Body.ASIN != nil {
-		book.ASIN = *input.Body.ASIN
-	}
-	if input.Body.ISBN != nil {
-		book.ISBN = *input.Body.ISBN
-	}
-	if input.Body.Abridged != nil {
-		book.Abridged = *input.Body.Abridged
-	}
-	if input.Body.CreatedAt != nil {
-		book.CreatedAt = *input.Body.CreatedAt
-	}
-
-	if err := s.store.UpdateBook(ctx, book); err != nil {
-		return nil, err
-	}
-
-	enriched, err := s.store.EnrichBook(ctx, book)
+	enriched, err := s.enricher.EnrichBook(ctx, book)
 	if err != nil {
 		return nil, err
 	}
@@ -437,11 +411,6 @@ func (s *Server) handleUpdateBook(ctx context.Context, input *UpdateBookInput) (
 func (s *Server) handleSetBookContributors(ctx context.Context, input *SetContributorsInput) (*BookOutput, error) {
 	userID, err := s.RequireCanEdit(ctx)
 	if err != nil {
-		return nil, err
-	}
-
-	// Verify user access BEFORE modifying the book
-	if _, err := s.store.GetBook(ctx, input.ID, userID); err != nil {
 		return nil, err
 	}
 
@@ -458,12 +427,12 @@ func (s *Server) handleSetBookContributors(ctx context.Context, input *SetContri
 		}
 	}
 
-	book, err := s.store.SetBookContributors(ctx, input.ID, contributors)
+	book, err := s.services.Book.SetContributors(ctx, userID, input.ID, contributors)
 	if err != nil {
 		return nil, err
 	}
 
-	enriched, err := s.store.EnrichBook(ctx, book)
+	enriched, err := s.enricher.EnrichBook(ctx, book)
 	if err != nil {
 		return nil, err
 	}
@@ -477,11 +446,6 @@ func (s *Server) handleSetBookSeries(ctx context.Context, input *SetSeriesInput)
 		return nil, err
 	}
 
-	// Verify user access BEFORE modifying the book
-	if _, err := s.store.GetBook(ctx, input.ID, userID); err != nil {
-		return nil, err
-	}
-
 	// Convert to store input format
 	seriesInputs := make([]store.SeriesInput, len(input.Body.Series))
 	for i, s := range input.Body.Series {
@@ -491,12 +455,12 @@ func (s *Server) handleSetBookSeries(ctx context.Context, input *SetSeriesInput)
 		}
 	}
 
-	book, err := s.store.SetBookSeries(ctx, input.ID, seriesInputs)
+	book, err := s.services.Book.SetSeries(ctx, userID, input.ID, seriesInputs)
 	if err != nil {
 		return nil, err
 	}
 
-	enriched, err := s.store.EnrichBook(ctx, book)
+	enriched, err := s.enricher.EnrichBook(ctx, book)
 	if err != nil {
 		return nil, err
 	}
@@ -510,12 +474,7 @@ func (s *Server) handleGetBookGenres(ctx context.Context, input *GetBookGenresIn
 		return nil, err
 	}
 
-	// Verify user access
-	if _, err := s.store.GetBook(ctx, input.ID, userID); err != nil {
-		return nil, err
-	}
-
-	genres, err := s.store.GetGenreIDsForBook(ctx, input.ID)
+	genres, err := s.services.Book.GetGenreIDs(ctx, userID, input.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -529,12 +488,7 @@ func (s *Server) handleSetBookGenres(ctx context.Context, input *SetGenresInput)
 		return nil, err
 	}
 
-	// Verify user access
-	if _, err := s.store.GetBook(ctx, input.ID, userID); err != nil {
-		return nil, err
-	}
-
-	if err := s.store.SetBookGenres(ctx, input.ID, input.Body.GenreIDs); err != nil {
+	if err := s.services.Book.SetGenres(ctx, userID, input.ID, input.Body.GenreIDs); err != nil {
 		return nil, err
 	}
 
@@ -646,7 +600,7 @@ func (s *Server) handleApplyBookMatch(ctx context.Context, input *ApplyMatchInpu
 	}
 
 	// Enrich book for response
-	enriched, err := s.store.EnrichBook(ctx, result.Book)
+	enriched, err := s.enricher.EnrichBook(ctx, result.Book)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to enrich book after match",
 			slog.String("book_id", input.ID),

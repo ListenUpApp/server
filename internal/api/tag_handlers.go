@@ -241,7 +241,7 @@ func (s *Server) handleGetTagBooks(ctx context.Context, input *GetTagBooksInput)
 	}
 
 	// Convert to DTOs (using existing dto.Book from the codebase) via batch enrichment.
-	enriched, err := s.store.EnrichBooks(ctx, books)
+	enriched, err := s.enricher.EnrichBooks(ctx, books)
 	if err != nil {
 		return nil, err
 	}

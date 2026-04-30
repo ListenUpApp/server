@@ -37,7 +37,7 @@ func (s *Server) handleGetBookSharePage(ctx context.Context, input *GetBookShare
 		}, nil
 	}
 
-	enriched, err := s.store.EnrichBook(ctx, book)
+	enriched, err := s.enricher.EnrichBook(ctx, book)
 	if err != nil {
 		// Graceful degradation: render a user-friendly HTML error page.
 		return &HTMLOutput{ //nolint:nilerr // graceful HTML error page for share links
