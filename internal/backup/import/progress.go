@@ -30,7 +30,7 @@ func (i *Importer) rebuildProgress(ctx context.Context) error {
 		key := domain.StateID(event.UserID, event.BookID)
 
 		// Get book duration for progress calculation
-		book, err := i.store.GetBookNoAccessCheck(ctx, event.BookID)
+		book, err := i.store.GetBookByID(ctx, event.BookID)
 		if err != nil {
 			// Orphaned event - book doesn't exist
 			orphanedCount++

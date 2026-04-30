@@ -533,7 +533,7 @@ func (s *SocialService) GetCurrentlyListening(ctx context.Context, viewingUserID
 	// Convert to slice and sort by reader count
 	books := make([]CurrentlyListeningBook, 0, len(bookReadersMap))
 	for bookID, br := range bookReadersMap {
-		book, err := s.store.GetBookNoAccessCheck(ctx, bookID)
+		book, err := s.store.GetBookByID(ctx, bookID)
 		if err != nil {
 			s.logger.Debug("failed to get book", "book_id", bookID, "error", err)
 			continue

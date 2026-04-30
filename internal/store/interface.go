@@ -59,7 +59,7 @@ type Store interface {
 	// Books
 	CreateBook(ctx context.Context, book *domain.Book) error
 	GetBook(ctx context.Context, id string, userID string) (*domain.Book, error)
-	GetBookNoAccessCheck(ctx context.Context, id string) (*domain.Book, error)
+	GetBookByID(ctx context.Context, id string) (*domain.Book, error)
 	GetBookByPath(ctx context.Context, path string) (*domain.Book, error)
 	GetBookByInode(ctx context.Context, inode int64) (*domain.Book, error)
 	GetBookByASIN(ctx context.Context, asin string) (*domain.Book, error)
@@ -385,8 +385,7 @@ type Store interface {
 	ClearAllData(ctx context.Context) error
 	ClearAllProgress(ctx context.Context) error
 	SaveProgress(ctx context.Context, progress *domain.PlaybackState) error
-	GetCollectionNoAccessCheck(ctx context.Context, id string) (*domain.Collection, error)
-	UpdateCollectionNoAccessCheck(ctx context.Context, coll *domain.Collection) error
+	GetCollectionByID(ctx context.Context, id string) (*domain.Collection, error)
 	GetTagByIDForRestore(ctx context.Context, tagID string) (*domain.Tag, error)
 	UpdateTagForRestore(ctx context.Context, t *domain.Tag) error
 

@@ -202,7 +202,7 @@ linters:
       - linters:
           - gocyclo
           - nestif
-        path: internal/api/.*_handlers\.go
+        path: internal/api/.*(_handlers.*|_analysis|_types)\.go
       - linters:
           - contextcheck
           - gocritic
@@ -254,7 +254,7 @@ linters:
       # Huma generates OpenAPI docs from struct tags; per-field godoc on
       # request/response types is redundant.
       - linters: [revive]
-        path: internal/api/.*_handlers\.go
+        path: internal/api/.*(_handlers.*|_analysis|_types)\.go
         text: "exported.*should have comment"
       # Store interface (interface.go) is the documented entry point;
       # implementation methods don't each need their own comment.

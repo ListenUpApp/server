@@ -483,7 +483,7 @@ func (s *Server) handleGetProgress(ctx context.Context, input *GetProgressInput)
 	}
 
 	// Get book for total duration (no access check - if user has progress, they had access)
-	book, err := s.store.GetBookNoAccessCheck(ctx, input.ID)
+	book, err := s.store.GetBookByID(ctx, input.ID)
 	if err != nil {
 		return nil, err
 	}

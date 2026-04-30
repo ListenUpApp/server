@@ -576,7 +576,7 @@ func (m *Matcher) hasCommonAuthor(ctx context.Context, bookID string, absAuthors
 		return true // No authors to check, assume match
 	}
 
-	book, err := m.store.GetBookNoAccessCheck(ctx, bookID)
+	book, err := m.store.GetBookByID(ctx, bookID)
 	if err != nil || book == nil {
 		return false
 	}
@@ -647,7 +647,7 @@ func (m *Matcher) suggestBooks(ctx context.Context, absItem *LibraryItem) []Book
 
 // getBookPrimaryAuthor returns the first author's name for a book.
 func (m *Matcher) getBookPrimaryAuthor(ctx context.Context, bookID string) string {
-	book, err := m.store.GetBookNoAccessCheck(ctx, bookID)
+	book, err := m.store.GetBookByID(ctx, bookID)
 	if err != nil || len(book.Contributors) == 0 {
 		return ""
 	}

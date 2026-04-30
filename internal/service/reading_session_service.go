@@ -297,7 +297,7 @@ func (s *ReadingSessionService) abandonSessionInternal(ctx context.Context, sess
 	// Get book for duration (no access check - if user has a session, they had access)
 	// If book doesn't exist (e.g., deleted), we still want to abandon the session
 	var bookDurationMs int64
-	book, err := s.store.GetBookNoAccessCheck(ctx, session.BookID)
+	book, err := s.store.GetBookByID(ctx, session.BookID)
 	if err == nil && book != nil {
 		bookDurationMs = book.TotalDuration
 	}
@@ -368,7 +368,7 @@ func (s *ReadingSessionService) GetBookReaders(ctx context.Context, bookID, view
 	}
 
 	// Get book duration for progress calculation
-	book, err := s.store.GetBookNoAccessCheck(ctx, bookID)
+	book, err := s.store.GetBookByID(ctx, bookID)
 	var bookDurationMs int64
 	if err == nil && book != nil {
 		bookDurationMs = book.TotalDuration
@@ -450,7 +450,7 @@ func (s *ReadingSessionService) GetUserReadingHistory(ctx context.Context, userI
 
 	for _, session := range sessions {
 		// Get book metadata
-		book, err := s.store.GetBookNoAccessCheck(ctx, session.BookID)
+		book, err := s.store.GetBookByID(ctx, session.BookID)
 		if err != nil {
 			s.logger.Warn("failed to get book for history session",
 				"session_id", session.ID,

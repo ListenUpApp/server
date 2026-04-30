@@ -455,14 +455,13 @@ func (s *Store) SaveProgress(ctx context.Context, progress *domain.PlaybackState
 	return s.UpsertState(ctx, progress)
 }
 
-// GetCollectionNoAccessCheck delegates to GetCollection with empty userID.
-func (s *Store) GetCollectionNoAccessCheck(ctx context.Context, id string) (*domain.Collection, error) {
+// GetCollectionByID retrieves a collection by ID without an access check.
+// Used by import/restore paths where the caller is operating on behalf of the
+// system, not a specific user. The SQLite GetCollection implementation does
+// not actually use the userID parameter — collection-level authorization is
+// enforced at the service layer via CanUserAccessCollection.
+func (s *Store) GetCollectionByID(ctx context.Context, id string) (*domain.Collection, error) {
 	return s.GetCollection(ctx, id, "")
-}
-
-// UpdateCollectionNoAccessCheck delegates to UpdateCollection with empty userID.
-func (s *Store) UpdateCollectionNoAccessCheck(ctx context.Context, coll *domain.Collection) error {
-	return s.UpdateCollection(ctx, coll, "")
 }
 
 // GetTagByIDForRestore retrieves a tag by its ID (alias for GetTagByID, used by restore).

@@ -215,7 +215,7 @@ func TestBackupRestore_RoundTrip(t *testing.T) {
 	assert.Equal(t, "Test Admin", user.DisplayName)
 	assert.True(t, user.IsRoot)
 
-	book, err := destStore.GetBookNoAccessCheck(ctx, "book-1")
+	book, err := destStore.GetBookByID(ctx, "book-1")
 	require.NoError(t, err)
 	assert.Equal(t, "Test Book", book.Title)
 	assert.Equal(t, int64(3600000), book.TotalDuration)

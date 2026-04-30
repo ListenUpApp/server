@@ -36,7 +36,7 @@ func (m *mockStore) UpsertState(_ context.Context, state *domain.PlaybackState) 
 
 // books can be set per-test to provide a known TotalDuration for secondary near-complete check.
 // When nil, returns a book with TotalDuration=0 so the secondary check is skipped.
-func (m *mockStore) GetBookNoAccessCheck(_ context.Context, bookID string) (*domain.Book, error) {
+func (m *mockStore) GetBookByID(_ context.Context, bookID string) (*domain.Book, error) {
 	if m.books != nil {
 		if b, ok := m.books[bookID]; ok {
 			return b, nil

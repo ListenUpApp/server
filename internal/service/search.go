@@ -104,7 +104,7 @@ func (s *SearchService) DeleteSeries(_ context.Context, seriesID string) error {
 // UpdateBookTags updates just the tags field of a book in the index.
 // This re-indexes the entire book document with updated tags.
 func (s *SearchService) UpdateBookTags(ctx context.Context, bookID string, tagSlugs []string) error {
-	book, err := s.store.GetBookNoAccessCheck(ctx, bookID)
+	book, err := s.store.GetBookByID(ctx, bookID)
 	if err != nil {
 		return fmt.Errorf("get book: %w", err)
 	}

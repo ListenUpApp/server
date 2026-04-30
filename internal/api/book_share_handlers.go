@@ -28,7 +28,7 @@ type GetBookSharePageInput struct {
 }
 
 func (s *Server) handleGetBookSharePage(ctx context.Context, input *GetBookSharePageInput) (*HTMLOutput, error) {
-	book, err := s.store.GetBookNoAccessCheck(ctx, input.ID)
+	book, err := s.store.GetBookByID(ctx, input.ID)
 	if err != nil {
 		// Graceful degradation: render a user-friendly HTML error page instead of an API error.
 		return &HTMLOutput{ //nolint:nilerr // graceful HTML error page for share links

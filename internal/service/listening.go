@@ -326,7 +326,7 @@ func (s *ListeningService) GetContinueListening(ctx context.Context, userID stri
 		}
 
 		// Fetch book details without access check
-		book, err := s.store.GetBookNoAccessCheck(ctx, progress.BookID)
+		book, err := s.store.GetBookByID(ctx, progress.BookID)
 		if err != nil {
 			s.logger.Warn("Book not found for progress", "book_id", progress.BookID, "error", err)
 			continue // Skip items where book is missing
@@ -561,7 +561,7 @@ func (s *ListeningService) GetBookStats(ctx context.Context, bookID string) (*Bo
 // This allows users to mark a book as complete manually (e.g., DNF at 90%).
 func (s *ListeningService) MarkComplete(ctx context.Context, userID, bookID string, finishedAt *time.Time) (*domain.PlaybackState, error) {
 	// Get book for duration (no access check - if user is marking complete, they had access)
-	book, err := s.store.GetBookNoAccessCheck(ctx, bookID)
+	book, err := s.store.GetBookByID(ctx, bookID)
 	if err != nil {
 		return nil, fmt.Errorf("book not found: %w", err)
 	}
@@ -669,7 +669,7 @@ func (s *ListeningService) DiscardProgress(ctx context.Context, userID, bookID s
 // Preserves history but clears current position and finished status.
 func (s *ListeningService) RestartBook(ctx context.Context, userID, bookID string) (*domain.PlaybackState, error) {
 	// Get book for duration (no access check - if user is restarting, they had access)
-	book, err := s.store.GetBookNoAccessCheck(ctx, bookID)
+	book, err := s.store.GetBookByID(ctx, bookID)
 	if err != nil {
 		return nil, fmt.Errorf("book not found: %w", err)
 	}

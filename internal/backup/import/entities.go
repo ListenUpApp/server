@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"encoding/json/v2"
 
@@ -14,45 +15,103 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
-func (i *Importer) importUsers(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
-	rc, err := stream.OpenFile(zr, "entities/users.jsonl")
+// progressLogEvery controls how often importEntity emits progress logs.
+const progressLogEvery = 1000
+
+// mergeVerdict describes what to do when an entity already exists in the
+// destination store during a merge restore.
+type mergeVerdict int
+
+const (
+	mergeVerdictUpdate mergeVerdict = iota // overwrite existing with backup version
+	mergeVerdictSkip                       // keep existing, skip backup version
+)
+
+// applyMergeStrategy returns whether a backup entity should overwrite an
+// existing local entity given the active merge strategy. It is only called
+// when both versions exist; full-mode restores wipe data first so existing
+// will always be nil.
+func applyMergeStrategy(opts RestoreOptions, backupUpdated, existingUpdated time.Time) mergeVerdict {
+	if opts.Mode != RestoreModeMerge {
+		return mergeVerdictUpdate
+	}
+	switch opts.MergeStrategy {
+	case MergeKeepLocal:
+		return mergeVerdictSkip
+	case MergeNewest:
+		if !backupUpdated.After(existingUpdated) {
+			return mergeVerdictSkip
+		}
+		return mergeVerdictUpdate
+	case MergeKeepBackup:
+		return mergeVerdictUpdate
+	default:
+		return mergeVerdictUpdate
+	}
+}
+
+// persistOutcome describes what happened when persist was called for one
+// streamed entity. Returning skipped=true means the entity was intentionally
+// skipped (already up-to-date, soft-deleted in merge mode, etc.) and should
+// be counted toward "skipped" rather than "imported" or "errors".
+type persistOutcome struct {
+	skipped bool
+	err     error
+}
+
+// importEntity is the generic streaming importer used for every entity type
+// stored in the backup zip as a JSONL file. It centralizes file lookup, parse
+// error accumulation, dry-run handling, soft-delete short-circuiting, and
+// progress logging so each per-entity importer collapses to a thin wrapper
+// that only declares its persist closure.
+//
+// fileName is the zip-relative path (e.g. "entities/users.jsonl"). entityName
+// is used as RestoreError.EntityType and in progress logs. idOf returns the
+// stable ID used in RestoreError.EntityID for failures (may be nil for
+// append-only types whose IDs aren't useful in error reporting). isDeleted
+// is consulted in merge mode to honor soft-deletes from the source; pass
+// nil for entity types that have no soft-delete semantics. persistFn is
+// invoked in non-dry-run mode to actually write the entity, and returns
+// whether it was skipped (e.g. by merge strategy) or errored.
+//
+// A missing zip entry is not an error: importEntity returns zero counts so
+// optional sections (older backups, partial archives) restore cleanly.
+//
+// Note: Go does not permit type parameters on methods, so importEntity is a
+// free function that takes the Importer explicitly.
+func importEntity[T any](
+	ctx context.Context,
+	i *Importer,
+	zr *zip.ReadCloser,
+	opts RestoreOptions,
+	fileName string,
+	entityName string,
+	idOf func(*T) string,
+	isDeleted func(*T) bool,
+	persistFn func(ctx context.Context, item *T) persistOutcome,
+) (imported, skipped int, errs []RestoreError) {
+	rc, err := stream.OpenFile(zr, fileName)
 	if err != nil {
 		if errors.Is(err, stream.ErrFileNotFound) {
 			return 0, 0, nil
 		}
-		errs = append(errs, RestoreError{EntityType: "users", Error: err.Error()})
-		return imported, skipped, errs
+		return 0, 0, []RestoreError{{EntityType: entityName, Error: err.Error()}}
 	}
 
-	reader := stream.NewReader[export.UserExport](rc)
+	reader := stream.NewReader[T](rc)
 
-	for userExport, err := range reader.All() {
-		if err != nil {
+	for entity, perr := range reader.All() {
+		if perr != nil {
 			errs = append(errs, RestoreError{
-				EntityType: "users",
-				Error:      fmt.Sprintf("parse error: %v", err),
+				EntityType: entityName,
+				Error:      fmt.Sprintf("parse error: %v", perr),
 			})
 			continue
 		}
 
-		// Convert export to domain
-		user := &domain.User{
-			Syncable:     userExport.Syncable,
-			Email:        userExport.Email,
-			PasswordHash: userExport.PasswordHash,
-			IsRoot:       userExport.IsRoot,
-			Role:         userExport.Role,
-			Status:       userExport.Status,
-			DisplayName:  userExport.DisplayName,
-			FirstName:    userExport.FirstName,
-			LastName:     userExport.LastName,
-			Permissions:  userExport.Permissions,
-			InvitedBy:    userExport.InvitedBy,
-			ApprovedBy:   userExport.ApprovedBy,
-		}
-
-		// Merge mode: skip soft-deleted
-		if opts.Mode == RestoreModeMerge && user.IsDeleted() {
+		// Soft-delete short circuit (merge mode only). Full restores keep
+		// soft-deleted rows so the destination matches the source exactly.
+		if isDeleted != nil && opts.Mode == RestoreModeMerge && isDeleted(&entity) {
 			skipped++
 			continue
 		}
@@ -62,322 +121,335 @@ func (i *Importer) importUsers(ctx context.Context, zr *zip.ReadCloser, opts Res
 			continue
 		}
 
-		// Check for existing
-		existing, _ := i.store.GetUser(ctx, user.ID)
-
-		if existing != nil {
-			// Entity exists - handle based on mode
-			if opts.Mode == RestoreModeMerge {
-				switch opts.MergeStrategy {
-				case MergeKeepLocal:
-					skipped++
-					continue
-				case MergeNewest:
-					if !user.UpdatedAt.After(existing.UpdatedAt) {
-						skipped++
-						continue
-					}
-					// MergeKeepBackup falls through to update
-				}
+		outcome := persistFn(ctx, &entity)
+		switch {
+		case outcome.err != nil:
+			rerr := RestoreError{EntityType: entityName, Error: outcome.err.Error()}
+			if idOf != nil {
+				rerr.EntityID = idOf(&entity)
 			}
-
-			// Update existing
-			if err := i.store.UpdateUser(ctx, user); err != nil {
-				errs = append(errs, RestoreError{
-					EntityType: "users",
-					EntityID:   user.ID,
-					Error:      err.Error(),
-				})
-				continue
-			}
-			imported++
-			continue // Critical: don't fall through to Create
-		}
-
-		// Create new
-		if err := i.store.CreateUser(ctx, user); err != nil {
-			errs = append(errs, RestoreError{
-				EntityType: "users",
-				EntityID:   user.ID,
-				Error:      err.Error(),
-			})
-			continue
-		}
-		imported++
-	}
-
-	return imported, skipped, errs
-}
-
-func (i *Importer) importProfiles(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
-	rc, err := stream.OpenFile(zr, "entities/profiles.jsonl")
-	if err != nil {
-		if errors.Is(err, stream.ErrFileNotFound) {
-			return 0, 0, nil
-		}
-		errs = append(errs, RestoreError{EntityType: "profiles", Error: err.Error()})
-		return imported, skipped, errs
-	}
-
-	reader := stream.NewReader[domain.UserProfile](rc)
-
-	for profile, err := range reader.All() {
-		if err != nil {
-			errs = append(errs, RestoreError{
-				EntityType: "profiles",
-				Error:      fmt.Sprintf("parse error: %v", err),
-			})
-			continue
-		}
-
-		if opts.DryRun {
-			imported++
-			continue
-		}
-
-		// Profiles use upsert semantics
-		if err := i.store.SaveUserProfile(ctx, &profile); err != nil {
-			errs = append(errs, RestoreError{
-				EntityType: "profiles",
-				EntityID:   profile.UserID,
-				Error:      err.Error(),
-			})
-			continue
-		}
-		imported++
-	}
-
-	return imported, skipped, errs
-}
-
-func (i *Importer) importLibraries(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
-	rc, err := stream.OpenFile(zr, "entities/libraries.jsonl")
-	if err != nil {
-		if errors.Is(err, stream.ErrFileNotFound) {
-			return 0, 0, nil
-		}
-		errs = append(errs, RestoreError{EntityType: "libraries", Error: err.Error()})
-		return imported, skipped, errs
-	}
-
-	reader := stream.NewReader[domain.Library](rc)
-
-	for lib, err := range reader.All() {
-		if err != nil {
-			errs = append(errs, RestoreError{
-				EntityType: "libraries",
-				Error:      fmt.Sprintf("parse error: %v", err),
-			})
-			continue
-		}
-
-		// Library doesn't have soft-delete
-
-		if opts.DryRun {
-			imported++
-			continue
-		}
-
-		existing, _ := i.store.GetLibrary(ctx, lib.ID)
-		if existing != nil {
-			if opts.Mode == RestoreModeMerge {
-				switch opts.MergeStrategy {
-				case MergeKeepLocal:
-					skipped++
-					continue
-				case MergeNewest:
-					if !lib.UpdatedAt.After(existing.UpdatedAt) {
-						skipped++
-						continue
-					}
-				}
-			}
-			if err := i.store.UpdateLibrary(ctx, &lib); err != nil {
-				errs = append(errs, RestoreError{
-					EntityType: "libraries",
-					EntityID:   lib.ID,
-					Error:      err.Error(),
-				})
-				continue
-			}
-			imported++
-			continue
-		}
-
-		if err := i.store.CreateLibrary(ctx, &lib); err != nil {
-			errs = append(errs, RestoreError{
-				EntityType: "libraries",
-				EntityID:   lib.ID,
-				Error:      err.Error(),
-			})
-			continue
-		}
-		imported++
-	}
-
-	return imported, skipped, errs
-}
-
-func (i *Importer) importContributors(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
-	rc, err := stream.OpenFile(zr, "entities/contributors.jsonl")
-	if err != nil {
-		if errors.Is(err, stream.ErrFileNotFound) {
-			return 0, 0, nil
-		}
-		errs = append(errs, RestoreError{EntityType: "contributors", Error: err.Error()})
-		return imported, skipped, errs
-	}
-
-	reader := stream.NewReader[domain.Contributor](rc)
-
-	for contrib, err := range reader.All() {
-		if err != nil {
-			errs = append(errs, RestoreError{
-				EntityType: "contributors",
-				Error:      fmt.Sprintf("parse error: %v", err),
-			})
-			continue
-		}
-
-		if opts.Mode == RestoreModeMerge && contrib.IsDeleted() {
+			errs = append(errs, rerr)
+		case outcome.skipped:
 			skipped++
-			continue
-		}
-
-		if opts.DryRun {
+		default:
 			imported++
-			continue
 		}
 
-		existing, _ := i.store.GetContributor(ctx, contrib.ID)
-		if existing != nil {
-			if opts.Mode == RestoreModeMerge {
-				switch opts.MergeStrategy {
-				case MergeKeepLocal:
-					skipped++
-					continue
-				case MergeNewest:
-					if !contrib.UpdatedAt.After(existing.UpdatedAt) {
-						skipped++
-						continue
-					}
-				}
-			}
-			if err := i.store.UpdateContributor(ctx, &contrib); err != nil {
-				errs = append(errs, RestoreError{
-					EntityType: "contributors",
-					EntityID:   contrib.ID,
-					Error:      err.Error(),
-				})
-				continue
-			}
-			imported++
-			continue
+		if total := imported + skipped; total > 0 && total%progressLogEvery == 0 {
+			i.logger.Debug("import progress",
+				"type", entityName,
+				"imported", imported,
+				"skipped", skipped,
+				"errors", len(errs))
 		}
-
-		if err := i.store.CreateContributor(ctx, &contrib); err != nil {
-			errs = append(errs, RestoreError{
-				EntityType: "contributors",
-				EntityID:   contrib.ID,
-				Error:      err.Error(),
-			})
-			continue
-		}
-		imported++
 	}
 
 	return imported, skipped, errs
 }
 
-func (i *Importer) importSeries(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
-	rc, err := stream.OpenFile(zr, "entities/series.jsonl")
-	if err != nil {
-		if errors.Is(err, stream.ErrFileNotFound) {
-			return 0, 0, nil
-		}
-		errs = append(errs, RestoreError{EntityType: "series", Error: err.Error()})
-		return imported, skipped, errs
-	}
-
-	reader := stream.NewReader[domain.Series](rc)
-
-	for series, err := range reader.All() {
-		if err != nil {
-			errs = append(errs, RestoreError{
-				EntityType: "series",
-				Error:      fmt.Sprintf("parse error: %v", err),
-			})
-			continue
-		}
-
-		if opts.Mode == RestoreModeMerge && series.IsDeleted() {
-			skipped++
-			continue
-		}
-
-		if opts.DryRun {
-			imported++
-			continue
-		}
-
-		existing, _ := i.store.GetSeries(ctx, series.ID)
-		if existing != nil {
-			if opts.Mode == RestoreModeMerge {
-				switch opts.MergeStrategy {
-				case MergeKeepLocal:
-					skipped++
-					continue
-				case MergeNewest:
-					if !series.UpdatedAt.After(existing.UpdatedAt) {
-						skipped++
-						continue
-					}
-				}
+// upsertWithMerge is the common "look up existing, decide via merge strategy,
+// then update or create" recipe used by most importers. It is parameterised
+// over the small set of store callbacks that vary between entity types.
+//
+// existing must be a pointer to the existing entity or nil if not found
+// (errors from get are intentionally swallowed to mirror the prior code; the
+// store returns nil + ErrNotFound rather than a hard failure for missing rows).
+func upsertWithMerge[T any](
+	ctx context.Context,
+	opts RestoreOptions,
+	item *T,
+	get func(ctx context.Context) (*T, error),
+	updatedAt func(*T) time.Time,
+	update func(ctx context.Context, item *T) error,
+	create func(ctx context.Context, item *T) error,
+) persistOutcome {
+	existing, _ := get(ctx)
+	if existing != nil {
+		switch applyMergeStrategy(opts, updatedAt(item), updatedAt(existing)) {
+		case mergeVerdictSkip:
+			return persistOutcome{skipped: true}
+		case mergeVerdictUpdate:
+			if err := update(ctx, item); err != nil {
+				return persistOutcome{err: err}
 			}
-			if err := i.store.UpdateSeries(ctx, &series); err != nil {
-				errs = append(errs, RestoreError{
-					EntityType: "series",
-					EntityID:   series.ID,
-					Error:      err.Error(),
-				})
-				continue
-			}
-			imported++
-			continue
+			return persistOutcome{}
 		}
-
-		if err := i.store.CreateSeries(ctx, &series); err != nil {
-			errs = append(errs, RestoreError{
-				EntityType: "series",
-				EntityID:   series.ID,
-				Error:      err.Error(),
-			})
-			continue
-		}
-		imported++
 	}
-
-	return imported, skipped, errs
+	if err := create(ctx, item); err != nil {
+		return persistOutcome{err: err}
+	}
+	return persistOutcome{}
 }
 
+// --- Per-entity importers (thin wrappers over importEntity) ----------------
+
+func (i *Importer) importUsers(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (int, int, []RestoreError) {
+	return importEntity(ctx, i, zr, opts,
+		"entities/users.jsonl",
+		"users",
+		func(u *export.UserExport) string { return u.ID },
+		func(u *export.UserExport) bool { return u.IsDeleted() },
+		func(ctx context.Context, u *export.UserExport) persistOutcome {
+			user := &domain.User{
+				Syncable:     u.Syncable,
+				Email:        u.Email,
+				PasswordHash: u.PasswordHash,
+				IsRoot:       u.IsRoot,
+				Role:         u.Role,
+				Status:       u.Status,
+				DisplayName:  u.DisplayName,
+				FirstName:    u.FirstName,
+				LastName:     u.LastName,
+				Permissions:  u.Permissions,
+				InvitedBy:    u.InvitedBy,
+				ApprovedBy:   u.ApprovedBy,
+			}
+			return upsertWithMerge(ctx, opts, user,
+				func(ctx context.Context) (*domain.User, error) { return i.store.GetUser(ctx, user.ID) },
+				func(x *domain.User) time.Time { return x.UpdatedAt },
+				func(ctx context.Context, x *domain.User) error { return i.store.UpdateUser(ctx, x) },
+				func(ctx context.Context, x *domain.User) error { return i.store.CreateUser(ctx, x) },
+			)
+		},
+	)
+}
+
+func (i *Importer) importProfiles(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (int, int, []RestoreError) {
+	return importEntity(ctx, i, zr, opts,
+		"entities/profiles.jsonl",
+		"profiles",
+		func(p *domain.UserProfile) string { return p.UserID },
+		nil, // no soft-delete on profiles
+		func(ctx context.Context, p *domain.UserProfile) persistOutcome {
+			// Profiles use upsert semantics — store handles existing rows.
+			if err := i.store.SaveUserProfile(ctx, p); err != nil {
+				return persistOutcome{err: err}
+			}
+			return persistOutcome{}
+		},
+	)
+}
+
+func (i *Importer) importLibraries(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (int, int, []RestoreError) {
+	return importEntity(ctx, i, zr, opts,
+		"entities/libraries.jsonl",
+		"libraries",
+		func(l *domain.Library) string { return l.ID },
+		nil, // libraries have no soft-delete
+		func(ctx context.Context, l *domain.Library) persistOutcome {
+			return upsertWithMerge(ctx, opts, l,
+				func(ctx context.Context) (*domain.Library, error) { return i.store.GetLibrary(ctx, l.ID) },
+				func(x *domain.Library) time.Time { return x.UpdatedAt },
+				func(ctx context.Context, x *domain.Library) error { return i.store.UpdateLibrary(ctx, x) },
+				func(ctx context.Context, x *domain.Library) error { return i.store.CreateLibrary(ctx, x) },
+			)
+		},
+	)
+}
+
+func (i *Importer) importContributors(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (int, int, []RestoreError) {
+	return importEntity(ctx, i, zr, opts,
+		"entities/contributors.jsonl",
+		"contributors",
+		func(c *domain.Contributor) string { return c.ID },
+		func(c *domain.Contributor) bool { return c.IsDeleted() },
+		func(ctx context.Context, c *domain.Contributor) persistOutcome {
+			return upsertWithMerge(ctx, opts, c,
+				func(ctx context.Context) (*domain.Contributor, error) { return i.store.GetContributor(ctx, c.ID) },
+				func(x *domain.Contributor) time.Time { return x.UpdatedAt },
+				func(ctx context.Context, x *domain.Contributor) error { return i.store.UpdateContributor(ctx, x) },
+				func(ctx context.Context, x *domain.Contributor) error { return i.store.CreateContributor(ctx, x) },
+			)
+		},
+	)
+}
+
+func (i *Importer) importSeries(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (int, int, []RestoreError) {
+	return importEntity(ctx, i, zr, opts,
+		"entities/series.jsonl",
+		"series",
+		func(s *domain.Series) string { return s.ID },
+		func(s *domain.Series) bool { return s.IsDeleted() },
+		func(ctx context.Context, s *domain.Series) persistOutcome {
+			return upsertWithMerge(ctx, opts, s,
+				func(ctx context.Context) (*domain.Series, error) { return i.store.GetSeries(ctx, s.ID) },
+				func(x *domain.Series) time.Time { return x.UpdatedAt },
+				func(ctx context.Context, x *domain.Series) error { return i.store.UpdateSeries(ctx, x) },
+				func(ctx context.Context, x *domain.Series) error { return i.store.CreateSeries(ctx, x) },
+			)
+		},
+	)
+}
+
+func (i *Importer) importTags(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (int, int, []RestoreError) {
+	return importEntity(ctx, i, zr, opts,
+		"entities/tags.jsonl",
+		"tags",
+		func(t *domain.Tag) string { return t.ID },
+		nil, // tags have no soft-delete
+		func(ctx context.Context, t *domain.Tag) persistOutcome {
+			return upsertWithMerge(ctx, opts, t,
+				func(ctx context.Context) (*domain.Tag, error) { return i.store.GetTagByIDForRestore(ctx, t.ID) },
+				func(x *domain.Tag) time.Time { return x.UpdatedAt },
+				func(ctx context.Context, x *domain.Tag) error { return i.store.UpdateTagForRestore(ctx, x) },
+				func(ctx context.Context, x *domain.Tag) error { return i.store.CreateTag(ctx, x) },
+			)
+		},
+	)
+}
+
+func (i *Importer) importBooks(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (int, int, []RestoreError) {
+	return importEntity(ctx, i, zr, opts,
+		"entities/books.jsonl",
+		"books",
+		func(b *domain.Book) string { return b.ID },
+		func(b *domain.Book) bool { return b.IsDeleted() },
+		func(ctx context.Context, b *domain.Book) persistOutcome {
+			return upsertWithMerge(ctx, opts, b,
+				func(ctx context.Context) (*domain.Book, error) { return i.store.GetBookByID(ctx, b.ID) },
+				func(x *domain.Book) time.Time { return x.UpdatedAt },
+				func(ctx context.Context, x *domain.Book) error { return i.store.UpdateBook(ctx, x) },
+				func(ctx context.Context, x *domain.Book) error { return i.store.CreateBook(ctx, x) },
+			)
+		},
+	)
+}
+
+func (i *Importer) importCollections(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (int, int, []RestoreError) {
+	return importEntity(ctx, i, zr, opts,
+		"entities/collections.jsonl",
+		"collections",
+		func(c *domain.Collection) string { return c.ID },
+		nil, // collections have no soft-delete
+		func(ctx context.Context, c *domain.Collection) persistOutcome {
+			return upsertWithMerge(ctx, opts, c,
+				func(ctx context.Context) (*domain.Collection, error) { return i.store.GetCollectionByID(ctx, c.ID) },
+				func(x *domain.Collection) time.Time { return x.UpdatedAt },
+				func(ctx context.Context, x *domain.Collection) error { return i.store.AdminUpdateCollection(ctx, x) },
+				func(ctx context.Context, x *domain.Collection) error { return i.store.CreateCollection(ctx, x) },
+			)
+		},
+	)
+}
+
+func (i *Importer) importCollectionShares(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (int, int, []RestoreError) {
+	return importEntity(ctx, i, zr, opts,
+		"entities/collection_shares.jsonl",
+		"collection_shares",
+		func(s *domain.CollectionShare) string { return s.ID },
+		func(s *domain.CollectionShare) bool { return s.IsDeleted() },
+		func(ctx context.Context, s *domain.CollectionShare) persistOutcome {
+			return upsertWithMerge(ctx, opts, s,
+				func(ctx context.Context) (*domain.CollectionShare, error) { return i.store.GetShare(ctx, s.ID) },
+				func(x *domain.CollectionShare) time.Time { return x.UpdatedAt },
+				func(ctx context.Context, x *domain.CollectionShare) error { return i.store.UpdateShare(ctx, x) },
+				func(ctx context.Context, x *domain.CollectionShare) error { return i.store.CreateShare(ctx, x) },
+			)
+		},
+	)
+}
+
+func (i *Importer) importShelves(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (int, int, []RestoreError) {
+	return importEntity(ctx, i, zr, opts,
+		"entities/shelves.jsonl",
+		"shelves",
+		func(s *domain.Shelf) string { return s.ID },
+		nil, // shelves have no soft-delete
+		func(ctx context.Context, s *domain.Shelf) persistOutcome {
+			return upsertWithMerge(ctx, opts, s,
+				func(ctx context.Context) (*domain.Shelf, error) { return i.store.GetShelf(ctx, s.ID) },
+				func(x *domain.Shelf) time.Time { return x.UpdatedAt },
+				func(ctx context.Context, x *domain.Shelf) error { return i.store.UpdateShelf(ctx, x) },
+				func(ctx context.Context, x *domain.Shelf) error { return i.store.CreateShelf(ctx, x) },
+			)
+		},
+	)
+}
+
+func (i *Importer) importActivities(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (int, int, []RestoreError) {
+	return importEntity(ctx, i, zr, opts,
+		"entities/activities.jsonl",
+		"activities",
+		nil, // activities are append-only; no useful pre-persist ID for errors
+		nil, // no soft-delete; activities are imported unconditionally
+		func(ctx context.Context, a *domain.Activity) persistOutcome {
+			// Activities are immutable. Duplicate inserts are treated as
+			// skips rather than errors so retried/overlapping backups don't
+			// pollute the error list.
+			if err := i.store.CreateActivity(ctx, a); err != nil {
+				return persistOutcome{skipped: true}
+			}
+			return persistOutcome{}
+		},
+	)
+}
+
+func (i *Importer) importListeningEvents(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (int, int, []RestoreError) {
+	return importEntity(ctx, i, zr, opts,
+		"listening/events.jsonl",
+		"listening_events",
+		nil, // events are append-only; duplicate-on-create is tolerated as skip
+		nil,
+		func(ctx context.Context, e *domain.ListeningEvent) persistOutcome {
+			// Events are historical truth — duplicates aren't errors.
+			if err := i.store.CreateListeningEvent(ctx, e); err != nil {
+				return persistOutcome{skipped: true}
+			}
+			return persistOutcome{}
+		},
+	)
+}
+
+func (i *Importer) importReadingSessions(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (int, int, []RestoreError) {
+	return importEntity(ctx, i, zr, opts,
+		"listening/sessions.jsonl",
+		"reading_sessions",
+		func(s *domain.BookReadingSession) string { return s.ID },
+		nil, // reading sessions have no soft-delete
+		func(ctx context.Context, s *domain.BookReadingSession) persistOutcome {
+			return upsertWithMerge(ctx, opts, s,
+				func(ctx context.Context) (*domain.BookReadingSession, error) {
+					return i.store.GetReadingSession(ctx, s.ID)
+				},
+				func(x *domain.BookReadingSession) time.Time { return x.UpdatedAt },
+				func(ctx context.Context, x *domain.BookReadingSession) error {
+					return i.store.UpdateReadingSession(ctx, x)
+				},
+				func(ctx context.Context, x *domain.BookReadingSession) error {
+					return i.store.CreateReadingSession(ctx, x)
+				},
+			)
+		},
+	)
+}
+
+// importGenres is the lone non-JSONL importer: genres are stored as a single
+// JSON array in entities/genres.json (legacy export format). The streaming
+// helper expects line-delimited JSON, so genres get a small bespoke loader
+// that decodes the array up front and then funnels through the same persist
+// pipeline as everything else.
 func (i *Importer) importGenres(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
 	rc, err := stream.OpenFile(zr, "entities/genres.json")
 	if err != nil {
 		if errors.Is(err, stream.ErrFileNotFound) {
 			return 0, 0, nil
 		}
-		errs = append(errs, RestoreError{EntityType: "genres", Error: err.Error()})
-		return imported, skipped, errs
+		return 0, 0, []RestoreError{{EntityType: "genres", Error: err.Error()}}
 	}
 	defer rc.Close()
 
 	var genres []*domain.Genre
 	if err := json.UnmarshalRead(rc, &genres); err != nil {
-		errs = append(errs, RestoreError{
-			EntityType: "genres",
-			Error:      fmt.Sprintf("parse error: %v", err),
-		})
-		return imported, skipped, errs
+		return 0, 0, []RestoreError{{EntityType: "genres", Error: fmt.Sprintf("parse error: %v", err)}}
+	}
+
+	persist := func(ctx context.Context, g *domain.Genre) persistOutcome {
+		return upsertWithMerge(ctx, opts, g,
+			func(ctx context.Context) (*domain.Genre, error) { return i.store.GetGenre(ctx, g.ID) },
+			func(x *domain.Genre) time.Time { return x.UpdatedAt },
+			func(ctx context.Context, x *domain.Genre) error { return i.store.UpdateGenre(ctx, x) },
+			func(ctx context.Context, x *domain.Genre) error { return i.store.CreateGenre(ctx, x) },
+		)
 	}
 
 	for _, genre := range genres {
@@ -385,541 +457,31 @@ func (i *Importer) importGenres(ctx context.Context, zr *zip.ReadCloser, opts Re
 			skipped++
 			continue
 		}
-
 		if opts.DryRun {
 			imported++
 			continue
 		}
-
-		existing, _ := i.store.GetGenre(ctx, genre.ID)
-		if existing != nil {
-			if opts.Mode == RestoreModeMerge {
-				switch opts.MergeStrategy {
-				case MergeKeepLocal:
-					skipped++
-					continue
-				case MergeNewest:
-					if !genre.UpdatedAt.After(existing.UpdatedAt) {
-						skipped++
-						continue
-					}
-				}
-			}
-			if err := i.store.UpdateGenre(ctx, genre); err != nil {
-				errs = append(errs, RestoreError{
-					EntityType: "genres",
-					EntityID:   genre.ID,
-					Error:      err.Error(),
-				})
-				continue
-			}
-			imported++
-			continue
-		}
-
-		if err := i.store.CreateGenre(ctx, genre); err != nil {
+		outcome := persist(ctx, genre)
+		switch {
+		case outcome.err != nil:
 			errs = append(errs, RestoreError{
 				EntityType: "genres",
 				EntityID:   genre.ID,
-				Error:      err.Error(),
+				Error:      outcome.err.Error(),
 			})
-			continue
-		}
-		imported++
-	}
-
-	return imported, skipped, errs
-}
-
-func (i *Importer) importTags(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
-	rc, err := stream.OpenFile(zr, "entities/tags.jsonl")
-	if err != nil {
-		if errors.Is(err, stream.ErrFileNotFound) {
-			return 0, 0, nil
-		}
-		errs = append(errs, RestoreError{EntityType: "tags", Error: err.Error()})
-		return imported, skipped, errs
-	}
-
-	reader := stream.NewReader[domain.Tag](rc)
-
-	for tag, err := range reader.All() {
-		if err != nil {
-			errs = append(errs, RestoreError{
-				EntityType: "tags",
-				Error:      fmt.Sprintf("parse error: %v", err),
-			})
-			continue
-		}
-
-		// Tag doesn't have soft-delete
-
-		if opts.DryRun {
-			imported++
-			continue
-		}
-
-		existing, _ := i.store.GetTagByIDForRestore(ctx, tag.ID)
-		if existing != nil {
-			if opts.Mode == RestoreModeMerge {
-				switch opts.MergeStrategy {
-				case MergeKeepLocal:
-					skipped++
-					continue
-				case MergeNewest:
-					if !tag.UpdatedAt.After(existing.UpdatedAt) {
-						skipped++
-						continue
-					}
-				}
-			}
-			if err := i.store.UpdateTagForRestore(ctx, &tag); err != nil {
-				errs = append(errs, RestoreError{
-					EntityType: "tags",
-					EntityID:   tag.ID,
-					Error:      err.Error(),
-				})
-				continue
-			}
-			imported++
-			continue
-		}
-
-		if err := i.store.CreateTag(ctx, &tag); err != nil {
-			errs = append(errs, RestoreError{
-				EntityType: "tags",
-				EntityID:   tag.ID,
-				Error:      err.Error(),
-			})
-			continue
-		}
-		imported++
-	}
-
-	return imported, skipped, errs
-}
-
-func (i *Importer) importBooks(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
-	rc, err := stream.OpenFile(zr, "entities/books.jsonl")
-	if err != nil {
-		if errors.Is(err, stream.ErrFileNotFound) {
-			return 0, 0, nil
-		}
-		errs = append(errs, RestoreError{EntityType: "books", Error: err.Error()})
-		return imported, skipped, errs
-	}
-
-	reader := stream.NewReader[domain.Book](rc)
-
-	for book, err := range reader.All() {
-		if err != nil {
-			errs = append(errs, RestoreError{
-				EntityType: "books",
-				Error:      fmt.Sprintf("parse error: %v", err),
-			})
-			continue
-		}
-
-		if opts.Mode == RestoreModeMerge && book.IsDeleted() {
+		case outcome.skipped:
 			skipped++
-			continue
-		}
-
-		if opts.DryRun {
+		default:
 			imported++
-			continue
 		}
-
-		existing, _ := i.store.GetBookNoAccessCheck(ctx, book.ID)
-		if existing != nil {
-			if opts.Mode == RestoreModeMerge {
-				switch opts.MergeStrategy {
-				case MergeKeepLocal:
-					skipped++
-					continue
-				case MergeNewest:
-					if !book.UpdatedAt.After(existing.UpdatedAt) {
-						skipped++
-						continue
-					}
-				}
-			}
-			if err := i.store.UpdateBook(ctx, &book); err != nil {
-				errs = append(errs, RestoreError{
-					EntityType: "books",
-					EntityID:   book.ID,
-					Error:      err.Error(),
-				})
-				continue
-			}
-			imported++
-			continue
-		}
-
-		if err := i.store.CreateBook(ctx, &book); err != nil {
-			errs = append(errs, RestoreError{
-				EntityType: "books",
-				EntityID:   book.ID,
-				Error:      err.Error(),
-			})
-			continue
-		}
-		imported++
 	}
 
 	return imported, skipped, errs
 }
 
-func (i *Importer) importCollections(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
-	rc, err := stream.OpenFile(zr, "entities/collections.jsonl")
-	if err != nil {
-		if errors.Is(err, stream.ErrFileNotFound) {
-			return 0, 0, nil
-		}
-		errs = append(errs, RestoreError{EntityType: "collections", Error: err.Error()})
-		return imported, skipped, errs
-	}
-
-	reader := stream.NewReader[domain.Collection](rc)
-
-	for coll, err := range reader.All() {
-		if err != nil {
-			errs = append(errs, RestoreError{
-				EntityType: "collections",
-				Error:      fmt.Sprintf("parse error: %v", err),
-			})
-			continue
-		}
-
-		// Collection doesn't have soft-delete
-
-		if opts.DryRun {
-			imported++
-			continue
-		}
-
-		existing, _ := i.store.GetCollectionNoAccessCheck(ctx, coll.ID)
-		if existing != nil {
-			if opts.Mode == RestoreModeMerge {
-				switch opts.MergeStrategy {
-				case MergeKeepLocal:
-					skipped++
-					continue
-				case MergeNewest:
-					if !coll.UpdatedAt.After(existing.UpdatedAt) {
-						skipped++
-						continue
-					}
-				}
-			}
-			if err := i.store.UpdateCollectionNoAccessCheck(ctx, &coll); err != nil {
-				errs = append(errs, RestoreError{
-					EntityType: "collections",
-					EntityID:   coll.ID,
-					Error:      err.Error(),
-				})
-				continue
-			}
-			imported++
-			continue
-		}
-
-		if err := i.store.CreateCollection(ctx, &coll); err != nil {
-			errs = append(errs, RestoreError{
-				EntityType: "collections",
-				EntityID:   coll.ID,
-				Error:      err.Error(),
-			})
-			continue
-		}
-		imported++
-	}
-
-	return imported, skipped, errs
-}
-
-func (i *Importer) importCollectionShares(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
-	rc, err := stream.OpenFile(zr, "entities/collection_shares.jsonl")
-	if err != nil {
-		if errors.Is(err, stream.ErrFileNotFound) {
-			return 0, 0, nil
-		}
-		errs = append(errs, RestoreError{EntityType: "collection_shares", Error: err.Error()})
-		return imported, skipped, errs
-	}
-
-	reader := stream.NewReader[domain.CollectionShare](rc)
-
-	for share, err := range reader.All() {
-		if err != nil {
-			errs = append(errs, RestoreError{
-				EntityType: "collection_shares",
-				Error:      fmt.Sprintf("parse error: %v", err),
-			})
-			continue
-		}
-
-		if opts.Mode == RestoreModeMerge && share.IsDeleted() {
-			skipped++
-			continue
-		}
-
-		if opts.DryRun {
-			imported++
-			continue
-		}
-
-		existing, _ := i.store.GetShare(ctx, share.ID)
-		if existing != nil {
-			if opts.Mode == RestoreModeMerge {
-				switch opts.MergeStrategy {
-				case MergeKeepLocal:
-					skipped++
-					continue
-				case MergeNewest:
-					if !share.UpdatedAt.After(existing.UpdatedAt) {
-						skipped++
-						continue
-					}
-				}
-			}
-			if err := i.store.UpdateShare(ctx, &share); err != nil {
-				errs = append(errs, RestoreError{
-					EntityType: "collection_shares",
-					EntityID:   share.ID,
-					Error:      err.Error(),
-				})
-				continue
-			}
-			imported++
-			continue
-		}
-
-		if err := i.store.CreateShare(ctx, &share); err != nil {
-			errs = append(errs, RestoreError{
-				EntityType: "collection_shares",
-				EntityID:   share.ID,
-				Error:      err.Error(),
-			})
-			continue
-		}
-		imported++
-	}
-
-	return imported, skipped, errs
-}
-
-func (i *Importer) importShelves(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
-	rc, err := stream.OpenFile(zr, "entities/shelves.jsonl")
-	if err != nil {
-		if errors.Is(err, stream.ErrFileNotFound) {
-			return 0, 0, nil
-		}
-		errs = append(errs, RestoreError{EntityType: "shelves", Error: err.Error()})
-		return imported, skipped, errs
-	}
-
-	reader := stream.NewReader[domain.Shelf](rc)
-
-	for shelf, err := range reader.All() {
-		if err != nil {
-			errs = append(errs, RestoreError{
-				EntityType: "shelves",
-				Error:      fmt.Sprintf("parse error: %v", err),
-			})
-			continue
-		}
-
-		// Shelf doesn't have soft-delete
-
-		if opts.DryRun {
-			imported++
-			continue
-		}
-
-		existing, _ := i.store.GetShelf(ctx, shelf.ID)
-		if existing != nil {
-			if opts.Mode == RestoreModeMerge {
-				switch opts.MergeStrategy {
-				case MergeKeepLocal:
-					skipped++
-					continue
-				case MergeNewest:
-					if !shelf.UpdatedAt.After(existing.UpdatedAt) {
-						skipped++
-						continue
-					}
-				}
-			}
-			if err := i.store.UpdateShelf(ctx, &shelf); err != nil {
-				errs = append(errs, RestoreError{
-					EntityType: "shelves",
-					EntityID:   shelf.ID,
-					Error:      err.Error(),
-				})
-				continue
-			}
-			imported++
-			continue
-		}
-
-		if err := i.store.CreateShelf(ctx, &shelf); err != nil {
-			errs = append(errs, RestoreError{
-				EntityType: "shelves",
-				EntityID:   shelf.ID,
-				Error:      err.Error(),
-			})
-			continue
-		}
-		imported++
-	}
-
-	return imported, skipped, errs
-}
-
-func (i *Importer) importActivities(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
-	rc, err := stream.OpenFile(zr, "entities/activities.jsonl")
-	if err != nil {
-		if errors.Is(err, stream.ErrFileNotFound) {
-			return 0, 0, nil
-		}
-		errs = append(errs, RestoreError{EntityType: "activities", Error: err.Error()})
-		return imported, skipped, errs
-	}
-
-	reader := stream.NewReader[domain.Activity](rc)
-
-	for activity, err := range reader.All() {
-		if err != nil {
-			errs = append(errs, RestoreError{
-				EntityType: "activities",
-				Error:      fmt.Sprintf("parse error: %v", err),
-			})
-			continue
-		}
-
-		// Activities are typically not merged - just import unconditionally
-		if opts.DryRun {
-			imported++
-			continue
-		}
-
-		// Create activity - duplicates will fail silently
-		if err := i.store.CreateActivity(ctx, &activity); err != nil {
-			// Don't count as error - activity might already exist
-			skipped++
-			continue
-		}
-		imported++
-	}
-
-	return imported, skipped, errs
-}
-
-func (i *Importer) importListeningEvents(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
-	rc, err := stream.OpenFile(zr, "listening/events.jsonl")
-	if err != nil {
-		if errors.Is(err, stream.ErrFileNotFound) {
-			return 0, 0, nil
-		}
-		errs = append(errs, RestoreError{EntityType: "listening_events", Error: err.Error()})
-		return imported, skipped, errs
-	}
-
-	reader := stream.NewReader[domain.ListeningEvent](rc)
-
-	for event, err := range reader.All() {
-		if err != nil {
-			errs = append(errs, RestoreError{
-				EntityType: "listening_events",
-				Error:      fmt.Sprintf("parse error: %v", err),
-			})
-			continue
-		}
-
-		// Events are immutable and imported unconditionally (they're historical truth)
-		if opts.DryRun {
-			imported++
-			continue
-		}
-
-		if err := i.store.CreateListeningEvent(ctx, &event); err != nil {
-			// Don't fail on duplicates - event might already exist
-			skipped++
-			continue
-		}
-		imported++
-	}
-
-	return imported, skipped, errs
-}
-
-func (i *Importer) importReadingSessions(ctx context.Context, zr *zip.ReadCloser, opts RestoreOptions) (imported, skipped int, errs []RestoreError) {
-	rc, err := stream.OpenFile(zr, "listening/sessions.jsonl")
-	if err != nil {
-		if errors.Is(err, stream.ErrFileNotFound) {
-			return 0, 0, nil
-		}
-		errs = append(errs, RestoreError{EntityType: "reading_sessions", Error: err.Error()})
-		return imported, skipped, errs
-	}
-
-	reader := stream.NewReader[domain.BookReadingSession](rc)
-
-	for session, err := range reader.All() {
-		if err != nil {
-			errs = append(errs, RestoreError{
-				EntityType: "reading_sessions",
-				Error:      fmt.Sprintf("parse error: %v", err),
-			})
-			continue
-		}
-
-		if opts.DryRun {
-			imported++
-			continue
-		}
-
-		existing, _ := i.store.GetReadingSession(ctx, session.ID)
-		if existing != nil {
-			if opts.Mode == RestoreModeMerge {
-				switch opts.MergeStrategy {
-				case MergeKeepLocal:
-					skipped++
-					continue
-				case MergeNewest:
-					if !session.UpdatedAt.After(existing.UpdatedAt) {
-						skipped++
-						continue
-					}
-				}
-			}
-			if err := i.store.UpdateReadingSession(ctx, &session); err != nil {
-				errs = append(errs, RestoreError{
-					EntityType: "reading_sessions",
-					EntityID:   session.ID,
-					Error:      err.Error(),
-				})
-				continue
-			}
-			imported++
-			continue
-		}
-
-		if err := i.store.CreateReadingSession(ctx, &session); err != nil {
-			errs = append(errs, RestoreError{
-				EntityType: "reading_sessions",
-				EntityID:   session.ID,
-				Error:      err.Error(),
-			})
-			continue
-		}
-		imported++
-	}
-
-	return imported, skipped, errs
-}
-
+// importServer restores instance and server settings. Unlike the per-entity
+// importers it deals with a single server.json document, has its own error
+// shape, and runs only in full-mode restores — so it stays as a one-off.
 func (i *Importer) importServer(ctx context.Context, zr *zip.ReadCloser) error {
 	rc, err := stream.OpenFile(zr, "server.json")
 	if err != nil {

@@ -87,63 +87,100 @@ func NewContainer() *do.RootScope {
 	return injector
 }
 
-// Bootstrap initializes all services and returns handles for lifecycle management.
-// This triggers lazy initialization of all core services.
+// Bootstrap eagerly resolves every registered service so the DI graph fails
+// fast at startup instead of surfacing a misconfiguration on the first request.
+//
+// We deliberately do not rely on do/v2 lazy resolution here. Many providers in
+// this graph are not pure constructors:
+//   - ProvideStore opens the SQLite database and wires SSE access checkers.
+//   - ProvideBootstrap runs EnsureLibrary (filesystem + DB writes).
+//   - ProvideHTTPServer launches http.Server.ListenAndServe in a goroutine.
+//   - ProvideMDNSService initializes the server instance and (optionally)
+//     starts mDNS advertisement.
+//   - ProvideTranscodeService, ProvideFileWatcher, ProvideSessionCleanupJob,
+//     ProvideEventLogCleanupJob start background workers.
+//   - ProvideGenreService seeds default genres into the database.
+//
+// If we left these to be resolved lazily on first use, `cmd/server` would
+// return from main() without ever opening the DB, starting the HTTP listener,
+// or kicking off background workers. The enumeration below is the explicit
+// "bring the graph up" step. Adding a new provider with side effects MUST
+// also add an entry here.
+//
+// After services are up, this also triggers one-shot startup tasks
+// (search reindex, user-stats backfill, initial scan for a fresh library).
 func Bootstrap(injector *do.RootScope) error {
-	// Invoke core services to trigger initialization
-	_ = do.MustInvoke[*config.Config](injector)
-	_ = do.MustInvoke[*logger.Logger](injector)
-	_ = do.MustInvoke[providers.AuthKey](injector)
-	_ = do.MustInvoke[*providers.SSEManagerHandle](injector)
-	_ = do.MustInvoke[*providers.StoreHandle](injector)
-	_ = do.MustInvoke[*providers.Bootstrap](injector)
-	_ = do.MustInvoke[*providers.ImageStorages](injector)
-	_ = do.MustInvoke[*images.Processor](injector)
-	_ = do.MustInvoke[*scanner.Scanner](injector)
-	_ = do.MustInvoke[*processor.EventProcessor](injector)
-	_ = do.MustInvoke[*providers.SearchIndexHandle](injector)
-	_ = do.MustInvoke[*service.SearchService](injector)
-	_ = do.MustInvoke[*providers.AudibleClientHandle](injector)
-	_ = do.MustInvoke[*providers.MetadataServiceHandle](injector)
-	_ = do.MustInvoke[*providers.ITunesClientHandle](injector)
-	_ = do.MustInvoke[*service.CoverService](injector)
-	_ = do.MustInvoke[*auth.TokenService](injector)
+	// Eagerly resolve every registered service. The list is in dependency
+	// order for readability, but do/v2 handles ordering on its own — what
+	// matters is that every entry is resolved before we return.
+	eagerInvokes := []func(*do.RootScope){
+		// Core infrastructure
+		func(i *do.RootScope) { _ = do.MustInvoke[*config.Config](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*logger.Logger](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[providers.AuthKey](i) },
 
-	// Business services
-	_ = do.MustInvoke[*service.InstanceService](injector)
-	_ = do.MustInvoke[*service.SessionService](injector)
-	_ = do.MustInvoke[*service.AuthService](injector)
-	_ = do.MustInvoke[*service.BookService](injector)
-	_ = do.MustInvoke[*service.ChapterService](injector)
-	_ = do.MustInvoke[*service.CollectionService](injector)
-	_ = do.MustInvoke[*service.SharingService](injector)
-	_ = do.MustInvoke[*service.SyncService](injector)
-	_ = do.MustInvoke[*service.ReadingSessionService](injector)
-	_ = do.MustInvoke[*service.ListeningService](injector)
-	_ = do.MustInvoke[*service.StatsService](injector)
-	_ = do.MustInvoke[*service.ProfileService](injector)
-	_ = do.MustInvoke[*service.GenreService](injector)
-	_ = do.MustInvoke[*service.TagService](injector)
-	_ = do.MustInvoke[*service.InviteService](injector)
-	_ = do.MustInvoke[*service.ShelfService](injector)
-	_ = do.MustInvoke[*service.AdminService](injector)
+		// Database & SSE
+		func(i *do.RootScope) { _ = do.MustInvoke[*providers.SSEManagerHandle](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*providers.StoreHandle](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*providers.Bootstrap](i) },
 
-	// Workers
-	_ = do.MustInvoke[*providers.TranscodeServiceHandle](injector)
-	_ = do.MustInvoke[*providers.FileWatcherHandle](injector)
-	_ = do.MustInvoke[*providers.SessionCleanupJob](injector)
+		// Storage / processing
+		func(i *do.RootScope) { _ = do.MustInvoke[*providers.ImageStorages](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*images.Processor](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*scanner.Scanner](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*processor.EventProcessor](i) },
 
-	// Server
-	_ = do.MustInvoke[*providers.HTTPServerHandle](injector)
-	_ = do.MustInvoke[*providers.MDNSServiceHandle](injector)
+		// Search
+		func(i *do.RootScope) { _ = do.MustInvoke[*providers.SearchIndexHandle](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*service.SearchService](i) },
 
-	// Trigger search reindex if needed
+		// Metadata
+		func(i *do.RootScope) { _ = do.MustInvoke[*providers.AudibleClientHandle](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*providers.MetadataServiceHandle](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*providers.ITunesClientHandle](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*service.CoverService](i) },
+
+		// Auth
+		func(i *do.RootScope) { _ = do.MustInvoke[*auth.TokenService](i) },
+
+		// Business services
+		func(i *do.RootScope) { _ = do.MustInvoke[*service.InstanceService](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*service.SessionService](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*service.AuthService](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*service.BookService](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*service.ChapterService](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*service.CollectionService](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*service.SharingService](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*service.SyncService](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*service.ReadingSessionService](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*service.ListeningService](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*service.StatsService](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*service.ProfileService](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*service.GenreService](i) }, // seeds default genres
+		func(i *do.RootScope) { _ = do.MustInvoke[*service.TagService](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*service.InviteService](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*service.ShelfService](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*service.AdminService](i) },
+
+		// Background workers (each starts goroutines on construction)
+		func(i *do.RootScope) { _ = do.MustInvoke[*providers.TranscodeServiceHandle](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*providers.FileWatcherHandle](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*providers.SessionCleanupJob](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*providers.EventLogCleanupJob](i) },
+
+		// Server (HTTP listener + mDNS announce both spawn at construction)
+		func(i *do.RootScope) { _ = do.MustInvoke[*providers.HTTPServerHandle](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*providers.MDNSServiceHandle](i) },
+	}
+	for _, invoke := range eagerInvokes {
+		invoke(injector)
+	}
+
+	// One-shot startup tasks that depend on the graph being live.
 	providers.TriggerSearchReindexIfNeeded(injector)
-
-	// Backfill pre-aggregated user stats if needed
 	providers.BackfillUserStatsIfNeeded(injector)
 
-	// Run initial scan if new library
+	// Run initial scan if this is a fresh library.
 	bootstrap := do.MustInvoke[*providers.Bootstrap](injector)
 	if bootstrap.IsNewLibrary {
 		go providers.RunInitialScan(injector, bootstrap)

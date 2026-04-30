@@ -488,7 +488,7 @@ func (im *Importer) applyMediaProgressOverride(
 			// Fetch book for secondary near-complete check and SSE emission.
 			// Done unconditionally so TotalDuration is available for SSE regardless of
 			// which finishing path (explicit, ABS near-complete, or LU near-complete) triggered.
-			book, _ := im.store.GetBookNoAccessCheck(ctx, listenUpBookID)
+			book, _ := im.store.GetBookByID(ctx, listenUpBookID)
 
 			// Secondary check: use ListenUp's own book duration (more reliable than ABS duration).
 			// ABS and ListenUp can differ by up to ~2% due to different audio duration parsers,
@@ -604,7 +604,7 @@ func (im *Importer) rebuildBookProgress(
 	}
 
 	// Get book duration
-	book, err := im.store.GetBookNoAccessCheck(ctx, bookID)
+	book, err := im.store.GetBookByID(ctx, bookID)
 	if err != nil {
 		return fmt.Errorf("get book: %w", err)
 	}

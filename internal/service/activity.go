@@ -48,7 +48,7 @@ func (s *ActivityService) RecordBookStarted(ctx context.Context, userID, bookID 
 		return fmt.Errorf("get user: %w", err)
 	}
 
-	book, err := s.store.GetBookNoAccessCheck(ctx, bookID)
+	book, err := s.store.GetBookByID(ctx, bookID)
 	if err != nil {
 		return fmt.Errorf("get book: %w", err)
 	}
@@ -103,7 +103,7 @@ func (s *ActivityService) RecordBookFinished(ctx context.Context, userID, bookID
 		return fmt.Errorf("get user: %w", err)
 	}
 
-	book, err := s.store.GetBookNoAccessCheck(ctx, bookID)
+	book, err := s.store.GetBookByID(ctx, bookID)
 	if err != nil {
 		return fmt.Errorf("get book: %w", err)
 	}
@@ -303,7 +303,7 @@ func (s *ActivityService) RecordListeningSession(ctx context.Context, userID, bo
 		return fmt.Errorf("get user: %w", err)
 	}
 
-	book, err := s.store.GetBookNoAccessCheck(ctx, bookID)
+	book, err := s.store.GetBookByID(ctx, bookID)
 	if err != nil {
 		return fmt.Errorf("get book: %w", err)
 	}

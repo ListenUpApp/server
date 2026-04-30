@@ -57,7 +57,7 @@ func (s *InboxService) ListBooks(ctx context.Context) ([]*domain.Book, error) {
 	// Get all books in the inbox collection
 	var books []*domain.Book
 	for _, bookID := range inbox.BookIDs {
-		book, err := s.store.GetBookNoAccessCheck(ctx, bookID)
+		book, err := s.store.GetBookByID(ctx, bookID)
 		if err != nil {
 			s.logger.Warn("failed to get inbox book",
 				"book_id", bookID,
@@ -91,7 +91,7 @@ func (s *InboxService) ReleaseBooks(ctx context.Context, bookIDs []string) (*Rel
 	result := &ReleaseResult{}
 
 	for _, bookID := range bookIDs {
-		book, err := s.store.GetBookNoAccessCheck(ctx, bookID)
+		book, err := s.store.GetBookByID(ctx, bookID)
 		if err != nil {
 			s.logger.Warn("failed to get book for release",
 				"book_id", bookID,
@@ -173,7 +173,7 @@ func (s *InboxService) StageCollection(ctx context.Context, bookID, collectionID
 		return err
 	}
 
-	book, err := s.store.GetBookNoAccessCheck(ctx, bookID)
+	book, err := s.store.GetBookByID(ctx, bookID)
 	if err != nil {
 		return fmt.Errorf("get book: %w", err)
 	}
@@ -210,7 +210,7 @@ func (s *InboxService) UnstageCollection(ctx context.Context, bookID, collection
 		return err
 	}
 
-	book, err := s.store.GetBookNoAccessCheck(ctx, bookID)
+	book, err := s.store.GetBookByID(ctx, bookID)
 	if err != nil {
 		return fmt.Errorf("get book: %w", err)
 	}

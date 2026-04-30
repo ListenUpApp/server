@@ -772,9 +772,20 @@ func (s *Store) GetBooksDeletedAfter(ctx context.Context, timestamp time.Time) (
 	return ids, nil
 }
 
-// GetBookNoAccessCheck retrieves a book by ID without access control.
-// Identical to GetBook since the SQLite implementation does not perform access checks.
-func (s *Store) GetBookNoAccessCheck(ctx context.Context, id string) (*domain.Book, error) {
+// GetBookByID retrieves a book by ID. This is a thin wrapper around GetBook
+// that doesn't take a userID; it exists because the SQLite store's access
+// check is performed separately (via CanUserAccessBook / GetAccessibleBookIDSet)
+// and the userID parameter on GetBook is currently ignored. Callers that need
+// authorization must either:
+//   - call CanUserAccessBook beforehand, or
+//   - filter results through GetAccessibleBookIDSet, or
+//   - go through a service-layer method that handles access (see BookService).
+//
+// Internal/admin/cascade paths that don't expose data to end users (collection
+// staging, activity recording, search reindexing, restore/import) call this
+// directly because the data either never reaches an unauthorized user or the
+// access check has already happened upstream.
+func (s *Store) GetBookByID(ctx context.Context, id string) (*domain.Book, error) {
 	return s.GetBook(ctx, id, "")
 }
 
@@ -791,7 +802,7 @@ func (s *Store) GetBookByInode(ctx context.Context, inode int64) (*domain.Book, 
 	if err != nil {
 		return nil, fmt.Errorf("get book by inode: %w", err)
 	}
-	return s.GetBookNoAccessCheck(ctx, bookID)
+	return s.GetBookByID(ctx, bookID)
 }
 
 // GetBookByASIN retrieves a book by its Amazon ASIN.
@@ -1151,7 +1162,7 @@ func (s *Store) SetBookContributors(ctx context.Context, bookID string, contribu
 		return nil, fmt.Errorf("touch book: %w", err)
 	}
 
-	return s.GetBookNoAccessCheck(ctx, bookID)
+	return s.GetBookByID(ctx, bookID)
 }
 
 // SetBookSeries replaces all series for a book using store.SeriesInput.
@@ -1187,7 +1198,7 @@ func (s *Store) SetBookSeries(ctx context.Context, bookID string, seriesInputs [
 		return nil, fmt.Errorf("touch book: %w", err)
 	}
 
-	return s.GetBookNoAccessCheck(ctx, bookID)
+	return s.GetBookByID(ctx, bookID)
 }
 
 // BroadcastBookCreated enriches and broadcasts a book.created SSE event.

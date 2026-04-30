@@ -217,7 +217,7 @@ func TestInboxService_StageCollection(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify book has staged collection.
-	book, err := testStore.GetBookNoAccessCheck(ctx, "book-001")
+	book, err := testStore.GetBookByID(ctx, "book-001")
 	require.NoError(t, err)
 	assert.Contains(t, book.StagedCollectionIDs, collection.ID)
 }
@@ -243,7 +243,7 @@ func TestInboxService_StageCollection_Idempotent(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify book has only one staged collection (not duplicated).
-	book, err := testStore.GetBookNoAccessCheck(ctx, "book-001")
+	book, err := testStore.GetBookByID(ctx, "book-001")
 	require.NoError(t, err)
 	assert.Len(t, book.StagedCollectionIDs, 1)
 }
@@ -270,7 +270,7 @@ func TestInboxService_StageCollection_MultipleCollections(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify book has both staged collections.
-	book, err := testStore.GetBookNoAccessCheck(ctx, "book-001")
+	book, err := testStore.GetBookByID(ctx, "book-001")
 	require.NoError(t, err)
 	assert.Len(t, book.StagedCollectionIDs, 2)
 	assert.Contains(t, book.StagedCollectionIDs, coll1.ID)
@@ -323,7 +323,7 @@ func TestInboxService_UnstageCollection(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify only coll2 remains.
-	book, err := testStore.GetBookNoAccessCheck(ctx, "book-001")
+	book, err := testStore.GetBookByID(ctx, "book-001")
 	require.NoError(t, err)
 	assert.Len(t, book.StagedCollectionIDs, 1)
 	assert.Contains(t, book.StagedCollectionIDs, coll2.ID)
@@ -349,7 +349,7 @@ func TestInboxService_UnstageCollection_NotStaged(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify book still has no staged collections.
-	book, err := testStore.GetBookNoAccessCheck(ctx, "book-001")
+	book, err := testStore.GetBookByID(ctx, "book-001")
 	require.NoError(t, err)
 	assert.Empty(t, book.StagedCollectionIDs)
 }
@@ -388,7 +388,7 @@ func TestInboxService_ReleaseBooks_WithStagedCollections(t *testing.T) {
 	assert.Contains(t, collection.BookIDs, "book-001")
 
 	// Verify staged collections are cleared.
-	book, err := testStore.GetBookNoAccessCheck(ctx, "book-001")
+	book, err := testStore.GetBookByID(ctx, "book-001")
 	require.NoError(t, err)
 	assert.Empty(t, book.StagedCollectionIDs)
 }
