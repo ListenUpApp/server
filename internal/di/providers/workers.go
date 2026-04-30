@@ -2,6 +2,9 @@ package providers
 
 import (
 	"context"
+	"expvar"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/samber/do/v2"
@@ -51,10 +54,13 @@ func ProvideTranscodeService(i do.Injector) (*TranscodeServiceHandle, error) {
 	return &TranscodeServiceHandle{TranscodeService: svc}, nil
 }
 
+var fileWatcherExpvarOnce sync.Once
+
 // FileWatcherHandle wraps the file watcher with shutdown capability.
 type FileWatcherHandle struct {
 	*watcher.Watcher
-	cancel context.CancelFunc
+	cancel       context.CancelFunc
+	lastTickUnix int64
 }
 
 // Shutdown implements do.Shutdownable.
@@ -64,6 +70,11 @@ func (h *FileWatcherHandle) Shutdown() error {
 		return h.Stop()
 	}
 	return nil
+}
+
+// LastTick returns the wall-clock time of the most recent loop iteration.
+func (h *FileWatcherHandle) LastTick() time.Time {
+	return time.Unix(atomic.LoadInt64(&h.lastTickUnix), 0)
 }
 
 // ProvideFileWatcher provides the file system watcher.
@@ -76,10 +87,18 @@ func ProvideFileWatcher(i do.Injector) (*FileWatcherHandle, error) {
 	if bootstrap.Library == nil {
 		log.Info("No library configured - file watcher disabled until setup")
 		ctx, cancel := context.WithCancel(context.Background())
-		return &FileWatcherHandle{
+		handle := &FileWatcherHandle{
 			Watcher: nil,
 			cancel:  cancel,
-		}, ctx.Err() // This will be nil
+		}
+		atomic.StoreInt64(&handle.lastTickUnix, time.Now().Unix())
+		fileWatcherExpvarOnce.Do(func() {
+			pinned := handle
+			expvar.Publish("file_watcher_last_tick_unix", expvar.Func(func() any {
+				return atomic.LoadInt64(&pinned.lastTickUnix)
+			}))
+		})
+		return handle, ctx.Err() // This will be nil
 	}
 
 	w, err := watcher.New(log.Logger, watcher.Options{IgnoreHidden: true})
@@ -106,6 +125,19 @@ func ProvideFileWatcher(i do.Injector) (*FileWatcherHandle, error) {
 	// Start in background
 	ctx, cancel := context.WithCancel(context.Background())
 
+	handle := &FileWatcherHandle{
+		Watcher: w,
+		cancel:  cancel,
+	}
+	atomic.StoreInt64(&handle.lastTickUnix, time.Now().Unix())
+
+	fileWatcherExpvarOnce.Do(func() {
+		pinned := handle
+		expvar.Publish("file_watcher_last_tick_unix", expvar.Func(func() any {
+			return atomic.LoadInt64(&pinned.lastTickUnix)
+		}))
+	})
+
 	go func() {
 		if err := w.Start(ctx); err != nil {
 			log.Error("File watcher error", "error", err)
@@ -117,6 +149,7 @@ func ProvideFileWatcher(i do.Injector) (*FileWatcherHandle, error) {
 		for {
 			select {
 			case event := <-w.Events():
+				atomic.StoreInt64(&handle.lastTickUnix, time.Now().Unix())
 				if err := eventProcessor.ProcessEvent(ctx, event); err != nil {
 					log.Warn("failed to process event",
 						"error", err,
@@ -125,6 +158,7 @@ func ProvideFileWatcher(i do.Injector) (*FileWatcherHandle, error) {
 					)
 				}
 			case err := <-w.Errors():
+				atomic.StoreInt64(&handle.lastTickUnix, time.Now().Unix())
 				log.Warn("file watcher error", "error", err)
 			case <-ctx.Done():
 				return
@@ -134,15 +168,15 @@ func ProvideFileWatcher(i do.Injector) (*FileWatcherHandle, error) {
 
 	log.Info("File watcher started", "scan_paths", len(bootstrap.Library.ScanPaths))
 
-	return &FileWatcherHandle{
-		Watcher: w,
-		cancel:  cancel,
-	}, nil
+	return handle, nil
 }
+
+var sessionCleanupExpvarOnce sync.Once
 
 // SessionCleanupJob runs periodic session cleanup.
 type SessionCleanupJob struct {
-	cancel context.CancelFunc
+	cancel       context.CancelFunc
+	lastTickUnix int64
 }
 
 // Shutdown implements do.Shutdownable.
@@ -151,12 +185,27 @@ func (j *SessionCleanupJob) Shutdown() error {
 	return nil
 }
 
+// LastTick returns the wall-clock time of the most recent loop iteration.
+func (j *SessionCleanupJob) LastTick() time.Time {
+	return time.Unix(atomic.LoadInt64(&j.lastTickUnix), 0)
+}
+
 // ProvideSessionCleanupJob provides the periodic session cleanup job.
 func ProvideSessionCleanupJob(i do.Injector) (*SessionCleanupJob, error) {
 	storeHandle := do.MustInvoke[*StoreHandle](i)
 	log := do.MustInvoke[*logger.Logger](i)
 
 	ctx, cancel := context.WithCancel(context.Background())
+
+	job := &SessionCleanupJob{cancel: cancel}
+	atomic.StoreInt64(&job.lastTickUnix, time.Now().Unix())
+
+	sessionCleanupExpvarOnce.Do(func() {
+		pinned := job
+		expvar.Publish("session_cleanup_last_tick_unix", expvar.Func(func() any {
+			return atomic.LoadInt64(&pinned.lastTickUnix)
+		}))
+	})
 
 	go func() {
 		ticker := time.NewTicker(1 * time.Hour)
@@ -176,12 +225,14 @@ func ProvideSessionCleanupJob(i do.Injector) (*SessionCleanupJob, error) {
 		for {
 			select {
 			case <-ticker.C:
+				atomic.StoreInt64(&job.lastTickUnix, time.Now().Unix())
 				if count, err := storeHandle.DeleteExpiredSessions(ctx); err != nil {
 					log.Warn("Session cleanup failed", "error", err)
 				} else if count > 0 {
 					log.Info("Session cleanup completed", "deleted", count)
 				}
 			case <-staleTicker.C:
+				atomic.StoreInt64(&job.lastTickUnix, time.Now().Unix())
 				if count, err := storeHandle.CleanupStaleSessions(ctx, 30*time.Minute); err != nil {
 					log.Warn("Stale reading session cleanup failed", "error", err)
 				} else if count > 0 {
@@ -195,12 +246,15 @@ func ProvideSessionCleanupJob(i do.Injector) (*SessionCleanupJob, error) {
 
 	log.Info("Session cleanup job started")
 
-	return &SessionCleanupJob{cancel: cancel}, nil
+	return job, nil
 }
+
+var eventLogCleanupExpvarOnce sync.Once
 
 // EventLogCleanupJob runs periodic SSE event log cleanup.
 type EventLogCleanupJob struct {
-	cancel context.CancelFunc
+	cancel       context.CancelFunc
+	lastTickUnix int64
 }
 
 // Shutdown cancels the cleanup loop's context and stops the job.
@@ -209,12 +263,27 @@ func (j *EventLogCleanupJob) Shutdown() error {
 	return nil
 }
 
+// LastTick returns the wall-clock time of the most recent loop iteration.
+func (j *EventLogCleanupJob) LastTick() time.Time {
+	return time.Unix(atomic.LoadInt64(&j.lastTickUnix), 0)
+}
+
 // ProvideEventLogCleanupJob provides periodic cleanup of the SSE event log.
 func ProvideEventLogCleanupJob(i do.Injector) (*EventLogCleanupJob, error) {
 	log := do.MustInvoke[*logger.Logger](i)
 	sseHandle := do.MustInvoke[*SSEManagerHandle](i)
 
 	ctx, cancel := context.WithCancel(context.Background())
+
+	job := &EventLogCleanupJob{cancel: cancel}
+	atomic.StoreInt64(&job.lastTickUnix, time.Now().Unix())
+
+	eventLogCleanupExpvarOnce.Do(func() {
+		pinned := job
+		expvar.Publish("event_log_cleanup_last_tick_unix", expvar.Func(func() any {
+			return atomic.LoadInt64(&pinned.lastTickUnix)
+		}))
+	})
 
 	go func() {
 		eventLogger := sseHandle.GetEventLogger()
@@ -235,6 +304,7 @@ func ProvideEventLogCleanupJob(i do.Injector) (*EventLogCleanupJob, error) {
 		for {
 			select {
 			case <-ticker.C:
+				atomic.StoreInt64(&job.lastTickUnix, time.Now().Unix())
 				if count, err := eventLogger.CleanupEventLog(ctx, 24*time.Hour); err != nil {
 					log.Warn("Event log cleanup failed", "error", err)
 				} else if count > 0 {
@@ -248,5 +318,5 @@ func ProvideEventLogCleanupJob(i do.Injector) (*EventLogCleanupJob, error) {
 
 	log.Info("Event log cleanup job started")
 
-	return &EventLogCleanupJob{cancel: cancel}, nil
+	return job, nil
 }
