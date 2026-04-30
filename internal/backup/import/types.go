@@ -85,14 +85,14 @@ type EntityCounts struct {
 
 // Errors.
 var (
-	ErrInvalidManifest = errInvalidManifest{}
-	ErrVersionMismatch = errVersionMismatch{}
+	ErrInvalidManifest = invalidManifestError{}
+	ErrVersionMismatch = versionMismatchError{}
 )
 
-type errInvalidManifest struct{}
+type invalidManifestError struct{}
 
-func (errInvalidManifest) Error() string { return "invalid or missing manifest" }
+func (invalidManifestError) Error() string { return "invalid or missing manifest" }
 
-type errVersionMismatch struct{}
+type versionMismatchError struct{}
 
-func (errVersionMismatch) Error() string { return "backup version not supported" }
+func (versionMismatchError) Error() string { return "backup version not supported" }

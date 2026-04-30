@@ -30,6 +30,8 @@ func New(s store.Store, dataDir string, logger *slog.Logger) *Importer {
 }
 
 // Import restores from a backup file.
+//
+//nolint:gocyclo // Sequential restore pipeline (manifest, entities, optional sections, finalize); flatter is clearer.
 func (i *Importer) Import(ctx context.Context, path string, opts RestoreOptions) (*RestoreResult, error) {
 	start := time.Now()
 
@@ -37,7 +39,7 @@ func (i *Importer) Import(ctx context.Context, path string, opts RestoreOptions)
 	if err != nil {
 		return nil, fmt.Errorf("open backup: %w", err)
 	}
-	defer zr.Close()
+	defer func() { _ = zr.Close() }()
 
 	// Read and validate manifest
 	manifest, err := i.readManifest(zr)

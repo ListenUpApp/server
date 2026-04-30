@@ -573,7 +573,7 @@ func (s *Server) handleUploadABSBackup(w http.ResponseWriter, r *http.Request) {
 	defer dest.Close()
 
 	if _, err := io.Copy(dest, file); err != nil {
-		os.Remove(destPath)
+		_ = os.Remove(destPath) // best-effort cleanup of partial upload
 		s.logger.Error("failed to copy file", "error", err)
 		http.Error(w, "failed to copy file", http.StatusInternalServerError)
 		return

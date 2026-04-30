@@ -147,7 +147,6 @@ func decodeHash(encodedHash string) (salt, hash []byte, params *argon2Params, er
 		return nil, nil, nil, fmt.Errorf("invalid hash encoding: %w", err)
 	}
 
-	//nolint:gosec // Hash length is always 32 bytes (argon2KeyLength), safe to convert
 	params.keyLength = uint32(len(hash))
 
 	return salt, hash, params, nil

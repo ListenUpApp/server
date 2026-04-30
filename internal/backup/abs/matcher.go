@@ -10,6 +10,9 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
+// matchReasonAdminMapping is the reason recorded for admin-configured user/book mappings.
+const matchReasonAdminMapping = "admin-configured mapping"
+
 // BookCache holds pre-loaded book data for fast matching.
 type BookCache struct {
 	byASIN  map[string]*CachedBook
@@ -69,7 +72,7 @@ func (m *Matcher) MatchUser(ctx context.Context, absUser *User) *UserMatch {
 	if listenUpID, ok := m.opts.UserMappings[absUser.ID]; ok {
 		match.ListenUpID = listenUpID
 		match.Confidence = MatchDefinitive
-		match.MatchReason = "admin-configured mapping"
+		match.MatchReason = matchReasonAdminMapping
 		return match
 	}
 
@@ -278,7 +281,7 @@ func (m *Matcher) MatchBookFast(absItem *LibraryItem) *BookMatch {
 	if listenUpID, ok := m.opts.BookMappings[absItem.ID]; ok {
 		match.ListenUpID = listenUpID
 		match.Confidence = MatchDefinitive
-		match.MatchReason = "admin-configured mapping"
+		match.MatchReason = matchReasonAdminMapping
 		return match
 	}
 
@@ -460,7 +463,7 @@ func (m *Matcher) MatchBook(ctx context.Context, absItem *LibraryItem) *BookMatc
 	if listenUpID, ok := m.opts.BookMappings[absItem.ID]; ok {
 		match.ListenUpID = listenUpID
 		match.Confidence = MatchDefinitive
-		match.MatchReason = "admin-configured mapping"
+		match.MatchReason = matchReasonAdminMapping
 		return match
 	}
 
@@ -734,7 +737,7 @@ func levenshteinDistance(a, b string) int {
 			if a[i-1] == b[j-1] {
 				cost = 0
 			}
-			matrix[i][j] = min(
+			matrix[i][j] = min3(
 				matrix[i-1][j]+1,      // deletion
 				matrix[i][j-1]+1,      // insertion
 				matrix[i-1][j-1]+cost, // substitution
@@ -745,12 +748,18 @@ func levenshteinDistance(a, b string) int {
 	return matrix[len(a)][len(b)]
 }
 
-func formatMatchReason(titleSim float64, durationDiff, totalDuration int64) string {
+// formatMatchReason renders a human-readable match explanation. The
+// totalDuration parameter is reserved for future use (relative-difference
+// formatting) and intentionally unused today.
+func formatMatchReason(titleSim float64, durationDiff, _ int64) string {
 	durationSec := durationDiff / 1000
 	return fmt.Sprintf("fuzzy match: title=%.0f%%, duration diff=%ds", titleSim*100, durationSec)
 }
 
-func formatSuggestionReason(titleSim float64, durationDiff int64) string {
+// formatSuggestionReason renders the suggestion reason. The durationDiff
+// parameter is kept for callsite symmetry with formatMatchReason and is
+// intentionally unused in the current heuristic.
+func formatSuggestionReason(titleSim float64, _ int64) string {
 	if titleSim >= 0.95 {
 		return "exact title match"
 	}
@@ -769,7 +778,9 @@ func abs(x int64) int64 {
 	return x
 }
 
-func min(a, b, c int) int {
+// min3 returns the smallest of the three int values. Named min3 to avoid
+// shadowing the predeclared builtin `min` (Go 1.21+).
+func min3(a, b, c int) int {
 	if a <= b && a <= c {
 		return a
 	}

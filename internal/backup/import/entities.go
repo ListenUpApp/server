@@ -932,6 +932,7 @@ func (i *Importer) importServer(ctx context.Context, zr *zip.ReadCloser) error {
 		return err
 	}
 
+	//nolint:nestif // Recovery cascade: update -> create-on-missing -> retry update; flatter is clearer.
 	if server.Instance != nil {
 		// Try to update existing instance, if not found create new one
 		if err := i.store.UpdateInstance(ctx, server.Instance); err != nil {

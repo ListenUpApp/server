@@ -583,18 +583,6 @@ func (s *Store) DeleteSharesForCollection(ctx context.Context, collectionID stri
 
 // --- Additional Collection Methods ---
 
-// getCollectionInternal retrieves a collection by ID without access control.
-// For internal store use.
-func (s *Store) getCollectionInternal(ctx context.Context, id string) (*domain.Collection, error) {
-	return s.GetCollection(ctx, id, "")
-}
-
-// updateCollectionInternal updates a collection without access control.
-// For internal store use.
-func (s *Store) updateCollectionInternal(ctx context.Context, coll *domain.Collection) error {
-	return s.UpdateCollection(ctx, coll, "")
-}
-
 // ListAllCollectionsByLibrary returns ALL collections for a library without access filtering.
 // BookIDs are loaded for each collection.
 func (s *Store) ListAllCollectionsByLibrary(ctx context.Context, libraryID string) ([]*domain.Collection, error) {

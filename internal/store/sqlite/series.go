@@ -582,11 +582,9 @@ func (s *Store) MergeSeries(ctx context.Context, sourceID, targetID string) (*do
 	// Verify target exists.
 	targetRow := tx.QueryRowContext(ctx,
 		`SELECT `+seriesColumns+` FROM series WHERE id = ? AND deleted_at IS NULL`, targetID)
-	target, err := scanSeries(targetRow)
-	if errors.Is(err, sql.ErrNoRows) {
+	if _, err := scanSeries(targetRow); errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
-	}
-	if err != nil {
+	} else if err != nil {
 		return nil, fmt.Errorf("get target series: %w", err)
 	}
 
@@ -630,7 +628,7 @@ func (s *Store) MergeSeries(ctx context.Context, sourceID, targetID string) (*do
 	}
 
 	// Re-read target to return fresh state.
-	target, err = s.GetSeries(ctx, targetID)
+	target, err := s.GetSeries(ctx, targetID)
 	if err != nil {
 		return nil, fmt.Errorf("reload target series: %w", err)
 	}

@@ -74,7 +74,7 @@ func (s *Service) Start(instance *domain.Instance, port int) error {
 	// Create avahi server connection
 	server, err := avahi.ServerNew(conn)
 	if err != nil {
-		s.conn.Close()
+		_ = s.conn.Close() // best-effort cleanup on error path
 		s.conn = nil
 		return fmt.Errorf("connect to avahi: %w", err)
 	}
@@ -83,7 +83,7 @@ func (s *Service) Start(instance *domain.Instance, port int) error {
 	// Create entry group for our service
 	entryGroup, err := server.EntryGroupNew()
 	if err != nil {
-		s.conn.Close()
+		_ = s.conn.Close() // best-effort cleanup on error path
 		s.conn = nil
 		s.server = nil
 		return fmt.Errorf("create entry group: %w", err)

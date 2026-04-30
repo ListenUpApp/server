@@ -275,8 +275,8 @@ func (s *Server) handleGetLibraryStatus(ctx context.Context, _ *LibraryStatusInp
 
 	library, err := s.store.GetDefaultLibrary(ctx)
 	if err != nil {
-		// No library exists
-		return &LibraryStatusOutput{
+		// No library exists — return a "needs setup" status rather than an error.
+		return &LibraryStatusOutput{ //nolint:nilerr // missing library is reported via status field, not error
 			Body: LibraryStatusResponse{
 				Exists:     false,
 				NeedsSetup: isAdmin, // Only admins can set up

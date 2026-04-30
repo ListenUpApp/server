@@ -43,6 +43,8 @@ func NewImporter(s store.Store, events EventEmitter, logger *slog.Logger) *Impor
 
 // Import executes the import using the provided mappings.
 // The mappings should come from BuildFinalMappings after admin review.
+//
+//nolint:gocyclo // Sequential phases (users, books, sessions, progress) with rollups; flatter than helpers.
 func (im *Importer) Import(
 	ctx context.Context,
 	backup *Backup,
@@ -185,18 +187,13 @@ func (im *Importer) importSessions(
 		sessionGroups[key] = append(sessionGroups[key], session)
 	}
 
-	for key, sessions := range sessionGroups {
-		// Parse key to get ABS IDs
-		var absUserID, absItemID string
-		fmt.Sscanf(key, "%s:%s", &absUserID, &absItemID)
-
-		// This is a simplification - the key format needs proper handling
-		// Let's extract properly from the first session
+	for _, sessions := range sessionGroups {
+		// ABS IDs come from the first session in the group.
 		if len(sessions) == 0 {
 			continue
 		}
-		absUserID = sessions[0].UserID
-		absItemID = sessions[0].LibraryItemID
+		absUserID := sessions[0].UserID
+		absItemID := sessions[0].LibraryItemID
 
 		// Look up ListenUp IDs
 		listenUpUserID, userOK := userMap[absUserID]
@@ -422,6 +419,8 @@ func (im *Importer) convertProgressToSession(
 // applyMediaProgressOverride writes authoritative progress from ABS MediaProgress
 // directly to playback state. This runs after session and progress import to fix
 // books whose progress was undercounted by event-sum reconstruction.
+//
+//nolint:gocyclo // Per-user/per-progress branching with mapping/duration guards; clearer inline.
 func (im *Importer) applyMediaProgressOverride(
 	ctx context.Context,
 	backup *Backup,

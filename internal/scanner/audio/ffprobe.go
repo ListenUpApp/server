@@ -32,7 +32,10 @@ func (p *FFprobeParser) ParseMultiFile(ctx context.Context, paths []string) (*Me
 
 // Parse extracts metadata using ffprobe.
 func (p *FFprobeParser) Parse(ctx context.Context, path string) (*Metadata, error) {
-	// Run ffprobe command.
+	// Run ffprobe command. The path is supplied by the configured library
+	// scanner; the binary name is fixed and arguments are not interpreted by
+	// a shell, so this is not a command-injection vector.
+	//nolint:gosec // G204: ffprobe binary fixed; only file path is variable and comes from a trusted scan target.
 	cmd := exec.CommandContext(ctx, "ffprobe",
 		"-v", "quiet",
 		"-print_format", "json",

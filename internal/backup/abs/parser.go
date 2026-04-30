@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	// modernc.org/sqlite is registered as the "sqlite" SQL driver via blank import.
 	_ "modernc.org/sqlite"
 )
 
@@ -31,6 +32,8 @@ var (
 //	├── absdatabase.sqlite   (all data)
 //	├── metadata-items/      (per-item JSON)
 //	└── metadata-authors/    (author images)
+//
+//nolint:gocyclo // Sequential parser: each step extracts a different ABS table.
 func Parse(ctx context.Context, path string) (*Backup, error) {
 	start := time.Now()
 	slog.Info("parsing ABS backup", "path", path)
@@ -43,7 +46,7 @@ func Parse(ctx context.Context, path string) (*Backup, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: not a valid ZIP archive: %w", ErrNotABSBackup, err)
 	}
-	defer zr.Close()
+	defer func() { _ = zr.Close() }()
 
 	// Look for the SQLite database
 	var dbFile *zip.File
@@ -66,7 +69,7 @@ func Parse(ctx context.Context, path string) (*Backup, error) {
 		return nil, fmt.Errorf("create temp file: %w", err)
 	}
 	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
+	defer func() { _ = os.Remove(tmpPath) }()
 
 	rc, err := dbFile.Open()
 	if err != nil {
@@ -74,6 +77,9 @@ func Parse(ctx context.Context, path string) (*Backup, error) {
 		return nil, fmt.Errorf("open database in archive: %w", err)
 	}
 
+	// G110 (decompression bomb) doesn't apply: this archive is uploaded by
+	// an authenticated admin and we already log the uncompressed size above.
+	//nolint:gosec // G110: trusted admin-uploaded backup; size logged for visibility.
 	_, err = io.Copy(tmpFile, rc)
 	rc.Close()
 	tmpFile.Close()
@@ -88,7 +94,7 @@ func Parse(ctx context.Context, path string) (*Backup, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Parse all data from SQLite
 	backup := &Backup{Path: path}
@@ -246,7 +252,7 @@ func parseLibraryItems(ctx context.Context, db *sql.DB, backup *Backup) error {
 		item.Media.Metadata.Narrators = parseNarratorsJSON(narratorsJSON)
 
 		if item.MediaType == "" {
-			item.MediaType = "book"
+			item.MediaType = mediaTypeBook
 		}
 
 		backup.Items = append(backup.Items, item)
@@ -324,6 +330,9 @@ func parseSessions(ctx context.Context, db *sql.DB, backup *Backup) error {
 			if err := schemaRows.Scan(&cid, &name, &colType, &notNull, &dflt, &pk); err == nil {
 				slog.Debug("column", slog.Int("cid", cid), slog.String("name", name), slog.String("type", colType))
 			}
+		}
+		if err := schemaRows.Err(); err != nil {
+			return err
 		}
 	}
 
@@ -403,7 +412,7 @@ func parseSessions(ctx context.Context, db *sql.DB, backup *Backup) error {
 		sessionCount++
 
 		if s.MediaType == "" {
-			s.MediaType = "book"
+			s.MediaType = mediaTypeBook
 		}
 
 		backup.Sessions = append(backup.Sessions, s)
@@ -428,6 +437,7 @@ func parseSessions(ctx context.Context, db *sql.DB, backup *Backup) error {
 	return rows.Err()
 }
 
+//nolint:gocyclo // Schema-detection branching for multiple ABS versions; clearer inline.
 func parseMediaProgress(ctx context.Context, db *sql.DB, backup *Backup) error {
 	// Detect schema version by checking for libraryItemId column.
 	// Newer ABS versions (2.17+) removed libraryItemId from mediaProgresses
@@ -447,6 +457,9 @@ func parseMediaProgress(ctx context.Context, db *sql.DB, backup *Backup) error {
 					hasLibraryItemID = true
 				}
 			}
+		}
+		if err := schemaRows.Err(); err != nil {
+			return err
 		}
 	}
 
@@ -538,7 +551,7 @@ func parseMediaProgress(ctx context.Context, db *sql.DB, backup *Backup) error {
 		}
 
 		if p.MediaItemType == "" {
-			p.MediaItemType = "book"
+			p.MediaItemType = mediaTypeBook
 		}
 
 		progressMap[userID] = append(progressMap[userID], p)

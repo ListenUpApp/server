@@ -202,6 +202,7 @@ type EventLogCleanupJob struct {
 	cancel context.CancelFunc
 }
 
+// Shutdown cancels the cleanup loop's context and stops the job.
 func (j *EventLogCleanupJob) Shutdown() error {
 	j.cancel()
 	return nil

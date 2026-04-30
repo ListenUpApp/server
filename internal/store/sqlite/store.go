@@ -13,6 +13,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/dto"
 	"github.com/listenupapp/listenup-server/internal/store"
 
+	// modernc.org/sqlite is registered as the "sqlite" SQL driver via blank import.
 	_ "modernc.org/sqlite"
 )
 
@@ -48,7 +49,7 @@ func Open(path string, logger *slog.Logger) (*Store, error) {
 
 	// Run schema migration. No parent context here — this is startup code.
 	if _, err := db.Exec(schemaSQL); err != nil { //nolint:noctx // startup-time migration; no caller context
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("exec schema: %w", err)
 	}
 

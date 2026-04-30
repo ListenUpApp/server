@@ -84,7 +84,7 @@ func (s *RestoreService) Validate(ctx context.Context, path string) (*Validation
 			Errors: []string{fmt.Sprintf("failed to open backup: %v", err)},
 		}, nil
 	}
-	defer zr.Close()
+	defer func() { _ = zr.Close() }()
 
 	result := &ValidationResult{
 		Valid: true,

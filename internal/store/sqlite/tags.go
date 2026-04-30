@@ -13,10 +13,6 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
-// tagColumns is the ordered list of columns selected in tag queries.
-// Must match the scan order in scanTag.
-const tagColumns = `id, slug, created_at, updated_at`
-
 // scanTag scans a sql.Row (or sql.Rows via its Scan method) into a domain.Tag.
 // BookCount is left as 0; the caller can compute it if needed.
 func scanTag(scanner interface{ Scan(dest ...any) error }) (*domain.Tag, error) {
@@ -454,7 +450,7 @@ func (s *Store) CleanupTagsForDeletedBook(ctx context.Context, bookID string) er
 // RecalculateTagBookCount updates a tag's book_count based on actual book_tags rows.
 // Since the tags table does not have a book_count column, this is a no-op
 // that returns nil. The BookCount field on domain.Tag is computed at read time.
-func (s *Store) RecalculateTagBookCount(ctx context.Context, tagID string) error {
+func (s *Store) RecalculateTagBookCount(_ context.Context, _ string) error {
 	// The tags table schema does not have a book_count column.
 	// BookCount is computed dynamically when needed.
 	// This method exists to satisfy the interface.

@@ -164,7 +164,7 @@ func (s *Server) handleSearch(ctx context.Context, input *SearchInput) (*SearchO
 
 	resp := SearchResponse{
 		Query:  input.Query,
-		Total:  int64(result.Total), //nolint:gosec // Safe: total count won't exceed int64
+		Total:  int64(result.Total),
 		TookMs: result.TookMs,
 		Hits:   make([]SearchHitResult, 0, len(result.Hits)),
 	}

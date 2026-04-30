@@ -232,16 +232,16 @@ func (s *Store) GetUserByEmailLower(ctx context.Context, email string) (*domain.
 
 // ListUsers returns all non-deleted users.
 func (s *Store) ListUsers(ctx context.Context) ([]*domain.User, error) {
-	return s.listUsers(ctx, false)
+	return s.listUsersFiltered(ctx, false)
 }
 
 // ListAllUsers returns all users including soft-deleted ones.
 // Used for backup export to preserve the full state.
 func (s *Store) ListAllUsers(ctx context.Context) ([]*domain.User, error) {
-	return s.listUsers(ctx, true)
+	return s.listUsersFiltered(ctx, true)
 }
 
-func (s *Store) listUsers(ctx context.Context, includeDeleted bool) ([]*domain.User, error) {
+func (s *Store) listUsersFiltered(ctx context.Context, includeDeleted bool) ([]*domain.User, error) {
 	query := `SELECT ` + userColumns + ` FROM users`
 	if !includeDeleted {
 		query += ` WHERE deleted_at IS NULL`

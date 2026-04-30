@@ -114,7 +114,7 @@ func ProvideBootstrap(i do.Injector) (*Bootstrap, error) {
 			// No library exists and none configured - server will start without library
 			// Admin can set it up via POST /api/v1/library/setup
 			log.Info("No library configured - setup required via API")
-			return &Bootstrap{
+			return &Bootstrap{ //nolint:nilerr // missing library is an expected startup state, not an error
 				Library:         nil,
 				InboxCollection: nil,
 				IsNewLibrary:    false,

@@ -207,16 +207,15 @@ func (s *Store) DeleteLibrary(ctx context.Context, id string) error {
 	if err != nil {
 		return fmt.Errorf("list collections: %w", err)
 	}
+	defer rows.Close()
 	var collIDs []string
 	for rows.Next() {
 		var cid string
 		if err := rows.Scan(&cid); err != nil {
-			rows.Close()
 			return fmt.Errorf("scan collection id: %w", err)
 		}
 		collIDs = append(collIDs, cid)
 	}
-	rows.Close()
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("rows iteration: %w", err)
 	}

@@ -30,7 +30,8 @@ type GetBookSharePageInput struct {
 func (s *Server) handleGetBookSharePage(ctx context.Context, input *GetBookSharePageInput) (*HTMLOutput, error) {
 	book, err := s.store.GetBookNoAccessCheck(ctx, input.ID)
 	if err != nil {
-		return &HTMLOutput{
+		// Graceful degradation: render a user-friendly HTML error page instead of an API error.
+		return &HTMLOutput{ //nolint:nilerr // graceful HTML error page for share links
 			ContentType: "text/html; charset=utf-8",
 			Body:        renderShareErrorPage("Book Not Found", "This book could not be found."),
 		}, nil
@@ -38,7 +39,8 @@ func (s *Server) handleGetBookSharePage(ctx context.Context, input *GetBookShare
 
 	enriched, err := s.store.EnrichBook(ctx, book)
 	if err != nil {
-		return &HTMLOutput{
+		// Graceful degradation: render a user-friendly HTML error page.
+		return &HTMLOutput{ //nolint:nilerr // graceful HTML error page for share links
 			ContentType: "text/html; charset=utf-8",
 			Body:        renderShareErrorPage("Error", "Could not load book details."),
 		}, nil
@@ -47,7 +49,8 @@ func (s *Server) handleGetBookSharePage(ctx context.Context, input *GetBookShare
 	// Get base URL from instance config
 	instance, err := s.services.Instance.GetInstance(ctx)
 	if err != nil {
-		return &HTMLOutput{
+		// Graceful degradation: render a user-friendly HTML error page.
+		return &HTMLOutput{ //nolint:nilerr // graceful HTML error page for share links
 			ContentType: "text/html; charset=utf-8",
 			Body:        renderShareErrorPage("Error", "Could not load server config."),
 		}, nil
@@ -142,11 +145,11 @@ func (s *Server) handleGetBookSharePage(ctx context.Context, input *GetBookShare
 	}, nil
 }
 
-func truncate(s string, max int) string {
-	if len(s) <= max {
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
 		return s
 	}
-	return s[:max-3] + "..."
+	return s[:maxLen-3] + "..."
 }
 
 func buildOGDescription(author, description string) string {

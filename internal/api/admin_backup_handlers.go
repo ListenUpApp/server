@@ -334,8 +334,12 @@ func (s *Server) handleDownloadBackup(ctx context.Context, input *DownloadBackup
 		Body: func(ctx huma.Context) {
 			ctx.SetHeader("Content-Type", "application/zip")
 			ctx.SetHeader("Content-Disposition", "attachment; filename=\""+input.ID+".listenup.zip\"")
-			io.Copy(ctx.BodyWriter(), f)
-			f.Close()
+			if _, err := io.Copy(ctx.BodyWriter(), f); err != nil {
+				s.logger.Error("failed to stream backup file", "error", err, "backup_id", input.ID)
+			}
+			if err := f.Close(); err != nil {
+				s.logger.Warn("failed to close backup file after streaming", "error", err, "backup_id", input.ID)
+			}
 		},
 	}, nil
 }

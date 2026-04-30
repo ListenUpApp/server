@@ -67,6 +67,9 @@ func (i *Importer) extractFile(f *zip.File, destPath string) error {
 	}
 	defer dst.Close()
 
+	// G110 (decompression bomb) doesn't apply: backup archives are uploaded
+	// by an authenticated admin from a trusted source.
+	//nolint:gosec // G110: trusted admin-uploaded backup; entry decompressed into the data directory.
 	_, err = io.Copy(dst, rc)
 	return err
 }

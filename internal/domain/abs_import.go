@@ -5,6 +5,7 @@ import "time"
 // ABSImportStatus represents the lifecycle state of an ABS import.
 type ABSImportStatus string
 
+// ABS import lifecycle states persisted on the import record.
 const (
 	ABSImportStatusActive    ABSImportStatus = "active"
 	ABSImportStatusCompleted ABSImportStatus = "completed"
@@ -17,6 +18,7 @@ const (
 // SessionImportStatus represents the import state of an individual session.
 type SessionImportStatus string
 
+// Session import statuses for individual ABS sessions during incremental import.
 const (
 	SessionStatusPendingUser SessionImportStatus = "pending_user" // Waiting for user mapping
 	SessionStatusPendingBook SessionImportStatus = "pending_book" // Waiting for book mapping
@@ -150,6 +152,7 @@ type ABSImportProgress struct {
 // MappingFilter specifies which items to return when listing.
 type MappingFilter string
 
+// Mapping filters select which ABS users/books to return when listing.
 const (
 	MappingFilterAll      MappingFilter = "all"
 	MappingFilterMapped   MappingFilter = "mapped"
@@ -159,6 +162,7 @@ const (
 // SessionStatusFilter specifies which sessions to return when listing.
 type SessionStatusFilter string
 
+// Session status filters select which ABS sessions to return when listing.
 const (
 	SessionFilterAll      SessionStatusFilter = "all"
 	SessionFilterPending  SessionStatusFilter = "pending" // pending_user or pending_book

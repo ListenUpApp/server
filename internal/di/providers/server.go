@@ -136,7 +136,10 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 	mdnsHandle := do.MustInvoke[*MDNSServiceHandle](i)
 	if mdnsHandle.Service != nil && mdnsHandle.started {
 		port := 8080
-		fmt.Sscanf(cfg.Server.Port, "%d", &port)
+		if _, err := fmt.Sscanf(cfg.Server.Port, "%d", &port); err != nil {
+			log.Warn("invalid server port, using default", "port", cfg.Server.Port, "error", err)
+			port = 8080
+		}
 		handler.SetOnInstanceUpdated(func(instance *domain.Instance) {
 			if err := mdnsHandle.Refresh(instance, port); err != nil {
 				log.Warn("Failed to refresh mDNS after instance update", "error", err)

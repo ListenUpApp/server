@@ -732,7 +732,7 @@ func (s *Server) runImportAnalysis(importID, backupPath string) {
 		slog.Int("sessions_stored", sessionsStored))
 }
 
-func (s *Server) handleListABSImports(ctx context.Context, input *ListABSImportsInput) (*ListABSImportsOutput, error) {
+func (s *Server) handleListABSImports(ctx context.Context, _ *ListABSImportsInput) (*ListABSImportsOutput, error) {
 	_, err := s.RequireAdmin(ctx)
 	if err != nil {
 		return nil, err
@@ -1713,7 +1713,7 @@ func extractBookSuggestionIDs(suggestions []abs.BookSuggestion) []string {
 // incorrectly marking books as completed.
 // Also honors the finished status from ABSImportProgress if the book was marked completed in ABS.
 // Returns (absProgressMatched, error) where absProgressMatched indicates if ABS progress was found.
-func (s *Server) rebuildProgressFromEvents(ctx context.Context, importID, userID, bookID, absUserID, absMediaID string) (absProgressMatched bool, err error) {
+func (s *Server) rebuildProgressFromEvents(ctx context.Context, importID, userID, bookID, absUserID, _ string) (absProgressMatched bool, err error) {
 	// Get all events for this user+book
 	events, err := s.store.GetEventsForUserBook(ctx, userID, bookID)
 	if err != nil {
@@ -1859,6 +1859,10 @@ func (s *Server) rebuildProgressFromEvents(ctx context.Context, importID, userID
 		slog.Float64("progress_pct", progress.ComputeProgress(bookDurationMs)*100))
 	if !progress.IsFinished && importID != "" && absUserID != "" {
 		absProgress, err := s.store.FindABSImportProgressByListenUpBook(ctx, importID, absUserID, bookID)
+		// gocritic: ifElseChain — switching on three different conditions
+		// (err, absProgress nil, absProgress.IsFinished) doesn't translate
+		// cleanly to a switch; the chain reads sequentially.
+		//nolint:gocritic // ifElseChain: branches gate on different vars; switch would obscure.
 		if err != nil {
 			s.logger.Warn("failed to find ABS import progress by book",
 				slog.String("abs_user_id", absUserID),

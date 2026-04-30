@@ -81,6 +81,11 @@ linters:
     gocritic:
       disabled-checks:
         - hugeParam
+        # rangeValCopy fires on every range-by-value over our domain structs
+        # (BookSuggestion, MediaProgress, etc.). Switching to index loops or
+        # pointers across all backup/import/handler callsites would be churn
+        # without measurable benefit; copies are bounded by import batch size.
+        - rangeValCopy
       enabled-tags:
         - diagnostic
         - performance
@@ -266,10 +271,21 @@ linters:
       - linters: [exhaustive]
         path: internal/(api|service|store|sse|backup|scanner|dto)/
       # backup.BackupX naming is intentional — package "backup" exposes
-      # these as the public surface.
+      # these as the public surface (BackupService, BackupOptions, etc.).
       - linters: [revive]
-        path: internal/backup/types\.go
+        path: internal/backup/(types|backup|options)\.go
         text: "stutters"
+      # The Service/Restore methods in package "backup" implement an interface
+      # that requires a context.Context parameter even when the operation is
+      # filesystem-only (List, Get, Delete, Validate). Keeping ctx makes these
+      # consistent and preserves the shape if we add cancellation later.
+      - linters: [revive]
+        path: internal/backup/(backup|restore)\.go
+        text: "unused-parameter.*ctx"
+      # Test file uses explicit Close + rebind across multiple debug PRAGMA
+      # queries; rows.Err checks would obscure the diagnostic flow.
+      - linters: [rowserrcheck]
+        path: internal/backup/abs/parser_test\.go
       # parser_test.go reuses `rows` across debug queries; the linter prefers
       # defer but explicit Close + rebind is the deliberate pattern here.
       - linters: [sqlclosecheck]

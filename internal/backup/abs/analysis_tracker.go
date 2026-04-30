@@ -8,6 +8,7 @@ import (
 // AnalysisPhase represents the current phase of analysis.
 type AnalysisPhase string
 
+// Analysis phases reported as the importer progresses through a backup.
 const (
 	PhaseParsing          AnalysisPhase = "parsing"
 	PhaseMatchingUsers    AnalysisPhase = "matching_users"
@@ -20,6 +21,7 @@ const (
 // AnalysisStatus represents the overall status of an async analysis.
 type AnalysisStatus string
 
+// Analysis lifecycle states for an async backup analysis.
 const (
 	StatusRunning   AnalysisStatus = "running"
 	StatusCompleted AnalysisStatus = "completed"

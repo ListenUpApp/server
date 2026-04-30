@@ -78,6 +78,8 @@ func New(s store.Store, dataDir, version string) *Exporter {
 }
 
 // Export creates a backup archive.
+//
+//nolint:gocyclo // Sequential pipeline (manifest, entity steps, optional sections, finalize); flat is clearer.
 func (e *Exporter) Export(ctx context.Context, opts Options) (*Result, error) {
 	start := time.Now()
 
@@ -87,7 +89,7 @@ func (e *Exporter) Export(ctx context.Context, opts Options) (*Result, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create backup file: %w", err)
 	}
-	defer os.Remove(tmpPath) // Clean up on failure
+	defer func() { _ = os.Remove(tmpPath) }() // Clean up on failure
 	defer f.Close()
 
 	// Tee to SHA-256 hasher
@@ -148,26 +150,26 @@ func (e *Exporter) Export(ctx context.Context, opts Options) (*Result, error) {
 
 	// Listening data (optional but recommended)
 	if opts.IncludeEvents {
-		if n, err := exportListeningEvents(ctx, e.store, zw); err != nil {
+		n, err := exportListeningEvents(ctx, e.store, zw)
+		if err != nil {
 			return nil, fmt.Errorf("export listening events: %w", err)
-		} else {
-			counts.ListeningEvents = n
 		}
+		counts.ListeningEvents = n
 
-		if n, err := exportReadingSessions(ctx, e.store, zw); err != nil {
+		n, err = exportReadingSessions(ctx, e.store, zw)
+		if err != nil {
 			return nil, fmt.Errorf("export reading sessions: %w", err)
-		} else {
-			counts.ReadingSessions = n
 		}
+		counts.ReadingSessions = n
 	}
 
 	// Images (optional, large)
 	if opts.IncludeImages {
-		if n, err := e.exportImages(ctx, zw); err != nil {
+		n, err := e.exportImages(ctx, zw)
+		if err != nil {
 			return nil, fmt.Errorf("export images: %w", err)
-		} else {
-			counts.Images = n
 		}
+		counts.Images = n
 	}
 
 	// Write manifest last (has final counts)

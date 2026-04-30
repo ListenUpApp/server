@@ -7,6 +7,9 @@ package abs
 
 import "time"
 
+// mediaTypeBook is ABS's media type identifier for audiobooks (vs. "podcast").
+const mediaTypeBook = "book"
+
 // Backup represents a parsed Audiobookshelf backup.
 // ABS creates backups as .audiobookshelf files (actually tar.gz archives).
 type Backup struct {
@@ -55,7 +58,7 @@ type MediaProgress struct {
 
 // IsBook returns true if this progress is for an audiobook (not podcast).
 func (p *MediaProgress) IsBook() bool {
-	return p.MediaItemType == "book" || p.MediaItemType == ""
+	return p.MediaItemType == mediaTypeBook || p.MediaItemType == ""
 }
 
 // LastUpdateTime returns LastUpdate as a time.Time.
@@ -83,7 +86,7 @@ type Folder struct {
 
 // IsBookLibrary returns true if this is an audiobook library.
 func (l *Library) IsBookLibrary() bool {
-	return l.MediaType == "book"
+	return l.MediaType == mediaTypeBook
 }
 
 // LibraryItem represents a book (or podcast) in ABS.
@@ -108,7 +111,7 @@ type LibraryItem struct {
 
 // IsBook returns true if this item is an audiobook.
 func (i *LibraryItem) IsBook() bool {
-	return i.MediaType == "book"
+	return i.MediaType == mediaTypeBook
 }
 
 // IsValid returns true if this item should be considered for import.
@@ -267,7 +270,7 @@ type Session struct {
 
 // IsBook returns true if this session is for an audiobook.
 func (s *Session) IsBook() bool {
-	return s.MediaType == "book"
+	return s.MediaType == mediaTypeBook
 }
 
 // StartedAtTime returns StartedAt as time.Time.
