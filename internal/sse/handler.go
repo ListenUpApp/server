@@ -164,6 +164,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // replayMissedEvents replays logged events to a reconnecting client.
+//
 //nolint:nestif // Cascade of optional reconnect mechanisms (Last-Event-ID, ?since=, fallback); easier to read inline.
 func (h *Handler) replayMissedEvents(w http.ResponseWriter, rc *http.ResponseController, r *http.Request, client *Client, logger *slog.Logger) {
 	var entries []EventLogEntry
