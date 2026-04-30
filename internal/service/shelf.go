@@ -19,16 +19,24 @@ type ShelfActivityRecorder interface {
 	RecordShelfCreated(ctx context.Context, userID string, shelf *domain.Shelf) error
 }
 
+// shelfServiceStore is the narrow store interface ShelfService depends on.
+type shelfServiceStore interface {
+	store.ShelfStore
+	store.UserStore
+	store.CollectionStore
+	store.BookStore
+}
+
 // ShelfService orchestrates shelf operations with ownership enforcement and SSE events.
 type ShelfService struct {
-	store            store.Store
+	store            shelfServiceStore
 	sseManager       *sse.Manager
 	logger           *slog.Logger
 	activityRecorder ShelfActivityRecorder
 }
 
 // NewShelfService creates a new shelf service.
-func NewShelfService(store store.Store, sseManager *sse.Manager, logger *slog.Logger) *ShelfService {
+func NewShelfService(store shelfServiceStore, sseManager *sse.Manager, logger *slog.Logger) *ShelfService {
 	return &ShelfService{
 		store:      store,
 		sseManager: sseManager,

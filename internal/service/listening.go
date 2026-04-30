@@ -27,9 +27,18 @@ type StreakCalculator interface {
 	CalculateUserStreak(ctx context.Context, userID string) int
 }
 
+// listeningServiceStore is the narrow store interface ListeningService depends on.
+type listeningServiceStore interface {
+	store.BookStore
+	store.ListeningStore
+	store.CollectionStore
+	store.UserStore
+	store.ContributorStore
+}
+
 // ListeningService handles listening events and playback progress.
 type ListeningService struct {
-	store                 store.Store
+	store                 listeningServiceStore
 	events                store.EventEmitter
 	readingSessionService *ReadingSessionService
 	logger                *slog.Logger
@@ -38,7 +47,7 @@ type ListeningService struct {
 }
 
 // NewListeningService creates a new listening service.
-func NewListeningService(store store.Store, events store.EventEmitter, readingSessionService *ReadingSessionService, logger *slog.Logger) *ListeningService {
+func NewListeningService(store listeningServiceStore, events store.EventEmitter, readingSessionService *ReadingSessionService, logger *slog.Logger) *ListeningService {
 	return &ListeningService{
 		store:                 store,
 		events:                events,

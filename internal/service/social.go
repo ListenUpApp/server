@@ -14,14 +14,22 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
+// socialServiceStore is the narrow store interface SocialService depends on.
+type socialServiceStore interface {
+	store.UserStore
+	store.ListeningStore
+	store.CollectionStore
+	store.BookStore
+}
+
 // SocialService provides social features like leaderboards.
 type SocialService struct {
-	store  store.Store
+	store  socialServiceStore
 	logger *slog.Logger
 }
 
 // NewSocialService creates a new social service.
-func NewSocialService(store store.Store, logger *slog.Logger) *SocialService {
+func NewSocialService(store socialServiceStore, logger *slog.Logger) *SocialService {
 	return &SocialService{
 		store:  store,
 		logger: logger,

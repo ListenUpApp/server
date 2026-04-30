@@ -17,7 +17,9 @@ import (
 )
 
 // setupTranscodeTest creates a minimal transcode service for testing.
-func setupTranscodeTest(t *testing.T) (*TranscodeService, string, func()) {
+// Returns the service, the underlying sqlite store (for test helpers that need wider access),
+// the cache temp dir, and a cleanup function.
+func setupTranscodeTest(t *testing.T) (*TranscodeService, transcodeTestStore, string, func()) {
 	t.Helper()
 
 	// Create temp directories for test database and cache
@@ -53,17 +55,23 @@ func setupTranscodeTest(t *testing.T) (*TranscodeService, string, func()) {
 		_ = os.RemoveAll(tmpDir)
 	}
 
-	return service, tmpDir, cleanup
+	return service, s, tmpDir, cleanup
+}
+
+// transcodeTestStore is the minimal store interface needed by transcode test helpers.
+type transcodeTestStore interface {
+	store.BookStore
+	store.TranscodeStore
 }
 
 // createTestTranscodeJob creates a transcode job for testing.
-func createTestTranscodeJob(t *testing.T, s store.Store, bookID, audioFileID string, status domain.TranscodeStatus) *domain.TranscodeJob {
+func createTestTranscodeJob(t *testing.T, s transcodeTestStore, bookID, audioFileID string, status domain.TranscodeStatus) *domain.TranscodeJob {
 	t.Helper()
 	return createTestTranscodeJobWithVariant(t, s, bookID, audioFileID, status, domain.TranscodeVariantSpatial)
 }
 
 // ensureTestBookWithAudioFile creates the book and audio file if they don't already exist.
-func ensureTestBookWithAudioFile(t *testing.T, s store.Store, bookID, audioFileID string) {
+func ensureTestBookWithAudioFile(t *testing.T, s transcodeTestStore, bookID, audioFileID string) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -96,7 +104,7 @@ func ensureTestBookWithAudioFile(t *testing.T, s store.Store, bookID, audioFileI
 }
 
 // createTestTranscodeJobWithVariant creates a transcode job with a specific variant for testing.
-func createTestTranscodeJobWithVariant(t *testing.T, s store.Store, bookID, audioFileID string, status domain.TranscodeStatus, variant domain.TranscodeVariant) *domain.TranscodeJob {
+func createTestTranscodeJobWithVariant(t *testing.T, s transcodeTestStore, bookID, audioFileID string, status domain.TranscodeStatus, variant domain.TranscodeVariant) *domain.TranscodeJob {
 	t.Helper()
 
 	ensureTestBookWithAudioFile(t, s, bookID, audioFileID)
@@ -226,7 +234,7 @@ func Test_findAvailableSegments(t *testing.T) {
 func Test_GenerateDynamicPlaylist(t *testing.T) {
 	tests := []struct {
 		name        string
-		setupJob    func(t *testing.T, s store.Store, cachePath string) (string, string) // Returns bookID, audioFileID
+		setupJob    func(t *testing.T, s transcodeTestStore, cachePath string) (string, string) // Returns bookID, audioFileID
 		setupFiles  func(t *testing.T, cachePath, bookID, audioFileID string)
 		wantErr     bool
 		wantErrMsg  string
@@ -234,7 +242,7 @@ func Test_GenerateDynamicPlaylist(t *testing.T) {
 	}{
 		{
 			name: "job exists, segments exist, status=Running - playlist without ENDLIST",
-			setupJob: func(t *testing.T, s store.Store, cachePath string) (string, string) {
+			setupJob: func(t *testing.T, s transcodeTestStore, cachePath string) (string, string) {
 				t.Helper()
 				bookID := "book_test123"
 				audioFileID := "af_test456"
@@ -264,7 +272,7 @@ func Test_GenerateDynamicPlaylist(t *testing.T) {
 		},
 		{
 			name: "job exists, segments exist, status=Completed - playlist with ENDLIST",
-			setupJob: func(t *testing.T, s store.Store, cachePath string) (string, string) {
+			setupJob: func(t *testing.T, s transcodeTestStore, cachePath string) (string, string) {
 				t.Helper()
 				bookID := "book_test789"
 				audioFileID := "af_test012"
@@ -293,7 +301,7 @@ func Test_GenerateDynamicPlaylist(t *testing.T) {
 		},
 		{
 			name: "job not found returns error",
-			setupJob: func(t *testing.T, s store.Store, cachePath string) (string, string) {
+			setupJob: func(t *testing.T, s transcodeTestStore, cachePath string) (string, string) {
 				t.Helper()
 				// Don't create a job - return non-existent IDs
 				return "book_nonexistent", "af_nonexistent"
@@ -307,7 +315,7 @@ func Test_GenerateDynamicPlaylist(t *testing.T) {
 		},
 		{
 			name: "no segments available returns error",
-			setupJob: func(t *testing.T, s store.Store, cachePath string) (string, string) {
+			setupJob: func(t *testing.T, s transcodeTestStore, cachePath string) (string, string) {
 				t.Helper()
 				bookID := "book_noseg"
 				audioFileID := "af_noseg"
@@ -327,13 +335,13 @@ func Test_GenerateDynamicPlaylist(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			service, tmpDir, cleanup := setupTranscodeTest(t)
+			service, rawStore, tmpDir, cleanup := setupTranscodeTest(t)
 			defer cleanup()
 
 			ctx := context.Background()
 
 			// Setup job and get IDs
-			bookID, audioFileID := tt.setupJob(t, service.store, service.config.CachePath)
+			bookID, audioFileID := tt.setupJob(t, rawStore, service.config.CachePath)
 
 			// Setup files
 			if tt.setupFiles != nil {
@@ -374,11 +382,11 @@ func Test_GenerateDynamicPlaylist(t *testing.T) {
 // Test_TranscodeVariants tests variant-specific functionality.
 func Test_TranscodeVariants(t *testing.T) {
 	t.Run("stereo variant creates correct cache path", func(t *testing.T) {
-		service, _, cleanup := setupTranscodeTest(t)
+		_, rawStore, _, cleanup := setupTranscodeTest(t)
 		defer cleanup()
 
 		job := createTestTranscodeJobWithVariant(
-			t, service.store,
+			t, rawStore,
 			"book_123", "af_456",
 			domain.TranscodeStatusCompleted,
 			domain.TranscodeVariantStereo,
@@ -388,11 +396,11 @@ func Test_TranscodeVariants(t *testing.T) {
 	})
 
 	t.Run("spatial variant creates correct cache path", func(t *testing.T) {
-		service, _, cleanup := setupTranscodeTest(t)
+		_, rawStore, _, cleanup := setupTranscodeTest(t)
 		defer cleanup()
 
 		job := createTestTranscodeJobWithVariant(
-			t, service.store,
+			t, rawStore,
 			"book_123", "af_456",
 			domain.TranscodeStatusCompleted,
 			domain.TranscodeVariantSpatial,
@@ -402,7 +410,7 @@ func Test_TranscodeVariants(t *testing.T) {
 	})
 
 	t.Run("multiple variants for same audio file", func(t *testing.T) {
-		service, _, cleanup := setupTranscodeTest(t)
+		_, rawStore, _, cleanup := setupTranscodeTest(t)
 		defer cleanup()
 
 		ctx := context.Background()
@@ -411,7 +419,7 @@ func Test_TranscodeVariants(t *testing.T) {
 
 		// Create stereo variant
 		stereoJob := createTestTranscodeJobWithVariant(
-			t, service.store,
+			t, rawStore,
 			bookID, audioFileID,
 			domain.TranscodeStatusCompleted,
 			domain.TranscodeVariantStereo,
@@ -419,26 +427,26 @@ func Test_TranscodeVariants(t *testing.T) {
 
 		// Create spatial variant
 		spatialJob := createTestTranscodeJobWithVariant(
-			t, service.store,
+			t, rawStore,
 			bookID, audioFileID,
 			domain.TranscodeStatusCompleted,
 			domain.TranscodeVariantSpatial,
 		)
 
 		// Verify both can be retrieved
-		retrievedStereo, err := service.store.GetTranscodeJobByAudioFileAndVariant(ctx, audioFileID, domain.TranscodeVariantStereo)
+		retrievedStereo, err := rawStore.GetTranscodeJobByAudioFileAndVariant(ctx, audioFileID, domain.TranscodeVariantStereo)
 		require.NoError(t, err)
 		assert.Equal(t, stereoJob.ID, retrievedStereo.ID)
 		assert.Equal(t, domain.TranscodeVariantStereo, retrievedStereo.Variant)
 
-		retrievedSpatial, err := service.store.GetTranscodeJobByAudioFileAndVariant(ctx, audioFileID, domain.TranscodeVariantSpatial)
+		retrievedSpatial, err := rawStore.GetTranscodeJobByAudioFileAndVariant(ctx, audioFileID, domain.TranscodeVariantSpatial)
 		require.NoError(t, err)
 		assert.Equal(t, spatialJob.ID, retrievedSpatial.ID)
 		assert.Equal(t, domain.TranscodeVariantSpatial, retrievedSpatial.Variant)
 	})
 
 	t.Run("GetHLSPath returns correct variant path", func(t *testing.T) {
-		service, _, cleanup := setupTranscodeTest(t)
+		service, rawStore, _, cleanup := setupTranscodeTest(t)
 		defer cleanup()
 
 		ctx := context.Background()
@@ -447,7 +455,7 @@ func Test_TranscodeVariants(t *testing.T) {
 
 		// Create stereo job with segments
 		createTestTranscodeJobWithVariant(
-			t, service.store,
+			t, rawStore,
 			bookID, audioFileID,
 			domain.TranscodeStatusRunning,
 			domain.TranscodeVariantStereo,
@@ -473,7 +481,7 @@ func Test_TranscodeVariants(t *testing.T) {
 
 // Test_buildFFmpegArgs_Variants tests that buildFFmpegArgs correctly handles variants.
 func Test_buildFFmpegArgs_Variants(t *testing.T) {
-	service, tmpDir, cleanup := setupTranscodeTest(t)
+	service, _, tmpDir, cleanup := setupTranscodeTest(t)
 	defer cleanup()
 
 	outputDir := filepath.Join(tmpDir, "output")

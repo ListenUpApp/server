@@ -13,17 +13,22 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
+// sessionServiceStore is the narrow store interface SessionService depends on.
+type sessionServiceStore interface {
+	store.UserStore
+}
+
 // SessionService handles user session management and lifecycle.
 // Sessions track authenticated devices and their refresh tokens.
 type SessionService struct {
-	store        store.Store
+	store        sessionServiceStore
 	tokenService *auth.TokenService
 	logger       *slog.Logger
 }
 
 // NewSessionService creates a new session management service.
 func NewSessionService(
-	store store.Store,
+	store sessionServiceStore,
 	tokenService *auth.TokenService,
 	logger *slog.Logger,
 ) *SessionService {

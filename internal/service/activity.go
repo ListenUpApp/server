@@ -14,9 +14,18 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
+// activityServiceStore is the narrow store interface ActivityService depends on.
+type activityServiceStore interface {
+	store.UserStore
+	store.BookStore
+	store.ListeningStore
+	store.CollectionStore
+	store.ContributorStore
+}
+
 // ActivityService manages social activity recording and retrieval.
 type ActivityService struct {
-	store      store.Store
+	store      activityServiceStore
 	sseManager *sse.Manager
 	logger     *slog.Logger
 }
@@ -32,7 +41,7 @@ func (s *ActivityService) getUserAvatarInfo(ctx context.Context, userID string) 
 }
 
 // NewActivityService creates a new activity service.
-func NewActivityService(store store.Store, sseManager *sse.Manager, logger *slog.Logger) *ActivityService {
+func NewActivityService(store activityServiceStore, sseManager *sse.Manager, logger *slog.Logger) *ActivityService {
 	return &ActivityService{
 		store:      store,
 		sseManager: sseManager,

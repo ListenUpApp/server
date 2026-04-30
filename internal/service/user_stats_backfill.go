@@ -11,9 +11,15 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
+// backfillStore is the narrow store interface BackfillUserStats depends on.
+type backfillStore interface {
+	store.UserStore
+	store.ListeningStore
+}
+
 // BackfillUserStats computes user_stats from existing events/progress for all users.
 // Called at startup if the user_stats table is empty.
-func BackfillUserStats(ctx context.Context, st store.Store, logger *slog.Logger) error {
+func BackfillUserStats(ctx context.Context, st backfillStore, logger *slog.Logger) error {
 	// Check if any stats exist already
 	existing, err := st.GetAllUserStats(ctx)
 	if err != nil {

@@ -8,10 +8,15 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
+// metadataServiceStore is the narrow store interface MetadataService depends on.
+type metadataServiceStore interface {
+	store.MetadataCacheStore
+}
+
 // MetadataService orchestrates metadata fetching with caching.
 type MetadataService struct {
 	client        *audible.Client
-	store         store.Store
+	store         metadataServiceStore
 	defaultRegion audible.Region
 	logger        *slog.Logger
 }
@@ -19,7 +24,7 @@ type MetadataService struct {
 // NewMetadataService creates a new metadata service.
 func NewMetadataService(
 	client *audible.Client,
-	store store.Store,
+	store metadataServiceStore,
 	defaultRegion audible.Region,
 	logger *slog.Logger,
 ) *MetadataService {

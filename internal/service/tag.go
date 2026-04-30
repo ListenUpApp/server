@@ -11,17 +11,24 @@ import (
 	"github.com/listenupapp/listenup-server/internal/util"
 )
 
+// tagServiceStore is the narrow store interface TagService depends on.
+type tagServiceStore interface {
+	store.TagStore
+	store.CollectionStore
+	store.BookStore
+}
+
 // TagService orchestrates global tag operations.
 // Tags are community-wide — no user ownership, but requires book access to tag.
 type TagService struct {
-	store      store.Store
+	store      tagServiceStore
 	sseManager *sse.Manager
 	search     *SearchService
 	logger     *slog.Logger
 }
 
 // NewTagService creates a new tag service.
-func NewTagService(store store.Store, sseManager *sse.Manager, search *SearchService, logger *slog.Logger) *TagService {
+func NewTagService(store tagServiceStore, sseManager *sse.Manager, search *SearchService, logger *slog.Logger) *TagService {
 	return &TagService{
 		store:      store,
 		sseManager: sseManager,

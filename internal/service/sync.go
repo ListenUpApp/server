@@ -27,15 +27,28 @@ type ManifestResponse struct {
 	} `json:"counts"`
 }
 
+// syncServiceStore is the narrow store interface SyncService depends on.
+type syncServiceStore interface {
+	store.CollectionStore
+	store.BookStore
+	store.BatchStore
+	store.ContributorStore
+	store.SeriesStore
+	store.GenreStore
+	store.TagStore
+	store.ListeningStore
+	store.UserStore
+}
+
 // SyncService orchestrates sync operations between server and clients.
 type SyncService struct {
-	store    store.Store
+	store    syncServiceStore
 	enricher *dto.Enricher
 	logger   *slog.Logger
 }
 
 // NewSyncService creates a new sync service.
-func NewSyncService(store store.Store, logger *slog.Logger) *SyncService {
+func NewSyncService(store syncServiceStore, logger *slog.Logger) *SyncService {
 	return &SyncService{
 		store:    store,
 		enricher: dto.NewEnricher(store),

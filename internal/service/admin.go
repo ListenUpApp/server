@@ -13,16 +13,22 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
+// adminServiceStore is the narrow store interface AdminService depends on.
+type adminServiceStore interface {
+	store.UserStore
+	store.ShelfStore
+}
+
 // AdminService handles admin-only user management operations.
 type AdminService struct {
-	store                   store.Store
+	store                   adminServiceStore
 	logger                  *slog.Logger
 	registrationBroadcaster *sse.RegistrationBroadcaster
 	shelfService            *ShelfService
 }
 
 // NewAdminService creates a new admin service.
-func NewAdminService(store store.Store, logger *slog.Logger, registrationBroadcaster *sse.RegistrationBroadcaster, shelfService *ShelfService) *AdminService {
+func NewAdminService(store adminServiceStore, logger *slog.Logger, registrationBroadcaster *sse.RegistrationBroadcaster, shelfService *ShelfService) *AdminService {
 	return &AdminService{
 		store:                   store,
 		logger:                  logger,

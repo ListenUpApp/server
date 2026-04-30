@@ -15,16 +15,21 @@ import (
 // ErrNoASIN is returned when a book has no ASIN for chapter lookup.
 var ErrNoASIN = errors.New("book has no ASIN for chapter lookup")
 
+// chapterServiceStore is the narrow store interface ChapterService depends on.
+type chapterServiceStore interface {
+	store.BookStore
+}
+
 // ChapterService handles chapter name alignment operations.
 type ChapterService struct {
-	store           store.Store
+	store           chapterServiceStore
 	metadataService *MetadataService
 	logger          *slog.Logger
 }
 
 // NewChapterService creates a new chapter service.
 func NewChapterService(
-	store store.Store,
+	store chapterServiceStore,
 	metadataService *MetadataService,
 	logger *slog.Logger,
 ) *ChapterService {

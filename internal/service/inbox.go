@@ -12,17 +12,24 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
+// inboxServiceStore is the narrow store interface InboxService depends on.
+type inboxServiceStore interface {
+	store.LibraryStore
+	store.CollectionStore
+	store.BookStore
+}
+
 // InboxService manages the Inbox staging workflow.
 // Books in Inbox are hidden from all library views until released.
 type InboxService struct {
-	store    store.Store
+	store    inboxServiceStore
 	enricher *dto.Enricher
 	sse      *sse.Manager
 	logger   *slog.Logger
 }
 
 // NewInboxService creates a new inbox service.
-func NewInboxService(store store.Store, enricher *dto.Enricher, sseManager *sse.Manager, logger *slog.Logger) *InboxService {
+func NewInboxService(store inboxServiceStore, enricher *dto.Enricher, sseManager *sse.Manager, logger *slog.Logger) *InboxService {
 	return &InboxService{
 		store:    store,
 		enricher: enricher,

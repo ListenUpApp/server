@@ -22,9 +22,19 @@ const MaxTaglineLength = 60
 // MaxAvatarSize is the maximum avatar image size in bytes (2MB).
 const MaxAvatarSize = 2 * 1024 * 1024
 
+// profileServiceStore is the narrow store interface ProfileService depends on.
+type profileServiceStore interface {
+	store.UserStore
+	store.ListeningStore
+	store.CollectionStore
+	store.BookStore
+	store.ShelfStore
+	store.ContributorStore
+}
+
 // ProfileService provides user profile management.
 type ProfileService struct {
-	store      store.Store
+	store      profileServiceStore
 	avatars    *images.Storage
 	sseManager *sse.Manager
 	stats      *StatsService
@@ -33,7 +43,7 @@ type ProfileService struct {
 
 // NewProfileService creates a new profile service.
 func NewProfileService(
-	store store.Store,
+	store profileServiceStore,
 	avatars *images.Storage,
 	sseManager *sse.Manager,
 	stats *StatsService,

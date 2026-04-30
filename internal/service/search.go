@@ -11,17 +11,28 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
+// searchServiceStore is the narrow store interface SearchService depends on.
+type searchServiceStore interface {
+	store.BookStore
+	store.ContributorStore
+	store.SeriesStore
+	store.GenreStore
+	store.TagStore
+	store.CollectionStore
+	store.UserStore
+}
+
 // SearchService provides search functionality across the library.
 // It bridges the search index with the data store, handling document
 // creation, updates, and query execution.
 type SearchService struct {
 	index  *search.SearchIndex
-	store  store.Store
+	store  searchServiceStore
 	logger *slog.Logger
 }
 
 // NewSearchService creates a new search service.
-func NewSearchService(index *search.SearchIndex, store store.Store, logger *slog.Logger) *SearchService {
+func NewSearchService(index *search.SearchIndex, store searchServiceStore, logger *slog.Logger) *SearchService {
 	return &SearchService{
 		index:  index,
 		store:  store,
