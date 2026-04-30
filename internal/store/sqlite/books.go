@@ -282,23 +282,23 @@ func coverArgs(img *domain.ImageFileInfo) (coverPath, coverFilename, coverFormat
 
 // CreateBook inserts a book row along with its audio files and chapters in a transaction.
 // Returns store.ErrAlreadyExists on duplicate ID or path.
-// indexBookAsync triggers a non-blocking search index update for a book.
-// Errors are logged but do not fail the caller.
-func (s *Store) indexBookAsync(ctx context.Context, book *domain.Book) {
-	go func() {
-		if err := s.searchIndexer.IndexBook(ctx, book); err != nil {
-			s.logger.Warn("failed to index book", "book_id", book.ID, "error", err)
-		}
-	}()
+
+// submitIndexBook enqueues a non-blocking search index update for a book.
+// The job runs on the store's async indexer worker; request-scoped contexts
+// are intentionally not propagated so indexing survives request completion.
+func (s *Store) submitIndexBook(book *domain.Book) {
+	if s.indexer == nil {
+		return
+	}
+	s.indexer.Submit(indexJob{op: opIndexBook, book: book})
 }
 
-// deleteBookFromIndexAsync triggers a non-blocking search index removal.
-func (s *Store) deleteBookFromIndexAsync(ctx context.Context, id string) {
-	go func() {
-		if err := s.searchIndexer.DeleteBook(ctx, id); err != nil {
-			s.logger.Warn("failed to delete book from index", "book_id", id, "error", err)
-		}
-	}()
+// submitDeleteBookFromIndex enqueues a non-blocking search index removal.
+func (s *Store) submitDeleteBookFromIndex(id string) {
+	if s.indexer == nil {
+		return
+	}
+	s.indexer.Submit(indexJob{op: opDeleteBook, id: id})
 }
 
 func (s *Store) CreateBook(ctx context.Context, book *domain.Book) error {
@@ -315,7 +315,7 @@ func (s *Store) CreateBook(ctx context.Context, book *domain.Book) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	s.indexBookAsync(ctx, book)
+	s.submitIndexBook(book)
 	return nil
 }
 
@@ -644,7 +644,7 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	s.indexBookAsync(ctx, book)
+	s.submitIndexBook(book)
 	return nil
 }
 
@@ -704,7 +704,7 @@ func (s *Store) DeleteBook(ctx context.Context, id string) error {
 	if n == 0 {
 		return store.ErrNotFound
 	}
-	s.deleteBookFromIndexAsync(ctx, id)
+	s.submitDeleteBookFromIndex(id)
 	return nil
 }
 
@@ -1107,6 +1107,15 @@ func (s *Store) TouchEntity(ctx context.Context, entityType, id string) error {
 // This is a convenience wrapper around the enricher for API handlers.
 func (s *Store) EnrichBook(ctx context.Context, book *domain.Book) (*dto.Book, error) {
 	return s.enricher.EnrichBook(ctx, book)
+}
+
+// EnrichBooks denormalizes multiple books in a single batch operation.
+// Avoids N+1 queries against contributors, series, genres, and tags stores by
+// collecting all referenced IDs across the input slice and fetching them in
+// one query per entity type. Use this for paginated list endpoints; use
+// EnrichBook for single-book operations.
+func (s *Store) EnrichBooks(ctx context.Context, books []*domain.Book) ([]*dto.Book, error) {
+	return s.enricher.EnrichBooks(ctx, books)
 }
 
 // SetBookContributors replaces all contributors for a book using store.ContributorInput.

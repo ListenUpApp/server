@@ -341,13 +341,13 @@ func (s *Server) handleListBooks(ctx context.Context, input *ListBooksInput) (*L
 		return nil, err
 	}
 
-	books := make([]BookResponse, len(result.Items))
-	for i, b := range result.Items {
-		enriched, err := s.store.EnrichBook(ctx, b)
-		if err != nil {
-			return nil, err
-		}
-		books[i] = mapEnrichedBookResponse(enriched)
+	enrichedBooks, err := s.store.EnrichBooks(ctx, result.Items)
+	if err != nil {
+		return nil, err
+	}
+	books := make([]BookResponse, len(enrichedBooks))
+	for i, eb := range enrichedBooks {
+		books[i] = mapEnrichedBookResponse(eb)
 	}
 
 	return &ListBooksOutput{

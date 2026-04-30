@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
@@ -34,6 +35,7 @@ type Server struct {
 	backupService             *backup.BackupService
 	restoreService            *backup.RestoreService
 	analysisTracker           *abs.AnalysisTracker
+	importJobs                *importJobManager
 	onInstanceUpdated         func(*domain.Instance)
 }
 
@@ -101,9 +103,26 @@ func NewServer(
 		analysisTracker:           abs.NewAnalysisTracker(),
 	}
 
+	// Cancelable manager for background ABS import analyses. Mirrors the
+	// pattern used in internal/di/providers/workers.go (ctx + cancel +
+	// WaitGroup) so analyses can be canceled and drained on shutdown
+	// instead of leaking past it with a context.Background.
+	s.importJobs = newImportJobManager(context.Background(), logger, s.runImportAnalysis)
+
 	s.registerRoutes()
 
 	return s
+}
+
+// Shutdown drains background jobs owned by the API server (currently the ABS
+// import analysis manager). Should be called after the underlying HTTP
+// listener has stopped accepting new connections so no new jobs can be
+// submitted while existing ones are draining.
+func (s *Server) Shutdown(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	return s.importJobs.Shutdown(ctx)
 }
 
 // ServeHTTP implements http.Handler.

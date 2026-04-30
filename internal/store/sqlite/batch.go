@@ -88,7 +88,7 @@ func (bw *sqliteBatchWriter) Flush(ctx context.Context) error {
 	}
 
 	for _, book := range written {
-		bw.store.indexBookAsync(ctx, book)
+		bw.store.submitIndexBook(book)
 	}
 
 	bw.mu.Lock()

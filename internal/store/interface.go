@@ -76,6 +76,7 @@ type Store interface {
 	SearchBooksByTitle(ctx context.Context, title string) ([]*domain.Book, error)
 	TouchEntity(ctx context.Context, entityType, id string) error
 	EnrichBook(ctx context.Context, book *domain.Book) (*dto.Book, error)
+	EnrichBooks(ctx context.Context, books []*domain.Book) ([]*dto.Book, error)
 	SetBookContributors(ctx context.Context, bookID string, contributors []ContributorInput) (*domain.Book, error)
 	SetBookSeries(ctx context.Context, bookID string, seriesInputs []SeriesInput) (*domain.Book, error)
 	SetBookGenres(ctx context.Context, bookID string, genreIDs []string) error

@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"database/sql"
 	_ "embed"
 	"fmt"
@@ -28,6 +29,7 @@ type Store struct {
 	enricher         *dto.Enricher
 	emitter          store.EventEmitter
 	searchIndexer    store.SearchIndexer
+	indexer          *asyncIndexer
 	transcodeDeleter store.TranscodeDeleter
 
 	mu       sync.RWMutex
@@ -61,6 +63,12 @@ func Open(path string, logger *slog.Logger) (*Store, error) {
 		transcodeDeleter: store.NewNoopTranscodeDeleter(),
 	}
 
+	// Wrap the (initially no-op) indexer in the async queue so that store
+	// methods always have a non-nil submission target. SetSearchIndexer
+	// will swap in the real indexer once search is wired up.
+	s.indexer = newAsyncIndexer(s.searchIndexer, logger)
+	s.indexer.Start(context.Background())
+
 	// Initialize enricher for SSE event denormalization.
 	// The store implements dto.Store interface.
 	s.enricher = dto.NewEnricher(s)
@@ -68,14 +76,35 @@ func Open(path string, logger *slog.Logger) (*Store, error) {
 	return s, nil
 }
 
-// Close closes the underlying database connection.
+// Close closes the underlying database connection. It first drains the
+// async search indexer with a bounded grace period so in-flight index
+// updates have a chance to finish before the database goes away.
 func (s *Store) Close() error {
+	if s.indexer != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := s.indexer.Shutdown(ctx); err != nil {
+			s.logger.Warn("async indexer shutdown timed out", "error", err)
+		}
+		cancel()
+	}
 	return s.db.Close()
 }
 
-// SetSearchIndexer sets the search indexer used for maintaining the search index.
+// SetSearchIndexer sets the search indexer used for maintaining the search
+// index. It rebuilds the async queue around the new indexer so that all
+// store operations submit work to a single, lifecycle-managed worker pool.
 func (s *Store) SetSearchIndexer(indexer store.SearchIndexer) {
+	// Drain the previous (typically no-op) async indexer before swapping.
+	if s.indexer != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := s.indexer.Shutdown(ctx); err != nil {
+			s.logger.Warn("previous async indexer shutdown timed out", "error", err)
+		}
+		cancel()
+	}
 	s.searchIndexer = indexer
+	s.indexer = newAsyncIndexer(indexer, s.logger)
+	s.indexer.Start(context.Background())
 }
 
 // SetTranscodeDeleter sets the transcode deleter used for cleaning up transcoded files.
@@ -83,10 +112,31 @@ func (s *Store) SetTranscodeDeleter(deleter store.TranscodeDeleter) {
 	s.transcodeDeleter = deleter
 }
 
-// SetBulkMode enables or disables bulk mode, which suppresses indexing and events.
+// SetBulkMode enables or disables bulk mode, which suppresses indexing and
+// events.
+//
+// Concurrency contract: bulk mode is a single global flag, not a counter, so
+// concurrent scans would trample each other's state — e.g. scan A finishes
+// and clears the flag while scan B is still running, re-enabling indexing
+// mid-bulk-write. Callers must therefore not invoke SetBulkMode concurrently.
+//
+// This is acceptable because the only caller is scanner.Scan, and the API
+// layer serializes full scans via sse.Manager.IsScanning() (see
+// internal/api/library_handlers.go); the watcher path uses ScanFolder, which
+// does not touch bulk mode.
+//
+// To enforce the contract at runtime, SetBulkMode panics if the new value
+// matches the current value: SetBulkMode(true) when already true means a
+// second scan started before the first cleared the flag, which would
+// indicate the upstream serialization guard is broken. If nested or
+// genuinely concurrent bulk regions ever become a real requirement, replace
+// the bool with a reference-counted bulkDepth and drop the panic.
 func (s *Store) SetBulkMode(enabled bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.bulkMode == enabled {
+		panic(fmt.Sprintf("sqlite store: SetBulkMode(%v) called while bulkMode already %v; concurrent scans are not supported", enabled, s.bulkMode))
+	}
 	s.bulkMode = enabled
 }
 

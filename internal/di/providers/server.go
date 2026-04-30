@@ -20,6 +20,7 @@ import (
 // HTTPServerHandle wraps http.Server with Shutdownable.
 type HTTPServerHandle struct {
 	*http.Server
+	apiServer *api.Server
 }
 
 // sseTokenVerifier adapts AuthService to the sse.TokenVerifier interface.
@@ -34,10 +35,22 @@ func (v *sseTokenVerifier) VerifyAccessToken(ctx context.Context, token string) 
 }
 
 // Shutdown implements do.Shutdownable.
+//
+// Shutdown order: stop accepting new HTTP connections first, then drain
+// background jobs owned by the API server (e.g. ABS import analyses) so
+// nothing is still writing to the store when later shutdown phases close it.
 func (h *HTTPServerHandle) Shutdown() error {
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
-	return h.Server.Shutdown(ctx)
+	httpErr := h.Server.Shutdown(ctx)
+	var apiErr error
+	if h.apiServer != nil {
+		apiErr = h.apiServer.Shutdown(ctx)
+	}
+	if httpErr != nil {
+		return httpErr
+	}
+	return apiErr
 }
 
 // ProvideHTTPServer provides the HTTP server.
@@ -165,7 +178,7 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 
 	log.Info("Server running", "addr", srv.Addr)
 
-	return &HTTPServerHandle{Server: srv}, nil
+	return &HTTPServerHandle{Server: srv, apiServer: handler}, nil
 }
 
 // MDNSServiceHandle wraps mdns.Service with Shutdownable.

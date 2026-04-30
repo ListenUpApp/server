@@ -240,14 +240,17 @@ func (s *Server) handleGetTagBooks(ctx context.Context, input *GetTagBooksInput)
 		return nil, err
 	}
 
-	// Convert to DTOs (using existing dto.Book from the codebase)
-	bookDTOs := make([]dto.Book, 0, len(books))
-	for _, b := range books {
-		enriched, err := s.store.EnrichBook(ctx, b)
-		if err != nil {
-			continue // Skip books that can't be enriched
+	// Convert to DTOs (using existing dto.Book from the codebase) via batch enrichment.
+	enriched, err := s.store.EnrichBooks(ctx, books)
+	if err != nil {
+		return nil, err
+	}
+	bookDTOs := make([]dto.Book, 0, len(enriched))
+	for _, eb := range enriched {
+		if eb == nil {
+			continue
 		}
-		bookDTOs = append(bookDTOs, *enriched)
+		bookDTOs = append(bookDTOs, *eb)
 	}
 
 	return &GetTagBooksOutput{
