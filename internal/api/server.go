@@ -165,6 +165,11 @@ func setupMiddleware(router chi.Router, logger *slog.Logger, services *Services)
 	// Response compression - gzip responses at compression level 5
 	router.Use(middleware.Compress(5))
 
+	// Top-level request timeout. SSE handlers detach from this via
+	// context.WithoutCancel in their ServeHTTP since long-lived streams
+	// must not be canceled by router timeout.
+	router.Use(middleware.Timeout(60 * time.Second))
+
 	// Auth middleware - validates Bearer tokens and stores userID in context.
 	// Must be added before routes so handlers can use GetUserID(ctx).
 	router.Use(authMiddleware(services.Auth))

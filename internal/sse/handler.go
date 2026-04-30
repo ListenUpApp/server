@@ -127,7 +127,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Stream events until client disconnects.
-	ctx := r.Context()
+	// Detach from any router-level timeout: SSE streams must outlive the
+	// request timeout middleware.
+	ctx := context.WithoutCancel(r.Context())
 
 	// Send periodic heartbeat to keep connection alive (every 30 seconds).
 	heartbeatTicker := time.NewTicker(30 * time.Second)
