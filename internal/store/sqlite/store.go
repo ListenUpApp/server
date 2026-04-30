@@ -3,7 +3,6 @@ package sqlite
 import (
 	"context"
 	"database/sql"
-	_ "embed"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -17,9 +16,6 @@ import (
 	// modernc.org/sqlite is registered as the "sqlite" SQL driver via blank import.
 	_ "modernc.org/sqlite"
 )
-
-//go:embed schema.sql
-var schemaSQL string
 
 // Store provides SQLite-backed persistence for the ListenUp server.
 type Store struct {
@@ -48,10 +44,11 @@ func Open(path string, logger *slog.Logger) (*Store, error) {
 	db.SetMaxIdleConns(2)
 	db.SetConnMaxLifetime(time.Hour)
 
-	// Run schema migration. No parent context here — this is startup code.
-	if _, err := db.Exec(schemaSQL); err != nil { //nolint:noctx // startup-time migration; no caller context
+	// Apply any pending schema migrations. Safe on a fresh DB (runs the
+	// baseline) and on an upgrade (applies whatever's new since last boot).
+	if err := migrate(context.Background(), db); err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("exec schema: %w", err)
+		return nil, fmt.Errorf("migrate schema: %w", err)
 	}
 
 	s := &Store{

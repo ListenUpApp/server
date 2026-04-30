@@ -1,3 +1,4 @@
+-- +goose Up
 CREATE TABLE IF NOT EXISTS users (
     id              TEXT PRIMARY KEY,
     created_at      TEXT NOT NULL,
@@ -564,3 +565,8 @@ CREATE TABLE IF NOT EXISTS sse_event_log (
 
 CREATE INDEX IF NOT EXISTS idx_sse_event_log_created_at ON sse_event_log(created_at);
 CREATE INDEX IF NOT EXISTS idx_sse_event_log_user_id ON sse_event_log(user_id);
+-- +goose Down
+-- The initial migration is the schema baseline; goose down on it
+-- would have to drop every table. Keep this as an explicit no-op so
+-- 'goose down' from baseline doesn't silently destroy a live database.
+SELECT 1;
