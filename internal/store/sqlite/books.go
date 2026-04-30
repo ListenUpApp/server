@@ -283,24 +283,6 @@ func coverArgs(img *domain.ImageFileInfo) (coverPath, coverFilename, coverFormat
 // CreateBook inserts a book row along with its audio files and chapters in a transaction.
 // Returns store.ErrAlreadyExists on duplicate ID or path.
 
-// submitIndexBook enqueues a non-blocking search index update for a book.
-// The job runs on the store's async indexer worker; request-scoped contexts
-// are intentionally not propagated so indexing survives request completion.
-func (s *Store) submitIndexBook(book *domain.Book) {
-	if s.indexer == nil {
-		return
-	}
-	s.indexer.Submit(indexJob{op: opIndexBook, book: book})
-}
-
-// submitDeleteBookFromIndex enqueues a non-blocking search index removal.
-func (s *Store) submitDeleteBookFromIndex(id string) {
-	if s.indexer == nil {
-		return
-	}
-	s.indexer.Submit(indexJob{op: opDeleteBook, id: id})
-}
-
 func (s *Store) CreateBook(ctx context.Context, book *domain.Book) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -312,11 +294,7 @@ func (s *Store) CreateBook(ctx context.Context, book *domain.Book) error {
 		return err
 	}
 
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	s.submitIndexBook(book)
-	return nil
+	return tx.Commit()
 }
 
 // createBookTx inserts a book and its audio files/chapters using the provided transaction.
@@ -641,11 +619,7 @@ func (s *Store) UpdateBook(ctx context.Context, book *domain.Book) error {
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	s.submitIndexBook(book)
-	return nil
+	return tx.Commit()
 }
 
 // updateBookJunctionTables writes contributor, series, and genre junction rows
@@ -704,7 +678,6 @@ func (s *Store) DeleteBook(ctx context.Context, id string) error {
 	if n == 0 {
 		return store.ErrNotFound
 	}
-	s.submitDeleteBookFromIndex(id)
 	return nil
 }
 

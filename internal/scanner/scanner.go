@@ -13,6 +13,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/dto"
 	"github.com/listenupapp/listenup-server/internal/media/images"
+	"github.com/listenupapp/listenup-server/internal/search/asyncindexer"
 	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
@@ -64,6 +65,7 @@ type Scanner struct {
 	logger          *slog.Logger
 	imageProcessor  *images.Processor
 	transcodeQueuer TranscodeQueuer
+	indexer         *asyncindexer.Indexer
 	enricher        *dto.Enricher
 
 	walker   *Walker
@@ -73,13 +75,14 @@ type Scanner struct {
 }
 
 // NewScanner creates a new scanner instance.
-func NewScanner(store store.Store, emitter store.EventEmitter, imageProcessor *images.Processor, logger *slog.Logger) *Scanner {
+func NewScanner(store store.Store, emitter store.EventEmitter, imageProcessor *images.Processor, indexer *asyncindexer.Indexer, logger *slog.Logger) *Scanner {
 	return &Scanner{
 		store:           store,
 		eventEmitter:    emitter,
 		logger:          logger,
 		imageProcessor:  imageProcessor,
 		transcodeQueuer: NoopTranscodeQueuer{}, // Default to no-op
+		indexer:         indexer,
 		enricher:        dto.NewEnricher(store),
 		walker:          NewWalker(logger),
 		grouper:         NewGrouper(logger),
@@ -520,6 +523,12 @@ func (s *Scanner) saveToDatabase(ctx context.Context, items []*LibraryItemData, 
 	if err := batchWriter.Flush(ctx); err != nil {
 		s.logger.Error("failed to flush batch", "error", err)
 		return fmt.Errorf("flush batch: %w", err)
+	}
+
+	// Submit index jobs for all successfully written books.
+	// We do this after Flush so that the book rows exist before indexing.
+	for _, book := range pendingBooks {
+		s.indexer.SubmitIndexBook(book)
 	}
 
 	// Post-flush operations: inbox, transcodes, SSE events.

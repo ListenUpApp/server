@@ -17,9 +17,10 @@ func ProvideScanner(i do.Injector) (*scanner.Scanner, error) {
 	storeHandle := do.MustInvoke[*StoreHandle](i)
 	sseHandle := do.MustInvoke[*SSEManagerHandle](i)
 	imageProcessor := do.MustInvoke[*images.Processor](i)
+	indexerHandle := do.MustInvoke[*AsyncIndexerHandle](i)
 	log := do.MustInvoke[*logger.Logger](i)
 
-	return scanner.NewScanner(storeHandle.Store, sseHandle.Manager, imageProcessor, log.Logger), nil
+	return scanner.NewScanner(storeHandle.Store, sseHandle.Manager, imageProcessor, indexerHandle.Indexer, log.Logger), nil
 }
 
 // ProvideEventProcessor provides the file event processor.

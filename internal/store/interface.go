@@ -11,16 +11,8 @@ import (
 )
 
 // Lifecycle covers store-wide lifecycle and bulk-mode controls.
-//
-// SetSearchIndexer is a post-construction hook left over from the era when
-// the store emitted search side effects directly. It is retained because the
-// search index is wired up after the store boots (the store needs to exist
-// before bleve can be opened against the same data dir), but new code should
-// route search-index updates through the service layer instead. The
-// SetTranscodeDeleter sibling hook has already been removed.
 type Lifecycle interface {
 	Close() error
-	SetSearchIndexer(indexer SearchIndexer)
 	SetBulkMode(enabled bool)
 	IsBulkMode() bool
 	InvalidateGenreCache()

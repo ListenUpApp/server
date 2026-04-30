@@ -50,6 +50,7 @@ func ProvideBookService(i do.Injector) (*service.BookService, error) {
 	metadataHandle := do.MustInvoke[*MetadataServiceHandle](i)
 	coverService := do.MustInvoke[*service.CoverService](i)
 	storages := do.MustInvoke[*ImageStorages](i)
+	indexerHandle := do.MustInvoke[*AsyncIndexerHandle](i)
 	log := do.MustInvoke[*logger.Logger](i)
 
 	return service.NewBookService(
@@ -58,6 +59,7 @@ func ProvideBookService(i do.Injector) (*service.BookService, error) {
 		metadataHandle.MetadataService,
 		coverService,
 		storages.Covers,
+		indexerHandle.Indexer,
 		log.Logger,
 	), nil
 }

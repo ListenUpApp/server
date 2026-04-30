@@ -22,8 +22,10 @@ import (
 	"github.com/listenupapp/listenup-server/internal/config"
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/dto"
+	"github.com/listenupapp/listenup-server/internal/search/asyncindexer"
 	"github.com/listenupapp/listenup-server/internal/service"
 	"github.com/listenupapp/listenup-server/internal/sse"
+	"github.com/listenupapp/listenup-server/internal/store"
 	"github.com/listenupapp/listenup-server/internal/store/sqlite"
 )
 
@@ -83,7 +85,9 @@ func setupPermTestServer(t *testing.T) *permTestServer {
 	// BookService is needed for the update-book handler under permission tests.
 	// Pass nil scanner/metadata/cover/storage — the update path doesn't touch
 	// them. logger keeps panics legible if a code path ever does.
-	bookService := service.NewBookService(st, nil, nil, nil, nil, logger)
+	noopIdx := asyncindexer.New(store.NewNoopSearchIndexer(), logger)
+	noopIdx.Start(context.Background())
+	bookService := service.NewBookService(st, nil, nil, nil, nil, noopIdx, logger)
 
 	services := &Services{
 		Instance: instanceService,

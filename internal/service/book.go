@@ -17,6 +17,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/media/images"
 	"github.com/listenupapp/listenup-server/internal/metadata/audible"
 	"github.com/listenupapp/listenup-server/internal/scanner"
+	"github.com/listenupapp/listenup-server/internal/search/asyncindexer"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
@@ -88,6 +89,7 @@ type BookService struct {
 	metadataService *MetadataService
 	coverService    *CoverService
 	coverStorage    *images.Storage
+	indexer         *asyncindexer.Indexer
 	logger          *slog.Logger
 }
 
@@ -98,6 +100,7 @@ func NewBookService(
 	metadataService *MetadataService,
 	coverService *CoverService,
 	coverStorage *images.Storage,
+	indexer *asyncindexer.Indexer,
 	logger *slog.Logger,
 ) *BookService {
 	return &BookService{
@@ -106,6 +109,7 @@ func NewBookService(
 		metadataService: metadataService,
 		coverService:    coverService,
 		coverStorage:    coverStorage,
+		indexer:         indexer,
 		logger:          logger,
 	}
 }
@@ -265,6 +269,7 @@ func (s *BookService) UpdateBook(ctx context.Context, userID, bookID string, pat
 	if err := s.store.UpdateBook(ctx, book); err != nil {
 		return nil, fmt.Errorf("update book: %w", err)
 	}
+	s.indexer.SubmitIndexBook(book)
 	return book, nil
 }
 
@@ -488,6 +493,7 @@ func (s *BookService) ApplyMatch(
 	if err := s.store.UpdateBook(ctx, book); err != nil {
 		return nil, fmt.Errorf("update book: %w", err)
 	}
+	s.indexer.SubmitIndexBook(book)
 
 	s.logger.Info("Applied Audible match",
 		"book_id", bookID,
@@ -618,6 +624,7 @@ func (s *BookService) ApplyMatchWithCoverResult(
 	if err := s.store.UpdateBook(ctx, book); err != nil {
 		return nil, fmt.Errorf("update book: %w", err)
 	}
+	s.indexer.SubmitIndexBook(book)
 
 	s.logger.Info("Applied Audible match with cover result",
 		"book_id", bookID,
@@ -756,6 +763,8 @@ func (s *BookService) resolveContributor(ctx context.Context, audibleContrib aud
 				"asin", audibleContrib.ASIN,
 			)
 			// Continue without enrichment
+		} else {
+			s.indexer.SubmitIndexContributor(existing)
 		}
 	}
 
@@ -831,6 +840,8 @@ func (s *BookService) resolveSingleSeries(ctx context.Context, audibleSeries aud
 				"series_id", existing.ID,
 				"asin", audibleSeries.ASIN,
 			)
+		} else {
+			s.indexer.SubmitIndexSeries(existing)
 		}
 	}
 

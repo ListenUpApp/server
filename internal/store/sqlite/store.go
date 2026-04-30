@@ -22,10 +22,8 @@ type Store struct {
 	db     *sql.DB
 	logger *slog.Logger
 
-	enricher      *dto.Enricher
-	emitter       store.EventEmitter
-	searchIndexer store.SearchIndexer
-	indexer       *asyncIndexer
+	enricher *dto.Enricher
+	emitter  store.EventEmitter
 
 	mu       sync.RWMutex
 	bulkMode bool
@@ -52,17 +50,10 @@ func Open(path string, logger *slog.Logger) (*Store, error) {
 	}
 
 	s := &Store{
-		db:            db,
-		logger:        logger,
-		emitter:       store.NewNoopEmitter(),
-		searchIndexer: store.NewNoopSearchIndexer(),
+		db:      db,
+		logger:  logger,
+		emitter: store.NewNoopEmitter(),
 	}
-
-	// Wrap the (initially no-op) indexer in the async queue so that store
-	// methods always have a non-nil submission target. SetSearchIndexer
-	// will swap in the real indexer once search is wired up.
-	s.indexer = newAsyncIndexer(s.searchIndexer, logger)
-	s.indexer.Start(context.Background())
 
 	// Initialize enricher for SSE event denormalization.
 	// The store implements dto.Store interface.
@@ -71,35 +62,9 @@ func Open(path string, logger *slog.Logger) (*Store, error) {
 	return s, nil
 }
 
-// Close closes the underlying database connection. It first drains the
-// async search indexer with a bounded grace period so in-flight index
-// updates have a chance to finish before the database goes away.
+// Close closes the underlying database connection.
 func (s *Store) Close() error {
-	if s.indexer != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		if err := s.indexer.Shutdown(ctx); err != nil {
-			s.logger.Warn("async indexer shutdown timed out", "error", err)
-		}
-		cancel()
-	}
 	return s.db.Close()
-}
-
-// SetSearchIndexer sets the search indexer used for maintaining the search
-// index. It rebuilds the async queue around the new indexer so that all
-// store operations submit work to a single, lifecycle-managed worker pool.
-func (s *Store) SetSearchIndexer(indexer store.SearchIndexer) {
-	// Drain the previous (typically no-op) async indexer before swapping.
-	if s.indexer != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		if err := s.indexer.Shutdown(ctx); err != nil {
-			s.logger.Warn("previous async indexer shutdown timed out", "error", err)
-		}
-		cancel()
-	}
-	s.searchIndexer = indexer
-	s.indexer = newAsyncIndexer(indexer, s.logger)
-	s.indexer.Start(context.Background())
 }
 
 // SetBulkMode enables or disables bulk mode, which suppresses indexing and

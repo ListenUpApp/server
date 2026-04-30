@@ -8,9 +8,17 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/listenupapp/listenup-server/internal/search/asyncindexer"
 	"github.com/listenupapp/listenup-server/internal/store"
 	"github.com/listenupapp/listenup-server/internal/store/sqlite"
 )
+
+// noopIndexer returns a started no-op async indexer for tests that don't need real indexing.
+func noopIndexer(logger *slog.Logger) *asyncindexer.Indexer {
+	idx := asyncindexer.New(store.NewNoopSearchIndexer(), logger)
+	idx.Start(context.Background())
+	return idx
+}
 
 func setupTestStore(t *testing.T) (store.Store, func()) {
 	t.Helper()
@@ -38,7 +46,7 @@ func TestScanner_Scan_EmptyDirectory(t *testing.T) {
 	testStore, cleanup := setupTestStore(t)
 	defer cleanup()
 
-	scanner := NewScanner(testStore, store.NewNoopEmitter(), nil, logger)
+	scanner := NewScanner(testStore, store.NewNoopEmitter(), nil, noopIndexer(logger), logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
@@ -83,7 +91,7 @@ func TestScanner_Scan_SingleAudiobook(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, noopIndexer(logger), logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
@@ -130,7 +138,7 @@ func TestScanner_Scan_MultipleAudiobooks(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, noopIndexer(logger), logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
@@ -185,7 +193,7 @@ func TestScanner_Scan_ContextCancellation(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, noopIndexer(logger), logger)
 
 	// Start scan and cancel during analysis.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -228,7 +236,7 @@ func TestScanner_Scan_ProgressCallback(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, noopIndexer(logger), logger)
 
 	// Track progress callbacks with mutex for thread safety.
 	var (
@@ -275,7 +283,7 @@ func TestScanner_Scan_ProgressCallback(t *testing.T) {
 func TestScanner_Scan_NonexistentPath(t *testing.T) {
 	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, noopIndexer(logger), logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
@@ -310,7 +318,7 @@ func TestScanner_Scan_DryRun(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, noopIndexer(logger), logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
@@ -338,7 +346,7 @@ func TestScanner_ScanFolder_EmptyFolder(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, noopIndexer(logger), logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
@@ -381,7 +389,7 @@ func TestScanner_ScanFolder_SingleM4B(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, noopIndexer(logger), logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
@@ -437,7 +445,7 @@ func TestScanner_ScanFolder_MultipleMP3s(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, noopIndexer(logger), logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
@@ -493,7 +501,7 @@ func TestScanner_ScanFolder_WithCoverArt(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, noopIndexer(logger), logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
@@ -571,7 +579,7 @@ func TestScanner_ScanFolder_MultiDisc(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, noopIndexer(logger), logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
@@ -632,7 +640,7 @@ func TestScanner_ScanFolder_WithMetadata(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, noopIndexer(logger), logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
@@ -679,7 +687,7 @@ func TestScanner_ScanFolder_WithMetadata(t *testing.T) {
 func TestScanner_ScanFolder_NonexistentPath(t *testing.T) {
 	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, noopIndexer(logger), logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{
@@ -716,7 +724,7 @@ func TestScanner_ScanFolder_ContextCancellation(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, noopIndexer(logger), logger)
 
 	// Create cancellable context.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -762,7 +770,7 @@ func TestScanner_ScanFolder_IgnoresHiddenFiles(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, noopIndexer(logger), logger)
 
 	ctx := context.Background()
 	opts := ScanOptions{

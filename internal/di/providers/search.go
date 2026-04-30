@@ -2,12 +2,14 @@ package providers
 
 import (
 	"context"
+	"time"
 
 	"github.com/samber/do/v2"
 
 	"github.com/listenupapp/listenup-server/internal/config"
 	"github.com/listenupapp/listenup-server/internal/logger"
 	"github.com/listenupapp/listenup-server/internal/search"
+	"github.com/listenupapp/listenup-server/internal/search/asyncindexer"
 	"github.com/listenupapp/listenup-server/internal/service"
 )
 
@@ -40,18 +42,38 @@ func ProvideSearchIndex(i do.Injector) (*SearchIndexHandle, error) {
 	return &SearchIndexHandle{SearchIndex: index}, nil
 }
 
+// AsyncIndexerHandle wraps the async indexer with shutdown capability.
+type AsyncIndexerHandle struct {
+	*asyncindexer.Indexer
+}
+
+// Shutdown implements do.Shutdownable.
+func (h *AsyncIndexerHandle) Shutdown() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return h.Indexer.Shutdown(ctx)
+}
+
+// ProvideAsyncIndexer provides the async search indexer.
+// It wraps the SearchService (which implements store.SearchIndexer) and starts
+// the worker goroutine. Shutdown drains in-flight jobs with a grace period.
+func ProvideAsyncIndexer(i do.Injector) (*AsyncIndexerHandle, error) {
+	searchSvc := do.MustInvoke[*service.SearchService](i)
+	log := do.MustInvoke[*logger.Logger](i)
+
+	idx := asyncindexer.New(searchSvc, log.Logger)
+	idx.Start(context.Background())
+
+	return &AsyncIndexerHandle{Indexer: idx}, nil
+}
+
 // ProvideSearchService provides the search service.
 func ProvideSearchService(i do.Injector) (*service.SearchService, error) {
 	indexHandle := do.MustInvoke[*SearchIndexHandle](i)
 	storeHandle := do.MustInvoke[*StoreHandle](i)
 	log := do.MustInvoke[*logger.Logger](i)
 
-	svc := service.NewSearchService(indexHandle.SearchIndex, storeHandle.Store, log.Logger)
-
-	// Wire to store for automatic indexing
-	storeHandle.SetSearchIndexer(svc)
-
-	return svc, nil
+	return service.NewSearchService(indexHandle.SearchIndex, storeHandle.Store, log.Logger), nil
 }
 
 // TriggerSearchReindexIfNeeded checks if reindexing is needed and triggers it.

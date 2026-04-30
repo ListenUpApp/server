@@ -14,6 +14,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/id"
 	"github.com/listenupapp/listenup-server/internal/scanner"
+	"github.com/listenupapp/listenup-server/internal/search/asyncindexer"
 	"github.com/listenupapp/listenup-server/internal/store"
 	"github.com/listenupapp/listenup-server/internal/watcher"
 )
@@ -187,7 +188,7 @@ func TestEventProcessor_ProcessEvent_AudioFile(t *testing.T) {
 		Level: slog.LevelError, // Reduce noise in tests
 	}))
 	mockStore := newMockBookStore()
-	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, asyncindexer.New(store.NewNoopSearchIndexer(), logger), logger)
 	processor := NewEventProcessor(scnr, mockStore, nil, nil, logger)
 
 	// Create event.
@@ -230,7 +231,7 @@ func TestEventProcessor_ProcessEvent_CoverFile(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError,
 	}))
-	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, asyncindexer.New(store.NewNoopSearchIndexer(), logger), logger)
 	mockStore := newMockBookStore()
 	processor := NewEventProcessor(scnr, mockStore, nil, nil, logger)
 
@@ -268,7 +269,7 @@ func TestEventProcessor_ProcessEvent_MetadataFile(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError,
 	}))
-	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, asyncindexer.New(store.NewNoopSearchIndexer(), logger), logger)
 	mockStore := newMockBookStore()
 	processor := NewEventProcessor(scnr, mockStore, nil, nil, logger)
 
@@ -306,7 +307,7 @@ func TestEventProcessor_ProcessEvent_IgnoredFile(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError,
 	}))
-	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, asyncindexer.New(store.NewNoopSearchIndexer(), logger), logger)
 	mockStore := newMockBookStore()
 	processor := NewEventProcessor(scnr, mockStore, nil, nil, logger)
 
@@ -341,7 +342,7 @@ func TestEventProcessor_ProcessEvent_RemovedFile(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError,
 	}))
-	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, asyncindexer.New(store.NewNoopSearchIndexer(), logger), logger)
 	mockStore := newMockBookStore()
 	processor := NewEventProcessor(scnr, mockStore, nil, nil, logger)
 
@@ -375,7 +376,7 @@ func TestEventProcessor_ProcessEvent_RemovedFile_AllFilesGone(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelInfo, // Enable to verify logging
 	}))
-	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, asyncindexer.New(store.NewNoopSearchIndexer(), logger), logger)
 	mockStore := newMockBookStore()
 	processor := NewEventProcessor(scnr, mockStore, nil, nil, logger)
 
@@ -421,7 +422,7 @@ func TestEventProcessor_ConcurrentEvents(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError,
 	}))
-	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, asyncindexer.New(store.NewNoopSearchIndexer(), logger), logger)
 	mockStore := newMockBookStore()
 	processor := NewEventProcessor(scnr, mockStore, nil, nil, logger)
 
@@ -491,7 +492,7 @@ func TestEventProcessor_MultiFileBookEvolution(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError,
 	}))
-	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, asyncindexer.New(store.NewNoopSearchIndexer(), logger), logger)
 	mockStore := newMockBookStore()
 	processor := NewEventProcessor(scnr, mockStore, nil, nil, logger)
 
@@ -594,7 +595,7 @@ func TestEventProcessor_DiscFolderHandling(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError,
 	}))
-	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, asyncindexer.New(store.NewNoopSearchIndexer(), logger), logger)
 	mockStore := newMockBookStore()
 	processor := NewEventProcessor(scnr, mockStore, nil, nil, logger)
 
@@ -733,7 +734,7 @@ func TestEventProcessor_ModifiedEvent(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError,
 	}))
-	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, logger)
+	scnr := scanner.NewScanner(nil, store.NewNoopEmitter(), nil, asyncindexer.New(store.NewNoopSearchIndexer(), logger), logger)
 	mockStore := newMockBookStore()
 	processor := NewEventProcessor(scnr, mockStore, nil, nil, logger)
 

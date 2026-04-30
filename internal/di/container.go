@@ -40,6 +40,7 @@ func NewContainer() *do.RootScope {
 	// Search layer
 	do.Provide(injector, providers.ProvideSearchIndex)
 	do.Provide(injector, providers.ProvideSearchService)
+	do.Provide(injector, providers.ProvideAsyncIndexer)
 
 	// Metadata layer
 	do.Provide(injector, providers.ProvideAudibleClient)
@@ -133,6 +134,7 @@ func Bootstrap(injector *do.RootScope) error {
 		// Search
 		func(i *do.RootScope) { _ = do.MustInvoke[*providers.SearchIndexHandle](i) },
 		func(i *do.RootScope) { _ = do.MustInvoke[*service.SearchService](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*providers.AsyncIndexerHandle](i) },
 
 		// Metadata
 		func(i *do.RootScope) { _ = do.MustInvoke[*providers.AudibleClientHandle](i) },
