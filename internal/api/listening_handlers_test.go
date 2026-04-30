@@ -13,6 +13,8 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/listenupapp/listenup-server/internal/domain"
+	"github.com/listenupapp/listenup-server/internal/service"
+	storemod "github.com/listenupapp/listenup-server/internal/store"
 	"github.com/listenupapp/listenup-server/internal/store/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -204,8 +206,7 @@ func TestGetAllProgressInput_HasUpdatedAfterQueryTag(t *testing.T) {
 }
 
 // newListeningHandlerServer builds a minimal *Server suitable for testing
-// handleGetAllProgress in isolation. No services are wired — the handler only
-// needs s.store.
+// handleGetAllProgress in isolation. Only the ListeningService is wired.
 func newListeningHandlerServer(t *testing.T) *Server {
 	t.Helper()
 	tmpDir, err := os.MkdirTemp("", "listening-handler-test-*")
@@ -218,7 +219,16 @@ func newListeningHandlerServer(t *testing.T) *Server {
 		_ = os.RemoveAll(tmpDir)
 	})
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	return &Server{store: st, logger: logger}
+	noopEmitter := storemod.NewNoopEmitter()
+	readingSessionService := service.NewReadingSessionService(st, noopEmitter, logger)
+	listeningService := service.NewListeningService(st, noopEmitter, readingSessionService, logger)
+	return &Server{
+		store:  st,
+		logger: logger,
+		services: &Services{
+			Listening: listeningService,
+		},
+	}
 }
 
 // TestHandleGetAllProgress_InvalidUpdatedAfter_Returns400 verifies the handler

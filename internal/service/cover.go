@@ -6,11 +6,19 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/media/covers"
 	"github.com/listenupapp/listenup-server/internal/media/images"
 	"github.com/listenupapp/listenup-server/internal/metadata/audible"
 	"github.com/listenupapp/listenup-server/internal/metadata/itunes"
+	"github.com/listenupapp/listenup-server/internal/store"
 )
+
+// coverServiceStore is the narrow store interface required by CoverService.
+type coverServiceStore interface {
+	store.BookStore
+	CanUserAccessBook(ctx context.Context, userID, bookID string) (bool, error)
+}
 
 // CoverOption represents a cover from any source with its metadata.
 type CoverOption struct {
@@ -37,6 +45,7 @@ type CoverDownloadResult struct {
 
 // CoverService handles cover search and download from multiple sources.
 type CoverService struct {
+	store           coverServiceStore
 	itunesClient    *itunes.Client
 	metadataService *MetadataService
 	downloader      *covers.Downloader
@@ -45,17 +54,39 @@ type CoverService struct {
 
 // NewCoverService creates a new cover service.
 func NewCoverService(
+	st coverServiceStore,
 	itunesClient *itunes.Client,
 	metadataService *MetadataService,
 	coverStorage *images.Storage,
 	logger *slog.Logger,
 ) *CoverService {
 	return &CoverService{
+		store:           st,
 		itunesClient:    itunesClient,
 		metadataService: metadataService,
 		downloader:      covers.NewDownloader(coverStorage, logger),
 		logger:          logger,
 	}
+}
+
+// GetBook retrieves a book with access check for the given user.
+func (s *CoverService) GetBook(ctx context.Context, bookID, userID string) (*domain.Book, error) {
+	return s.store.GetBook(ctx, bookID, userID)
+}
+
+// GetBookByID retrieves a book without access check.
+func (s *CoverService) GetBookByID(ctx context.Context, bookID string) (*domain.Book, error) {
+	return s.store.GetBookByID(ctx, bookID)
+}
+
+// UpdateBook persists book changes.
+func (s *CoverService) UpdateBook(ctx context.Context, book *domain.Book) error {
+	return s.store.UpdateBook(ctx, book)
+}
+
+// CanUserAccessBook checks whether userID can see bookID.
+func (s *CoverService) CanUserAccessBook(ctx context.Context, userID, bookID string) (bool, error) {
+	return s.store.CanUserAccessBook(ctx, userID, bookID)
 }
 
 // SearchCovers searches for covers from all available sources.

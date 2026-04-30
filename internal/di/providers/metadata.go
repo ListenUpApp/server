@@ -95,11 +95,13 @@ func ProvideITunesClient(i do.Injector) (*ITunesClientHandle, error) {
 // ProvideCoverService provides the cover search and download service.
 func ProvideCoverService(i do.Injector) (*service.CoverService, error) {
 	log := do.MustInvoke[*logger.Logger](i)
+	storeHandle := do.MustInvoke[*StoreHandle](i)
 	itunesHandle := do.MustInvoke[*ITunesClientHandle](i)
 	metadataHandle := do.MustInvoke[*MetadataServiceHandle](i)
 	storages := do.MustInvoke[*ImageStorages](i)
 
 	svc := service.NewCoverService(
+		storeHandle.Store,
 		itunesHandle.Client,
 		metadataHandle.MetadataService,
 		storages.Covers,

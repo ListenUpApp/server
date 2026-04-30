@@ -3,6 +3,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -12,20 +13,144 @@ import (
 	"github.com/listenupapp/listenup-server/internal/store"
 )
 
+// libraryServiceStore is the narrow store interface required by LibraryService.
+type libraryServiceStore interface {
+	store.LibraryStore
+	store.UserStore
+	store.BookStore
+}
+
 // LibraryService orchestrates library operations.
 type LibraryService struct {
-	store      store.LibraryStore
+	store      libraryServiceStore
 	sseManager *sse.Manager
 	logger     *slog.Logger
 }
 
 // NewLibraryService creates a new library service.
-func NewLibraryService(libraries store.LibraryStore, sseManager *sse.Manager, logger *slog.Logger) *LibraryService {
+func NewLibraryService(libraries libraryServiceStore, sseManager *sse.Manager, logger *slog.Logger) *LibraryService {
 	return &LibraryService{
 		store:      libraries,
 		sseManager: sseManager,
 		logger:     logger,
 	}
+}
+
+// ListLibraries returns all libraries.
+func (s *LibraryService) ListLibraries(ctx context.Context) ([]*domain.Library, error) {
+	return s.store.ListLibraries(ctx)
+}
+
+// GetLibrary returns a single library by ID.
+func (s *LibraryService) GetLibrary(ctx context.Context, id string) (*domain.Library, error) {
+	return s.store.GetLibrary(ctx, id)
+}
+
+// LibraryStatusResult contains the result of GetLibraryStatus.
+type LibraryStatusResult struct {
+	Exists    bool
+	Library   *domain.Library
+	IsAdmin   bool
+	BookCount int
+}
+
+// GetLibraryStatus returns library existence and basic info for a user.
+func (s *LibraryService) GetLibraryStatus(ctx context.Context, userID string) (*LibraryStatusResult, error) {
+	user, err := s.store.GetUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	library, err := s.store.GetDefaultLibrary(ctx)
+	if err != nil {
+		// No library exists — report via status fields, not error.
+		return &LibraryStatusResult{ //nolint:nilerr // missing library is reported via status field, not error
+			Exists:  false,
+			IsAdmin: user.IsAdmin(),
+		}, nil
+	}
+
+	bookCount, _ := s.store.CountBooks(ctx)
+
+	return &LibraryStatusResult{
+		Exists:    true,
+		Library:   library,
+		IsAdmin:   user.IsAdmin(),
+		BookCount: bookCount,
+	}, nil
+}
+
+// SetupLibraryInput is the input for setting up a library.
+type SetupLibraryInput struct {
+	AdminID    string
+	Name       string
+	ScanPaths  []string // At least one path required.
+	SkipInbox  *bool
+}
+
+// SetupLibrary creates the initial library if none exists.
+// Returns the created library. Returns an error if a library already exists.
+func (s *LibraryService) SetupLibrary(ctx context.Context, input SetupLibraryInput) (*domain.Library, error) {
+	if existing, err := s.store.GetDefaultLibrary(ctx); err == nil && existing != nil {
+		return nil, errors.New("library already exists")
+	}
+
+	result, err := s.store.EnsureLibrary(ctx, input.ScanPaths[0], input.AdminID)
+	if err != nil {
+		return nil, fmt.Errorf("ensure library: %w", err)
+	}
+
+	lib := result.Library
+	lib.Name = input.Name
+	if input.SkipInbox != nil {
+		lib.SkipInbox = *input.SkipInbox
+	}
+
+	// Add additional scan paths
+	for _, p := range input.ScanPaths[1:] {
+		lib.AddScanPath(p)
+	}
+
+	lib.UpdatedAt = time.Now()
+	if err := s.store.UpdateLibrary(ctx, lib); err != nil {
+		return nil, fmt.Errorf("update library: %w", err)
+	}
+
+	return lib, nil
+}
+
+// AddScanPath adds a scan path to an existing library.
+func (s *LibraryService) AddScanPath(ctx context.Context, libraryID, cleanPath string) (*domain.Library, error) {
+	lib, err := s.store.GetLibrary(ctx, libraryID)
+	if err != nil {
+		return nil, err
+	}
+
+	lib.AddScanPath(cleanPath)
+	lib.UpdatedAt = time.Now()
+
+	if err := s.store.UpdateLibrary(ctx, lib); err != nil {
+		return nil, fmt.Errorf("update library: %w", err)
+	}
+
+	return lib, nil
+}
+
+// RemoveScanPath removes a scan path from an existing library.
+func (s *LibraryService) RemoveScanPath(ctx context.Context, libraryID, cleanPath string) (*domain.Library, error) {
+	lib, err := s.store.GetLibrary(ctx, libraryID)
+	if err != nil {
+		return nil, err
+	}
+
+	lib.RemoveScanPath(cleanPath)
+	lib.UpdatedAt = time.Now()
+
+	if err := s.store.UpdateLibrary(ctx, lib); err != nil {
+		return nil, fmt.Errorf("update library: %w", err)
+	}
+
+	return lib, nil
 }
 
 // UpdateLibrary updates a library's settings.

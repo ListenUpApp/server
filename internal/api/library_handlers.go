@@ -9,6 +9,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/listenupapp/listenup-server/internal/scanner"
+	"github.com/listenupapp/listenup-server/internal/service"
 )
 
 func (s *Server) registerLibraryRoutes() {
@@ -190,7 +191,7 @@ func (s *Server) handleListLibraries(ctx context.Context, _ *ListLibrariesInput)
 		return nil, err
 	}
 
-	libraries, err := s.store.ListLibraries(ctx)
+	libraries, err := s.services.Library.ListLibraries(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -217,7 +218,7 @@ func (s *Server) handleGetLibrary(ctx context.Context, input *GetLibraryInput) (
 		return nil, err
 	}
 
-	lib, err := s.store.GetLibrary(ctx, input.ID)
+	lib, err := s.services.Library.GetLibrary(ctx, input.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -266,31 +267,22 @@ func (s *Server) handleGetLibraryStatus(ctx context.Context, _ *LibraryStatusInp
 		return nil, err
 	}
 
-	// Check if user is admin
-	user, err := s.store.GetUser(ctx, userID)
+	status, err := s.services.Library.GetLibraryStatus(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	isAdmin := user.IsAdmin()
 
-	library, err := s.store.GetDefaultLibrary(ctx)
-	if err != nil {
-		// No library exists — return a "needs setup" status rather than an error.
-		return &LibraryStatusOutput{ //nolint:nilerr // missing library is reported via status field, not error
+	if !status.Exists {
+		return &LibraryStatusOutput{
 			Body: LibraryStatusResponse{
 				Exists:     false,
-				NeedsSetup: isAdmin, // Only admins can set up
+				NeedsSetup: status.IsAdmin, // Only admins can set up
 				BookCount:  0,
 			},
 		}, nil
 	}
 
-	// Get book count
-	bookCount, err := s.store.CountBooks(ctx)
-	if err != nil {
-		bookCount = 0
-	}
-
+	library := status.Library
 	isScanning := s.sseManager.IsScanning()
 
 	return &LibraryStatusOutput{
@@ -307,7 +299,7 @@ func (s *Server) handleGetLibraryStatus(ctx context.Context, _ *LibraryStatusInp
 				UpdatedAt:  library.UpdatedAt,
 			},
 			NeedsSetup: false,
-			BookCount:  bookCount,
+			BookCount:  status.BookCount,
 			IsScanning: isScanning,
 		},
 	}, nil
@@ -319,13 +311,9 @@ func (s *Server) handleSetupLibrary(ctx context.Context, input *SetupLibraryInpu
 		return nil, err
 	}
 
-	// Check if library already exists
-	if existing, err := s.store.GetDefaultLibrary(ctx); err == nil && existing != nil {
-		return nil, huma.Error409Conflict("library already exists")
-	}
-
 	// Validate all paths exist and are accessible
-	for _, path := range input.Body.ScanPaths {
+	cleanPaths := make([]string, len(input.Body.ScanPaths))
+	for i, path := range input.Body.ScanPaths {
 		cleanPath := filepath.Clean(path)
 		if !filepath.IsAbs(cleanPath) {
 			return nil, huma.Error400BadRequest("scan paths must be absolute: " + path)
@@ -342,35 +330,23 @@ func (s *Server) handleSetupLibrary(ctx context.Context, input *SetupLibraryInpu
 		if !info.IsDir() {
 			return nil, huma.Error400BadRequest("path is not a directory: " + path)
 		}
+		cleanPaths[i] = cleanPath
 	}
 
-	// Create library
 	name := input.Body.Name
 	if name == "" {
 		name = "My Library"
 	}
 
-	result, err := s.store.EnsureLibrary(ctx, input.Body.ScanPaths[0], adminID)
+	library, err := s.services.Library.SetupLibrary(ctx, service.SetupLibraryInput{
+		AdminID:   adminID,
+		Name:      name,
+		ScanPaths: cleanPaths,
+		SkipInbox: input.Body.SkipInbox,
+	})
 	if err != nil {
 		s.logger.Error("failed to create library", "error", err)
-		return nil, huma.Error500InternalServerError("failed to create library")
-	}
-
-	library := result.Library
-	library.Name = name
-	if input.Body.SkipInbox != nil {
-		library.SkipInbox = *input.Body.SkipInbox
-	}
-
-	// Add remaining scan paths
-	for _, path := range input.Body.ScanPaths[1:] {
-		library.AddScanPath(filepath.Clean(path))
-	}
-
-	library.UpdatedAt = time.Now()
-	if err := s.store.UpdateLibrary(ctx, library); err != nil {
-		s.logger.Error("failed to update library", "library_id", library.ID, "error", err)
-		return nil, huma.Error500InternalServerError("failed to update library")
+		return nil, huma.Error409Conflict("library already exists")
 	}
 
 	// Set scanning state IMMEDIATELY before launching async scan.
@@ -464,16 +440,9 @@ func (s *Server) handleAddScanPath(ctx context.Context, input *ScanPathInput) (*
 		return nil, huma.Error400BadRequest("path is not a directory: " + cleanPath)
 	}
 
-	lib, err := s.store.GetLibrary(ctx, input.ID)
+	lib, err := s.services.Library.AddScanPath(ctx, input.ID, cleanPath)
 	if err != nil {
 		return nil, err
-	}
-
-	lib.AddScanPath(cleanPath)
-	lib.UpdatedAt = time.Now()
-
-	if err := s.store.UpdateLibrary(ctx, lib); err != nil {
-		return nil, huma.Error500InternalServerError("failed to update library")
 	}
 
 	return &LibraryOutput{
@@ -495,21 +464,20 @@ func (s *Server) handleRemoveScanPath(ctx context.Context, input *RemoveScanPath
 		return nil, err
 	}
 
-	lib, err := s.store.GetLibrary(ctx, input.ID)
+	// Check minimum scan path constraint before delegating to service
+	existing, err := s.services.Library.GetLibrary(ctx, input.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(lib.ScanPaths) <= 1 {
+	if len(existing.ScanPaths) <= 1 {
 		return nil, huma.Error400BadRequest("cannot remove the last scan path")
 	}
 
 	cleanPath := filepath.Clean(input.Path)
-	lib.RemoveScanPath(cleanPath)
-	lib.UpdatedAt = time.Now()
-
-	if err := s.store.UpdateLibrary(ctx, lib); err != nil {
-		return nil, huma.Error500InternalServerError("failed to update library")
+	lib, err := s.services.Library.RemoveScanPath(ctx, input.ID, cleanPath)
+	if err != nil {
+		return nil, err
 	}
 
 	return &LibraryOutput{
@@ -532,7 +500,7 @@ func (s *Server) handleTriggerScan(ctx context.Context, input *TriggerScanInput)
 	}
 
 	// Verify library exists
-	if _, err := s.store.GetLibrary(ctx, input.ID); err != nil {
+	if _, err := s.services.Library.GetLibrary(ctx, input.ID); err != nil {
 		return nil, err
 	}
 

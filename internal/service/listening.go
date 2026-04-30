@@ -289,6 +289,31 @@ func (s *ListeningService) checkMilestones(ctx context.Context, userID string, n
 	}
 }
 
+// GetBook retrieves a book with access check for userID.
+func (s *ListeningService) GetBook(ctx context.Context, bookID, userID string) (*domain.Book, error) {
+	return s.store.GetBook(ctx, bookID, userID)
+}
+
+// GetBookByID retrieves a book without an access check.
+func (s *ListeningService) GetBookByID(ctx context.Context, bookID string) (*domain.Book, error) {
+	return s.store.GetBookByID(ctx, bookID)
+}
+
+// GetStateForUserUpdatedAfter returns all playback states updated after the given time.
+func (s *ListeningService) GetStateForUserUpdatedAfter(ctx context.Context, userID string, since time.Time) ([]*domain.PlaybackState, error) {
+	return s.store.GetStateForUserUpdatedAfter(ctx, userID, since)
+}
+
+// GetEventsForUser returns all listening events for a user.
+func (s *ListeningService) GetEventsForUser(ctx context.Context, userID string) ([]*domain.ListeningEvent, error) {
+	return s.store.GetEventsForUser(ctx, userID)
+}
+
+// GetEventsForUserInRange returns listening events for a user within a time range.
+func (s *ListeningService) GetEventsForUserInRange(ctx context.Context, userID string, start, end time.Time) ([]*domain.ListeningEvent, error) {
+	return s.store.GetEventsForUserInRange(ctx, userID, start, end)
+}
+
 // GetProgress retrieves playback state for a specific book.
 func (s *ListeningService) GetProgress(ctx context.Context, userID, bookID string) (*domain.PlaybackState, error) {
 	progress, err := s.store.GetState(ctx, userID, bookID)

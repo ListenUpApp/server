@@ -367,6 +367,21 @@ func (s *ShelfService) CreateDefaultShelf(ctx context.Context, userID string) er
 	return nil
 }
 
+// GetUser retrieves a user by ID. Used by handlers to enrich shelf owner info.
+func (s *ShelfService) GetUser(ctx context.Context, userID string) (*domain.User, error) {
+	return s.store.GetUser(ctx, userID)
+}
+
+// GetBook retrieves a book accessible by the shelf owner (used for shelf detail enrichment).
+func (s *ShelfService) GetBook(ctx context.Context, bookID, ownerID string) (*domain.Book, error) {
+	return s.store.GetBook(ctx, bookID, ownerID)
+}
+
+// CanUserAccessBook checks whether userID can see bookID.
+func (s *ShelfService) CanUserAccessBook(ctx context.Context, userID, bookID string) (bool, error) {
+	return s.store.CanUserAccessBook(ctx, userID, bookID)
+}
+
 // getOwnerInfo extracts display name and avatar color from a user.
 func (s *ShelfService) getOwnerInfo(user *domain.User) (displayName, avatarColor string) {
 	if user == nil {

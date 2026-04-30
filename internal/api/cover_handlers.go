@@ -173,7 +173,7 @@ func (s *Server) handleGetBookCover(ctx context.Context, input *GetBookCoverInpu
 		return nil, err
 	}
 
-	book, err := s.store.GetBook(ctx, input.ID, userID)
+	book, err := s.services.Cover.GetBook(ctx, input.ID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +203,7 @@ func (s *Server) handleDeleteBookCover(ctx context.Context, input *DeleteBookCov
 		return nil, err
 	}
 
-	book, err := s.store.GetBook(ctx, input.ID, userID)
+	book, err := s.services.Cover.GetBook(ctx, input.ID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +218,7 @@ func (s *Server) handleDeleteBookCover(ctx context.Context, input *DeleteBookCov
 	book.CoverImage = nil
 	book.Touch()
 
-	if err := s.store.UpdateBook(ctx, book); err != nil {
+	if err := s.services.Cover.UpdateBook(ctx, book); err != nil {
 		return nil, err
 	}
 
@@ -244,7 +244,7 @@ func (s *Server) handleServeCover(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	if canAccess, err := s.store.CanUserAccessBook(r.Context(), userID, id); err != nil || !canAccess {
+	if canAccess, err := s.services.Cover.CanUserAccessBook(r.Context(), userID, id); err != nil || !canAccess {
 		http.Error(w, "cover not found", http.StatusNotFound)
 		return
 	}
@@ -276,7 +276,7 @@ func (s *Server) handleServeCoverByBookID(w http.ResponseWriter, r *http.Request
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	if canAccess, err := s.store.CanUserAccessBook(r.Context(), userID, id); err != nil || !canAccess {
+	if canAccess, err := s.services.Cover.CanUserAccessBook(r.Context(), userID, id); err != nil || !canAccess {
 		http.Error(w, "cover not found", http.StatusNotFound)
 		return
 	}
@@ -323,7 +323,7 @@ func (s *Server) handleServeCoverBatch(w http.ResponseWriter, r *http.Request) {
 	// Filter to only books the user can access
 	accessibleIDs := make([]string, 0, len(ids))
 	for _, id := range ids {
-		if canAccess, err := s.store.CanUserAccessBook(r.Context(), userID, id); err == nil && canAccess {
+		if canAccess, err := s.services.Cover.CanUserAccessBook(r.Context(), userID, id); err == nil && canAccess {
 			accessibleIDs = append(accessibleIDs, id)
 		}
 	}

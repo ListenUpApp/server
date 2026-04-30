@@ -483,7 +483,7 @@ func (s *Server) handleGetProgress(ctx context.Context, input *GetProgressInput)
 	}
 
 	// Get book for total duration (no access check - if user has progress, they had access)
-	book, err := s.store.GetBookByID(ctx, input.ID)
+	book, err := s.services.Listening.GetBookByID(ctx, input.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -652,7 +652,7 @@ func (s *Server) handleGetAllProgress(ctx context.Context, input *GetAllProgress
 
 	slog.Info("fetching all state for sync", "user_id", userID, "updated_after", input.UpdatedAfter)
 
-	progressRecords, err := s.store.GetStateForUserUpdatedAfter(ctx, userID, updatedAfter)
+	progressRecords, err := s.services.Listening.GetStateForUserUpdatedAfter(ctx, userID, updatedAfter)
 	if err != nil {
 		slog.Error("get all progress failed", "error", err)
 		return nil, err
@@ -754,7 +754,7 @@ func (s *Server) handleGetBookStats(ctx context.Context, input *GetBookStatsInpu
 	}
 
 	// Verify user can access this book
-	if _, err := s.store.GetBook(ctx, input.ID, userID); err != nil {
+	if _, err := s.services.Listening.GetBook(ctx, input.ID, userID); err != nil {
 		return nil, err
 	}
 
@@ -782,9 +782,9 @@ func (s *Server) handleGetListeningEvents(ctx context.Context, input *GetListeni
 	var events []*domain.ListeningEvent
 	if input.Since > 0 {
 		since := time.UnixMilli(input.Since)
-		events, err = s.store.GetEventsForUserInRange(ctx, userID, since, time.Now().Add(time.Hour))
+		events, err = s.services.Listening.GetEventsForUserInRange(ctx, userID, since, time.Now().Add(time.Hour))
 	} else {
-		events, err = s.store.GetEventsForUser(ctx, userID)
+		events, err = s.services.Listening.GetEventsForUser(ctx, userID)
 	}
 	if err != nil {
 		return nil, err

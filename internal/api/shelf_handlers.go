@@ -251,7 +251,7 @@ func (s *Server) handleListMyShelves(ctx context.Context, _ *ListMyShelvesInput)
 	}
 
 	// Get owner info (the current user)
-	owner, err := s.store.GetUser(ctx, userID)
+	owner, err := s.services.Shelf.GetUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -277,7 +277,7 @@ func (s *Server) handleListDiscoverShelves(ctx context.Context, _ *DiscoverShelv
 
 	var users []UserShelvesResponse
 	for ownerID, ownerShelves := range shelvesByOwner {
-		owner, err := s.store.GetUser(ctx, ownerID)
+		owner, err := s.services.Shelf.GetUser(ctx, ownerID)
 		if err != nil {
 			// Skip users we can't find
 			continue
@@ -313,7 +313,7 @@ func (s *Server) handleCreateShelf(ctx context.Context, input *CreateShelfInput)
 		return nil, err
 	}
 
-	owner, err := s.store.GetUser(ctx, userID)
+	owner, err := s.services.Shelf.GetUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -332,7 +332,7 @@ func (s *Server) handleGetShelf(ctx context.Context, input *GetShelfInput) (*She
 		return nil, err
 	}
 
-	owner, err := s.store.GetUser(ctx, shelf.OwnerID)
+	owner, err := s.services.Shelf.GetUser(ctx, shelf.OwnerID)
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +343,7 @@ func (s *Server) handleGetShelf(ctx context.Context, input *GetShelfInput) (*She
 
 	for _, bookID := range shelf.BookIDs {
 		// Check if the requesting user can access this book
-		canAccess, err := s.store.CanUserAccessBook(ctx, userID, bookID)
+		canAccess, err := s.services.Shelf.CanUserAccessBook(ctx, userID, bookID)
 		if err != nil {
 			s.logger.Warn("failed to check book access for shelf",
 				"shelf_id", input.ID,
@@ -358,7 +358,7 @@ func (s *Server) handleGetShelf(ctx context.Context, input *GetShelfInput) (*She
 		}
 
 		// Get book details - use shelf owner's userID to fetch the book
-		book, err := s.store.GetBook(ctx, bookID, shelf.OwnerID)
+		book, err := s.services.Shelf.GetBook(ctx, bookID, shelf.OwnerID)
 		if err != nil {
 			s.logger.Warn("failed to get book for shelf",
 				"shelf_id", input.ID,
@@ -443,7 +443,7 @@ func (s *Server) handleUpdateShelf(ctx context.Context, input *UpdateShelfInput)
 		return nil, err
 	}
 
-	owner, err := s.store.GetUser(ctx, shelf.OwnerID)
+	owner, err := s.services.Shelf.GetUser(ctx, shelf.OwnerID)
 	if err != nil {
 		return nil, err
 	}
@@ -502,7 +502,7 @@ func (s *Server) mapShelfResponse(ctx context.Context, shelf *domain.Shelf, owne
 	accessibleBookCount := 0
 
 	for _, bookID := range shelf.BookIDs {
-		canAccess, err := s.store.CanUserAccessBook(ctx, requesterID, bookID)
+		canAccess, err := s.services.Shelf.CanUserAccessBook(ctx, requesterID, bookID)
 		if err != nil {
 			continue
 		}
@@ -511,7 +511,7 @@ func (s *Server) mapShelfResponse(ctx context.Context, shelf *domain.Shelf, owne
 		}
 
 		// Get book to get duration
-		book, err := s.store.GetBook(ctx, bookID, shelf.OwnerID)
+		book, err := s.services.Shelf.GetBook(ctx, bookID, shelf.OwnerID)
 		if err != nil {
 			continue
 		}
