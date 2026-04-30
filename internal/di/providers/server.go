@@ -150,8 +150,14 @@ func ProvideHTTPServer(i do.Injector) (*HTTPServerHandle, error) {
 	backupSvc := backup.NewBackupService(storeHandle.Store, backupDir, dataDir, "dev", log.Logger)
 	restoreSvc := backup.NewRestoreService(storeHandle.Store, dataDir, log.Logger)
 
+	indexerHandle := do.MustInvoke[*AsyncIndexerHandle](i)
+	fileWatcher := do.MustInvoke[*FileWatcherHandle](i)
+	sessionJob := do.MustInvoke[*SessionCleanupJob](i)
+	eventLogJob := do.MustInvoke[*EventLogCleanupJob](i)
+
 	enricher := dto.NewEnricher(storeHandle.Store)
 	handler := api.NewServer(storeHandle.Store, enricher, services, storage, sseHandler, sseHandle.Manager, registrationBroadcaster, backupSvc, restoreSvc, log.Logger)
+	handler.SetWorkers(indexerHandle.Indexer, fileWatcher, sessionJob, eventLogJob)
 
 	// Wire mDNS refresh callback for when instance settings change
 	mdnsHandle := do.MustInvoke[*MDNSServiceHandle](i)

@@ -16,6 +16,7 @@ import (
 	"github.com/listenupapp/listenup-server/internal/backup/abs"
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/dto"
+	"github.com/listenupapp/listenup-server/internal/search/asyncindexer"
 	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
@@ -39,12 +40,26 @@ type Server struct {
 	analysisTracker           *abs.AnalysisTracker
 	importJobs                *importJobManager
 	onInstanceUpdated         func(*domain.Instance)
+
+	// Workers and indexer for /health derived component checks.
+	indexer      *asyncindexer.Indexer
+	fileWatcher  lastTicker
+	sessionJob   lastTicker
+	eventLogJob  lastTicker
 }
 
 // SetOnInstanceUpdated registers a callback invoked when instance settings change.
 // Used to refresh mDNS advertisements.
 func (s *Server) SetOnInstanceUpdated(fn func(*domain.Instance)) {
 	s.onInstanceUpdated = fn
+}
+
+// SetWorkers wires the background worker handles used by /health component checks.
+func (s *Server) SetWorkers(indexer *asyncindexer.Indexer, fileWatcher, sessionJob, eventLogJob lastTicker) {
+	s.indexer = indexer
+	s.fileWatcher = fileWatcher
+	s.sessionJob = sessionJob
+	s.eventLogJob = eventLogJob
 }
 
 // NewServer creates a new HTTP server with all routes configured.

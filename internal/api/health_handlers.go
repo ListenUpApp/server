@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -15,6 +16,16 @@ const (
 	statusHealthy   = "healthy"
 	statusDegraded  = "degraded"
 	statusUnhealthy = "unhealthy"
+)
+
+// lastTicker is the minimal interface health checks need from background workers.
+type lastTicker interface {
+	LastTick() time.Time
+}
+
+const (
+	workerStaleThreshold = 5 * time.Minute
+	indexerHighDepth     = 50 // queue depth threshold for "high"
 )
 
 func (s *Server) registerHealthRoutes() {
@@ -73,6 +84,42 @@ func (s *Server) handleHealthCheck(ctx context.Context, _ *struct{}) (*HealthOut
 		overall = statusUnhealthy
 	} else if sseHealth.Status == statusDegraded && overall == statusHealthy {
 		overall = statusDegraded
+	}
+
+	// Async indexer.
+	indexerHealth := s.checkAsyncIndexer()
+	components["async_indexer"] = indexerHealth
+	if indexerHealth.Status == statusUnhealthy {
+		overall = statusUnhealthy
+	} else if indexerHealth.Status == statusDegraded && overall == statusHealthy {
+		overall = statusDegraded
+	}
+
+	// importJobs is a concrete typed pointer; convert to interface only when non-nil
+	// to avoid the "typed nil wrapped in non-nil interface" trap.
+	var importJobsTicker lastTicker
+	if s.importJobs != nil {
+		importJobsTicker = s.importJobs
+	}
+
+	// Background workers.
+	workerChecks := []struct {
+		name string
+		lt   lastTicker
+	}{
+		{"file_watcher", s.fileWatcher},
+		{"session_cleanup", s.sessionJob},
+		{"event_log_cleanup", s.eventLogJob},
+		{"import_jobs", importJobsTicker},
+	}
+	for _, w := range workerChecks {
+		h := s.checkWorker(w.name, w.lt)
+		components[w.name] = h
+		if h.Status == statusUnhealthy {
+			overall = statusUnhealthy
+		} else if h.Status == statusDegraded && overall == statusHealthy {
+			overall = statusDegraded
+		}
 	}
 
 	return &HealthOutput{
@@ -170,6 +217,55 @@ func (s *Server) checkSSEManager() ComponentHealth {
 	return ComponentHealth{
 		Status:  statusHealthy,
 		Message: formatSSEStatus(clientCount),
+	}
+}
+
+// checkAsyncIndexer reports the indexer's drop count and queue depth as health.
+func (s *Server) checkAsyncIndexer() ComponentHealth {
+	if s.indexer == nil {
+		return ComponentHealth{
+			Status:  statusDegraded,
+			Message: "async indexer not configured",
+		}
+	}
+	drops := s.indexer.Drops()
+	depth := s.indexer.QueueDepth()
+	if drops > 0 {
+		return ComponentHealth{
+			Status:  statusDegraded,
+			Message: fmt.Sprintf("%d index ops dropped (cumulative); queue at %d", drops, depth),
+		}
+	}
+	if depth > indexerHighDepth {
+		return ComponentHealth{
+			Status:  statusDegraded,
+			Message: fmt.Sprintf("queue depth %d (high)", depth),
+		}
+	}
+	return ComponentHealth{
+		Status:  statusHealthy,
+		Message: fmt.Sprintf("queue depth %d, no drops", depth),
+	}
+}
+
+// checkWorker reports a worker as degraded if it hasn't ticked recently.
+func (s *Server) checkWorker(name string, lt lastTicker) ComponentHealth {
+	if lt == nil {
+		return ComponentHealth{
+			Status:  statusDegraded,
+			Message: name + " not configured",
+		}
+	}
+	age := time.Since(lt.LastTick())
+	if age > workerStaleThreshold {
+		return ComponentHealth{
+			Status:  statusDegraded,
+			Message: fmt.Sprintf("last tick %s ago", age.Round(time.Second)),
+		}
+	}
+	return ComponentHealth{
+		Status:  statusHealthy,
+		Message: fmt.Sprintf("last tick %s ago", age.Round(time.Second)),
 	}
 }
 
