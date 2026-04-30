@@ -41,7 +41,7 @@ func (s *Server) handleCreateABSImport(ctx context.Context, input *CreateABSImpo
 		UpdatedAt:  now,
 	}
 
-	if err := s.store.CreateABSImport(ctx, imp); err != nil {
+	if err := s.services.ABSImport.CreateABSImport(ctx, imp); err != nil {
 		return nil, huma.Error500InternalServerError("failed to create import", err)
 	}
 
@@ -60,7 +60,7 @@ func (s *Server) handleListABSImports(ctx context.Context, _ *ListABSImportsInpu
 		return nil, err
 	}
 
-	imports, err := s.store.ListABSImports(ctx)
+	imports, err := s.services.ABSImport.ListABSImports(ctx)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("failed to list imports", err)
 	}
@@ -80,7 +80,7 @@ func (s *Server) handleGetABSImport(ctx context.Context, input *GetABSImportInpu
 		return nil, err
 	}
 
-	imp, err := s.store.GetABSImport(ctx, input.ID)
+	imp, err := s.services.ABSImport.GetABSImport(ctx, input.ID)
 	if err != nil {
 		return nil, huma.Error404NotFound("import not found")
 	}
@@ -96,7 +96,7 @@ func (s *Server) handleDeleteABSImport(ctx context.Context, input *DeleteABSImpo
 		return nil, err
 	}
 
-	if err := s.store.DeleteABSImport(ctx, input.ID); err != nil {
+	if err := s.services.ABSImport.DeleteABSImport(ctx, input.ID); err != nil {
 		return nil, huma.Error500InternalServerError("failed to delete import", err)
 	}
 
@@ -113,25 +113,25 @@ func (s *Server) handleDeleteABSImport(ctx context.Context, input *DeleteABSImpo
 // (users mapped, books mapped, sessions imported). Called after any mutation
 // to user/book mappings or session imports.
 func (s *Server) updateImportStats(ctx context.Context, importID string) {
-	imp, err := s.store.GetABSImport(ctx, importID)
+	imp, err := s.services.ABSImport.GetABSImport(ctx, importID)
 	if err != nil {
 		s.logger.Error("updateImportStats: failed to get import", slog.String("import_id", importID), slog.String("error", err.Error()))
 		return
 	}
 
-	users, err := s.store.ListABSImportUsers(ctx, importID, domain.MappingFilterAll)
+	users, err := s.services.ABSImport.ListABSImportUsers(ctx, importID, domain.MappingFilterAll)
 	if err != nil {
 		s.logger.Error("updateImportStats: failed to list users", slog.String("import_id", importID), slog.String("error", err.Error()))
 		return
 	}
 
-	books, err := s.store.ListABSImportBooks(ctx, importID, domain.MappingFilterAll)
+	books, err := s.services.ABSImport.ListABSImportBooks(ctx, importID, domain.MappingFilterAll)
 	if err != nil {
 		s.logger.Error("updateImportStats: failed to list books", slog.String("import_id", importID), slog.String("error", err.Error()))
 		return
 	}
 
-	sessions, err := s.store.ListABSImportSessions(ctx, importID, domain.SessionFilterImported)
+	sessions, err := s.services.ABSImport.ListABSImportSessions(ctx, importID, domain.SessionFilterImported)
 	if err != nil {
 		s.logger.Error("updateImportStats: failed to list sessions", slog.String("import_id", importID), slog.String("error", err.Error()))
 		return
@@ -155,7 +155,7 @@ func (s *Server) updateImportStats(ctx context.Context, importID string) {
 	imp.BooksMapped = booksMapped
 	imp.SessionsImported = len(sessions)
 
-	if err := s.store.UpdateABSImport(ctx, imp); err != nil {
+	if err := s.services.ABSImport.UpdateABSImport(ctx, imp); err != nil {
 		s.logger.Error("updateImportStats: failed to update import", slog.String("import_id", importID), slog.String("error", err.Error()))
 	}
 }

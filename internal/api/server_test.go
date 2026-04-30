@@ -85,14 +85,16 @@ func setupTestServer(t *testing.T) *testServer {
 	shelfService := service.NewShelfService(st, sseManager, logger)
 	inboxService := service.NewInboxService(st, enricher, sseManager, logger)
 	settingsService := service.NewSettingsService(st, inboxService, logger)
+	absImportService := service.NewABSImportService(st, logger)
 
 	services := &Services{
-		Instance: instanceService,
-		Auth:     authService,
-		Sync:     syncService,
-		Shelf:    shelfService,
-		Settings: settingsService,
-		Inbox:    inboxService,
+		Instance:  instanceService,
+		Auth:      authService,
+		Sync:      syncService,
+		Shelf:     shelfService,
+		Settings:  settingsService,
+		Inbox:     inboxService,
+		ABSImport: absImportService,
 	}
 
 	// Create chi router

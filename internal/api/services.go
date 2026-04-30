@@ -35,6 +35,7 @@ type Services struct {
 	Library        *service.LibraryService        // Library management
 	Contributor    *service.ContributorService    // Contributor CRUD + indexing
 	Series         *service.SeriesService         // Series CRUD + indexing
+	ABSImport      *service.ABSImportService      // Audiobookshelf import workflow
 }
 
 // StorageServices groups file storage handlers used by the API server.

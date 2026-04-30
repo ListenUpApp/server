@@ -24,14 +24,14 @@ func (s *Server) handleListABSImportSessions(ctx context.Context, input *ListABS
 		filter = domain.SessionFilterAll
 	}
 
-	sessions, err := s.store.ListABSImportSessions(ctx, input.ID, filter)
+	sessions, err := s.services.ABSImport.ListABSImportSessions(ctx, input.ID, filter)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("failed to list sessions", err)
 	}
 
 	// Also get all sessions for summary - if this fails, we still return filtered results
 	// but with empty summary (better than hiding the error completely)
-	allSessions, err := s.store.ListABSImportSessions(ctx, input.ID, domain.SessionFilterAll)
+	allSessions, err := s.services.ABSImport.ListABSImportSessions(ctx, input.ID, domain.SessionFilterAll)
 	if err != nil {
 		s.logger.Error("failed to get all sessions for summary", slog.String("error", err.Error()))
 		// Continue with empty allSessions - summary will be zeros
@@ -71,7 +71,7 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 	start := time.Now()
 
 	// Get ready sessions
-	readySessions, err := s.store.ListABSImportSessions(ctx, input.ID, domain.SessionFilterReady)
+	readySessions, err := s.services.ABSImport.ListABSImportSessions(ctx, input.ID, domain.SessionFilterReady)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("failed to get sessions", err)
 	}
@@ -103,11 +103,11 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 	}
 
 	// Get all user and book mappings - these MUST succeed or import will silently fail
-	users, err := s.store.ListABSImportUsers(ctx, input.ID, domain.MappingFilterMapped)
+	users, err := s.services.ABSImport.ListABSImportUsers(ctx, input.ID, domain.MappingFilterMapped)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("failed to load user mappings", err)
 	}
-	books, err := s.store.ListABSImportBooks(ctx, input.ID, domain.MappingFilterMapped)
+	books, err := s.services.ABSImport.ListABSImportBooks(ctx, input.ID, domain.MappingFilterMapped)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("failed to load book mappings", err)
 	}
@@ -203,7 +203,7 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 			CreatedAt:       time.Now(),
 		}
 
-		if err := s.store.CreateListeningEvent(ctx, event); err != nil {
+		if err := s.services.ABSImport.CreateListeningEvent(ctx, event); err != nil {
 			s.logger.Error("failed to create listening event",
 				slog.String("session_id", sess.ABSSessionID),
 				slog.String("error", err.Error()))
@@ -221,7 +221,7 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 
 		// Mark session as imported - if this fails, the event was still created
 		// so we count it as imported but log the status update failure
-		if err := s.store.UpdateABSImportSessionStatus(ctx, input.ID, sess.ABSSessionID, domain.SessionStatusImported); err != nil {
+		if err := s.services.ABSImport.UpdateABSImportSessionStatus(ctx, input.ID, sess.ABSSessionID, domain.SessionStatusImported); err != nil {
 			s.logger.Error("failed to mark session imported (event was created)",
 				slog.String("session_id", sess.ABSSessionID),
 				slog.String("error", err.Error()))
@@ -279,7 +279,7 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 		listenUpUserID := *u.ListenUpID
 
 		// Get all MediaProgress entries stored for this user
-		allProgress, err := s.store.ListABSImportProgressForUser(ctx, input.ID, u.ABSUserID)
+		allProgress, err := s.services.ABSImport.ListABSImportProgressForUser(ctx, input.ID, u.ABSUserID)
 		if err != nil {
 			s.logger.Warn("failed to list ABS progress for user",
 				slog.String("abs_user_id", u.ABSUserID),
@@ -302,7 +302,7 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 
 			// Find the matching book - first try direct lookup, then try via bookMap
 			var listenUpBookID string
-			absBook, err := s.store.GetABSImportBook(ctx, input.ID, absProgress.ABSMediaID)
+			absBook, err := s.services.ABSImport.GetABSImportBook(ctx, input.ID, absProgress.ABSMediaID)
 			if err == nil && absBook != nil && absBook.ListenUpID != nil {
 				listenUpBookID = *absBook.ListenUpID
 				s.logger.Debug("found book via direct lookup",
@@ -342,10 +342,10 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 			}
 
 			// Only create if no existing state
-			existingProgress, _ := s.store.GetState(ctx, listenUpUserID, listenUpBookID)
+			existingProgress, _ := s.services.ABSImport.GetState(ctx, listenUpUserID, listenUpBookID)
 			if existingProgress != nil {
 				// Get book duration for logging
-				existingBook, _ := s.store.GetBookByID(ctx, listenUpBookID)
+				existingBook, _ := s.services.ABSImport.GetBookByID(ctx, listenUpBookID)
 				existingDuration := int64(0)
 				if existingBook != nil {
 					existingDuration = existingBook.TotalDuration
@@ -360,7 +360,7 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 			}
 
 			// Get book duration from ListenUp
-			book, err := s.store.GetBookByID(ctx, listenUpBookID)
+			book, err := s.services.ABSImport.GetBookByID(ctx, listenUpBookID)
 			if err != nil || book == nil {
 				continue
 			}
@@ -386,7 +386,7 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 				progress.FinishedAt = absProgress.FinishedAt
 			}
 
-			if err := s.store.UpsertState(ctx, progress); err != nil {
+			if err := s.services.ABSImport.UpsertState(ctx, progress); err != nil {
 				s.logger.Warn("failed to create state from MediaProgress",
 					slog.String("user_id", listenUpUserID),
 					slog.String("book_id", listenUpBookID),
@@ -420,7 +420,7 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 		listenUpUserID := *u.ListenUpID
 
 		// Get all MediaProgress entries stored for this user
-		allProgress, err := s.store.ListABSImportProgressForUser(ctx, input.ID, u.ABSUserID)
+		allProgress, err := s.services.ABSImport.ListABSImportProgressForUser(ctx, input.ID, u.ABSUserID)
 		if err != nil {
 			continue
 		}
@@ -428,7 +428,7 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 		for _, absProgress := range allProgress {
 			// Find the ListenUp book ID
 			var listenUpBookID string
-			absBook, err := s.store.GetABSImportBook(ctx, input.ID, absProgress.ABSMediaID)
+			absBook, err := s.services.ABSImport.GetABSImportBook(ctx, input.ID, absProgress.ABSMediaID)
 			if err == nil && absBook != nil && absBook.ListenUpID != nil {
 				listenUpBookID = *absBook.ListenUpID
 			} else if bookID, ok := bookMap[absProgress.ABSMediaID]; ok {
@@ -438,7 +438,7 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 			}
 
 			// Check if user already has a session for this book
-			existingSessions, err := s.store.GetUserBookSessions(ctx, listenUpUserID, listenUpBookID)
+			existingSessions, err := s.services.ABSImport.GetUserBookSessions(ctx, listenUpUserID, listenUpBookID)
 			if err == nil && len(existingSessions) > 0 {
 				readingSessionsSkipped++
 				continue // Already has a reading session
@@ -491,7 +491,7 @@ func (s *Server) handleImportABSSessions(ctx context.Context, input *ImportABSSe
 			}
 
 			// Store the session
-			if err := s.store.CreateReadingSession(ctx, session); err != nil {
+			if err := s.services.ABSImport.CreateReadingSession(ctx, session); err != nil {
 				s.logger.Warn("failed to create reading session",
 					slog.String("session_id", sessionID),
 					slog.String("user_id", listenUpUserID),
@@ -554,11 +554,11 @@ func (s *Server) handleSkipABSSession(ctx context.Context, input *SkipABSSession
 		reason = "Skipped by admin"
 	}
 
-	if err := s.store.SkipABSImportSession(ctx, input.ID, input.SessionID, reason); err != nil {
+	if err := s.services.ABSImport.SkipABSImportSession(ctx, input.ID, input.SessionID, reason); err != nil {
 		return nil, huma.Error500InternalServerError("failed to skip session", err)
 	}
 
-	sess, err := s.store.GetABSImportSession(ctx, input.ID, input.SessionID)
+	sess, err := s.services.ABSImport.GetABSImportSession(ctx, input.ID, input.SessionID)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("failed to get session", err)
 	}
@@ -596,7 +596,7 @@ func toABSImportSessionResponse(s *domain.ABSImportSession) ABSImportSessionResp
 // Returns (absProgressMatched, error) where absProgressMatched indicates if ABS progress was found.
 func (s *Server) rebuildProgressFromEvents(ctx context.Context, importID, userID, bookID, absUserID, _ string) (absProgressMatched bool, err error) {
 	// Get all events for this user+book
-	events, err := s.store.GetEventsForUserBook(ctx, userID, bookID)
+	events, err := s.services.ABSImport.GetEventsForUserBook(ctx, userID, bookID)
 	if err != nil {
 		return false, fmt.Errorf("get events: %w", err)
 	}
@@ -622,7 +622,7 @@ func (s *Server) rebuildProgressFromEvents(ctx context.Context, importID, userID
 	}
 
 	// Get book duration from ListenUp
-	book, err := s.store.GetBookByID(ctx, bookID)
+	book, err := s.services.ABSImport.GetBookByID(ctx, bookID)
 	if err != nil {
 		return false, fmt.Errorf("get book: %w", err)
 	}
@@ -674,7 +674,7 @@ func (s *Server) rebuildProgressFromEvents(ctx context.Context, importID, userID
 	}
 
 	// Get existing state or create new
-	existingProgress, err := s.store.GetState(ctx, userID, bookID)
+	existingProgress, err := s.services.ABSImport.GetState(ctx, userID, bookID)
 	if err != nil && !errors.Is(err, store.ErrProgressNotFound) {
 		// Real error, not just "not found"
 		return false, fmt.Errorf("get state: %w", err)
@@ -739,7 +739,7 @@ func (s *Server) rebuildProgressFromEvents(ctx context.Context, importID, userID
 		slog.Bool("progress_is_finished", progress.IsFinished),
 		slog.Float64("progress_pct", progress.ComputeProgress(bookDurationMs)*100))
 	if !progress.IsFinished && importID != "" && absUserID != "" {
-		absProgress, err := s.store.FindABSImportProgressByListenUpBook(ctx, importID, absUserID, bookID)
+		absProgress, err := s.services.ABSImport.FindABSImportProgressByListenUpBook(ctx, importID, absUserID, bookID)
 		// gocritic: ifElseChain — switching on three different conditions
 		// (err, absProgress nil, absProgress.IsFinished) doesn't translate
 		// cleanly to a switch; the chain reads sequentially.
@@ -785,12 +785,12 @@ func (s *Server) rebuildProgressFromEvents(ctx context.Context, importID, userID
 		return absProgressMatched, nil
 	}
 
-	if err := s.store.UpsertState(ctx, progress); err != nil {
+	if err := s.services.ABSImport.UpsertState(ctx, progress); err != nil {
 		return absProgressMatched, fmt.Errorf("upsert state: %w", err)
 	}
 
 	// VERIFY: Read back what was actually saved to confirm IsFinished persisted
-	savedProgress, verifyErr := s.store.GetState(ctx, userID, bookID)
+	savedProgress, verifyErr := s.services.ABSImport.GetState(ctx, userID, bookID)
 	if verifyErr != nil {
 		s.logger.Error("VERIFY FAILED: could not read back saved progress",
 			slog.String("user_id", userID),

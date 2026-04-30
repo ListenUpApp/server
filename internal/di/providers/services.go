@@ -268,3 +268,11 @@ func ProvideSeriesService(i do.Injector) (*service.SeriesService, error) {
 
 	return service.NewSeriesService(storeHandle.Store, indexerHandle.Indexer, log.Logger), nil
 }
+
+// ProvideABSImportService provides the ABS import service.
+func ProvideABSImportService(i do.Injector) (*service.ABSImportService, error) {
+	storeHandle := do.MustInvoke[*StoreHandle](i)
+	log := do.MustInvoke[*logger.Logger](i)
+
+	return service.NewABSImportService(storeHandle.Store, log.Logger), nil
+}

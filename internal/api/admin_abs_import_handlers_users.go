@@ -19,7 +19,7 @@ func (s *Server) handleListABSImportUsers(ctx context.Context, input *ListABSImp
 		filter = domain.MappingFilterAll
 	}
 
-	users, err := s.store.ListABSImportUsers(ctx, input.ID, filter)
+	users, err := s.services.ABSImport.ListABSImportUsers(ctx, input.ID, filter)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("failed to list users", err)
 	}
@@ -44,7 +44,7 @@ func (s *Server) handleMapABSImportUser(ctx context.Context, input *MapABSImport
 	}
 
 	// Verify ListenUp user exists
-	luUser, err := s.store.GetUser(ctx, input.Body.ListenUpID)
+	luUser, err := s.services.ABSImport.GetUser(ctx, input.Body.ListenUpID)
 	if err != nil {
 		return nil, huma.Error400BadRequest("ListenUp user not found")
 	}
@@ -58,19 +58,19 @@ func (s *Server) handleMapABSImportUser(ctx context.Context, input *MapABSImport
 		luDisplayName = &luUser.DisplayName
 	}
 
-	if err := s.store.UpdateABSImportUserMapping(ctx, input.ID, input.ABSUserID, &input.Body.ListenUpID, luEmail, luDisplayName); err != nil {
+	if err := s.services.ABSImport.UpdateABSImportUserMapping(ctx, input.ID, input.ABSUserID, &input.Body.ListenUpID, luEmail, luDisplayName); err != nil {
 		return nil, huma.Error500InternalServerError("failed to update mapping", err)
 	}
 
 	// Recalculate session statuses
-	if err := s.store.RecalculateSessionStatusesForUser(ctx, input.ID, input.ABSUserID); err != nil {
+	if err := s.services.ABSImport.RecalculateSessionStatusesForUser(ctx, input.ID, input.ABSUserID); err != nil {
 		s.logger.Error("failed to recalculate sessions", slog.String("error", err.Error()))
 	}
 
 	// Update import stats
 	s.updateImportStats(ctx, input.ID)
 
-	user, err := s.store.GetABSImportUser(ctx, input.ID, input.ABSUserID)
+	user, err := s.services.ABSImport.GetABSImportUser(ctx, input.ID, input.ABSUserID)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("failed to get user", err)
 	}
@@ -86,19 +86,19 @@ func (s *Server) handleClearABSImportUserMapping(ctx context.Context, input *Cle
 		return nil, err
 	}
 
-	if err := s.store.UpdateABSImportUserMapping(ctx, input.ID, input.ABSUserID, nil, nil, nil); err != nil {
+	if err := s.services.ABSImport.UpdateABSImportUserMapping(ctx, input.ID, input.ABSUserID, nil, nil, nil); err != nil {
 		return nil, huma.Error500InternalServerError("failed to clear mapping", err)
 	}
 
 	// Recalculate session statuses
-	if err := s.store.RecalculateSessionStatusesForUser(ctx, input.ID, input.ABSUserID); err != nil {
+	if err := s.services.ABSImport.RecalculateSessionStatusesForUser(ctx, input.ID, input.ABSUserID); err != nil {
 		s.logger.Error("failed to recalculate sessions", slog.String("error", err.Error()))
 	}
 
 	// Update import stats
 	s.updateImportStats(ctx, input.ID)
 
-	user, err := s.store.GetABSImportUser(ctx, input.ID, input.ABSUserID)
+	user, err := s.services.ABSImport.GetABSImportUser(ctx, input.ID, input.ABSUserID)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("failed to get user", err)
 	}

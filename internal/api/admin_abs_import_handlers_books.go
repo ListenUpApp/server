@@ -19,7 +19,7 @@ func (s *Server) handleListABSImportBooks(ctx context.Context, input *ListABSImp
 		filter = domain.MappingFilterAll
 	}
 
-	books, err := s.store.ListABSImportBooks(ctx, input.ID, filter)
+	books, err := s.services.ABSImport.ListABSImportBooks(ctx, input.ID, filter)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("failed to list books", err)
 	}
@@ -44,7 +44,7 @@ func (s *Server) handleMapABSImportBook(ctx context.Context, input *MapABSImport
 	}
 
 	// Verify ListenUp book exists (pass empty userID for admin access)
-	luBook, err := s.store.GetBook(ctx, input.Body.ListenUpID, "")
+	luBook, err := s.services.ABSImport.GetBook(ctx, input.Body.ListenUpID, "")
 	if err != nil {
 		return nil, huma.Error400BadRequest("ListenUp book not found")
 	}
@@ -56,19 +56,19 @@ func (s *Server) handleMapABSImportBook(ctx context.Context, input *MapABSImport
 	}
 	luAuthor := (*string)(nil) // Contributors are separate entities; author display TBD
 
-	if err := s.store.UpdateABSImportBookMapping(ctx, input.ID, input.ABSMediaID, &input.Body.ListenUpID, luTitle, luAuthor); err != nil {
+	if err := s.services.ABSImport.UpdateABSImportBookMapping(ctx, input.ID, input.ABSMediaID, &input.Body.ListenUpID, luTitle, luAuthor); err != nil {
 		return nil, huma.Error500InternalServerError("failed to update mapping", err)
 	}
 
 	// Recalculate session statuses
-	if err := s.store.RecalculateSessionStatusesForBook(ctx, input.ID, input.ABSMediaID); err != nil {
+	if err := s.services.ABSImport.RecalculateSessionStatusesForBook(ctx, input.ID, input.ABSMediaID); err != nil {
 		s.logger.Error("failed to recalculate sessions", slog.String("error", err.Error()))
 	}
 
 	// Update import stats
 	s.updateImportStats(ctx, input.ID)
 
-	book, err := s.store.GetABSImportBook(ctx, input.ID, input.ABSMediaID)
+	book, err := s.services.ABSImport.GetABSImportBook(ctx, input.ID, input.ABSMediaID)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("failed to get book", err)
 	}
@@ -84,19 +84,19 @@ func (s *Server) handleClearABSImportBookMapping(ctx context.Context, input *Cle
 		return nil, err
 	}
 
-	if err := s.store.UpdateABSImportBookMapping(ctx, input.ID, input.ABSMediaID, nil, nil, nil); err != nil {
+	if err := s.services.ABSImport.UpdateABSImportBookMapping(ctx, input.ID, input.ABSMediaID, nil, nil, nil); err != nil {
 		return nil, huma.Error500InternalServerError("failed to clear mapping", err)
 	}
 
 	// Recalculate session statuses
-	if err := s.store.RecalculateSessionStatusesForBook(ctx, input.ID, input.ABSMediaID); err != nil {
+	if err := s.services.ABSImport.RecalculateSessionStatusesForBook(ctx, input.ID, input.ABSMediaID); err != nil {
 		s.logger.Error("failed to recalculate sessions", slog.String("error", err.Error()))
 	}
 
 	// Update import stats
 	s.updateImportStats(ctx, input.ID)
 
-	book, err := s.store.GetABSImportBook(ctx, input.ID, input.ABSMediaID)
+	book, err := s.services.ABSImport.GetABSImportBook(ctx, input.ID, input.ABSMediaID)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("failed to get book", err)
 	}
