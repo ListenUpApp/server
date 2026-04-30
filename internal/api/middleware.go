@@ -46,6 +46,11 @@ func StructuredLogger(logger *slog.Logger) func(next http.Handler) http.Handler 
 				slog.Int("bytes", ww.ww.BytesWritten()),
 			}
 
+			// Include user_id when the request is authenticated.
+			if userID, err := GetUserID(r.Context()); err == nil && userID != "" {
+				attrs = append(attrs, slog.String("user_id", userID))
+			}
+
 			// Add query string if present (but not for sensitive endpoints)
 			if r.URL.RawQuery != "" && !isSensitivePath(r.URL.Path) {
 				attrs = append(attrs, slog.String("query", r.URL.RawQuery))
