@@ -74,6 +74,8 @@ func NewContainer() *do.RootScope {
 	do.Provide(injector, providers.ProvideSettingsService)
 	do.Provide(injector, providers.ProvideAdminService)
 	do.Provide(injector, providers.ProvideLibraryService)
+	do.Provide(injector, providers.ProvideContributorService)
+	do.Provide(injector, providers.ProvideSeriesService)
 
 	// Workers
 	do.Provide(injector, providers.ProvideTranscodeService)
@@ -163,6 +165,8 @@ func Bootstrap(injector *do.RootScope) error {
 		func(i *do.RootScope) { _ = do.MustInvoke[*service.InviteService](i) },
 		func(i *do.RootScope) { _ = do.MustInvoke[*service.ShelfService](i) },
 		func(i *do.RootScope) { _ = do.MustInvoke[*service.AdminService](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*service.ContributorService](i) },
+		func(i *do.RootScope) { _ = do.MustInvoke[*service.SeriesService](i) },
 
 		// Background workers (each starts goroutines on construction)
 		func(i *do.RootScope) { _ = do.MustInvoke[*providers.TranscodeServiceHandle](i) },

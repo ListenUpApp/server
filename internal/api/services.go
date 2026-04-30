@@ -33,6 +33,8 @@ type Services struct {
 	Activity       *service.ActivityService       // Activity feed
 	Profile        *service.ProfileService        // User profiles
 	Library        *service.LibraryService        // Library management
+	Contributor    *service.ContributorService    // Contributor CRUD + indexing
+	Series         *service.SeriesService         // Series CRUD + indexing
 }
 
 // StorageServices groups file storage handlers used by the API server.

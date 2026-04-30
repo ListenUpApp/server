@@ -207,7 +207,7 @@ func (s *Server) handleListSeries(ctx context.Context, input *ListSeriesInput) (
 		limit = 50
 	}
 
-	result, err := s.store.ListSeries(ctx, store.PaginationParams{
+	result, err := s.services.Series.ListSeries(ctx, store.PaginationParams{
 		Cursor: input.Cursor,
 		Limit:  limit,
 	})
@@ -216,14 +216,14 @@ func (s *Server) handleListSeries(ctx context.Context, input *ListSeriesInput) (
 	}
 
 	// Filter series by user's accessible books
-	accessibleBookIDs, err := s.store.GetAccessibleBookIDSet(ctx, userID)
+	accessibleBookIDs, err := s.services.Series.GetAccessibleBookIDSet(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 
 	var filtered []*domain.Series
 	for _, ser := range result.Items {
-		bookIDs, err := s.store.GetBookIDsBySeries(ctx, ser.ID)
+		bookIDs, err := s.services.Series.GetBookIDsBySeries(ctx, ser.ID)
 		if err != nil {
 			continue
 		}
@@ -268,7 +268,7 @@ func (s *Server) handleCreateSeries(ctx context.Context, input *CreateSeriesInpu
 		ASIN:        input.Body.ASIN,
 	}
 
-	if err := s.store.CreateSeries(ctx, series); err != nil {
+	if err := s.services.Series.CreateSeries(ctx, series); err != nil {
 		return nil, err
 	}
 
@@ -281,17 +281,17 @@ func (s *Server) handleGetSeries(ctx context.Context, input *GetSeriesInput) (*S
 		return nil, err
 	}
 
-	series, err := s.store.GetSeries(ctx, input.ID)
+	series, err := s.services.Series.GetSeries(ctx, input.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	// Verify user has access to at least one book in this series
-	accessibleBookIDs, err := s.store.GetAccessibleBookIDSet(ctx, userID)
+	accessibleBookIDs, err := s.services.Series.GetAccessibleBookIDSet(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	bookIDs, err := s.store.GetBookIDsBySeries(ctx, input.ID)
+	bookIDs, err := s.services.Series.GetBookIDsBySeries(ctx, input.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -314,7 +314,7 @@ func (s *Server) handleUpdateSeries(ctx context.Context, input *UpdateSeriesInpu
 		return nil, err
 	}
 
-	series, err := s.store.GetSeries(ctx, input.ID)
+	series, err := s.services.Series.GetSeries(ctx, input.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -331,7 +331,7 @@ func (s *Server) handleUpdateSeries(ctx context.Context, input *UpdateSeriesInpu
 	}
 	series.UpdatedAt = time.Now()
 
-	if err := s.store.UpdateSeries(ctx, series); err != nil {
+	if err := s.services.Series.UpdateSeries(ctx, series); err != nil {
 		return nil, err
 	}
 
@@ -343,7 +343,7 @@ func (s *Server) handleDeleteSeries(ctx context.Context, input *DeleteSeriesInpu
 		return nil, err
 	}
 
-	if err := s.store.DeleteSeries(ctx, input.ID); err != nil {
+	if err := s.services.Series.DeleteSeries(ctx, input.ID); err != nil {
 		return nil, err
 	}
 
@@ -356,12 +356,12 @@ func (s *Server) handleGetSeriesBooks(ctx context.Context, input *GetSeriesBooks
 		return nil, err
 	}
 
-	books, err := s.store.GetBooksBySeries(ctx, input.ID)
+	books, err := s.services.Series.GetBooksBySeries(ctx, input.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	accessible, err := s.store.GetAccessibleBookIDSet(ctx, userID)
+	accessible, err := s.services.Series.GetAccessibleBookIDSet(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -401,7 +401,7 @@ func (s *Server) handleMergeSeries(ctx context.Context, input *MergeSeriesInput)
 		return nil, huma.Error400BadRequest("source and target series must be different")
 	}
 
-	target, err := s.store.MergeSeries(ctx, input.Body.SourceID, input.Body.TargetID)
+	target, err := s.services.Series.MergeSeries(ctx, input.Body.SourceID, input.Body.TargetID)
 	if err != nil {
 		return nil, err
 	}

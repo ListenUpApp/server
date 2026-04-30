@@ -316,7 +316,7 @@ func (s *Server) handleListContributors(ctx context.Context, input *ListContribu
 		limit = 50
 	}
 
-	result, err := s.store.ListContributors(ctx, store.PaginationParams{
+	result, err := s.services.Contributor.ListContributors(ctx, store.PaginationParams{
 		Cursor: input.Cursor,
 		Limit:  limit,
 	})
@@ -325,14 +325,14 @@ func (s *Server) handleListContributors(ctx context.Context, input *ListContribu
 	}
 
 	// Filter contributors by user's accessible books
-	accessibleBookIDs, err := s.store.GetAccessibleBookIDSet(ctx, userID)
+	accessibleBookIDs, err := s.services.Contributor.GetAccessibleBookIDSet(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 
 	var filtered []*domain.Contributor
 	for _, c := range result.Items {
-		bookIDs, err := s.store.GetBookIDsByContributor(ctx, c.ID)
+		bookIDs, err := s.services.Contributor.GetBookIDsByContributor(ctx, c.ID)
 		if err != nil {
 			continue
 		}
@@ -380,7 +380,7 @@ func (s *Server) handleCreateContributor(ctx context.Context, input *CreateContr
 		ASIN:      input.Body.AudibleASIN,
 	}
 
-	if err := s.store.CreateContributor(ctx, c); err != nil {
+	if err := s.services.Contributor.CreateContributor(ctx, c); err != nil {
 		return nil, err
 	}
 
@@ -393,17 +393,17 @@ func (s *Server) handleGetContributor(ctx context.Context, input *GetContributor
 		return nil, err
 	}
 
-	c, err := s.store.GetContributor(ctx, input.ID)
+	c, err := s.services.Contributor.GetContributor(ctx, input.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	// Verify user has access to at least one of this contributor's books
-	accessibleBookIDs, err := s.store.GetAccessibleBookIDSet(ctx, userID)
+	accessibleBookIDs, err := s.services.Contributor.GetAccessibleBookIDSet(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	bookIDs, err := s.store.GetBookIDsByContributor(ctx, c.ID)
+	bookIDs, err := s.services.Contributor.GetBookIDsByContributor(ctx, c.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -426,7 +426,7 @@ func (s *Server) handleUpdateContributor(ctx context.Context, input *UpdateContr
 		return nil, err
 	}
 
-	c, err := s.store.GetContributor(ctx, input.ID)
+	c, err := s.services.Contributor.GetContributor(ctx, input.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -451,7 +451,7 @@ func (s *Server) handleUpdateContributor(ctx context.Context, input *UpdateContr
 		c.ASIN = *input.Body.AudibleASIN
 	}
 
-	if err := s.store.UpdateContributor(ctx, c); err != nil {
+	if err := s.services.Contributor.UpdateContributor(ctx, c); err != nil {
 		return nil, err
 	}
 
@@ -463,7 +463,7 @@ func (s *Server) handleDeleteContributor(ctx context.Context, input *DeleteContr
 		return nil, err
 	}
 
-	if err := s.store.DeleteContributor(ctx, input.ID); err != nil {
+	if err := s.services.Contributor.DeleteContributor(ctx, input.ID); err != nil {
 		return nil, err
 	}
 
@@ -476,12 +476,12 @@ func (s *Server) handleGetContributorBooks(ctx context.Context, input *GetContri
 		return nil, err
 	}
 
-	books, err := s.store.GetBooksByContributor(ctx, input.ID)
+	books, err := s.services.Contributor.GetBooksByContributor(ctx, input.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	accessible, err := s.store.GetAccessibleBookIDSet(ctx, userID)
+	accessible, err := s.services.Contributor.GetAccessibleBookIDSet(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -520,7 +520,7 @@ func (s *Server) handleMergeContributors(ctx context.Context, input *MergeContri
 		return nil, err
 	}
 
-	c, err := s.store.MergeContributors(ctx, input.Body.SourceID, input.Body.TargetID)
+	c, err := s.services.Contributor.MergeContributors(ctx, input.Body.SourceID, input.Body.TargetID)
 	if err != nil {
 		return nil, err
 	}
@@ -533,7 +533,7 @@ func (s *Server) handleUnmergeContributor(ctx context.Context, input *UnmergeCon
 		return nil, err
 	}
 
-	c, err := s.store.UnmergeContributor(ctx, input.Body.SourceID, input.Body.AliasName)
+	c, err := s.services.Contributor.UnmergeContributor(ctx, input.Body.SourceID, input.Body.AliasName)
 	if err != nil {
 		return nil, err
 	}
@@ -593,7 +593,7 @@ func (s *Server) handleApplyContributorMetadata(ctx context.Context, input *Appl
 	}
 
 	// Get existing contributor
-	contributor, err := s.store.GetContributor(ctx, input.ID)
+	contributor, err := s.services.Contributor.GetContributor(ctx, input.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -648,7 +648,7 @@ func (s *Server) handleApplyContributorMetadata(ctx context.Context, input *Appl
 
 	// Update contributor
 	contributor.UpdatedAt = time.Now()
-	if err := s.store.UpdateContributor(ctx, contributor); err != nil {
+	if err := s.services.Contributor.UpdateContributor(ctx, contributor); err != nil {
 		return nil, err
 	}
 

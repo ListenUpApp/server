@@ -250,3 +250,21 @@ func ProvideLibraryService(i do.Injector) (*service.LibraryService, error) {
 
 	return service.NewLibraryService(storeHandle.Store, sseHandle.Manager, log.Logger), nil
 }
+
+// ProvideContributorService provides the contributor service.
+func ProvideContributorService(i do.Injector) (*service.ContributorService, error) {
+	storeHandle := do.MustInvoke[*StoreHandle](i)
+	indexerHandle := do.MustInvoke[*AsyncIndexerHandle](i)
+	log := do.MustInvoke[*logger.Logger](i)
+
+	return service.NewContributorService(storeHandle.Store, indexerHandle.Indexer, log.Logger), nil
+}
+
+// ProvideSeriesService provides the series service.
+func ProvideSeriesService(i do.Injector) (*service.SeriesService, error) {
+	storeHandle := do.MustInvoke[*StoreHandle](i)
+	indexerHandle := do.MustInvoke[*AsyncIndexerHandle](i)
+	log := do.MustInvoke[*logger.Logger](i)
+
+	return service.NewSeriesService(storeHandle.Store, indexerHandle.Indexer, log.Logger), nil
+}
