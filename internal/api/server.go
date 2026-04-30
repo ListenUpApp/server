@@ -3,6 +3,7 @@ package api
 
 import (
 	"context"
+	_ "expvar" // registers /debug/vars on http.DefaultServeMux
 	"log/slog"
 	"net/http"
 	"time"
@@ -80,6 +81,11 @@ func NewServer(
 	// Set up base middleware BEFORE huma (which registers OpenAPI routes).
 	// Auth middleware needs access to services, so we pass it here.
 	setupMiddleware(router, logger, services)
+
+	// Expose stdlib metrics published via expvar (drops counter, queue depth,
+	// worker last-tick timestamps). Public — same posture as /health.
+	// Must be mounted AFTER setupMiddleware so chi's middleware chain applies.
+	router.Mount("/debug/vars", http.DefaultServeMux)
 
 	// Configure huma API
 	config := huma.DefaultConfig("ListenUp API", "1.0.0")

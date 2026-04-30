@@ -86,6 +86,10 @@ func New(indexer store.SearchIndexer, logger *slog.Logger) *Indexer {
 		jobs:    make(chan Job, queueDepth),
 	}
 
+	// Seed lastTick so a freshly-started indexer with no jobs yet isn't
+	// reported as "stale" by /health.
+	atomic.StoreInt64(&i.lastTickUnix, time.Now().UnixNano())
+
 	publishOnce.Do(func() {
 		pinned := i
 		expvar.Publish("asyncindexer_queue_depth", expvar.Func(func() any {
@@ -206,7 +210,7 @@ func (a *Indexer) run() {
 			if !ok {
 				return
 			}
-			atomic.StoreInt64(&a.lastTickUnix, time.Now().Unix())
+			atomic.StoreInt64(&a.lastTickUnix, time.Now().UnixNano())
 			a.execute(job)
 		}
 	}
@@ -257,7 +261,7 @@ func (a *Indexer) execute(job Job) {
 // LastTick returns the wall-clock time of the most recently processed job.
 // Used by /health to surface worker liveness.
 func (a *Indexer) LastTick() time.Time {
-	return time.Unix(atomic.LoadInt64(&a.lastTickUnix), 0)
+	return time.Unix(0, atomic.LoadInt64(&a.lastTickUnix))
 }
 
 // Drops returns the cumulative number of jobs dropped due to a full queue.
