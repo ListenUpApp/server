@@ -14,6 +14,7 @@ import (
 )
 
 func TestLinuxBackend_FileCreation(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	opts := Options{
 		IgnoreHidden: true,
@@ -56,6 +57,7 @@ func TestLinuxBackend_FileCreation(t *testing.T) {
 }
 
 func TestLinuxBackend_FileDeletion(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	opts := Options{}
 	opts.setDefaults()
@@ -96,6 +98,7 @@ func TestLinuxBackend_FileDeletion(t *testing.T) {
 }
 
 func TestLinuxBackend_NewDirectoryWatching(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	opts := Options{}
 	opts.setDefaults()
@@ -138,6 +141,7 @@ func TestLinuxBackend_NewDirectoryWatching(t *testing.T) {
 }
 
 func TestLinuxBackend_IgnoreHidden(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	opts := Options{
 		IgnoreHidden: true,

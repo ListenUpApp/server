@@ -8,6 +8,7 @@ import (
 )
 
 func TestGrouper_Group_SingleFile(t *testing.T) {
+	t.Parallel()
 	// Single audio file in root should be its own audiobook.
 	files := []WalkResult{
 		{
@@ -41,6 +42,7 @@ func TestGrouper_Group_SingleFile(t *testing.T) {
 }
 
 func TestGrouper_Group_MultipleFilesInDirectory(t *testing.T) {
+	t.Parallel()
 	// Multiple audio files in same directory = one audiobook.
 	files := []WalkResult{
 		{
@@ -87,6 +89,7 @@ func TestGrouper_Group_MultipleFilesInDirectory(t *testing.T) {
 }
 
 func TestGrouper_Group_MultipleBooks(t *testing.T) {
+	t.Parallel()
 	// Multiple separate books should be in separate groups.
 	files := []WalkResult{
 		{
@@ -130,6 +133,7 @@ func TestGrouper_Group_MultipleBooks(t *testing.T) {
 }
 
 func TestGrouper_Group_MultiDisc(t *testing.T) {
+	t.Parallel()
 	// Multi-disc structure should be grouped together.
 	files := []WalkResult{
 		{
@@ -183,6 +187,7 @@ func TestGrouper_Group_MultiDisc(t *testing.T) {
 }
 
 func TestGrouper_Group_NestedAuthorBook(t *testing.T) {
+	t.Parallel()
 	// Author/Book nested structure.
 	files := []WalkResult{
 		{
@@ -232,6 +237,7 @@ func TestGrouper_Group_NestedAuthorBook(t *testing.T) {
 }
 
 func TestGrouper_Group_EmptyInput(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	grouper := NewGrouper(logger)
 
@@ -244,6 +250,7 @@ func TestGrouper_Group_EmptyInput(t *testing.T) {
 }
 
 func TestGrouper_Group_MixedDiscFormats(t *testing.T) {
+	t.Parallel()
 	// Test different disc naming conventions.
 	files := []WalkResult{
 		{
@@ -280,6 +287,7 @@ func TestGrouper_Group_MixedDiscFormats(t *testing.T) {
 }
 
 func TestGrouper_Group_IgnoresNonAudioFiles(t *testing.T) {
+	t.Parallel()
 	// Non-audio files should still be included in groups.
 	// (they might be cover art, metadata, etc.).
 	files := []WalkResult{

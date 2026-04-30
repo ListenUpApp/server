@@ -61,6 +61,7 @@ func TestScanner_Scan_EmptyDirectory(t *testing.T) {
 }
 
 func TestScanner_Scan_SingleAudiobook(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Create a simple audiobook.
@@ -106,6 +107,7 @@ func TestScanner_Scan_SingleAudiobook(t *testing.T) {
 }
 
 func TestScanner_Scan_MultipleAudiobooks(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Create multiple audiobooks.
@@ -160,6 +162,7 @@ func TestScanner_Scan_MultipleAudiobooks(t *testing.T) {
 }
 
 func TestScanner_Scan_ContextCancellation(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Create many files to increase chance of cancellation during processing.
@@ -204,6 +207,7 @@ func TestScanner_Scan_ContextCancellation(t *testing.T) {
 }
 
 func TestScanner_Scan_ProgressCallback(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Create a simple audiobook.
@@ -269,6 +273,7 @@ func TestScanner_Scan_ProgressCallback(t *testing.T) {
 }
 
 func TestScanner_Scan_NonexistentPath(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 
@@ -284,6 +289,7 @@ func TestScanner_Scan_NonexistentPath(t *testing.T) {
 }
 
 func TestScanner_Scan_DryRun(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Create a simple audiobook.
@@ -328,6 +334,7 @@ func TestScanner_Scan_DryRun(t *testing.T) {
 }
 
 func TestScanner_ScanFolder_EmptyFolder(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
@@ -357,6 +364,7 @@ func TestScanner_ScanFolder_EmptyFolder(t *testing.T) {
 }
 
 func TestScanner_ScanFolder_SingleM4B(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Copy test audio file.
@@ -405,6 +413,7 @@ func TestScanner_ScanFolder_SingleM4B(t *testing.T) {
 }
 
 func TestScanner_ScanFolder_MultipleMP3s(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	bookDir := filepath.Join(tmpDir, "My Audiobook")
@@ -457,6 +466,7 @@ func TestScanner_ScanFolder_MultipleMP3s(t *testing.T) {
 }
 
 func TestScanner_ScanFolder_WithCoverArt(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	bookDir := filepath.Join(tmpDir, "My Book")
@@ -519,6 +529,7 @@ func TestScanner_ScanFolder_WithCoverArt(t *testing.T) {
 }
 
 func TestScanner_ScanFolder_MultiDisc(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	bookDir := filepath.Join(tmpDir, "My Audiobook")
@@ -589,6 +600,7 @@ func TestScanner_ScanFolder_MultiDisc(t *testing.T) {
 }
 
 func TestScanner_ScanFolder_WithMetadata(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	bookDir := filepath.Join(tmpDir, "My Book")
@@ -665,6 +677,7 @@ func TestScanner_ScanFolder_WithMetadata(t *testing.T) {
 }
 
 func TestScanner_ScanFolder_NonexistentPath(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	scanner := NewScanner(nil, store.NewNoopEmitter(), nil, logger)
 
@@ -680,6 +693,7 @@ func TestScanner_ScanFolder_NonexistentPath(t *testing.T) {
 }
 
 func TestScanner_ScanFolder_ContextCancellation(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	bookDir := filepath.Join(tmpDir, "My Book")
@@ -721,6 +735,7 @@ func TestScanner_ScanFolder_ContextCancellation(t *testing.T) {
 }
 
 func TestScanner_ScanFolder_IgnoresHiddenFiles(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	bookDir := filepath.Join(tmpDir, "My Book")

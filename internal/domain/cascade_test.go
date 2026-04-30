@@ -40,9 +40,11 @@ func (m *mockCascadeUpdater) GetBookIDsBySeries(_ context.Context, _ string) ([]
 }
 
 func TestCascadeBookUpdate(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	t.Run("successfully touches book entity", func(t *testing.T) {
+		t.Parallel()
 		mock := &mockCascadeUpdater{}
 		bookID := "book-123"
 
@@ -55,6 +57,7 @@ func TestCascadeBookUpdate(t *testing.T) {
 	})
 
 	t.Run("returns error when TouchEntity fails", func(t *testing.T) {
+		t.Parallel()
 		expectedErr := errors.New("touch entity failed")
 		mock := &mockCascadeUpdater{
 			returnError: expectedErr,
@@ -68,6 +71,7 @@ func TestCascadeBookUpdate(t *testing.T) {
 	})
 
 	t.Run("handles empty book ID", func(t *testing.T) {
+		t.Parallel()
 		mock := &mockCascadeUpdater{}
 		bookID := ""
 
@@ -80,7 +84,9 @@ func TestCascadeBookUpdate(t *testing.T) {
 }
 
 func TestGetCurrentCheckpoint(t *testing.T) {
+	t.Parallel()
 	t.Run("returns zero time for empty book list", func(t *testing.T) {
+		t.Parallel()
 		books := []*Book{}
 
 		checkpoint := GetCurrentCheckpoint(books)
@@ -89,6 +95,7 @@ func TestGetCurrentCheckpoint(t *testing.T) {
 	})
 
 	t.Run("returns latest timestamp from single book", func(t *testing.T) {
+		t.Parallel()
 		now := time.Now()
 		books := []*Book{
 			{
@@ -105,6 +112,7 @@ func TestGetCurrentCheckpoint(t *testing.T) {
 	})
 
 	t.Run("returns latest timestamp from multiple books", func(t *testing.T) {
+		t.Parallel()
 		now := time.Now()
 		earlier := now.Add(-1 * time.Hour)
 		latest := now.Add(1 * time.Hour)
@@ -136,6 +144,7 @@ func TestGetCurrentCheckpoint(t *testing.T) {
 	})
 
 	t.Run("handles books with same timestamp", func(t *testing.T) {
+		t.Parallel()
 		now := time.Now()
 		books := []*Book{
 			{
@@ -158,6 +167,7 @@ func TestGetCurrentCheckpoint(t *testing.T) {
 	})
 
 	t.Run("handles nil book in list", func(t *testing.T) {
+		t.Parallel()
 		now := time.Now()
 		books := []*Book{
 			{

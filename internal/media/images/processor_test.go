@@ -18,7 +18,9 @@ import (
 )
 
 func TestProcessor_ExtractAndProcess(t *testing.T) {
+	t.Parallel()
 	t.Run("extracts and saves cover from M4B file", func(t *testing.T) {
+		t.Parallel()
 		// This test requires a real M4B file with embedded artwork.
 		// We'll skip if the test file doesn't exist.
 		testFile := findTestAudioFile(t)
@@ -51,6 +53,7 @@ func TestProcessor_ExtractAndProcess(t *testing.T) {
 	})
 
 	t.Run("returns empty hash for file without cover", func(t *testing.T) {
+		t.Parallel()
 		// Create a minimal M4B file without cover art.
 		testFile := createTestAudioFileWithoutCover(t)
 
@@ -67,6 +70,7 @@ func TestProcessor_ExtractAndProcess(t *testing.T) {
 	})
 
 	t.Run("returns error for non-existent file", func(t *testing.T) {
+		t.Parallel()
 		ctx := context.Background()
 		processor := setupTestProcessor(t)
 
@@ -77,6 +81,7 @@ func TestProcessor_ExtractAndProcess(t *testing.T) {
 	})
 
 	t.Run("returns error for invalid file", func(t *testing.T) {
+		t.Parallel()
 		// Create an invalid audio file.
 		tmpDir := t.TempDir()
 		invalidFile := filepath.Join(tmpDir, "invalid.m4b")
@@ -92,6 +97,7 @@ func TestProcessor_ExtractAndProcess(t *testing.T) {
 	})
 
 	t.Run("respects context cancellation", func(t *testing.T) {
+		t.Parallel()
 		testFile := findTestAudioFile(t)
 		if testFile == "" {
 			t.Skip("No test audio file available")
@@ -109,6 +115,7 @@ func TestProcessor_ExtractAndProcess(t *testing.T) {
 	})
 
 	t.Run("handles timeout context", func(t *testing.T) {
+		t.Parallel()
 		testFile := findTestAudioFile(t)
 		if testFile == "" {
 			t.Skip("No test audio file available")
@@ -127,7 +134,9 @@ func TestProcessor_ExtractAndProcess(t *testing.T) {
 }
 
 func TestProcessor_HashConsistency(t *testing.T) {
+	t.Parallel()
 	t.Run("same input produces same hash", func(t *testing.T) {
+		t.Parallel()
 		testFile := findTestAudioFile(t)
 		if testFile == "" {
 			t.Skip("No test audio file available")
@@ -150,7 +159,9 @@ func TestProcessor_HashConsistency(t *testing.T) {
 }
 
 func TestProcessor_ErrorHandling(t *testing.T) {
+	t.Parallel()
 	t.Run("handles corrupted image data gracefully", func(t *testing.T) {
+		t.Parallel()
 		// This would require creating an audio file with corrupted image data.
 		// For now, we'll test with an invalid file.
 		tmpDir := t.TempDir()
@@ -167,6 +178,7 @@ func TestProcessor_ErrorHandling(t *testing.T) {
 	})
 
 	t.Run("handles permission errors on storage", func(t *testing.T) {
+		t.Parallel()
 		// Create storage in a read-only directory.
 		tmpDir := t.TempDir()
 		readOnlyDir := filepath.Join(tmpDir, "readonly")

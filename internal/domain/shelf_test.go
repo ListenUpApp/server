@@ -8,6 +8,7 @@ import (
 )
 
 func TestShelf_AddBook_PrependsNewestFirst(t *testing.T) {
+	t.Parallel()
 	shelf := &Shelf{
 		ID:      "shelf-1",
 		OwnerID: "user-1",
@@ -22,6 +23,7 @@ func TestShelf_AddBook_PrependsNewestFirst(t *testing.T) {
 }
 
 func TestShelf_AddBook_UpdatesTimestamp(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	shelf := &Shelf{
 		ID:        "shelf-1",
@@ -36,6 +38,7 @@ func TestShelf_AddBook_UpdatesTimestamp(t *testing.T) {
 }
 
 func TestShelf_AddBook_IgnoresDuplicates(t *testing.T) {
+	t.Parallel()
 	shelf := &Shelf{
 		ID:      "shelf-1",
 		OwnerID: "user-1",
@@ -52,6 +55,7 @@ func TestShelf_AddBook_IgnoresDuplicates(t *testing.T) {
 }
 
 func TestShelf_AddBook_ToEmptyList(t *testing.T) {
+	t.Parallel()
 	shelf := &Shelf{
 		ID:      "shelf-1",
 		OwnerID: "user-1",
@@ -66,6 +70,7 @@ func TestShelf_AddBook_ToEmptyList(t *testing.T) {
 }
 
 func TestShelf_AddBook_ToNilList(t *testing.T) {
+	t.Parallel()
 	shelf := &Shelf{
 		ID:      "shelf-1",
 		OwnerID: "user-1",
@@ -80,6 +85,7 @@ func TestShelf_AddBook_ToNilList(t *testing.T) {
 }
 
 func TestShelf_RemoveBook_Works(t *testing.T) {
+	t.Parallel()
 	shelf := &Shelf{
 		ID:      "shelf-1",
 		OwnerID: "user-1",
@@ -94,6 +100,7 @@ func TestShelf_RemoveBook_Works(t *testing.T) {
 }
 
 func TestShelf_RemoveBook_UpdatesTimestamp(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	shelf := &Shelf{
 		ID:        "shelf-1",
@@ -109,6 +116,7 @@ func TestShelf_RemoveBook_UpdatesTimestamp(t *testing.T) {
 }
 
 func TestShelf_RemoveBook_HandlesNonExistentGracefully(t *testing.T) {
+	t.Parallel()
 	shelf := &Shelf{
 		ID:      "shelf-1",
 		OwnerID: "user-1",
@@ -125,6 +133,7 @@ func TestShelf_RemoveBook_HandlesNonExistentGracefully(t *testing.T) {
 }
 
 func TestShelf_RemoveBook_FromEmptyList(t *testing.T) {
+	t.Parallel()
 	shelf := &Shelf{
 		ID:      "shelf-1",
 		OwnerID: "user-1",
@@ -139,6 +148,7 @@ func TestShelf_RemoveBook_FromEmptyList(t *testing.T) {
 }
 
 func TestShelf_RemoveBook_FirstElement(t *testing.T) {
+	t.Parallel()
 	shelf := &Shelf{
 		ID:      "shelf-1",
 		OwnerID: "user-1",
@@ -153,6 +163,7 @@ func TestShelf_RemoveBook_FirstElement(t *testing.T) {
 }
 
 func TestShelf_RemoveBook_LastElement(t *testing.T) {
+	t.Parallel()
 	shelf := &Shelf{
 		ID:      "shelf-1",
 		OwnerID: "user-1",
@@ -167,6 +178,7 @@ func TestShelf_RemoveBook_LastElement(t *testing.T) {
 }
 
 func TestShelf_ContainsBook_ReturnsTrue(t *testing.T) {
+	t.Parallel()
 	shelf := &Shelf{
 		ID:      "shelf-1",
 		OwnerID: "user-1",
@@ -180,6 +192,7 @@ func TestShelf_ContainsBook_ReturnsTrue(t *testing.T) {
 }
 
 func TestShelf_ContainsBook_ReturnsFalse(t *testing.T) {
+	t.Parallel()
 	shelf := &Shelf{
 		ID:      "shelf-1",
 		OwnerID: "user-1",
@@ -191,6 +204,7 @@ func TestShelf_ContainsBook_ReturnsFalse(t *testing.T) {
 }
 
 func TestShelf_ContainsBook_EmptyList(t *testing.T) {
+	t.Parallel()
 	shelf := &Shelf{
 		ID:      "shelf-1",
 		OwnerID: "user-1",
@@ -202,6 +216,7 @@ func TestShelf_ContainsBook_EmptyList(t *testing.T) {
 }
 
 func TestShelf_ContainsBook_NilList(t *testing.T) {
+	t.Parallel()
 	shelf := &Shelf{
 		ID:      "shelf-1",
 		OwnerID: "user-1",

@@ -12,6 +12,7 @@ import (
 )
 
 func TestParseContributorProfileAPI(t *testing.T) {
+	t.Parallel()
 	// Test parsing the API response format
 	jsonResponse := []byte(`{
 		"contributor": {
@@ -38,6 +39,7 @@ func TestParseContributorProfileAPI(t *testing.T) {
 }
 
 func TestParseContributorSearch(t *testing.T) {
+	t.Parallel()
 	html, err := os.ReadFile("testdata/contributor_search.html")
 	require.NoError(t, err)
 
@@ -56,6 +58,7 @@ func TestParseContributorSearch(t *testing.T) {
 }
 
 func TestParseContributorSearch_PlainTextLinks(t *testing.T) {
+	t.Parallel()
 	// Test parsing author links found in audiobook listings (plain text, no h3)
 	html := []byte(`<!DOCTYPE html>
 <html>
@@ -95,6 +98,7 @@ func TestParseContributorSearch_PlainTextLinks(t *testing.T) {
 }
 
 func TestParseContributorProfileAPI_EmptyName(t *testing.T) {
+	t.Parallel()
 	// API returns empty name when contributor not found
 	jsonResponse := []byte(`{
 		"contributor": {
@@ -161,6 +165,7 @@ func TestGetContributorProfileLive(t *testing.T) {
 }
 
 func TestWebHost(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		region Region
 		want   string
@@ -175,6 +180,7 @@ func TestWebHost(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.region), func(t *testing.T) {
+			t.Parallel()
 			got := tt.region.WebHost()
 			assert.Equal(t, tt.want, got)
 		})

@@ -9,6 +9,7 @@ import (
 )
 
 func TestGenerate_Uniqueness(t *testing.T) {
+	t.Parallel()
 	// Generate many IDs and verify they're unique.
 	ids := make(map[string]bool)
 	count := 1000
@@ -24,6 +25,7 @@ func TestGenerate_Uniqueness(t *testing.T) {
 }
 
 func TestGenerate_Format(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		prefix string
@@ -39,6 +41,7 @@ func TestGenerate_Format(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			id, err := Generate(tt.prefix)
 			require.NoError(t, err)
 
@@ -71,6 +74,7 @@ func TestGenerate_Format(t *testing.T) {
 }
 
 func TestMustGenerate_Format(t *testing.T) {
+	t.Parallel()
 	id := MustGenerate("test")
 
 	assert.True(t, strings.HasPrefix(id, "test-"))
@@ -78,6 +82,7 @@ func TestMustGenerate_Format(t *testing.T) {
 }
 
 func TestMustGenerate_Uniqueness(t *testing.T) {
+	t.Parallel()
 	ids := make(map[string]bool)
 	count := 100
 

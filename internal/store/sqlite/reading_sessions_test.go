@@ -11,6 +11,7 @@ import (
 )
 
 func TestCreateAndGetReadingSession(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -82,6 +83,7 @@ func TestCreateAndGetReadingSession(t *testing.T) {
 }
 
 func TestGetActiveReadingSession(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -124,6 +126,7 @@ func TestGetActiveReadingSession(t *testing.T) {
 }
 
 func TestGetActiveReadingSession_None(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -141,6 +144,7 @@ func TestGetActiveReadingSession_None(t *testing.T) {
 }
 
 func TestUpdateReadingSession(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -220,6 +224,7 @@ func TestUpdateReadingSession(t *testing.T) {
 }
 
 func TestUpdateReadingSession_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -251,6 +256,7 @@ func TestUpdateReadingSession_NotFound(t *testing.T) {
 }
 
 func TestGetAllReadingSessions(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 

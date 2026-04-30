@@ -23,6 +23,7 @@ func makeTestTag(id, slug string) *domain.Tag {
 }
 
 func TestCreateAndGetTag(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -55,6 +56,7 @@ func TestCreateAndGetTag(t *testing.T) {
 }
 
 func TestGetTagBySlug(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -77,6 +79,7 @@ func TestGetTagBySlug(t *testing.T) {
 }
 
 func TestGetTag_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -107,6 +110,7 @@ func TestGetTag_NotFound(t *testing.T) {
 }
 
 func TestCreateTag_DuplicateSlug(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -127,6 +131,7 @@ func TestCreateTag_DuplicateSlug(t *testing.T) {
 }
 
 func TestListTags(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -170,6 +175,7 @@ func TestListTags(t *testing.T) {
 }
 
 func TestFindOrCreateTagBySlug(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -217,6 +223,7 @@ func TestFindOrCreateTagBySlug(t *testing.T) {
 }
 
 func TestSetAndGetBookTags(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 

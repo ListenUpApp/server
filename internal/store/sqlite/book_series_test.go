@@ -19,6 +19,7 @@ func insertTestSeries(t *testing.T, s *Store, id, name string) {
 }
 
 func TestSetAndGetBookSeries(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -68,6 +69,7 @@ func TestSetAndGetBookSeries(t *testing.T) {
 }
 
 func TestSetBookSeries_Replace(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -124,6 +126,7 @@ func TestSetBookSeries_Replace(t *testing.T) {
 }
 
 func TestGetBookSeries_Empty(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 

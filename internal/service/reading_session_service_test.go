@@ -351,6 +351,7 @@ func TestGetUserReadingHistory(t *testing.T) {
 }
 
 func TestAvatarColorForUser(t *testing.T) {
+	t.Parallel()
 	// Test that avatar color is consistent for same user
 	color1 := color.ForUser("user-123")
 	color2 := color.ForUser("user-123")

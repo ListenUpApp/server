@@ -8,6 +8,7 @@ import (
 )
 
 func TestNewUserSettings_Defaults(t *testing.T) {
+	t.Parallel()
 	settings := NewUserSettings("user-123")
 
 	require.NotNil(t, settings)

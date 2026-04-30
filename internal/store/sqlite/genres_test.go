@@ -27,6 +27,7 @@ func makeTestGenre(id, name, slug string) *domain.Genre {
 }
 
 func TestCreateAndGetGenre(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -96,6 +97,7 @@ func TestCreateAndGetGenre(t *testing.T) {
 }
 
 func TestGetGenre_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -114,6 +116,7 @@ func TestGetGenre_NotFound(t *testing.T) {
 }
 
 func TestGetGenreBySlug(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -143,6 +146,7 @@ func TestGetGenreBySlug(t *testing.T) {
 }
 
 func TestCreateGenre_DuplicateSlug(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -163,6 +167,7 @@ func TestCreateGenre_DuplicateSlug(t *testing.T) {
 }
 
 func TestListGenres(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -209,6 +214,7 @@ func TestListGenres(t *testing.T) {
 }
 
 func TestUpdateGenre(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -251,6 +257,7 @@ func TestUpdateGenre(t *testing.T) {
 }
 
 func TestDeleteGenre(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -308,6 +315,7 @@ func TestDeleteGenre(t *testing.T) {
 }
 
 func TestSetAndGetBookGenres(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -365,6 +373,7 @@ func TestSetAndGetBookGenres(t *testing.T) {
 }
 
 func TestMoveGenre_UpdatesPathAndDepth(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -434,6 +443,7 @@ func TestMoveGenre_UpdatesPathAndDepth(t *testing.T) {
 }
 
 func TestGetOrCreateGenreBySlug(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 

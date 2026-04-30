@@ -10,6 +10,7 @@ import (
 )
 
 func TestWalker_Walk_EmptyDirectory(t *testing.T) {
+	t.Parallel()
 	// Setup: Create empty directory.
 	tmpDir := t.TempDir()
 
@@ -35,6 +36,7 @@ func TestWalker_Walk_EmptyDirectory(t *testing.T) {
 }
 
 func TestWalker_Walk_SingleFile(t *testing.T) {
+	t.Parallel()
 	// Setup: Create directory with one file.
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -86,6 +88,7 @@ func TestWalker_Walk_SingleFile(t *testing.T) {
 }
 
 func TestWalker_Walk_SkipsHiddenFiles(t *testing.T) {
+	t.Parallel()
 	// Setup: Create directory with hidden file.
 	tmpDir := t.TempDir()
 
@@ -128,6 +131,7 @@ func TestWalker_Walk_SkipsHiddenFiles(t *testing.T) {
 }
 
 func TestWalker_Walk_NestedDirectories(t *testing.T) {
+	t.Parallel()
 	// Setup: Create nested directory structure.
 	tmpDir := t.TempDir()
 
@@ -202,6 +206,7 @@ func TestWalker_Walk_NestedDirectories(t *testing.T) {
 }
 
 func TestWalker_Walk_ContextCancellation(t *testing.T) {
+	t.Parallel()
 	// Setup: Create directory with files.
 	tmpDir := t.TempDir()
 
@@ -235,6 +240,7 @@ func TestWalker_Walk_ContextCancellation(t *testing.T) {
 }
 
 func TestWalker_Walk_RelativePath(t *testing.T) {
+	t.Parallel()
 	// Setup: Create directory structure.
 	tmpDir := t.TempDir()
 
@@ -277,6 +283,7 @@ func TestWalker_Walk_RelativePath(t *testing.T) {
 }
 
 func TestWalker_Walk_ModTime(t *testing.T) {
+	t.Parallel()
 	// Setup: Create file and verify modtime is captured.
 	tmpDir := t.TempDir()
 

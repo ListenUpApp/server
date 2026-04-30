@@ -232,6 +232,7 @@ func TestDiagnoseRealBackup(t *testing.T) {
 }
 
 func TestParseRealBackup(t *testing.T) {
+	t.Parallel()
 	// Use actual backup file for integration test
 	backupPath := "/home/simonh/listenUp/backups/uploads/abs-upload-1768498102773632640.audiobookshelf"
 

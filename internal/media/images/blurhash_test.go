@@ -7,6 +7,7 @@ import (
 )
 
 func TestComputeBlurHash(t *testing.T) {
+	t.Parallel()
 	// Create a test image - find an existing cover in the test fixtures or use a real image
 	// For now, test with a real JPEG if available, or skip
 
@@ -18,6 +19,7 @@ func TestComputeBlurHash(t *testing.T) {
 }
 
 func TestComputeBlurHash_WithRealImage(t *testing.T) {
+	t.Parallel()
 	// Look for any existing cover image to test with
 	testDir := t.TempDir()
 

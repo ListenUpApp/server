@@ -27,6 +27,7 @@ func makeTestContributor(id, name string) *domain.Contributor {
 }
 
 func TestCreateAndGetContributor(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -98,6 +99,7 @@ func TestCreateAndGetContributor(t *testing.T) {
 }
 
 func TestGetContributor_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -116,6 +118,7 @@ func TestGetContributor_NotFound(t *testing.T) {
 }
 
 func TestCreateContributor_Duplicate(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -136,6 +139,7 @@ func TestCreateContributor_Duplicate(t *testing.T) {
 }
 
 func TestListContributors_Pagination(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -223,6 +227,7 @@ func TestListContributors_Pagination(t *testing.T) {
 }
 
 func TestUpdateContributor(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -283,6 +288,7 @@ func TestUpdateContributor(t *testing.T) {
 }
 
 func TestUpdateContributor_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -303,6 +309,7 @@ func TestUpdateContributor_NotFound(t *testing.T) {
 }
 
 func TestGetOrCreateContributor_Creates(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -338,6 +345,7 @@ func TestGetOrCreateContributor_Creates(t *testing.T) {
 }
 
 func TestGetOrCreateContributor_Finds(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -366,6 +374,7 @@ func TestGetOrCreateContributor_Finds(t *testing.T) {
 }
 
 func TestContributor_AliasesRoundTrip(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -381,6 +390,7 @@ func TestContributor_AliasesRoundTrip(t *testing.T) {
 
 	for i, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			id := fmt.Sprintf("alias-test-%d", i)
 			c := makeTestContributor(id, fmt.Sprintf("Author %d", i))
 			c.Aliases = tc.aliases
@@ -407,6 +417,7 @@ func TestContributor_AliasesRoundTrip(t *testing.T) {
 }
 
 func TestMergeContributors_SelfMerge(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -435,6 +446,7 @@ func TestMergeContributors_SelfMerge(t *testing.T) {
 }
 
 func TestContributor_SoftDelete(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 

@@ -33,6 +33,7 @@ func makeTestUser(id, email string) *domain.User {
 }
 
 func TestCreateAndGetUser(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -100,6 +101,7 @@ func TestCreateAndGetUser(t *testing.T) {
 }
 
 func TestGetUser_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -113,6 +115,7 @@ func TestGetUser_NotFound(t *testing.T) {
 }
 
 func TestCreateUser_DuplicateEmail(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -133,6 +136,7 @@ func TestCreateUser_DuplicateEmail(t *testing.T) {
 }
 
 func TestCreateUser_DuplicateID(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -153,6 +157,7 @@ func TestCreateUser_DuplicateID(t *testing.T) {
 }
 
 func TestGetUserByEmail(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -178,6 +183,7 @@ func TestGetUserByEmail(t *testing.T) {
 }
 
 func TestGetUserByEmailLower(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -212,6 +218,7 @@ func TestGetUserByEmailLower(t *testing.T) {
 }
 
 func TestListUsers(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -251,6 +258,7 @@ func TestListUsers(t *testing.T) {
 }
 
 func TestUpdateUser(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -319,6 +327,7 @@ func TestUpdateUser(t *testing.T) {
 }
 
 func TestUpdateUser_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -339,6 +348,7 @@ func TestUpdateUser_NotFound(t *testing.T) {
 }
 
 func TestDeleteUser(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -375,6 +385,7 @@ func TestDeleteUser(t *testing.T) {
 }
 
 func TestDeleteUser_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -393,6 +404,7 @@ func TestDeleteUser_NotFound(t *testing.T) {
 }
 
 func TestCreateUser_ApprovedAtZeroValue(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -415,6 +427,7 @@ func TestCreateUser_ApprovedAtZeroValue(t *testing.T) {
 }
 
 func TestCreateUser_PermissionsDisabled(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 

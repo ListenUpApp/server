@@ -14,6 +14,7 @@ import (
 )
 
 func TestEnvelope_Marshal(t *testing.T) {
+	t.Parallel()
 	envelope := Envelope{
 		Success: true,
 		Data:    map[string]string{"key": "value"},
@@ -34,6 +35,7 @@ func TestEnvelope_Marshal(t *testing.T) {
 }
 
 func TestJSON_Success(t *testing.T) {
+	t.Parallel()
 	w := httptest.NewRecorder()
 	logger := slog.New(slog.DiscardHandler)
 
@@ -53,6 +55,7 @@ func TestJSON_Success(t *testing.T) {
 }
 
 func TestJSON_Error(t *testing.T) {
+	t.Parallel()
 	w := httptest.NewRecorder()
 	logger := slog.New(slog.DiscardHandler)
 
@@ -71,6 +74,7 @@ func TestJSON_Error(t *testing.T) {
 }
 
 func TestJSON_NilLogger(t *testing.T) {
+	t.Parallel()
 	w := httptest.NewRecorder()
 
 	data := map[string]string{"message": "test"}
@@ -85,6 +89,7 @@ func TestJSON_NilLogger(t *testing.T) {
 }
 
 func TestSuccess(t *testing.T) {
+	t.Parallel()
 	w := httptest.NewRecorder()
 	logger := slog.New(slog.DiscardHandler)
 
@@ -112,6 +117,7 @@ func TestSuccess(t *testing.T) {
 }
 
 func TestCreated(t *testing.T) {
+	t.Parallel()
 	w := httptest.NewRecorder()
 	logger := slog.New(slog.DiscardHandler)
 
@@ -130,6 +136,7 @@ func TestCreated(t *testing.T) {
 }
 
 func TestNoContent(t *testing.T) {
+	t.Parallel()
 	w := httptest.NewRecorder()
 
 	NoContent(w)
@@ -139,6 +146,7 @@ func TestNoContent(t *testing.T) {
 }
 
 func TestError_Generic(t *testing.T) {
+	t.Parallel()
 	w := httptest.NewRecorder()
 	logger := slog.New(slog.DiscardHandler)
 
@@ -157,6 +165,7 @@ func TestError_Generic(t *testing.T) {
 }
 
 func TestError_NilLogger(t *testing.T) {
+	t.Parallel()
 	w := httptest.NewRecorder()
 
 	Error(w, http.StatusBadRequest, "bad request", nil)
@@ -172,6 +181,7 @@ func TestError_NilLogger(t *testing.T) {
 }
 
 func TestBadRequest(t *testing.T) {
+	t.Parallel()
 	w := httptest.NewRecorder()
 	logger := slog.New(slog.DiscardHandler)
 
@@ -188,6 +198,7 @@ func TestBadRequest(t *testing.T) {
 }
 
 func TestUnauthorized(t *testing.T) {
+	t.Parallel()
 	w := httptest.NewRecorder()
 	logger := slog.New(slog.DiscardHandler)
 
@@ -204,6 +215,7 @@ func TestUnauthorized(t *testing.T) {
 }
 
 func TestForbidden(t *testing.T) {
+	t.Parallel()
 	w := httptest.NewRecorder()
 	logger := slog.New(slog.DiscardHandler)
 
@@ -220,6 +232,7 @@ func TestForbidden(t *testing.T) {
 }
 
 func TestNotFound(t *testing.T) {
+	t.Parallel()
 	w := httptest.NewRecorder()
 	logger := slog.New(slog.DiscardHandler)
 
@@ -236,6 +249,7 @@ func TestNotFound(t *testing.T) {
 }
 
 func TestInternalError(t *testing.T) {
+	t.Parallel()
 	w := httptest.NewRecorder()
 	logger := slog.New(slog.DiscardHandler)
 
@@ -252,6 +266,7 @@ func TestInternalError(t *testing.T) {
 }
 
 func TestStatusCodeBoundary(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name            string
 		status          int
@@ -271,6 +286,7 @@ func TestStatusCodeBoundary(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			w := httptest.NewRecorder()
 			logger := slog.New(slog.DiscardHandler)
 
@@ -291,6 +307,7 @@ func TestStatusCodeBoundary(t *testing.T) {
 }
 
 func TestEnvelope_OmitEmpty(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		envelope    Envelope
@@ -327,6 +344,7 @@ func TestEnvelope_OmitEmpty(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			data, err := json.Marshal(tt.envelope)
 			require.NoError(t, err)
 
@@ -342,6 +360,7 @@ func TestEnvelope_OmitEmpty(t *testing.T) {
 }
 
 func TestHandleError_StoreError(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		err        error
@@ -376,6 +395,7 @@ func TestHandleError_StoreError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			w := httptest.NewRecorder()
 			HandleError(w, tt.err, nil)
 
@@ -386,6 +406,7 @@ func TestHandleError_StoreError(t *testing.T) {
 }
 
 func TestHandleError_UnknownError(t *testing.T) {
+	t.Parallel()
 	w := httptest.NewRecorder()
 	err := errors.New("unknown error")
 

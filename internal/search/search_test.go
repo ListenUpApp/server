@@ -317,6 +317,7 @@ func TestSearchIndex_Persistence(t *testing.T) {
 }
 
 func TestBookToSearchDocument(t *testing.T) {
+	t.Parallel()
 	book := &domain.Book{
 		Syncable: domain.Syncable{
 			ID: "book-123",
@@ -354,6 +355,7 @@ func TestBookToSearchDocument(t *testing.T) {
 }
 
 func TestContributorToSearchDocument(t *testing.T) {
+	t.Parallel()
 	contributor := &domain.Contributor{
 		Syncable: domain.Syncable{
 			ID: "contrib-123",
@@ -370,6 +372,7 @@ func TestContributorToSearchDocument(t *testing.T) {
 }
 
 func TestSeriesToSearchDocument(t *testing.T) {
+	t.Parallel()
 	series := &domain.Series{
 		Syncable: domain.Syncable{
 			ID: "series-123",
@@ -416,6 +419,7 @@ func TestSearchIndex_LargeBatch(t *testing.T) {
 }
 
 func TestSearchParams_Defaults(t *testing.T) {
+	t.Parallel()
 	params := SearchParams{}
 
 	// Empty params should have sensible behavior when used

@@ -9,6 +9,7 @@ import (
 )
 
 func TestBatchWriter_FlushWritesJunctionTables(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -113,6 +114,7 @@ func TestBatchWriter_FlushWritesJunctionTables(t *testing.T) {
 // writes junction table relationships. This covers the case where books were
 // originally created before junction-table writing was added to createBookTx.
 func TestBatchWriter_FlushUpdatesJunctionTablesForExistingBook(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -217,6 +219,7 @@ func TestBatchWriter_FlushUpdatesJunctionTablesForExistingBook(t *testing.T) {
 }
 
 func TestUpdateBookJunctionTables_BumpsUpdatedAt(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 

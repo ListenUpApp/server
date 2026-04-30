@@ -11,6 +11,7 @@ import (
 )
 
 func TestUpsertAndGetBookPreferences(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -67,6 +68,7 @@ func TestUpsertAndGetBookPreferences(t *testing.T) {
 }
 
 func TestGetBookPreferences_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -81,6 +83,7 @@ func TestGetBookPreferences_NotFound(t *testing.T) {
 }
 
 func TestUpsertBookPreferences_NilOptionalFields(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -118,6 +121,7 @@ func TestUpsertBookPreferences_NilOptionalFields(t *testing.T) {
 }
 
 func TestUpsertBookPreferences_Update(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 

@@ -7,6 +7,7 @@ import (
 )
 
 func TestCollection_GrantsGlobalAccess(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		isGlobalAccess bool
@@ -18,6 +19,7 @@ func TestCollection_GrantsGlobalAccess(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			coll := &Collection{IsGlobalAccess: tt.isGlobalAccess}
 			assert.Equal(t, tt.expected, coll.GrantsGlobalAccess())
 		})
@@ -25,6 +27,7 @@ func TestCollection_GrantsGlobalAccess(t *testing.T) {
 }
 
 func TestCollection_IsSystemCollection_IncludesGlobalAccess(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		coll     *Collection
@@ -37,6 +40,7 @@ func TestCollection_IsSystemCollection_IncludesGlobalAccess(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.isSystem, tt.coll.IsSystemCollection())
 		})
 	}

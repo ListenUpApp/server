@@ -7,6 +7,7 @@ import (
 )
 
 func TestLibrary_GetAccessMode(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		mode     AccessMode
@@ -19,6 +20,7 @@ func TestLibrary_GetAccessMode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			lib := &Library{AccessMode: tt.mode}
 			assert.Equal(t, tt.expected, lib.GetAccessMode())
 		})
@@ -26,6 +28,7 @@ func TestLibrary_GetAccessMode(t *testing.T) {
 }
 
 func TestLibrary_IsOpen(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		mode   AccessMode
@@ -38,6 +41,7 @@ func TestLibrary_IsOpen(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			lib := &Library{AccessMode: tt.mode}
 			assert.Equal(t, tt.isOpen, lib.IsOpen())
 		})
@@ -45,6 +49,7 @@ func TestLibrary_IsOpen(t *testing.T) {
 }
 
 func TestLibrary_IsRestricted(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		mode         AccessMode
@@ -57,6 +62,7 @@ func TestLibrary_IsRestricted(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			lib := &Library{AccessMode: tt.mode}
 			assert.Equal(t, tt.isRestricted, lib.IsRestricted())
 		})

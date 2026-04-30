@@ -35,6 +35,7 @@ func insertTestLibrary(t *testing.T, s *Store, libID, ownerID string) {
 }
 
 func TestCreateAndGetCollection(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -111,6 +112,7 @@ func TestCreateAndGetCollection(t *testing.T) {
 }
 
 func TestGetCollection_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -129,6 +131,7 @@ func TestGetCollection_NotFound(t *testing.T) {
 }
 
 func TestUpdateCollection(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -190,6 +193,7 @@ func TestUpdateCollection(t *testing.T) {
 }
 
 func TestDeleteCollection(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -236,6 +240,7 @@ func TestDeleteCollection(t *testing.T) {
 }
 
 func TestListCollectionsByLibrary(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -284,6 +289,7 @@ func TestListCollectionsByLibrary(t *testing.T) {
 }
 
 func TestAddAndRemoveBookFromCollection(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -336,6 +342,7 @@ func TestAddAndRemoveBookFromCollection(t *testing.T) {
 }
 
 func TestGetCollectionsForBook(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -392,6 +399,7 @@ func TestGetCollectionsForBook(t *testing.T) {
 }
 
 func TestCreateAndGetShare(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -462,6 +470,7 @@ func TestCreateAndGetShare(t *testing.T) {
 }
 
 func TestGetSharesForUser(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -538,6 +547,7 @@ func TestGetSharesForUser(t *testing.T) {
 }
 
 func TestDeleteShare(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 

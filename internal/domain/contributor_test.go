@@ -9,6 +9,7 @@ import (
 )
 
 func TestContributorRole_String(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		role     ContributorRole
 		expected string
@@ -21,12 +22,14 @@ func TestContributorRole_String(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.expected, tt.role.String())
 		})
 	}
 }
 
 func TestContributorRole_IsValid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		role     ContributorRole
@@ -42,12 +45,14 @@ func TestContributorRole_IsValid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.expected, tt.role.IsValid())
 		})
 	}
 }
 
 func TestContributor_JSONMarshaling(t *testing.T) {
+	t.Parallel()
 	contributor := &Contributor{
 		Syncable: Syncable{
 			ID: "contrib-123",
@@ -81,6 +86,7 @@ func TestContributor_JSONMarshaling(t *testing.T) {
 }
 
 func TestBookContributor_JSONMarshaling(t *testing.T) {
+	t.Parallel()
 	bc := BookContributor{
 		ContributorID: "contrib-123",
 		Roles:         []ContributorRole{RoleAuthor, RoleNarrator},
@@ -103,6 +109,7 @@ func TestBookContributor_JSONMarshaling(t *testing.T) {
 }
 
 func TestBookContributor_MultipleRoles(t *testing.T) {
+	t.Parallel()
 	// Test the "one person, many roles" scenario
 	// Brandon Sanderson narrating his own work
 	bc := BookContributor{

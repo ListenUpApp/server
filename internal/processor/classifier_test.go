@@ -5,6 +5,7 @@ import (
 )
 
 func TestClassifyFile(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		path     string
@@ -171,6 +172,7 @@ func TestClassifyFile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := classifyFile(tt.path)
 			if result != tt.expected {
 				t.Errorf("classifyFile(%q) = %v, expected %v",
@@ -181,6 +183,7 @@ func TestClassifyFile(t *testing.T) {
 }
 
 func TestFileType_String(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		expected string
 		fileType FileType
@@ -193,6 +196,7 @@ func TestFileType_String(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
+			t.Parallel()
 			result := tt.fileType.String()
 			if result != tt.expected {
 				t.Errorf("FileType.String() = %q, expected %q",
@@ -203,6 +207,7 @@ func TestFileType_String(t *testing.T) {
 }
 
 func TestClassifyFile_EdgeCases(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		path     string
@@ -242,6 +247,7 @@ func TestClassifyFile_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := classifyFile(tt.path)
 			if result != tt.expected {
 				t.Errorf("classifyFile(%q) = %v, expected %v",

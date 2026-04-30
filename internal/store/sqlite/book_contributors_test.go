@@ -29,6 +29,7 @@ func insertTestContributor(t *testing.T, s *Store, id, name string) {
 }
 
 func TestSetAndGetBookContributors(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -94,6 +95,7 @@ func TestSetAndGetBookContributors(t *testing.T) {
 }
 
 func TestSetBookContributors_Replace(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -150,6 +152,7 @@ func TestSetBookContributors_Replace(t *testing.T) {
 }
 
 func TestGetBookContributors_Empty(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -166,6 +169,7 @@ func TestGetBookContributors_Empty(t *testing.T) {
 }
 
 func TestSetBookContributors_MultipleRoles(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 

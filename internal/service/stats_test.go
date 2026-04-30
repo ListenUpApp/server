@@ -435,6 +435,7 @@ func TestGetUserStats_BooksStartedAndFinished(t *testing.T) {
 }
 
 func TestStatsPeriod_Bounds(t *testing.T) {
+	t.Parallel()
 	// Test on a Wednesday, 2024-01-10 15:30:00
 	now := time.Date(2024, 1, 10, 15, 30, 0, 0, time.UTC)
 
@@ -472,6 +473,7 @@ func TestStatsPeriod_Bounds(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.period), func(t *testing.T) {
+			t.Parallel()
 			start, end := tt.period.Bounds(now)
 			assert.Equal(t, tt.wantStart, start)
 			assert.Equal(t, tt.wantEnd, end)
@@ -480,6 +482,7 @@ func TestStatsPeriod_Bounds(t *testing.T) {
 }
 
 func TestStatsPeriod_Valid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		period domain.StatsPeriod
 		want   bool
@@ -495,6 +498,7 @@ func TestStatsPeriod_Valid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.period), func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.want, tt.period.Valid())
 		})
 	}

@@ -3,6 +3,7 @@ package backup
 import "testing"
 
 func TestRestoreMode_Valid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		mode  RestoreMode
 		valid bool
@@ -16,6 +17,7 @@ func TestRestoreMode_Valid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.mode), func(t *testing.T) {
+			t.Parallel()
 			if got := tt.mode.Valid(); got != tt.valid {
 				t.Errorf("RestoreMode(%q).Valid() = %v, want %v", tt.mode, got, tt.valid)
 			}
@@ -24,6 +26,7 @@ func TestRestoreMode_Valid(t *testing.T) {
 }
 
 func TestMergeStrategy_Valid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		strategy MergeStrategy
 		valid    bool
@@ -37,6 +40,7 @@ func TestMergeStrategy_Valid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.strategy), func(t *testing.T) {
+			t.Parallel()
 			if got := tt.strategy.Valid(); got != tt.valid {
 				t.Errorf("MergeStrategy(%q).Valid() = %v, want %v", tt.strategy, got, tt.valid)
 			}

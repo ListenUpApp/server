@@ -11,6 +11,7 @@ import (
 )
 
 func TestCreateAndGetListeningEvent(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -88,6 +89,7 @@ func TestCreateAndGetListeningEvent(t *testing.T) {
 }
 
 func TestGetListeningEvent_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -106,6 +108,7 @@ func TestGetListeningEvent_NotFound(t *testing.T) {
 }
 
 func TestGetListeningEventsForBook(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -169,6 +172,7 @@ func TestGetListeningEventsForBook(t *testing.T) {
 }
 
 func TestGetTotalListenTime(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -235,6 +239,7 @@ func TestGetTotalListenTime(t *testing.T) {
 }
 
 func TestUpsertAndGetPlaybackState(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -300,6 +305,7 @@ func TestUpsertAndGetPlaybackState(t *testing.T) {
 }
 
 func TestGetPlaybackState_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -314,6 +320,7 @@ func TestGetPlaybackState_NotFound(t *testing.T) {
 }
 
 func TestGetContinueListening(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -413,6 +420,7 @@ func TestGetContinueListening(t *testing.T) {
 // table returns only records with updated_at strictly greater than the cutoff.
 // Pairs with the api-layer updated_after query param unblocking client W6.
 func TestGetStateForUserUpdatedAfter(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -480,6 +488,7 @@ func TestGetStateForUserUpdatedAfter(t *testing.T) {
 // records for the user, matching the baseline behavior of GetStateForUser. This lets
 // the handler layer pass a zero time.Time as a sentinel for "no filter".
 func TestGetStateForUserUpdatedAfter_ZeroCutoff(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 

@@ -3,6 +3,7 @@ package abs
 import "testing"
 
 func TestNormalizeString(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    string
 		expected string
@@ -23,6 +24,7 @@ func TestNormalizeString(t *testing.T) {
 }
 
 func TestNormalizeTitle(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    string
 		expected string
@@ -44,6 +46,7 @@ func TestNormalizeTitle(t *testing.T) {
 }
 
 func TestStringSimilarity(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		a, b     string
 		minScore float64
@@ -67,6 +70,7 @@ func TestStringSimilarity(t *testing.T) {
 }
 
 func TestLevenshteinDistance(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		a, b     string
 		expected int
@@ -90,6 +94,7 @@ func TestLevenshteinDistance(t *testing.T) {
 }
 
 func TestMatchConfidenceString(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		confidence MatchConfidence
 		expected   string
@@ -111,6 +116,7 @@ func TestMatchConfidenceString(t *testing.T) {
 }
 
 func TestMatchConfidenceShouldAutoImport(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		confidence MatchConfidence
 		expected   bool

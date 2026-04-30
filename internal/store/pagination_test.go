@@ -9,6 +9,7 @@ import (
 
 // TestDefaultPaginationParams tests the default pagination parameters.
 func TestDefaultPaginationParams(t *testing.T) {
+	t.Parallel()
 	params := DefaultPaginationParms()
 	assert.Equal(t, 100, params.Limit)
 	assert.Empty(t, params.Cursor)
@@ -16,6 +17,7 @@ func TestDefaultPaginationParams(t *testing.T) {
 
 // TestPaginationParams_Validate tests validation of pagination parameters.
 func TestPaginationParams_Validate(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		input         PaginationParams
@@ -50,6 +52,7 @@ func TestPaginationParams_Validate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			params := tt.input
 			params.Validate()
 			assert.Equal(t, tt.expectedLimit, params.Limit)
@@ -59,6 +62,7 @@ func TestPaginationParams_Validate(t *testing.T) {
 
 // TestEncodeCursor tests cursor encoding.
 func TestEncodeCursor(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    string
@@ -83,6 +87,7 @@ func TestEncodeCursor(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := EncodeCursor(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -91,6 +96,7 @@ func TestEncodeCursor(t *testing.T) {
 
 // TestDecodeCursor tests cursor decoding.
 func TestDecodeCursor(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		input       string
@@ -125,6 +131,7 @@ func TestDecodeCursor(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := DecodeCursor(tt.input)
 			if tt.shouldError {
 				assert.Error(t, err)
@@ -138,6 +145,7 @@ func TestDecodeCursor(t *testing.T) {
 
 // TestEncodeDecode_RoundTrip tests encoding and decoding round trip.
 func TestEncodeDecode_RoundTrip(t *testing.T) {
+	t.Parallel()
 	tests := []string{
 		"book:001",
 		"book:test-book-id-123",
@@ -148,6 +156,7 @@ func TestEncodeDecode_RoundTrip(t *testing.T) {
 
 	for _, original := range tests {
 		t.Run(original, func(t *testing.T) {
+			t.Parallel()
 			encoded := EncodeCursor(original)
 			decoded, err := DecodeCursor(encoded)
 			require.NoError(t, err)
@@ -158,6 +167,7 @@ func TestEncodeDecode_RoundTrip(t *testing.T) {
 
 // TestPaginatedResult_Structure tests the structure of paginated results.
 func TestPaginatedResult_Structure(t *testing.T) {
+	t.Parallel()
 	result := &PaginatedResult[string]{
 		Items:      []string{"item1", "item2", "item3"},
 		NextCursor: "cursor123",
@@ -173,6 +183,7 @@ func TestPaginatedResult_Structure(t *testing.T) {
 
 // TestPaginatedResult_NoMorePages tests paginated result with no more pages.
 func TestPaginatedResult_NoMorePages(t *testing.T) {
+	t.Parallel()
 	result := &PaginatedResult[string]{
 		Items:      []string{"item1", "item2"},
 		NextCursor: "",
@@ -188,6 +199,7 @@ func TestPaginatedResult_NoMorePages(t *testing.T) {
 
 // TestPaginatedResult_EmptyResult tests paginated result with no items.
 func TestPaginatedResult_EmptyResult(t *testing.T) {
+	t.Parallel()
 	result := &PaginatedResult[string]{
 		Items:      []string{},
 		NextCursor: "",

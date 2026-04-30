@@ -48,6 +48,7 @@ func makeTestSession(t *testing.T, s *Store, sessionID, userID string) *domain.S
 }
 
 func TestCreateAndGetSession(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -119,6 +120,7 @@ func TestCreateAndGetSession(t *testing.T) {
 }
 
 func TestGetSession_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -137,6 +139,7 @@ func TestGetSession_NotFound(t *testing.T) {
 }
 
 func TestCreateSession_Duplicate(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -157,6 +160,7 @@ func TestCreateSession_Duplicate(t *testing.T) {
 }
 
 func TestListSessions(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -189,6 +193,7 @@ func TestListSessions(t *testing.T) {
 }
 
 func TestUpdateSession(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -263,6 +268,7 @@ func TestUpdateSession(t *testing.T) {
 }
 
 func TestUpdateSession_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -295,6 +301,7 @@ func TestUpdateSession_NotFound(t *testing.T) {
 }
 
 func TestDeleteSession(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -329,6 +336,7 @@ func TestDeleteSession(t *testing.T) {
 }
 
 func TestDeleteSession_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -340,6 +348,7 @@ func TestDeleteSession_NotFound(t *testing.T) {
 }
 
 func TestGetSessionsByUser(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -396,6 +405,7 @@ func TestGetSessionsByUser(t *testing.T) {
 }
 
 func TestDeleteExpiredSessions(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 

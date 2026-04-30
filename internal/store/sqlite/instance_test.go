@@ -11,6 +11,7 @@ import (
 )
 
 func TestSetAndGetInstanceKey(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -29,6 +30,7 @@ func TestSetAndGetInstanceKey(t *testing.T) {
 }
 
 func TestGetInstanceKey_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -47,6 +49,7 @@ func TestGetInstanceKey_NotFound(t *testing.T) {
 }
 
 func TestSetInstanceKey_Overwrite(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -70,6 +73,7 @@ func TestSetInstanceKey_Overwrite(t *testing.T) {
 }
 
 func TestGetServerSettings_Defaults(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -90,6 +94,7 @@ func TestGetServerSettings_Defaults(t *testing.T) {
 }
 
 func TestUpdateAndGetServerSettings(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 

@@ -13,6 +13,7 @@ import (
 )
 
 func TestAnalyzeItems_SingleFileChapteredMP3(t *testing.T) {
+	t.Parallel()
 	dir := "/home/simonh/Music/Libation/Books/No Life Forsaken [B0DBJC226L]"
 
 	// Find the MP3 file.
@@ -87,6 +88,7 @@ func TestAnalyzeItems_SingleFileChapteredMP3(t *testing.T) {
 
 //nolint:gocyclo // Test complexity is acceptable
 func TestAnalyzeItems_MultiFileAudiobook(t *testing.T) {
+	t.Parallel()
 	dir := "/home/simonh/Music/Libation/Books/Harry Potter and the Philosopher’s Stone (Full-Cast Edition) [B0F14Y2YW7]"
 
 	// Find all MP3 files.
@@ -170,6 +172,7 @@ func TestAnalyzeItems_MultiFileAudiobook(t *testing.T) {
 
 //nolint:gocyclo // Test complexity is acceptable
 func TestAnalyzeItems_MusicAlbum(t *testing.T) {
+	t.Parallel()
 	dir := "/home/simonh/Downloads/Happiness (2010)-20251108T221125Z-1-001/Happiness (2010)"
 
 	// Find all MP3 files.

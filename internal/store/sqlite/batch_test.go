@@ -39,6 +39,7 @@ func (s *spySearchIndexer) indexedIDs() []string {
 }
 
 func TestBatchWriter_FlushIndexesBooks(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	spy := &spySearchIndexer{}
 	s.SetSearchIndexer(spy)
@@ -91,6 +92,7 @@ func TestBatchWriter_FlushIndexesBooks(t *testing.T) {
 }
 
 func TestBatchWriter_EmptyFlushNoIndex(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	spy := &spySearchIndexer{}
 	s.SetSearchIndexer(spy)

@@ -7,6 +7,7 @@ import (
 
 // TestSyncMap_BasicOperations tests basic Load, Store operations.
 func TestSyncMap_BasicOperations(t *testing.T) {
+	t.Parallel()
 	sm := NewSyncMap[string, int]()
 
 	// Test Store and Load.
@@ -29,6 +30,7 @@ func TestSyncMap_BasicOperations(t *testing.T) {
 
 // TestSyncMap_LoadOrStore tests LoadOrStore functionality.
 func TestSyncMap_LoadOrStore(t *testing.T) {
+	t.Parallel()
 	sm := NewSyncMap[string, int]()
 
 	// First store - should return the stored value with loaded=false.
@@ -51,6 +53,7 @@ func TestSyncMap_LoadOrStore(t *testing.T) {
 
 // TestSyncMap_Delete tests Delete functionality.
 func TestSyncMap_Delete(t *testing.T) {
+	t.Parallel()
 	sm := NewSyncMap[string, int]()
 
 	sm.Store("key1", 1)
@@ -76,6 +79,7 @@ func TestSyncMap_Delete(t *testing.T) {
 
 // TestSyncMap_Len tests Len functionality.
 func TestSyncMap_Len(t *testing.T) {
+	t.Parallel()
 	sm := NewSyncMap[string, int]()
 
 	if sm.Len() != 0 {
@@ -99,6 +103,7 @@ func TestSyncMap_Len(t *testing.T) {
 
 // TestSyncMap_ConcurrentAccess tests concurrent access safety.
 func TestSyncMap_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	sm := NewSyncMap[int, int]()
 	numGoroutines := 100
 	numOperations := 1000
@@ -152,6 +157,7 @@ func TestSyncMap_ConcurrentAccess(t *testing.T) {
 
 // TestSyncMap_LoadOrStore_Concurrent tests LoadOrStore under concurrent access.
 func TestSyncMap_LoadOrStore_Concurrent(t *testing.T) {
+	t.Parallel()
 	sm := NewSyncMap[string, *sync.Mutex]()
 	numGoroutines := 100
 	key := "shared-key"
@@ -188,6 +194,7 @@ func TestSyncMap_LoadOrStore_Concurrent(t *testing.T) {
 
 // TestSyncMap_TypeSafety demonstrates type safety with different types.
 func TestSyncMap_TypeSafety(t *testing.T) {
+	t.Parallel()
 	// String -> Int.
 	intMap := NewSyncMap[string, int]()
 	intMap.Store("count", 42)
@@ -213,6 +220,7 @@ func TestSyncMap_TypeSafety(t *testing.T) {
 
 // TestSyncMap_ZeroValue tests that Load returns zero value for missing keys.
 func TestSyncMap_ZeroValue(t *testing.T) {
+	t.Parallel()
 	intMap := NewSyncMap[string, int]()
 	if val, ok := intMap.Load("missing"); ok || val != 0 {
 		t.Errorf("Load(missing) = %v, %v; want 0, false", val, ok)

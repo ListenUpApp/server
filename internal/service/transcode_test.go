@@ -139,6 +139,7 @@ func createTestTranscodeJobWithVariant(t *testing.T, s store.Store, bookID, audi
 
 // Test_findAvailableSegments tests the findAvailableSegments function.
 func Test_findAvailableSegments(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		setupDir      func(t *testing.T, dir string)
@@ -192,6 +193,7 @@ func Test_findAvailableSegments(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Create temp directory for test
 			tmpDir, err := os.MkdirTemp("", "segments-test-*")
 			require.NoError(t, err)

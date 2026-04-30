@@ -258,6 +258,7 @@ func TestClient_GetChapters(t *testing.T) {
 }
 
 func TestValidateASIN(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		asin  string
 		valid bool
@@ -275,6 +276,7 @@ func TestValidateASIN(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.asin, func(t *testing.T) {
+			t.Parallel()
 			got := ValidateASIN(tt.asin)
 			if got != tt.valid {
 				t.Errorf("ValidateASIN(%q) = %v, want %v", tt.asin, got, tt.valid)
@@ -284,6 +286,7 @@ func TestValidateASIN(t *testing.T) {
 }
 
 func TestRegion_Host(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		region Region
 		host   string
@@ -303,6 +306,7 @@ func TestRegion_Host(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.region), func(t *testing.T) {
+			t.Parallel()
 			got := tt.region.Host()
 			if got != tt.host {
 				t.Errorf("Region(%q).Host() = %q, want %q", tt.region, got, tt.host)
@@ -312,6 +316,7 @@ func TestRegion_Host(t *testing.T) {
 }
 
 func TestRegion_Valid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		region Region
 		valid  bool
@@ -332,6 +337,7 @@ func TestRegion_Valid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.region), func(t *testing.T) {
+			t.Parallel()
 			got := tt.region.Valid()
 			if got != tt.valid {
 				t.Errorf("Region(%q).Valid() = %v, want %v", tt.region, got, tt.valid)
@@ -361,6 +367,7 @@ func TestClient_ContextCancellation(t *testing.T) {
 }
 
 func TestError_Error(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		err  *Error
@@ -389,6 +396,7 @@ func TestError_Error(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := tt.err.Error()
 			if got != tt.want {
 				t.Errorf("Error() = %q, want %q", got, tt.want)
@@ -398,6 +406,7 @@ func TestError_Error(t *testing.T) {
 }
 
 func TestError_Unwrap(t *testing.T) {
+	t.Parallel()
 	err := &Error{
 		Op:     "getBook",
 		Region: RegionUS,

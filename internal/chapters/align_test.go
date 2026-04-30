@@ -5,6 +5,7 @@ import (
 )
 
 func TestAlign_ExactMatch(t *testing.T) {
+	t.Parallel()
 	local := []Chapter{
 		{Title: "Chapter 1", StartTime: 0, EndTime: 60000},
 		{Title: "Chapter 2", StartTime: 60000, EndTime: 120000},
@@ -39,6 +40,7 @@ func TestAlign_ExactMatch(t *testing.T) {
 }
 
 func TestAlign_MoreLocalThanRemote(t *testing.T) {
+	t.Parallel()
 	// 6 local chapters, 3 remote - should use greedy matching
 	local := []Chapter{
 		{Title: "Track 1", StartTime: 0, EndTime: 30000},
@@ -85,6 +87,7 @@ func TestAlign_MoreLocalThanRemote(t *testing.T) {
 }
 
 func TestAlign_MoreRemoteThanLocal(t *testing.T) {
+	t.Parallel()
 	local := []Chapter{
 		{Title: "1", StartTime: 0, EndTime: 90000},
 		{Title: "2", StartTime: 90000, EndTime: 180000},
@@ -113,6 +116,7 @@ func TestAlign_MoreRemoteThanLocal(t *testing.T) {
 }
 
 func TestAlign_ConfidenceScoring(t *testing.T) {
+	t.Parallel()
 	// Perfect alignment should have high confidence
 	local := []Chapter{
 		{Title: "Ch 1", StartTime: 0, EndTime: 100000},

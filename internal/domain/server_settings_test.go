@@ -8,6 +8,7 @@ import (
 )
 
 func TestNewServerSettings_Defaults(t *testing.T) {
+	t.Parallel()
 	settings := NewServerSettings()
 
 	require.NotNil(t, settings)
@@ -17,6 +18,7 @@ func TestNewServerSettings_Defaults(t *testing.T) {
 }
 
 func TestServerSettings_GetDisplayName(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    string
@@ -41,6 +43,7 @@ func TestServerSettings_GetDisplayName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			settings := &ServerSettings{Name: tt.input}
 			assert.Equal(t, tt.expected, settings.GetDisplayName())
 		})

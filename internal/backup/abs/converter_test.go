@@ -6,6 +6,7 @@ import (
 )
 
 func TestSessionToEvent(t *testing.T) {
+	t.Parallel()
 	converter := NewConverter()
 
 	session := &Session{
@@ -47,6 +48,7 @@ func TestSessionToEvent(t *testing.T) {
 }
 
 func TestProgressToEvents(t *testing.T) {
+	t.Parallel()
 	converter := NewConverter()
 
 	progress := &MediaProgress{
@@ -82,6 +84,7 @@ func TestProgressToEvents(t *testing.T) {
 }
 
 func TestProgressToEventsNoProgress(t *testing.T) {
+	t.Parallel()
 	converter := NewConverter()
 
 	progress := &MediaProgress{
@@ -100,6 +103,7 @@ func TestProgressToEventsNoProgress(t *testing.T) {
 }
 
 func TestConvertSessions(t *testing.T) {
+	t.Parallel()
 	converter := NewConverter()
 
 	sessions := []Session{
@@ -152,6 +156,7 @@ func TestConvertSessions(t *testing.T) {
 }
 
 func TestCalculateSessionStats(t *testing.T) {
+	t.Parallel()
 	sessions := []Session{
 		{
 			ID:            "s1",
@@ -207,6 +212,7 @@ func TestCalculateSessionStats(t *testing.T) {
 }
 
 func TestCalculateSessionStatsEmpty(t *testing.T) {
+	t.Parallel()
 	stats := CalculateSessionStats(nil)
 
 	if stats.TotalSessions != 0 {

@@ -5,6 +5,7 @@ import (
 )
 
 func TestDetermineBookFolder(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		filePath string
@@ -212,6 +213,7 @@ func TestDetermineBookFolder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := determineBookFolder(tt.filePath)
 			if result != tt.expected {
 				t.Errorf("determineBookFolder(%q) = %q, expected %q",
@@ -222,6 +224,7 @@ func TestDetermineBookFolder(t *testing.T) {
 }
 
 func TestDetermineBookFolder_EdgeCases(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		filePath string
@@ -251,6 +254,7 @@ func TestDetermineBookFolder_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := determineBookFolder(tt.filePath)
 			if result != tt.expected {
 				t.Errorf("determineBookFolder(%q) = %q, expected %q",
@@ -263,6 +267,7 @@ func TestDetermineBookFolder_EdgeCases(t *testing.T) {
 // TestIsDiscDir tests the disc directory detection logic.
 // This should match the behavior from internal/scanner/grouper.go.
 func TestIsDiscDir(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		dirName  string
@@ -415,6 +420,7 @@ func TestIsDiscDir(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := isDiscDir(tt.dirName)
 			if result != tt.expected {
 				t.Errorf("isDiscDir(%q) = %v, expected %v",

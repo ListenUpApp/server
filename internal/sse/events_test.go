@@ -14,6 +14,7 @@ import (
 // FinishedAt from domain.PlaybackState so the client can stateful-merge completion
 // timestamps across devices (server-side contribution to Bug 2).
 func TestNewProgressUpdatedEvent_PopulatesFinishedAt(t *testing.T) {
+	t.Parallel()
 	finishedAt := time.Date(2026, 4, 11, 12, 0, 0, 0, time.UTC)
 	state := &domain.PlaybackState{
 		UserID:            "user-1",
@@ -37,6 +38,7 @@ func TestNewProgressUpdatedEvent_PopulatesFinishedAt(t *testing.T) {
 // TestNewProgressUpdatedEvent_PopulatesStartedAt verifies StartedAt is carried on the
 // event so the client's stateful-merge handler can preserve both timestamps on echoes.
 func TestNewProgressUpdatedEvent_PopulatesStartedAt(t *testing.T) {
+	t.Parallel()
 	startedAt := time.Date(2026, 4, 1, 8, 0, 0, 0, time.UTC)
 	state := &domain.PlaybackState{
 		UserID:       "user-1",
@@ -57,6 +59,7 @@ func TestNewProgressUpdatedEvent_PopulatesStartedAt(t *testing.T) {
 // omits finished_at when the state has no completion timestamp, so the client
 // receives field-absent rather than null.
 func TestNewProgressUpdatedEvent_OmitsFinishedAtWhenNil(t *testing.T) {
+	t.Parallel()
 	state := &domain.PlaybackState{
 		UserID:     "user-1",
 		BookID:     "book-1",
@@ -76,6 +79,7 @@ func TestNewProgressUpdatedEvent_OmitsFinishedAtWhenNil(t *testing.T) {
 // TestProgressUpdatedEventData_JSONContract pins the wire format the client expects.
 // Any change to these keys is a breaking contract change for every connected client.
 func TestProgressUpdatedEventData_JSONContract(t *testing.T) {
+	t.Parallel()
 	finishedAt := time.Date(2026, 4, 11, 12, 0, 0, 0, time.UTC)
 	startedAt := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
 

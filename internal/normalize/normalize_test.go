@@ -3,6 +3,7 @@ package normalize
 import "testing"
 
 func TestLanguageCode(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    string
 		expected string
@@ -34,6 +35,7 @@ func TestLanguageCode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
 			result := LanguageCode(tt.input)
 			if result != tt.expected {
 				t.Errorf("LanguageCode(%q) = %q, want %q", tt.input, result, tt.expected)
@@ -43,6 +45,7 @@ func TestLanguageCode(t *testing.T) {
 }
 
 func TestLanguage(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    string
 		expected string
@@ -70,6 +73,7 @@ func TestLanguage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
 			result := Language(tt.input)
 			if result != tt.expected {
 				t.Errorf("Language(%q) = %q, want %q", tt.input, result, tt.expected)
@@ -79,6 +83,7 @@ func TestLanguage(t *testing.T) {
 }
 
 func TestGenreSlugs(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    string
 		expected []string
@@ -92,6 +97,7 @@ func TestGenreSlugs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
 			result := GenreSlugs(tt.input)
 			if len(result) != len(tt.expected) {
 				t.Errorf("GenreSlugs(%q) = %v, want %v", tt.input, result, tt.expected)

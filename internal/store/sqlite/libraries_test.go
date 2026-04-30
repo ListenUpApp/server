@@ -36,6 +36,7 @@ func createTestOwner(t *testing.T, s *Store, id string) {
 }
 
 func TestCreateAndGetLibrary(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -91,6 +92,7 @@ func TestCreateAndGetLibrary(t *testing.T) {
 }
 
 func TestGetLibrary_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -109,6 +111,7 @@ func TestGetLibrary_NotFound(t *testing.T) {
 }
 
 func TestCreateLibrary_Duplicate(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -131,6 +134,7 @@ func TestCreateLibrary_Duplicate(t *testing.T) {
 }
 
 func TestListLibraries(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -166,6 +170,7 @@ func TestListLibraries(t *testing.T) {
 }
 
 func TestUpdateLibrary(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -213,6 +218,7 @@ func TestUpdateLibrary(t *testing.T) {
 }
 
 func TestUpdateLibrary_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -233,6 +239,7 @@ func TestUpdateLibrary_NotFound(t *testing.T) {
 }
 
 func TestLibrary_ScanPathsRoundTrip(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -273,6 +280,7 @@ func TestLibrary_ScanPathsRoundTrip(t *testing.T) {
 }
 
 func TestLibrary_EmptyScanPaths(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 

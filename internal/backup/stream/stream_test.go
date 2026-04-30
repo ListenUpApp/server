@@ -112,6 +112,7 @@ func TestOpenFile_NotFound(t *testing.T) {
 }
 
 func TestReader_ContinuesOnParseError(t *testing.T) {
+	t.Parallel()
 	// Create JSONL with one bad line
 	jsonl := `{"id":"1","name":"Good"}
 {bad json}

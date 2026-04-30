@@ -10,6 +10,7 @@ import (
 )
 
 func TestError_Error(t *testing.T) {
+	t.Parallel()
 	err := &store.Error{
 		Code:    http.StatusNotFound,
 		Message: "not found",
@@ -19,6 +20,7 @@ func TestError_Error(t *testing.T) {
 }
 
 func TestError_ErrorWithCause(t *testing.T) {
+	t.Parallel()
 	cause := errors.New("underlying error")
 	err := &store.Error{
 		Code:    http.StatusNotFound,
@@ -31,6 +33,7 @@ func TestError_ErrorWithCause(t *testing.T) {
 }
 
 func TestError_HTTPCode(t *testing.T) {
+	t.Parallel()
 	err := &store.Error{
 		Code:    http.StatusBadRequest,
 		Message: "bad request",
@@ -40,6 +43,7 @@ func TestError_HTTPCode(t *testing.T) {
 }
 
 func TestError_Unwrap(t *testing.T) {
+	t.Parallel()
 	cause := errors.New("underlying")
 	err := &store.Error{
 		Code:    http.StatusInternalServerError,
@@ -51,6 +55,7 @@ func TestError_Unwrap(t *testing.T) {
 }
 
 func TestError_WithMessage(t *testing.T) {
+	t.Parallel()
 	original := &store.Error{
 		Code:    http.StatusNotFound,
 		Message: "original",
@@ -63,6 +68,7 @@ func TestError_WithMessage(t *testing.T) {
 }
 
 func TestError_WithCause(t *testing.T) {
+	t.Parallel()
 	original := &store.Error{
 		Code:    http.StatusNotFound,
 		Message: "not found",
@@ -77,6 +83,7 @@ func TestError_WithCause(t *testing.T) {
 }
 
 func TestSentinelErrors(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		err      *store.Error
@@ -111,6 +118,7 @@ func TestSentinelErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.wantCode, tt.err.HTTPCode())
 			assert.NotEmpty(t, tt.err.Message)
 		})

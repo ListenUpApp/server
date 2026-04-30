@@ -12,6 +12,7 @@ import (
 )
 
 func TestNew(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	w, err := New(logger, Options{})
@@ -23,6 +24,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestWatcher_Watch(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	w, err := New(logger, Options{})
 	require.NoError(t, err)
@@ -34,6 +36,7 @@ func TestWatcher_Watch(t *testing.T) {
 }
 
 func TestWatcher_FileCreation(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	opts := Options{
@@ -71,6 +74,7 @@ func TestWatcher_FileCreation(t *testing.T) {
 }
 
 func TestWatcher_FileDeletion(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	w, err := New(logger, Options{})
 	require.NoError(t, err)
@@ -105,6 +109,7 @@ func TestWatcher_FileDeletion(t *testing.T) {
 }
 
 func TestWatcher_IgnoreHidden(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	opts := Options{

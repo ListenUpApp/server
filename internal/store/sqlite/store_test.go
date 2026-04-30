@@ -22,6 +22,7 @@ func newTestStore(t *testing.T) *Store {
 }
 
 func TestOpen(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 
 	// Verify WAL mode is set.
@@ -64,6 +65,7 @@ func TestOpen(t *testing.T) {
 }
 
 func TestPragmasOnAllConnections(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 
 	// Open 4 concurrent connections and verify foreign_keys is enabled on each.

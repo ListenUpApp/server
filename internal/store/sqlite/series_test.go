@@ -36,6 +36,7 @@ func makeTestSeries(id, name string) *domain.Series {
 }
 
 func TestCreateAndGetSeries(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -103,6 +104,7 @@ func TestCreateAndGetSeries(t *testing.T) {
 }
 
 func TestGetSeries_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -121,6 +123,7 @@ func TestGetSeries_NotFound(t *testing.T) {
 }
 
 func TestCreateSeries_Duplicate(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -141,6 +144,7 @@ func TestCreateSeries_Duplicate(t *testing.T) {
 }
 
 func TestListSeries_Pagination(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -221,6 +225,7 @@ func TestListSeries_Pagination(t *testing.T) {
 }
 
 func TestUpdateSeries(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -277,6 +282,7 @@ func TestUpdateSeries(t *testing.T) {
 }
 
 func TestUpdateSeries_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -297,6 +303,7 @@ func TestUpdateSeries_NotFound(t *testing.T) {
 }
 
 func TestSeries_NilCoverImage(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -321,6 +328,7 @@ func TestSeries_NilCoverImage(t *testing.T) {
 }
 
 func TestSeries_SoftDelete(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 

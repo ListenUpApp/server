@@ -11,6 +11,7 @@ import (
 )
 
 func TestCreateAndGetInvite(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -82,6 +83,7 @@ func TestCreateAndGetInvite(t *testing.T) {
 }
 
 func TestGetInvite_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -100,6 +102,7 @@ func TestGetInvite_NotFound(t *testing.T) {
 }
 
 func TestGetInviteByToken(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -157,6 +160,7 @@ func TestGetInviteByToken(t *testing.T) {
 }
 
 func TestCreateInvite_DuplicateCode(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -206,6 +210,7 @@ func TestCreateInvite_DuplicateCode(t *testing.T) {
 }
 
 func TestListInvites(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -264,6 +269,7 @@ func TestListInvites(t *testing.T) {
 }
 
 func TestUseInvite(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 

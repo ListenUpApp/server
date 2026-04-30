@@ -7,12 +7,14 @@ import (
 )
 
 func TestDefaultPermissions(t *testing.T) {
+	t.Parallel()
 	perms := DefaultPermissions()
 
 	assert.True(t, perms.CanShare, "CanShare should default to true")
 }
 
 func TestUser_CanShare(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		permissions UserPermissions
@@ -24,6 +26,7 @@ func TestUser_CanShare(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			user := &User{Permissions: tt.permissions}
 			assert.Equal(t, tt.expected, user.CanShare())
 		})
@@ -31,6 +34,7 @@ func TestUser_CanShare(t *testing.T) {
 }
 
 func TestUserPermissions_ZeroValue(t *testing.T) {
+	t.Parallel()
 	// Zero value should be restrictive (all false)
 	// This ensures existing users without permissions set are safe by default
 	var perms UserPermissions

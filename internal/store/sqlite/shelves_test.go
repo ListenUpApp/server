@@ -11,6 +11,7 @@ import (
 )
 
 func TestCreateAndGetLens(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -80,6 +81,7 @@ func TestCreateAndGetLens(t *testing.T) {
 }
 
 func TestGetLens_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -98,6 +100,7 @@ func TestGetLens_NotFound(t *testing.T) {
 }
 
 func TestUpdateLens(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -154,6 +157,7 @@ func TestUpdateLens(t *testing.T) {
 }
 
 func TestDeleteLens(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -198,6 +202,7 @@ func TestDeleteLens(t *testing.T) {
 }
 
 func TestListLensesByOwner(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -243,6 +248,7 @@ func TestListLensesByOwner(t *testing.T) {
 }
 
 func TestAddAndRemoveBookFromLens(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 

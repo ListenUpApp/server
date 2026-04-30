@@ -30,6 +30,7 @@ func makeTestBook(id, title, path string) *domain.Book {
 }
 
 func TestCreateAndGetBook(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -234,6 +235,7 @@ func TestCreateAndGetBook(t *testing.T) {
 }
 
 func TestGetBook_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -252,6 +254,7 @@ func TestGetBook_NotFound(t *testing.T) {
 }
 
 func TestCreateBook_DuplicatePath(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -272,6 +275,7 @@ func TestCreateBook_DuplicatePath(t *testing.T) {
 }
 
 func TestGetBookByPath(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -293,6 +297,7 @@ func TestGetBookByPath(t *testing.T) {
 }
 
 func TestGetBookByPath_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -311,6 +316,7 @@ func TestGetBookByPath_NotFound(t *testing.T) {
 }
 
 func TestListBooks_Pagination(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -393,6 +399,7 @@ func TestListBooks_Pagination(t *testing.T) {
 }
 
 func TestUpdateBook(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -494,6 +501,7 @@ func TestUpdateBook(t *testing.T) {
 }
 
 func TestUpdateBook_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -514,6 +522,7 @@ func TestUpdateBook_NotFound(t *testing.T) {
 }
 
 func TestDeleteBook(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -557,6 +566,7 @@ func TestDeleteBook(t *testing.T) {
 }
 
 func TestDeleteBook_NotFound(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -575,6 +585,7 @@ func TestDeleteBook_NotFound(t *testing.T) {
 }
 
 func TestGetBooksForSync(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -625,6 +636,7 @@ func TestGetBooksForSync(t *testing.T) {
 }
 
 func TestGetBooksDeletedAfter(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -663,6 +675,7 @@ func TestGetBooksDeletedAfter(t *testing.T) {
 }
 
 func TestBook_NilCoverImage(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -684,6 +697,7 @@ func TestBook_NilCoverImage(t *testing.T) {
 }
 
 func TestBook_StagedCollectionIDs(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 

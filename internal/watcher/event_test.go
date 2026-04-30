@@ -8,6 +8,7 @@ import (
 )
 
 func TestEventType_String(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		want      string
 		eventType EventType
@@ -20,6 +21,7 @@ func TestEventType_String(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.want, func(t *testing.T) {
+			t.Parallel()
 			got := tt.eventType.String()
 			assert.Equal(t, tt.want, got)
 		})
@@ -27,6 +29,7 @@ func TestEventType_String(t *testing.T) {
 }
 
 func TestEvent_Creation(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	event := Event{
 		Type:    EventAdded,
@@ -44,6 +47,7 @@ func TestEvent_Creation(t *testing.T) {
 }
 
 func TestEvent_MoveEvent(t *testing.T) {
+	t.Parallel()
 	event := Event{
 		Type:    EventMoved,
 		Path:    "/new/path.m4b",

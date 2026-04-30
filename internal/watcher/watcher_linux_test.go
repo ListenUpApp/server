@@ -12,6 +12,7 @@ import (
 )
 
 func TestNewLinuxBackend(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	opts := Options{}
 	opts.setDefaults()
@@ -26,6 +27,7 @@ func TestNewLinuxBackend(t *testing.T) {
 }
 
 func TestLinuxBackend_Channels(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	opts := Options{}
 	opts.setDefaults()

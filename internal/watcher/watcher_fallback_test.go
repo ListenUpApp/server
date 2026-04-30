@@ -15,6 +15,7 @@ import (
 )
 
 func TestNewFallbackBackend(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	opts := Options{}
 	opts.setDefaults()
@@ -28,6 +29,7 @@ func TestNewFallbackBackend(t *testing.T) {
 }
 
 func TestFallbackBackend_Watch(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	opts := Options{}
 	opts.setDefaults()
@@ -45,6 +47,7 @@ func TestFallbackBackend_Watch(t *testing.T) {
 }
 
 func TestFallbackBackend_Debouncing(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	opts := Options{
 		SettleDelay: 50 * time.Millisecond,

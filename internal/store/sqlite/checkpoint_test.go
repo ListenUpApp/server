@@ -7,6 +7,7 @@ import (
 )
 
 func TestGetLibraryCheckpoint_Empty(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -21,6 +22,7 @@ func TestGetLibraryCheckpoint_Empty(t *testing.T) {
 }
 
 func TestGetLibraryCheckpoint_WithData(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -74,6 +76,7 @@ func TestGetLibraryCheckpoint_WithData(t *testing.T) {
 }
 
 func TestGetLibraryCheckpoint_ExcludesDeleted(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 

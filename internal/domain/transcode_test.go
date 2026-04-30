@@ -7,6 +7,7 @@ import (
 )
 
 func TestNeedsTranscode(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		codec    string
 		expected bool
@@ -35,6 +36,7 @@ func TestNeedsTranscode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.codec, func(t *testing.T) {
+			t.Parallel()
 			result := NeedsTranscode(tt.codec)
 			assert.Equal(t, tt.expected, result, "NeedsTranscode(%q)", tt.codec)
 		})

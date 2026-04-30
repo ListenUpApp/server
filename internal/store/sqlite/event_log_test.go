@@ -7,6 +7,7 @@ import (
 )
 
 func TestLogAndReplayEvents(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -67,6 +68,7 @@ func TestLogAndReplayEvents(t *testing.T) {
 }
 
 func TestReplayEventsSinceID(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -102,6 +104,7 @@ func TestReplayEventsSinceID(t *testing.T) {
 }
 
 func TestReplayEventsEmpty(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -115,6 +118,7 @@ func TestReplayEventsEmpty(t *testing.T) {
 }
 
 func TestCleanupEventLog(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -153,6 +157,7 @@ func TestCleanupEventLog(t *testing.T) {
 }
 
 func TestReplayEventsUserIsolation(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -191,6 +196,7 @@ func TestReplayEventsUserIsolation(t *testing.T) {
 
 // TestStoreImplementsEventLogger verifies that *Store satisfies sse.EventLogger.
 func TestStoreImplementsEventLogger(t *testing.T) {
+	t.Parallel()
 	s := newTestStore(t)
 	// Compile-time check: *Store must implement sse.EventLogger.
 	var _ interface {

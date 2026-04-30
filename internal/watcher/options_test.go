@@ -8,6 +8,7 @@ import (
 )
 
 func TestOptions_Defaults(t *testing.T) {
+	t.Parallel()
 	opts := Options{}
 	opts.setDefaults()
 
@@ -18,6 +19,7 @@ func TestOptions_Defaults(t *testing.T) {
 }
 
 func TestOptions_CustomValues(t *testing.T) {
+	t.Parallel()
 	opts := Options{
 		IgnoreHidden:   false,
 		SettleDelay:    200 * time.Millisecond,
@@ -31,6 +33,7 @@ func TestOptions_CustomValues(t *testing.T) {
 }
 
 func TestOptions_ShouldIgnore(t *testing.T) {
+	t.Parallel()
 	opts := Options{
 		IgnoreHidden:   true,
 		IgnorePatterns: []string{"*.tmp", ".DS_Store", "*.bak"},
@@ -53,6 +56,7 @@ func TestOptions_ShouldIgnore(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := opts.shouldIgnore(tt.path)
 			assert.Equal(t, tt.expect, got)
 		})
@@ -60,6 +64,7 @@ func TestOptions_ShouldIgnore(t *testing.T) {
 }
 
 func TestOptions_ShouldIgnore_NoIgnoreHidden(t *testing.T) {
+	t.Parallel()
 	opts := Options{
 		IgnoreHidden:   false,
 		IgnorePatterns: []string{},

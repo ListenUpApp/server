@@ -9,6 +9,7 @@ import (
 )
 
 func TestAnalyzer_Analyze_SingleFile(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Create test audio file.
@@ -67,6 +68,7 @@ func TestAnalyzer_Analyze_SingleFile(t *testing.T) {
 }
 
 func TestAnalyzer_Analyze_MultipleFiles(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Copy test file multiple times.
@@ -124,6 +126,7 @@ func TestAnalyzer_Analyze_MultipleFiles(t *testing.T) {
 }
 
 func TestAnalyzer_Analyze_ContextCancellation(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Copy test file multiple times.
@@ -173,6 +176,7 @@ func TestAnalyzer_Analyze_ContextCancellation(t *testing.T) {
 }
 
 func TestAnalyzer_Analyze_InvalidFile(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Create invalid audio file.
@@ -222,6 +226,7 @@ func TestAnalyzer_Analyze_InvalidFile(t *testing.T) {
 }
 
 func TestAnalyzer_Analyze_EmptyList(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	analyzer := NewAnalyzer(logger)
 
@@ -241,6 +246,7 @@ func TestAnalyzer_Analyze_EmptyList(t *testing.T) {
 }
 
 func TestAnalyzer_Analyze_DefaultWorkers(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Create a test file.
@@ -294,6 +300,7 @@ func TestAnalyzer_Analyze_DefaultWorkers(t *testing.T) {
 }
 
 func TestAnalyzer_Analyze_PreservesOrder(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Copy test file multiple times.
@@ -398,6 +405,7 @@ func BenchmarkAnalyzer_Analyze(b *testing.B) {
 // TestBuildBookMetadata_UsesAlbumForTitle verifies that buildBookMetadata
 // uses the Album tag (book title) instead of Title tag (track/chapter title).
 func TestBuildBookMetadata_UsesAlbumForTitle(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		audioMetadata *AudioMetadata
@@ -434,6 +442,7 @@ func TestBuildBookMetadata_UsesAlbumForTitle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := buildBookMetadata(tt.audioMetadata)
 			if result == nil {
 				t.Fatal("buildBookMetadata returned nil")

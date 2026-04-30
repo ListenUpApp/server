@@ -9,6 +9,7 @@ import (
 )
 
 func TestNewListeningEvent_ComputesDuration(t *testing.T) {
+	t.Parallel()
 	startedAt := time.Date(2025, 1, 1, 10, 0, 0, 0, time.UTC)
 	endedAt := time.Date(2025, 1, 1, 10, 30, 0, 0, time.UTC)
 
@@ -39,6 +40,7 @@ func TestNewListeningEvent_ComputesDuration(t *testing.T) {
 }
 
 func TestListeningEvent_WallDurationMs(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		durationMs    int64
@@ -73,6 +75,7 @@ func TestListeningEvent_WallDurationMs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			event := &ListeningEvent{
 				DurationMs:    tt.durationMs,
 				PlaybackSpeed: tt.playbackSpeed,
@@ -83,6 +86,7 @@ func TestListeningEvent_WallDurationMs(t *testing.T) {
 }
 
 func TestNewPlaybackState_FromFirstEvent(t *testing.T) {
+	t.Parallel()
 	event := &ListeningEvent{
 		UserID:          "user-123",
 		BookID:          "book-456",
@@ -111,11 +115,13 @@ func TestNewPlaybackState_FromFirstEvent(t *testing.T) {
 }
 
 func TestStateID(t *testing.T) {
+	t.Parallel()
 	id := StateID("user-123", "book-456")
 	assert.Equal(t, "user-123:book-456", id)
 }
 
 func TestPlaybackState_UpdateFromEvent(t *testing.T) {
+	t.Parallel()
 	bookDurationMs := int64(3600000) // 1 hour book
 
 	// Initial progress at 30 min
@@ -149,6 +155,7 @@ func TestPlaybackState_UpdateFromEvent(t *testing.T) {
 }
 
 func TestPlaybackState_UpdateFromEvent_Rewind(t *testing.T) {
+	t.Parallel()
 	bookDurationMs := int64(3600000)
 
 	// Progress at 45 min
@@ -177,6 +184,7 @@ func TestPlaybackState_UpdateFromEvent_Rewind(t *testing.T) {
 }
 
 func TestPlaybackState_DetectsCompletion(t *testing.T) {
+	t.Parallel()
 	bookDurationMs := int64(3600000) // 1 hour
 
 	tests := []struct {
@@ -223,6 +231,7 @@ func TestPlaybackState_DetectsCompletion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			event := &ListeningEvent{
 				UserID:        "user-123",
 				BookID:        "book-456",
@@ -245,6 +254,7 @@ func TestPlaybackState_DetectsCompletion(t *testing.T) {
 }
 
 func TestPlaybackState_ComputeProgress(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name       string
 		positionMs int64
@@ -259,6 +269,7 @@ func TestPlaybackState_ComputeProgress(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			state := PlaybackState{
 				CurrentPositionMs: tc.positionMs,
 			}

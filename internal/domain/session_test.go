@@ -9,6 +9,7 @@ import (
 )
 
 func TestNewBookReadingSession(t *testing.T) {
+	t.Parallel()
 	session := NewBookReadingSession("session-123", "user-456", "book-789")
 
 	require.NotNil(t, session)
@@ -26,6 +27,7 @@ func TestNewBookReadingSession(t *testing.T) {
 }
 
 func TestBookReadingSession_IsActive(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		finishedAt *time.Time
@@ -48,6 +50,7 @@ func TestBookReadingSession_IsActive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			session := &BookReadingSession{
 				FinishedAt: tt.finishedAt,
 			}
@@ -57,6 +60,7 @@ func TestBookReadingSession_IsActive(t *testing.T) {
 }
 
 func TestBookReadingSession_IsStale(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2025, 6, 1, 12, 0, 0, 0, time.UTC)
 
 	tests := []struct {
@@ -118,12 +122,14 @@ func TestBookReadingSession_IsStale(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.wantStale, tt.session.IsStale(tt.checkTime))
 		})
 	}
 }
 
 func TestBookReadingSession_MarkCompleted(t *testing.T) {
+	t.Parallel()
 	session := NewBookReadingSession("session-123", "user-456", "book-789")
 	beforeMark := time.Now()
 
@@ -139,6 +145,7 @@ func TestBookReadingSession_MarkCompleted(t *testing.T) {
 }
 
 func TestBookReadingSession_MarkAbandoned(t *testing.T) {
+	t.Parallel()
 	session := NewBookReadingSession("session-123", "user-456", "book-789")
 	beforeMark := time.Now()
 
@@ -154,6 +161,7 @@ func TestBookReadingSession_MarkAbandoned(t *testing.T) {
 }
 
 func TestBookReadingSession_UpdateProgress(t *testing.T) {
+	t.Parallel()
 	session := NewBookReadingSession("session-123", "user-456", "book-789")
 	originalUpdatedAt := session.UpdatedAt
 
@@ -168,6 +176,7 @@ func TestBookReadingSession_UpdateProgress(t *testing.T) {
 }
 
 func TestBookReadingSession_UpdateProgress_Accumulates(t *testing.T) {
+	t.Parallel()
 	session := NewBookReadingSession("session-123", "user-456", "book-789")
 
 	session.UpdateProgress(1800000) // 30 min

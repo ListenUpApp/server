@@ -7,11 +7,13 @@ import (
 )
 
 func TestBookPreferencesID(t *testing.T) {
+	t.Parallel()
 	id := BookPreferencesID("user-123", "book-456")
 	assert.Equal(t, "user-123:prefs:book-456", id)
 }
 
 func TestNewBookPreferences(t *testing.T) {
+	t.Parallel()
 	prefs := NewBookPreferences("user-123", "book-456")
 
 	assert.Equal(t, "user-123", prefs.UserID)

@@ -7,6 +7,7 @@ import (
 )
 
 func TestKeyedRateLimiter_Allow(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		rps      float64
@@ -43,6 +44,7 @@ func TestKeyedRateLimiter_Allow(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			rl := New(tt.rps, tt.burst)
 			defer rl.Stop()
 
@@ -61,6 +63,7 @@ func TestKeyedRateLimiter_Allow(t *testing.T) {
 }
 
 func TestKeyedRateLimiter_Wait(t *testing.T) {
+	t.Parallel()
 	rl := New(10, 1) // 10 rps, burst of 1
 	defer rl.Stop()
 
@@ -90,6 +93,7 @@ func TestKeyedRateLimiter_Wait(t *testing.T) {
 }
 
 func TestKeyedRateLimiter_WaitContextCancelled(t *testing.T) {
+	t.Parallel()
 	rl := New(0.1, 1) // Very slow: 1 request per 10 seconds
 	defer rl.Stop()
 
@@ -107,6 +111,7 @@ func TestKeyedRateLimiter_WaitContextCancelled(t *testing.T) {
 }
 
 func TestKeyedRateLimiter_IndependentKeys(t *testing.T) {
+	t.Parallel()
 	rl := New(1, 1)
 	defer rl.Stop()
 

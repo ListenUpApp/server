@@ -10,6 +10,7 @@ import (
 )
 
 func TestGetInode(t *testing.T) {
+	t.Parallel()
 	// Create a temporary file.
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -29,6 +30,7 @@ func TestGetInode(t *testing.T) {
 }
 
 func TestGetInode_DifferentFiles(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Create two different files.
@@ -54,6 +56,7 @@ func TestGetInode_DifferentFiles(t *testing.T) {
 }
 
 func TestGetInode_InvalidSysInterface(t *testing.T) {
+	t.Parallel()
 	// Passing nil or invalid interface should return 0.
 	inode := getInode(nil)
 	assert.Zero(t, inode, "Invalid sys interface should return 0")

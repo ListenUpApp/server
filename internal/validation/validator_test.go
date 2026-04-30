@@ -16,6 +16,7 @@ type TestRequest struct {
 }
 
 func TestValidator_ValidateSuccess(t *testing.T) {
+	t.Parallel()
 	v := validation.New()
 
 	req := TestRequest{
@@ -29,6 +30,7 @@ func TestValidator_ValidateSuccess(t *testing.T) {
 }
 
 func TestValidator_ValidateErrors(t *testing.T) {
+	t.Parallel()
 	v := validation.New()
 
 	//nolint:govet // fieldalignment: Minor memory optimization not worth the complexity in test code
@@ -82,6 +84,7 @@ func TestValidator_ValidateErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := v.Validate(tt.req)
 			assert.Error(t, err)
 
@@ -99,6 +102,7 @@ func TestValidator_ValidateErrors(t *testing.T) {
 }
 
 func TestValidator_JSONFieldNames(t *testing.T) {
+	t.Parallel()
 	v := validation.New()
 
 	req := TestRequest{
@@ -130,6 +134,7 @@ type OptionalFieldRequest struct {
 }
 
 func TestValidator_OptionalFields(t *testing.T) {
+	t.Parallel()
 	v := validation.New()
 
 	// Test 1: All nil should pass
@@ -182,6 +187,7 @@ type ItemInput struct {
 }
 
 func TestValidator_SliceValidation(t *testing.T) {
+	t.Parallel()
 	v := validation.New()
 
 	// Test 1: Valid slice should pass
@@ -224,6 +230,7 @@ type LengthRequest struct {
 }
 
 func TestValidator_LengthValidation(t *testing.T) {
+	t.Parallel()
 	v := validation.New()
 
 	// Test 1: Correct length should pass
@@ -257,6 +264,7 @@ type NumericRangeRequest struct {
 }
 
 func TestValidator_NumericRangeValidation(t *testing.T) {
+	t.Parallel()
 	v := validation.New()
 
 	// Test 1: Valid values should pass
@@ -306,6 +314,7 @@ type OneOfRequest struct {
 }
 
 func TestValidator_OneOfValidation(t *testing.T) {
+	t.Parallel()
 	v := validation.New()
 
 	// Test 1: Valid value should pass

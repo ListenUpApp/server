@@ -64,6 +64,7 @@ func newTestImporter() *Importer {
 // all handled identically (and silently). Now that they share one helper, we
 // pin the contract: a missing zip entry is not an error.
 func TestImportEntity_FileNotFound(t *testing.T) {
+	t.Parallel()
 	zr := writeZip(t, map[string]string{
 		"other.jsonl": "",
 	})
@@ -91,6 +92,7 @@ func TestImportEntity_FileNotFound(t *testing.T) {
 // TestImportEntity_DryRun ensures the persist callback is bypassed in dry-run
 // mode but each well-formed entity still counts toward "imported".
 func TestImportEntity_DryRun(t *testing.T) {
+	t.Parallel()
 	zr := writeZip(t, map[string]string{
 		"entities/fakes.jsonl": `{"id":"a","name":"x"}` + "\n" + `{"id":"b","name":"y"}` + "\n",
 	})
@@ -119,6 +121,7 @@ func TestImportEntity_DryRun(t *testing.T) {
 // circuit fires only in merge mode and only when the isDeleted callback is
 // supplied.
 func TestImportEntity_SoftDeletedSkippedInMerge(t *testing.T) {
+	t.Parallel()
 	zr := writeZip(t, map[string]string{
 		"entities/fakes.jsonl": `{"id":"alive","name":"x"}` + "\n" + `{"id":"dead","name":"y"}` + "\n",
 	})
@@ -149,6 +152,7 @@ func TestImportEntity_SoftDeletedSkippedInMerge(t *testing.T) {
 // TestImportEntity_PersistOutcomes covers all three branches of persistOutcome
 // in a single pass: imported, skipped, and error-with-id.
 func TestImportEntity_PersistOutcomes(t *testing.T) {
+	t.Parallel()
 	zr := writeZip(t, map[string]string{
 		"entities/fakes.jsonl": `{"id":"ok","name":"x"}` + "\n" +
 			`{"id":"skip","name":"y"}` + "\n" +
@@ -190,6 +194,7 @@ func TestImportEntity_PersistOutcomes(t *testing.T) {
 // RestoreError with no EntityID (we don't have a parsed entity yet) and that
 // streaming continues on subsequent valid lines.
 func TestImportEntity_ParseErrorsRecorded(t *testing.T) {
+	t.Parallel()
 	zr := writeZip(t, map[string]string{
 		"entities/fakes.jsonl": `not-json` + "\n" + `{"id":"ok","name":"x"}` + "\n",
 	})
@@ -216,6 +221,7 @@ func TestImportEntity_ParseErrorsRecorded(t *testing.T) {
 // TestApplyMergeStrategy pins the small decision table that decides whether
 // an existing local entity gets overwritten on a merge restore.
 func TestApplyMergeStrategy(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	earlier := now.Add(-time.Hour)
 
@@ -236,6 +242,7 @@ func TestApplyMergeStrategy(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			got := applyMergeStrategy(tc.opts, tc.backup, tc.existing)
 			assert.Equal(t, tc.want, got)
 		})

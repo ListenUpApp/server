@@ -103,6 +103,7 @@ func (m *mockStore) AddBookGenre(_ context.Context, _ string, _ string) error {
 
 // TestConvertToBook_WithFullMetadata tests converting a library item with complete metadata.
 func TestConvertToBook_WithFullMetadata(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	item := &LibraryItemData{
 		Path:    "/audiobooks/test-book",
@@ -207,6 +208,7 @@ func TestConvertToBook_WithFullMetadata(t *testing.T) {
 
 // TestConvertToBook_WithoutMetadata tests converting without metadata (uses folder name).
 func TestConvertToBook_WithoutMetadata(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	item := &LibraryItemData{
 		Path:    "/audiobooks/My Awesome Book",
@@ -237,6 +239,7 @@ func TestConvertToBook_WithoutMetadata(t *testing.T) {
 
 // TestConvertToBook_MultipleAudioFiles tests converting with multiple audio files.
 func TestConvertToBook_MultipleAudioFiles(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	item := &LibraryItemData{
 		Path:    "/audiobooks/test",
@@ -291,6 +294,7 @@ func TestConvertToBook_MultipleAudioFiles(t *testing.T) {
 
 // TestConvertToBook_WithSeries tests converting with series information.
 func TestConvertToBook_WithSeries(t *testing.T) {
+	t.Parallel()
 	item := &LibraryItemData{
 		Path: "/audiobooks/test",
 		AudioFiles: []AudioFileData{
@@ -329,6 +333,7 @@ func TestConvertToBook_WithSeries(t *testing.T) {
 
 // TestConvertToBook_WithChapters_SingleFile tests chapter conversion for single-file audiobook.
 func TestConvertToBook_WithChapters_SingleFile(t *testing.T) {
+	t.Parallel()
 	item := &LibraryItemData{
 		Path: "/audiobooks/test",
 		AudioFiles: []AudioFileData{
@@ -374,6 +379,7 @@ func TestConvertToBook_WithChapters_SingleFile(t *testing.T) {
 
 // TestConvertToBook_WithChapters_MultiFile tests chapter conversion for multi-file audiobook.
 func TestConvertToBook_WithChapters_MultiFile(t *testing.T) {
+	t.Parallel()
 	item := &LibraryItemData{
 		Path: "/audiobooks/test",
 		AudioFiles: []AudioFileData{
@@ -425,6 +431,7 @@ func TestConvertToBook_WithChapters_MultiFile(t *testing.T) {
 
 // TestConvertToBook_NoCoverImage tests conversion without cover image.
 func TestConvertToBook_NoCoverImage(t *testing.T) {
+	t.Parallel()
 	item := &LibraryItemData{
 		Path: "/audiobooks/test",
 		AudioFiles: []AudioFileData{
@@ -448,6 +455,7 @@ func TestConvertToBook_NoCoverImage(t *testing.T) {
 
 // TestConvertToBook_MultipleCoverImages tests that only first image is used.
 func TestConvertToBook_MultipleCoverImages(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	item := &LibraryItemData{
 		Path: "/audiobooks/test",
@@ -490,6 +498,7 @@ func TestConvertToBook_MultipleCoverImages(t *testing.T) {
 
 // TestConvertToBook_FileExtensions tests various file extension handling.
 func TestConvertToBook_FileExtensions(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		ext      string
 		expected string
@@ -505,6 +514,7 @@ func TestConvertToBook_FileExtensions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.ext, func(t *testing.T) {
+			t.Parallel()
 			item := &LibraryItemData{
 				Path: "/audiobooks/test",
 				AudioFiles: []AudioFileData{
@@ -529,6 +539,7 @@ func TestConvertToBook_FileExtensions(t *testing.T) {
 
 // TestSortAudioFilesByFilename tests the sorting function.
 func TestSortAudioFilesByFilename(t *testing.T) {
+	t.Parallel()
 	files := []domain.AudioFileInfo{
 		{Filename: "track10.mp3"},
 		{Filename: "track2.mp3"},
@@ -547,6 +558,7 @@ func TestSortAudioFilesByFilename(t *testing.T) {
 
 // TestSortAudioFilesByFilename_Empty tests sorting empty slice.
 func TestSortAudioFilesByFilename_Empty(t *testing.T) {
+	t.Parallel()
 	files := []domain.AudioFileInfo{}
 	sortAudioFilesByFilename(files)
 	assert.Empty(t, files)
@@ -554,6 +566,7 @@ func TestSortAudioFilesByFilename_Empty(t *testing.T) {
 
 // TestSortAudioFilesByFilename_Single tests sorting single file.
 func TestSortAudioFilesByFilename_Single(t *testing.T) {
+	t.Parallel()
 	files := []domain.AudioFileInfo{
 		{Filename: "track1.mp3"},
 	}
@@ -563,6 +576,7 @@ func TestSortAudioFilesByFilename_Single(t *testing.T) {
 }
 
 func TestCompareFilenames(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		a        string
@@ -603,6 +617,7 @@ func TestCompareFilenames(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := compareFilenames(tt.a, tt.b)
 
 			// Normalize to -1, 0, 1 for comparison
@@ -638,6 +653,7 @@ func TestCompareFilenames(t *testing.T) {
 }
 
 func TestCompareFilenamesTransitivity(t *testing.T) {
+	t.Parallel()
 	// Test that if a < b and b < c, then a < c
 	files := []string{
 		"track1.mp3",
@@ -658,6 +674,7 @@ func TestCompareFilenamesTransitivity(t *testing.T) {
 
 // TestFindAudioFileForChapter tests chapter-to-file matching.
 func TestFindAudioFileForChapter(t *testing.T) {
+	t.Parallel()
 	files := []domain.AudioFileInfo{
 		{ID: "af-1", Duration: 600000},  // 10 minutes (0-10)
 		{ID: "af-2", Duration: 900000},  // 15 minutes (10-25)
@@ -679,6 +696,7 @@ func TestFindAudioFileForChapter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := findAudioFileForChapter(tt.startMs, files)
 			assert.Equal(t, tt.expectedID, result)
 		})
@@ -687,12 +705,14 @@ func TestFindAudioFileForChapter(t *testing.T) {
 
 // TestFindAudioFileForChapter_EmptyFiles tests with no audio files.
 func TestFindAudioFileForChapter_EmptyFiles(t *testing.T) {
+	t.Parallel()
 	result := findAudioFileForChapter(1000, []domain.AudioFileInfo{})
 	assert.Empty(t, result)
 }
 
 // TestConvertChapters_Empty tests converting empty chapters.
 func TestConvertChapters_Empty(t *testing.T) {
+	t.Parallel()
 	audioFiles := []domain.AudioFileInfo{
 		{ID: "af-1", Duration: 600000},
 	}
@@ -703,6 +723,7 @@ func TestConvertChapters_Empty(t *testing.T) {
 
 // TestConvertChapters_SingleFile tests chapter conversion for single file.
 func TestConvertChapters_SingleFile(t *testing.T) {
+	t.Parallel()
 	audioFiles := []domain.AudioFileInfo{
 		{ID: "af-1", Duration: 3600000}, // 60 minutes
 	}
@@ -729,6 +750,7 @@ func TestConvertChapters_SingleFile(t *testing.T) {
 
 // TestConvertChapters_MultiFile tests chapter conversion for multiple files.
 func TestConvertChapters_MultiFile(t *testing.T) {
+	t.Parallel()
 	audioFiles := []domain.AudioFileInfo{
 		{ID: "af-1", Duration: 1200000}, // 20 minutes
 		{ID: "af-2", Duration: 1800000}, // 30 minutes
@@ -756,6 +778,7 @@ func TestConvertChapters_MultiFile(t *testing.T) {
 // TestUpdateBookFromScan tests updating existing book with new scan data.
 // Phase 5: Scanner respects user edits - only structural data is updated.
 func TestUpdateBookFromScan(t *testing.T) {
+	t.Parallel()
 	originalCreatedAt := time.Now().Add(-24 * time.Hour)
 	existingBook := &domain.Book{
 		Syncable: domain.Syncable{
@@ -819,6 +842,7 @@ func TestUpdateBookFromScan(t *testing.T) {
 
 // TestUpdateBookFromScan_PreservesID tests that book ID is never changed.
 func TestUpdateBookFromScan_PreservesID(t *testing.T) {
+	t.Parallel()
 	existingBook := &domain.Book{
 		Syncable: domain.Syncable{
 			ID:        "book-preserve-this-id",
@@ -854,6 +878,7 @@ func TestUpdateBookFromScan_PreservesID(t *testing.T) {
 
 // TestConvertToBook_AudioFileWithoutMetadata tests audio file without metadata.
 func TestConvertToBook_AudioFileWithoutMetadata(t *testing.T) {
+	t.Parallel()
 	item := &LibraryItemData{
 		Path: "/audiobooks/test",
 		AudioFiles: []AudioFileData{

@@ -10,7 +10,9 @@ import (
 )
 
 func TestNewStorage(t *testing.T) {
+	t.Parallel()
 	t.Run("creates storage with valid path", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 
 		storage, err := NewStorage(tmpDir)
@@ -25,6 +27,7 @@ func TestNewStorage(t *testing.T) {
 	})
 
 	t.Run("returns error for empty path", func(t *testing.T) {
+		t.Parallel()
 		storage, err := NewStorage("")
 		assert.Error(t, err)
 		assert.Nil(t, storage)
@@ -32,6 +35,7 @@ func TestNewStorage(t *testing.T) {
 	})
 
 	t.Run("creates nested directories if needed", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		nestedPath := filepath.Join(tmpDir, "nested", "path")
 
@@ -47,7 +51,9 @@ func TestNewStorage(t *testing.T) {
 }
 
 func TestStorage_Save(t *testing.T) {
+	t.Parallel()
 	t.Run("saves image data successfully", func(t *testing.T) {
+		t.Parallel()
 		storage := setupTestStorage(t)
 		testData := []byte("test image data")
 
@@ -62,6 +68,7 @@ func TestStorage_Save(t *testing.T) {
 	})
 
 	t.Run("returns error for empty book ID", func(t *testing.T) {
+		t.Parallel()
 		storage := setupTestStorage(t)
 		testData := []byte("test image data")
 
@@ -71,6 +78,7 @@ func TestStorage_Save(t *testing.T) {
 	})
 
 	t.Run("returns error for empty image data", func(t *testing.T) {
+		t.Parallel()
 		storage := setupTestStorage(t)
 
 		err := storage.Save("book-123", []byte{})
@@ -79,6 +87,7 @@ func TestStorage_Save(t *testing.T) {
 	})
 
 	t.Run("overwrites existing file", func(t *testing.T) {
+		t.Parallel()
 		storage := setupTestStorage(t)
 		bookID := "book-123"
 
@@ -99,7 +108,9 @@ func TestStorage_Save(t *testing.T) {
 }
 
 func TestStorage_Get(t *testing.T) {
+	t.Parallel()
 	t.Run("retrieves saved image data", func(t *testing.T) {
+		t.Parallel()
 		storage := setupTestStorage(t)
 		testData := []byte("test image data")
 		bookID := "book-123"
@@ -113,6 +124,7 @@ func TestStorage_Get(t *testing.T) {
 	})
 
 	t.Run("returns error for non-existent cover", func(t *testing.T) {
+		t.Parallel()
 		storage := setupTestStorage(t)
 
 		data, err := storage.Get("non-existent-book")
@@ -122,6 +134,7 @@ func TestStorage_Get(t *testing.T) {
 	})
 
 	t.Run("returns error for empty book ID", func(t *testing.T) {
+		t.Parallel()
 		storage := setupTestStorage(t)
 
 		data, err := storage.Get("")
@@ -132,7 +145,9 @@ func TestStorage_Get(t *testing.T) {
 }
 
 func TestStorage_Exists(t *testing.T) {
+	t.Parallel()
 	t.Run("returns true for existing cover", func(t *testing.T) {
+		t.Parallel()
 		storage := setupTestStorage(t)
 		bookID := "book-123"
 
@@ -143,12 +158,14 @@ func TestStorage_Exists(t *testing.T) {
 	})
 
 	t.Run("returns false for non-existent cover", func(t *testing.T) {
+		t.Parallel()
 		storage := setupTestStorage(t)
 
 		assert.False(t, storage.Exists("non-existent-book"))
 	})
 
 	t.Run("returns false for empty book ID", func(t *testing.T) {
+		t.Parallel()
 		storage := setupTestStorage(t)
 
 		assert.False(t, storage.Exists(""))
@@ -156,7 +173,9 @@ func TestStorage_Exists(t *testing.T) {
 }
 
 func TestStorage_Delete(t *testing.T) {
+	t.Parallel()
 	t.Run("deletes existing cover", func(t *testing.T) {
+		t.Parallel()
 		storage := setupTestStorage(t)
 		bookID := "book-123"
 
@@ -170,6 +189,7 @@ func TestStorage_Delete(t *testing.T) {
 	})
 
 	t.Run("succeeds when cover does not exist", func(t *testing.T) {
+		t.Parallel()
 		storage := setupTestStorage(t)
 
 		err := storage.Delete("non-existent-book")
@@ -177,6 +197,7 @@ func TestStorage_Delete(t *testing.T) {
 	})
 
 	t.Run("returns error for empty book ID", func(t *testing.T) {
+		t.Parallel()
 		storage := setupTestStorage(t)
 
 		err := storage.Delete("")
@@ -186,7 +207,9 @@ func TestStorage_Delete(t *testing.T) {
 }
 
 func TestStorage_Hash(t *testing.T) {
+	t.Parallel()
 	t.Run("computes consistent hash", func(t *testing.T) {
+		t.Parallel()
 		storage := setupTestStorage(t)
 		bookID := "book-123"
 		testData := []byte("test image data")
@@ -208,6 +231,7 @@ func TestStorage_Hash(t *testing.T) {
 	})
 
 	t.Run("different data produces different hash", func(t *testing.T) {
+		t.Parallel()
 		storage := setupTestStorage(t)
 
 		err := storage.Save("book-1", []byte("data1"))
@@ -226,6 +250,7 @@ func TestStorage_Hash(t *testing.T) {
 	})
 
 	t.Run("returns error for non-existent cover", func(t *testing.T) {
+		t.Parallel()
 		storage := setupTestStorage(t)
 
 		hash, err := storage.Hash("non-existent-book")
@@ -234,6 +259,7 @@ func TestStorage_Hash(t *testing.T) {
 	})
 
 	t.Run("returns error for empty book ID", func(t *testing.T) {
+		t.Parallel()
 		storage := setupTestStorage(t)
 
 		hash, err := storage.Hash("")
@@ -243,7 +269,9 @@ func TestStorage_Hash(t *testing.T) {
 }
 
 func TestStorage_Path(t *testing.T) {
+	t.Parallel()
 	t.Run("generates correct path", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		storage, err := NewStorage(tmpDir)
 		require.NoError(t, err)
@@ -254,6 +282,7 @@ func TestStorage_Path(t *testing.T) {
 	})
 
 	t.Run("handles various book IDs", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		storage, err := NewStorage(tmpDir)
 		require.NoError(t, err)
@@ -275,7 +304,9 @@ func TestStorage_Path(t *testing.T) {
 }
 
 func TestStorage_Concurrent(t *testing.T) {
+	t.Parallel()
 	t.Run("handles concurrent writes safely", func(t *testing.T) {
+		t.Parallel()
 		storage := setupTestStorage(t)
 		bookID := "book-123"
 
@@ -305,6 +336,7 @@ func TestStorage_Concurrent(t *testing.T) {
 	})
 
 	t.Run("handles concurrent reads safely", func(t *testing.T) {
+		t.Parallel()
 		storage := setupTestStorage(t)
 		bookID := "book-123"
 		testData := []byte("test data")

@@ -14,6 +14,7 @@ import (
 )
 
 func TestNew_DefaultWriter(t *testing.T) {
+	t.Parallel()
 	cfg := Config{
 		Level:  slog.LevelInfo,
 		Format: "json",
@@ -25,6 +26,7 @@ func TestNew_DefaultWriter(t *testing.T) {
 }
 
 func TestNew_CustomWriter(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	cfg := Config{
 		Level:  slog.LevelInfo,
@@ -40,6 +42,7 @@ func TestNew_CustomWriter(t *testing.T) {
 }
 
 func TestNew_FormatAutoDetection(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		environment string
@@ -64,6 +67,7 @@ func TestNew_FormatAutoDetection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			var buf bytes.Buffer
 			cfg := Config{
 				Level:       slog.LevelInfo,
@@ -88,6 +92,7 @@ func TestNew_FormatAutoDetection(t *testing.T) {
 }
 
 func TestNew_ExplicitFormat(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	cfg := Config{
 		Level:       slog.LevelInfo,
@@ -104,6 +109,7 @@ func TestNew_ExplicitFormat(t *testing.T) {
 }
 
 func TestParseLevel(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input string
 		want  slog.Level
@@ -125,6 +131,7 @@ func TestParseLevel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
 			got := ParseLevel(tt.input)
 			assert.Equal(t, tt.want, got)
 		})
@@ -132,6 +139,7 @@ func TestParseLevel(t *testing.T) {
 }
 
 func TestPrettyHandler_Enabled(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		handlerLevel slog.Level
@@ -166,6 +174,7 @@ func TestPrettyHandler_Enabled(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			var buf bytes.Buffer
 			handler := NewPrettyHandler(&buf, &slog.HandlerOptions{
 				Level: tt.handlerLevel,
@@ -178,6 +187,7 @@ func TestPrettyHandler_Enabled(t *testing.T) {
 }
 
 func TestPrettyHandler_Handle(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	handler := NewPrettyHandler(&buf, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -194,6 +204,7 @@ func TestPrettyHandler_Handle(t *testing.T) {
 }
 
 func TestPrettyHandler_LevelFormatting(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		wantString string
 		level      slog.Level
@@ -206,6 +217,7 @@ func TestPrettyHandler_LevelFormatting(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.wantString, func(t *testing.T) {
+			t.Parallel()
 			var buf bytes.Buffer
 			handler := NewPrettyHandler(&buf, &slog.HandlerOptions{
 				Level: slog.LevelDebug,
@@ -220,6 +232,7 @@ func TestPrettyHandler_LevelFormatting(t *testing.T) {
 }
 
 func TestPrettyHandler_WithAttrs(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	handler := NewPrettyHandler(&buf, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -241,6 +254,7 @@ func TestPrettyHandler_WithAttrs(t *testing.T) {
 }
 
 func TestPrettyHandler_WithGroup(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	handler := NewPrettyHandler(&buf, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -262,6 +276,7 @@ func TestPrettyHandler_WithGroup(t *testing.T) {
 }
 
 func TestPrettyHandler_WithSource(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	handler := NewPrettyHandler(&buf, &slog.HandlerOptions{
 		Level:     slog.LevelInfo,
@@ -277,6 +292,7 @@ func TestPrettyHandler_WithSource(t *testing.T) {
 }
 
 func TestFormatLevel(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		wantStr   string
 		wantColor string
@@ -290,6 +306,7 @@ func TestFormatLevel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.wantStr, func(t *testing.T) {
+			t.Parallel()
 			str, color := formatLevel(tt.level)
 			assert.Equal(t, tt.wantStr, str)
 			assert.Equal(t, tt.wantColor, color)
@@ -298,6 +315,7 @@ func TestFormatLevel(t *testing.T) {
 }
 
 func TestFormatValue(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	duration := 5 * time.Second
 
@@ -330,6 +348,7 @@ func TestFormatValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := formatValue(tt.value)
 			assert.Equal(t, tt.want, got)
 		})
@@ -337,6 +356,7 @@ func TestFormatValue(t *testing.T) {
 }
 
 func TestLogger_WithError(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	cfg := Config{
 		Level:  slog.LevelInfo,
@@ -356,6 +376,7 @@ func TestLogger_WithError(t *testing.T) {
 }
 
 func TestLogger_WithField(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	cfg := Config{
 		Level:  slog.LevelInfo,
@@ -375,6 +396,7 @@ func TestLogger_WithField(t *testing.T) {
 }
 
 func TestLogger_WithFields(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	cfg := Config{
 		Level:  slog.LevelInfo,
@@ -401,6 +423,7 @@ func TestLogger_WithFields(t *testing.T) {
 }
 
 func TestLogger_AllLevels(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	cfg := Config{
 		Level:  slog.LevelDebug,
@@ -429,6 +452,7 @@ func TestLogger_AllLevels(t *testing.T) {
 }
 
 func TestLogger_LevelFiltering(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	cfg := Config{
 		Level:  slog.LevelWarn, // Only warn and error
@@ -453,6 +477,7 @@ func TestLogger_LevelFiltering(t *testing.T) {
 }
 
 func TestNewPrettyHandler_NilOptions(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	handler := NewPrettyHandler(&buf, nil)
 
@@ -466,6 +491,7 @@ func TestNewPrettyHandler_NilOptions(t *testing.T) {
 }
 
 func TestPrettyHandler_MultipleAttributes(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	handler := NewPrettyHandler(&buf, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -487,6 +513,7 @@ func TestPrettyHandler_MultipleAttributes(t *testing.T) {
 }
 
 func TestPrettyHandler_TimeFormatting(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	handler := NewPrettyHandler(&buf, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -503,6 +530,7 @@ func TestPrettyHandler_TimeFormatting(t *testing.T) {
 }
 
 func TestLogger_ChainedWithMethods(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	cfg := Config{
 		Level:  slog.LevelInfo,
@@ -534,6 +562,7 @@ func TestLogger_ChainedWithMethods(t *testing.T) {
 }
 
 func TestPrettyHandler_EmptyMessage(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	handler := NewPrettyHandler(&buf, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -549,6 +578,7 @@ func TestPrettyHandler_EmptyMessage(t *testing.T) {
 }
 
 func TestPrettyHandler_NoAttributes(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	handler := NewPrettyHandler(&buf, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -570,6 +600,7 @@ func TestPrettyHandler_NoAttributes(t *testing.T) {
 }
 
 func TestConfig_Defaults(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		config Config
@@ -598,6 +629,7 @@ func TestConfig_Defaults(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			logger := New(tt.config)
 			require.NotNil(t, logger)
 			require.NotNil(t, logger.Logger)

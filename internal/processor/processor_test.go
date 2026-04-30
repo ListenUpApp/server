@@ -168,6 +168,7 @@ func (m *mockBookStore) AdminAddBookToCollection(_ context.Context, _, _ string)
 
 // TestEventProcessor_ProcessEvent_AudioFile tests processing an audio file event.
 func TestEventProcessor_ProcessEvent_AudioFile(t *testing.T) {
+	t.Parallel()
 	// Create temp directory for test.
 	tempDir := t.TempDir()
 	bookFolder := filepath.Join(tempDir, "Author", "Book")
@@ -211,6 +212,7 @@ func TestEventProcessor_ProcessEvent_AudioFile(t *testing.T) {
 
 // TestEventProcessor_ProcessEvent_CoverFile tests processing a cover file event.
 func TestEventProcessor_ProcessEvent_CoverFile(t *testing.T) {
+	t.Parallel()
 	// Create temp directory for test.
 	tempDir := t.TempDir()
 	bookFolder := filepath.Join(tempDir, "Author", "Book")
@@ -248,6 +250,7 @@ func TestEventProcessor_ProcessEvent_CoverFile(t *testing.T) {
 
 // TestEventProcessor_ProcessEvent_MetadataFile tests processing a metadata file event.
 func TestEventProcessor_ProcessEvent_MetadataFile(t *testing.T) {
+	t.Parallel()
 	// Create temp directory for test.
 	tempDir := t.TempDir()
 	bookFolder := filepath.Join(tempDir, "Author", "Book")
@@ -285,6 +288,7 @@ func TestEventProcessor_ProcessEvent_MetadataFile(t *testing.T) {
 
 // TestEventProcessor_ProcessEvent_IgnoredFile tests that ignored files are skipped.
 func TestEventProcessor_ProcessEvent_IgnoredFile(t *testing.T) {
+	t.Parallel()
 	// Create temp directory for test.
 	tempDir := t.TempDir()
 	bookFolder := filepath.Join(tempDir, "Author", "Book")
@@ -325,6 +329,7 @@ func TestEventProcessor_ProcessEvent_IgnoredFile(t *testing.T) {
 
 // TestEventProcessor_ProcessEvent_RemovedFile tests processing a file removal event.
 func TestEventProcessor_ProcessEvent_RemovedFile(t *testing.T) {
+	t.Parallel()
 	// Create temp directory for test.
 	tempDir := t.TempDir()
 	bookFolder := filepath.Join(tempDir, "Author", "Book")
@@ -358,6 +363,7 @@ func TestEventProcessor_ProcessEvent_RemovedFile(t *testing.T) {
 // TestEventProcessor_ProcessEvent_RemovedFile_AllFilesGone tests that when all.
 // audio files are removed, the folder is detected as empty.
 func TestEventProcessor_ProcessEvent_RemovedFile_AllFilesGone(t *testing.T) {
+	t.Parallel()
 	// Create temp directory for test.
 	tempDir := t.TempDir()
 	bookFolder := filepath.Join(tempDir, "Author", "Book")
@@ -394,6 +400,7 @@ func TestEventProcessor_ProcessEvent_RemovedFile_AllFilesGone(t *testing.T) {
 // TestEventProcessor_ConcurrentEvents tests that concurrent events for the same.
 // folder are properly deduplicated using per-folder locks.
 func TestEventProcessor_ConcurrentEvents(t *testing.T) {
+	t.Parallel()
 	// Create temp directory for test.
 	tempDir := t.TempDir()
 	bookFolder := filepath.Join(tempDir, "Author", "Book")
@@ -472,6 +479,7 @@ func TestEventProcessor_ConcurrentEvents(t *testing.T) {
 // TestEventProcessor_MultiFileBookEvolution tests that a multi-file book.
 // evolves correctly as files are added.
 func TestEventProcessor_MultiFileBookEvolution(t *testing.T) {
+	t.Parallel()
 	// Create temp directory for test.
 	tempDir := t.TempDir()
 	bookFolder := filepath.Join(tempDir, "Author", "Book")
@@ -557,6 +565,7 @@ func TestEventProcessor_MultiFileBookEvolution(t *testing.T) {
 // TestEventProcessor_DiscFolderHandling tests that files in disc folders.
 // (CD1, CD2, etc.) are properly grouped under the parent folder.
 func TestEventProcessor_DiscFolderHandling(t *testing.T) {
+	t.Parallel()
 	// Create temp directory for test.
 	tempDir := t.TempDir()
 	bookFolder := filepath.Join(tempDir, "Author", "Book")
@@ -632,6 +641,7 @@ func TestEventProcessor_DiscFolderHandling(t *testing.T) {
 
 // TestEventProcessor_GetFolderLock tests the getFolderLock method.
 func TestEventProcessor_GetFolderLock(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError,
 	}))
@@ -671,6 +681,7 @@ func TestEventProcessor_GetFolderLock(t *testing.T) {
 // TestEventProcessor_GetFolderLock_Concurrent tests that getFolderLock.
 // is safe for concurrent access.
 func TestEventProcessor_GetFolderLock_Concurrent(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError,
 	}))
@@ -704,6 +715,7 @@ func TestEventProcessor_GetFolderLock_Concurrent(t *testing.T) {
 
 // TestEventProcessor_ModifiedEvent tests that modified events are handled correctly.
 func TestEventProcessor_ModifiedEvent(t *testing.T) {
+	t.Parallel()
 	// Create temp directory for test.
 	tempDir := t.TempDir()
 	bookFolder := filepath.Join(tempDir, "Author", "Book")

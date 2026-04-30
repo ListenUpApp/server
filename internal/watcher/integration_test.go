@@ -17,6 +17,7 @@ import (
 
 // TestIntegration_LargeFileDetection tests detection of large files.
 func TestIntegration_LargeFileDetection(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
@@ -68,6 +69,7 @@ func TestIntegration_LargeFileDetection(t *testing.T) {
 
 // TestIntegration_MultipleRapidChanges tests handling of rapid file changes.
 func TestIntegration_MultipleRapidChanges(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
@@ -130,6 +132,7 @@ func TestIntegration_MultipleRapidChanges(t *testing.T) {
 
 // TestIntegration_NewDirectoryDetection tests automatic watching of new directories.
 func TestIntegration_NewDirectoryDetection(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}

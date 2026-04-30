@@ -7,6 +7,7 @@ import (
 )
 
 func TestInferSeriesPosition_ExplicitMarker(t *testing.T) {
+	t.Parallel()
 	file := &audiometa.File{}
 	file.Tags.Series = "Epic Fantasy"
 	file.Tags.SeriesPart = "2"
@@ -18,6 +19,7 @@ func TestInferSeriesPosition_ExplicitMarker(t *testing.T) {
 }
 
 func TestInferSeriesPosition_SmallTrackTotal(t *testing.T) {
+	t.Parallel()
 	file := &audiometa.File{}
 	file.Tags.Series = "Epic Fantasy"
 	file.Tags.SeriesPart = "" // No explicit marker
@@ -31,6 +33,7 @@ func TestInferSeriesPosition_SmallTrackTotal(t *testing.T) {
 }
 
 func TestInferSeriesPosition_NoInference(t *testing.T) {
+	t.Parallel()
 	file := &audiometa.File{}
 	file.Tags.Series = "Epic Fantasy"
 	file.Tags.SeriesPart = "" // No explicit marker
@@ -44,6 +47,7 @@ func TestInferSeriesPosition_NoInference(t *testing.T) {
 }
 
 func TestInferSeriesPosition_LargeTrackTotal(t *testing.T) {
+	t.Parallel()
 	file := &audiometa.File{}
 	file.Tags.Series = "Epic Fantasy"
 	file.Tags.SeriesPart = "" // No explicit marker
@@ -57,6 +61,7 @@ func TestInferSeriesPosition_LargeTrackTotal(t *testing.T) {
 }
 
 func TestInferSeriesPosition_NoSeries(t *testing.T) {
+	t.Parallel()
 	file := &audiometa.File{}
 	file.Tags.Series = "" // No series tag
 	file.Tags.SeriesPart = ""
@@ -70,6 +75,7 @@ func TestInferSeriesPosition_NoSeries(t *testing.T) {
 }
 
 func TestIsLikelySeriesTrackNumber(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		trackNum   int
@@ -91,6 +97,7 @@ func TestIsLikelySeriesTrackNumber(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := isLikelySeriesTrackNumber(tt.trackNum, tt.trackTotal)
 			if result != tt.expected {
 				t.Errorf("isLikelySeriesTrackNumber(%d, %d) = %v, want %v",

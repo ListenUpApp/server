@@ -5,6 +5,7 @@ import (
 )
 
 func TestIsGenericName(t *testing.T) {
+	t.Parallel()
 	generic := []string{
 		"Chapter 1",
 		"Chapter 12",
@@ -50,6 +51,7 @@ func TestIsGenericName(t *testing.T) {
 }
 
 func TestAnalyzeChapters(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		titles      []string
@@ -84,6 +86,7 @@ func TestAnalyzeChapters(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			chapters := make([]Chapter, len(tt.titles))
 			for i, title := range tt.titles {
 				chapters[i] = Chapter{Title: title}

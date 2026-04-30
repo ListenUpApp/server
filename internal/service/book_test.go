@@ -11,6 +11,7 @@ import (
 // TestMergeContributors_PreservesAuthorsWhenOnlyNarratorsSelected tests that
 // existing authors are preserved when only narrators are selected from Audible.
 func TestMergeContributors_PreservesAuthorsWhenOnlyNarratorsSelected(t *testing.T) {
+	t.Parallel()
 	existing := []domain.BookContributor{
 		{ContributorID: "author-1", Roles: []domain.ContributorRole{domain.RoleAuthor}},
 		{ContributorID: "narrator-1", Roles: []domain.ContributorRole{domain.RoleNarrator}},
@@ -36,6 +37,7 @@ func TestMergeContributors_PreservesAuthorsWhenOnlyNarratorsSelected(t *testing.
 // TestMergeContributors_PreservesNarratorsWhenOnlyAuthorsSelected tests that
 // existing narrators are preserved when only authors are selected from Audible.
 func TestMergeContributors_PreservesNarratorsWhenOnlyAuthorsSelected(t *testing.T) {
+	t.Parallel()
 	existing := []domain.BookContributor{
 		{ContributorID: "author-1", Roles: []domain.ContributorRole{domain.RoleAuthor}},
 		{ContributorID: "narrator-1", Roles: []domain.ContributorRole{domain.RoleNarrator}},
@@ -59,6 +61,7 @@ func TestMergeContributors_PreservesNarratorsWhenOnlyAuthorsSelected(t *testing.
 // TestMergeContributors_PreservesOtherRoles tests that roles like editor and
 // translator are always preserved regardless of author/narrator selections.
 func TestMergeContributors_PreservesOtherRoles(t *testing.T) {
+	t.Parallel()
 	existing := []domain.BookContributor{
 		{ContributorID: "author-1", Roles: []domain.ContributorRole{domain.RoleAuthor}},
 		{ContributorID: "editor-1", Roles: []domain.ContributorRole{domain.RoleEditor}},
@@ -80,6 +83,7 @@ func TestMergeContributors_PreservesOtherRoles(t *testing.T) {
 // TestMergeContributors_DeduplicatesContributors tests that the same contributor
 // is not added twice when they appear in both existing and new lists.
 func TestMergeContributors_DeduplicatesContributors(t *testing.T) {
+	t.Parallel()
 	existing := []domain.BookContributor{
 		{ContributorID: "person-1", Roles: []domain.ContributorRole{domain.RoleAuthor}},
 	}
@@ -94,6 +98,7 @@ func TestMergeContributors_DeduplicatesContributors(t *testing.T) {
 // TestMergeContributors_MergesRolesForSamePerson tests that when a person is both
 // an existing author and a new narrator, their roles are merged.
 func TestMergeContributors_MergesRolesForSamePerson(t *testing.T) {
+	t.Parallel()
 	existing := []domain.BookContributor{
 		{ContributorID: "person-1", Roles: []domain.ContributorRole{domain.RoleAuthor, domain.RoleNarrator}},
 	}

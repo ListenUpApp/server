@@ -9,6 +9,7 @@ import (
 )
 
 func TestSeries_JSONMarshaling(t *testing.T) {
+	t.Parallel()
 	series := &Series{
 		Syncable: Syncable{
 			ID: "series-123",
@@ -36,6 +37,7 @@ func TestSeries_JSONMarshaling(t *testing.T) {
 }
 
 func TestSeries_OngoingSeries(t *testing.T) {
+	t.Parallel()
 	// Test series with unknown total (ongoing series)
 	series := &Series{
 		Syncable: Syncable{
@@ -49,6 +51,7 @@ func TestSeries_OngoingSeries(t *testing.T) {
 }
 
 func TestSeries_CompletedSeries(t *testing.T) {
+	t.Parallel()
 	// Test series with known total
 	series := &Series{
 		Syncable: Syncable{
@@ -62,6 +65,7 @@ func TestSeries_CompletedSeries(t *testing.T) {
 }
 
 func TestSeries_EmptyDescription(t *testing.T) {
+	t.Parallel()
 	// Test that description is optional
 	series := &Series{
 		Syncable: Syncable{

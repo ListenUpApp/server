@@ -29,6 +29,7 @@ func getTestFile(t *testing.T) string {
 }
 
 func TestFFprobeParser_Parse_BasicMetadata(t *testing.T) {
+	t.Parallel()
 	testFile := getTestFile(t)
 
 	parser := NewFFprobeParser()
@@ -81,6 +82,7 @@ func TestFFprobeParser_Parse_BasicMetadata(t *testing.T) {
 }
 
 func TestFFprobeParser_Parse_AudioFormat(t *testing.T) {
+	t.Parallel()
 	testFile := getTestFile(t)
 
 	parser := NewFFprobeParser()
@@ -123,6 +125,7 @@ func TestFFprobeParser_Parse_AudioFormat(t *testing.T) {
 }
 
 func TestFFprobeParser_Parse_NonexistentFile(t *testing.T) {
+	t.Parallel()
 	parser := NewFFprobeParser()
 	ctx := context.Background()
 
@@ -133,6 +136,7 @@ func TestFFprobeParser_Parse_NonexistentFile(t *testing.T) {
 }
 
 func TestFFprobeParser_Parse_ContextCancellation(t *testing.T) {
+	t.Parallel()
 	testFile := getTestFile(t)
 
 	parser := NewFFprobeParser()
@@ -148,6 +152,7 @@ func TestFFprobeParser_Parse_ContextCancellation(t *testing.T) {
 }
 
 func TestFFprobeParser_Parse_InvalidFile(t *testing.T) {
+	t.Parallel()
 	// Create a non-audio file.
 	tmpDir := t.TempDir()
 	invalidFile := filepath.Join(tmpDir, "invalid.mp3")
