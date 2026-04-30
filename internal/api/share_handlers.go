@@ -241,7 +241,7 @@ func (s *Server) handleDeleteShare(ctx context.Context, input *DeleteShareInput)
 	}
 
 	// Get the share before deleting to know which user and collection to notify
-	share, err := s.store.GetShare(ctx, input.ID)
+	share, err := s.services.Sharing.GetShare(ctx, userID, input.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -290,7 +290,7 @@ func mapShareResponse(s *domain.CollectionShare) ShareResponse {
 // isCreated=true emits book.created events, isCreated=false emits book.deleted events.
 func (s *Server) emitBooksForShare(ctx context.Context, collectionID, userID string, isCreated bool) {
 	// Get the collection to find the owner and book IDs
-	coll, err := s.store.AdminGetCollection(ctx, collectionID)
+	coll, err := s.services.Collection.AdminGetCollection(ctx, collectionID)
 	if err != nil {
 		if !errors.Is(err, store.ErrCollectionNotFound) {
 			s.logger.Error("failed to get collection for share notification", "collection_id", collectionID, "error", err)
@@ -302,7 +302,7 @@ func (s *Server) emitBooksForShare(ctx context.Context, collectionID, userID str
 	for _, bookID := range coll.BookIDs {
 		if isCreated {
 			// For book.created, we need the full enriched book data
-			book, err := s.store.GetBook(ctx, bookID, coll.OwnerID)
+			book, err := s.services.Collection.GetBook(ctx, bookID, coll.OwnerID)
 			if err != nil {
 				s.logger.Error("failed to get book for share notification", "book_id", bookID, "error", err)
 				continue
@@ -319,7 +319,7 @@ func (s *Server) emitBooksForShare(ctx context.Context, collectionID, userID str
 		} else {
 			// For book.deleted, only emit if user can no longer access the book
 			// (they may still have access through another collection or open mode)
-			canAccess, err := s.store.CanUserAccessBook(ctx, userID, bookID)
+			canAccess, err := s.services.Collection.CanUserAccessBook(ctx, userID, bookID)
 			if err != nil {
 				s.logger.Error("failed to check book access for unshare", "book_id", bookID, "user_id", userID, "error", err)
 				continue

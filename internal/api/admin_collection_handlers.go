@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/listenupapp/listenup-server/internal/domain"
-	"github.com/listenupapp/listenup-server/internal/id"
 	"github.com/listenupapp/listenup-server/internal/sse"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
@@ -179,7 +177,7 @@ func (s *Server) handleListAdminCollections(ctx context.Context, _ *ListAdminCol
 		return nil, err
 	}
 
-	collections, err := s.store.AdminListAllCollections(ctx)
+	collections, err := s.services.Collection.AdminListAllCollections(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -206,37 +204,13 @@ func (s *Server) handleCreateAdminCollection(ctx context.Context, input *CreateA
 		return nil, err
 	}
 
-	// Get library ID - use default library if not specified
-	libraryID := input.Body.LibraryID
-	if libraryID == "" {
-		lib, err := s.store.GetDefaultLibrary(ctx)
-		if err != nil {
-			return nil, huma.Error400BadRequest("No default library found")
-		}
-		libraryID = lib.ID
-	}
-
-	// Generate collection ID
-	collID, err := id.Generate("coll")
+	coll, err := s.services.Collection.AdminCreateCollection(ctx, userID, input.Body.LibraryID, input.Body.Name)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("Failed to generate collection ID")
-	}
-
-	now := time.Now()
-	coll := &domain.Collection{
-		ID:        collID,
-		LibraryID: libraryID,
-		OwnerID:   userID,
-		Name:      input.Body.Name,
-		BookIDs:   []string{},
-		IsInbox:   false,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-
-	if err := s.store.CreateCollection(ctx, coll); err != nil {
 		if errors.Is(err, store.ErrDuplicateCollection) {
 			return nil, huma.Error409Conflict("Collection already exists")
+		}
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, huma.Error400BadRequest("No default library found")
 		}
 		return nil, err
 	}
@@ -260,7 +234,7 @@ func (s *Server) handleGetAdminCollection(ctx context.Context, input *GetAdminCo
 		return nil, err
 	}
 
-	coll, err := s.store.AdminGetCollection(ctx, input.ID)
+	coll, err := s.services.Collection.AdminGetCollection(ctx, input.ID)
 	if err != nil {
 		if errors.Is(err, store.ErrCollectionNotFound) {
 			return nil, huma.Error404NotFound("Collection not found")
@@ -284,21 +258,11 @@ func (s *Server) handleUpdateAdminCollection(ctx context.Context, input *UpdateA
 		return nil, err
 	}
 
-	coll, err := s.store.AdminGetCollection(ctx, input.ID)
+	coll, err := s.services.Collection.AdminUpdateCollectionName(ctx, input.ID, input.Body.Name)
 	if err != nil {
 		if errors.Is(err, store.ErrCollectionNotFound) {
 			return nil, huma.Error404NotFound("Collection not found")
 		}
-		return nil, err
-	}
-
-	// Apply updates
-	if input.Body.Name != nil {
-		coll.Name = *input.Body.Name
-	}
-	coll.UpdatedAt = time.Now()
-
-	if err := s.store.AdminUpdateCollection(ctx, coll); err != nil {
 		return nil, err
 	}
 
@@ -321,8 +285,7 @@ func (s *Server) handleDeleteAdminCollection(ctx context.Context, input *DeleteA
 		return nil, err
 	}
 
-	// Get collection first for SSE event
-	coll, err := s.store.AdminGetCollection(ctx, input.ID)
+	result, err := s.services.Collection.AdminDeleteCollection(ctx, input.ID)
 	if err != nil {
 		if errors.Is(err, store.ErrCollectionNotFound) {
 			return nil, huma.Error404NotFound("Collection not found")
@@ -330,46 +293,16 @@ func (s *Server) handleDeleteAdminCollection(ctx context.Context, input *DeleteA
 		return nil, err
 	}
 
-	if coll.IsInbox {
+	if result.Collection.IsInbox {
 		return nil, huma.Error400BadRequest("Cannot delete system collection")
 	}
 
-	collName := coll.Name
-
-	// Identify books that will become public after deletion
-	// (books only in this collection, not in any other)
-	var booksBecomingPublic []string
-	for _, bookID := range coll.BookIDs {
-		colls, err := s.store.GetCollectionsForBook(ctx, bookID)
-		if err != nil {
-			continue
-		}
-		// If book is only in this collection, it will become public
-		if len(colls) == 1 && colls[0].ID == input.ID {
-			booksBecomingPublic = append(booksBecomingPublic, bookID)
-		}
-	}
-
-	// Get member IDs for access grant notifications
-	memberUserIDs := make(map[string]bool)
-	if len(booksBecomingPublic) > 0 {
-		memberUserIDs[coll.OwnerID] = true
-		shares, _ := s.store.GetSharesForCollection(ctx, input.ID)
-		for _, share := range shares {
-			memberUserIDs[share.SharedWithUserID] = true
-		}
-	}
-
-	if err := s.store.AdminDeleteCollection(ctx, input.ID); err != nil {
-		return nil, err
-	}
-
 	// Emit SSE event for admins
-	s.sseManager.Emit(sse.NewCollectionDeletedEvent(input.ID, collName))
+	s.sseManager.Emit(sse.NewCollectionDeletedEvent(input.ID, result.Collection.Name))
 
 	// Notify non-members about books becoming public
-	for _, bookID := range booksBecomingPublic {
-		book, err := s.store.GetBook(ctx, bookID, coll.OwnerID)
+	for _, bookID := range result.BooksBecomingPublic {
+		book, err := s.services.Collection.GetBook(ctx, bookID, result.Collection.OwnerID)
 		if err != nil {
 			continue
 		}
@@ -378,7 +311,7 @@ func (s *Server) handleDeleteAdminCollection(ctx context.Context, input *DeleteA
 			continue
 		}
 		createEvent := sse.NewBookCreatedEvent(enrichedBook)
-		s.sseManager.EmitToNonMembers(memberUserIDs, createEvent)
+		s.sseManager.EmitToNonMembers(result.MemberUserIDs, createEvent)
 	}
 
 	return &MessageOutput{Body: MessageResponse{Message: "Collection deleted"}}, nil
@@ -389,8 +322,7 @@ func (s *Server) handleAddBooksToCollection(ctx context.Context, input *AddBooks
 		return nil, err
 	}
 
-	// Get collection first for SSE event and validation
-	coll, err := s.store.AdminGetCollection(ctx, input.ID)
+	result, err := s.services.Collection.AdminAddBooksToCollection(ctx, input.ID, input.Body.BookIDs)
 	if err != nil {
 		if errors.Is(err, store.ErrCollectionNotFound) {
 			return nil, huma.Error404NotFound("Collection not found")
@@ -398,48 +330,24 @@ func (s *Server) handleAddBooksToCollection(ctx context.Context, input *AddBooks
 		return nil, err
 	}
 
-	collName := coll.Name
-
-	// Get users who have access to this collection (for access revocation notifications)
-	// Members = owner + anyone with shares
-	memberUserIDs := make(map[string]bool)
-	memberUserIDs[coll.OwnerID] = true
-
-	shares, err := s.store.GetSharesForCollection(ctx, input.ID)
-	if err == nil {
-		for _, share := range shares {
-			memberUserIDs[share.SharedWithUserID] = true
-		}
-	}
-
-	for _, bookID := range input.Body.BookIDs {
-		// Check if book was previously uncollected (public)
-		// If so, adding it to a collection restricts access
-		existingColls, _ := s.store.GetCollectionsForBook(ctx, bookID)
-		wasUncollected := len(existingColls) == 0
-
-		if err := s.store.AdminAddBookToCollection(ctx, bookID, input.ID); err != nil {
-			// Continue on error - best effort
-			s.logger.Warn("failed to add book to collection",
-				"book_id", bookID,
-				"collection_id", input.ID,
-				"error", err)
+	for _, r := range result.Results {
+		if !r.Added {
 			continue
 		}
 
 		// Emit SSE event for each book added (admin-only)
-		s.sseManager.Emit(sse.NewCollectionBookAddedEvent(input.ID, collName, bookID))
+		s.sseManager.Emit(sse.NewCollectionBookAddedEvent(input.ID, result.Collection.Name, r.BookID))
 
 		// If book was previously uncollected (visible to all), notify non-members
 		// that they've lost access by sending a book.deleted event
-		if wasUncollected {
+		if r.WasUncollected {
 			s.logger.Debug("book was uncollected, notifying non-members of access revocation",
-				"book_id", bookID,
+				"book_id", r.BookID,
 				"collection_id", input.ID,
-				"member_count", len(memberUserIDs))
+				"member_count", len(result.MemberUserIDs))
 
-			deleteEvent := sse.NewBookDeletedEvent(bookID, time.Now())
-			s.sseManager.EmitToNonMembers(memberUserIDs, deleteEvent)
+			deleteEvent := sse.NewBookDeletedEvent(r.BookID, time.Now())
+			s.sseManager.EmitToNonMembers(result.MemberUserIDs, deleteEvent)
 		}
 	}
 
@@ -451,8 +359,7 @@ func (s *Server) handleRemoveBookFromAdminCollection(ctx context.Context, input 
 		return nil, err
 	}
 
-	// Get collection first for SSE event
-	coll, err := s.store.AdminGetCollection(ctx, input.ID)
+	result, err := s.services.Collection.AdminRemoveBookFromCollection(ctx, input.ID, input.BookID)
 	if err != nil {
 		if errors.Is(err, store.ErrCollectionNotFound) {
 			return nil, huma.Error404NotFound("Collection not found")
@@ -460,44 +367,23 @@ func (s *Server) handleRemoveBookFromAdminCollection(ctx context.Context, input 
 		return nil, err
 	}
 
-	collName := coll.Name
-
-	// Check if book will become uncollected after removal
-	// (i.e., it's only in this one collection)
-	existingColls, _ := s.store.GetCollectionsForBook(ctx, input.BookID)
-	willBecomePublic := len(existingColls) == 1 && existingColls[0].ID == input.ID
-
-	// Get member IDs before removal (for access grant notifications)
-	memberUserIDs := make(map[string]bool)
-	if willBecomePublic {
-		memberUserIDs[coll.OwnerID] = true
-		shares, _ := s.store.GetSharesForCollection(ctx, input.ID)
-		for _, share := range shares {
-			memberUserIDs[share.SharedWithUserID] = true
-		}
-	}
-
-	if err := s.store.AdminRemoveBookFromCollection(ctx, input.BookID, input.ID); err != nil {
-		return nil, err
-	}
-
 	// Emit SSE event for admins
-	s.sseManager.Emit(sse.NewCollectionBookRemovedEvent(input.ID, collName, input.BookID))
+	s.sseManager.Emit(sse.NewCollectionBookRemovedEvent(input.ID, result.Collection.Name, input.BookID))
 
 	// If book became uncollected (public), notify non-members that they can now access it
-	if willBecomePublic {
+	if result.WillBecomePublic {
 		s.logger.Debug("book became uncollected, notifying non-members of access grant",
 			"book_id", input.BookID,
 			"collection_id", input.ID)
 
 		// Get book and enrich for SSE
 		// Use collection owner as userID for access (admin has global access)
-		book, err := s.store.GetBook(ctx, input.BookID, coll.OwnerID)
+		book, err := s.services.Collection.GetBook(ctx, input.BookID, result.Collection.OwnerID)
 		if err == nil {
 			enrichedBook, err := s.enricher.EnrichBook(ctx, book)
 			if err == nil {
 				createEvent := sse.NewBookCreatedEvent(enrichedBook)
-				s.sseManager.EmitToNonMembers(memberUserIDs, createEvent)
+				s.sseManager.EmitToNonMembers(result.MemberUserIDs, createEvent)
 			}
 		}
 	}
