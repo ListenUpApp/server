@@ -10,6 +10,7 @@ import (
 
 	"encoding/json/v2"
 
+	"github.com/listenupapp/listenup-server/internal/backup/manifest"
 	"github.com/listenupapp/listenup-server/internal/backup/stream"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
@@ -114,26 +115,26 @@ func (i *Importer) Import(ctx context.Context, path string, opts RestoreOptions)
 	return result, nil
 }
 
-func (i *Importer) readManifest(zr *zip.ReadCloser) (*Manifest, error) {
+func (i *Importer) readManifest(zr *zip.ReadCloser) (*manifest.Manifest, error) {
 	rc, err := stream.OpenFile(zr, "manifest.json")
 	if err != nil {
 		return nil, ErrInvalidManifest
 	}
 	defer rc.Close()
 
-	var manifest Manifest
-	if err := json.UnmarshalRead(rc, &manifest); err != nil {
+	var m manifest.Manifest
+	if err := json.UnmarshalRead(rc, &m); err != nil {
 		return nil, ErrInvalidManifest
 	}
 
-	return &manifest, nil
+	return &m, nil
 }
 
 func (i *Importer) checkVersion(version string) error {
 	// For now, only support exact version match
 	// Future: add migration logic for older versions
-	if version != FormatVersion {
-		return fmt.Errorf("%w: got %s, want %s", ErrVersionMismatch, version, FormatVersion)
+	if version != manifest.FormatVersion {
+		return fmt.Errorf("%w: got %s, want %s", ErrVersionMismatch, version, manifest.FormatVersion)
 	}
 	return nil
 }

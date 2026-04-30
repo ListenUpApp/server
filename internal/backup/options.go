@@ -1,6 +1,10 @@
 package backup
 
-import "time"
+import (
+	"time"
+
+	"github.com/listenupapp/listenup-server/internal/backup/manifest"
+)
 
 // BackupOptions configures backup creation.
 type BackupOptions struct {
@@ -76,20 +80,20 @@ func (s MergeStrategy) Valid() bool {
 
 // BackupResult contains the outcome of a backup operation.
 type BackupResult struct {
-	Path     string        `json:"path"`
-	Size     int64         `json:"size"`
-	Counts   EntityCounts  `json:"counts"`
-	Duration time.Duration `json:"duration"`
-	Checksum string        `json:"checksum"`
+	Path     string                 `json:"path"`
+	Size     int64                  `json:"size"`
+	Counts   manifest.EntityCounts  `json:"counts"`
+	Duration time.Duration          `json:"duration"`
+	Checksum string                 `json:"checksum"`
 }
 
 // BackupInfo describes an existing backup.
 type BackupInfo struct {
-	ID        string       `json:"id"`
-	Path      string       `json:"path"`
-	Size      int64        `json:"size"`
-	CreatedAt time.Time    `json:"created_at"`
-	Counts    EntityCounts `json:"counts"`
+	ID        string                `json:"id"`
+	Path      string                `json:"path"`
+	Size      int64                 `json:"size"`
+	CreatedAt time.Time             `json:"created_at"`
+	Counts    manifest.EntityCounts `json:"counts"`
 }
 
 // RestoreResult contains the outcome of a restore operation.
@@ -109,9 +113,9 @@ type RestoreError struct {
 
 // ValidationResult describes backup validity.
 type ValidationResult struct {
-	Valid          bool         `json:"valid"`
-	Manifest       *Manifest    `json:"manifest,omitempty"`
-	ExpectedCounts EntityCounts `json:"expected_counts"`
-	Errors         []string     `json:"errors,omitempty"`
-	Warnings       []string     `json:"warnings,omitempty"`
+	Valid          bool                  `json:"valid"`
+	Manifest       *manifest.Manifest    `json:"manifest,omitempty"`
+	ExpectedCounts manifest.EntityCounts `json:"expected_counts"`
+	Errors         []string              `json:"errors,omitempty"`
+	Warnings       []string              `json:"warnings,omitempty"`
 }

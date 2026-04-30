@@ -1,4 +1,7 @@
-package backup
+// Package manifest defines the canonical backup manifest shape used by
+// both the export and import subpackages. It has no dependencies beyond
+// stdlib, so any package in the backup tree can import it without cycles.
+package manifest
 
 import "time"
 

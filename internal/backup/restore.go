@@ -9,6 +9,7 @@ import (
 	"encoding/json/v2"
 
 	backupimport "github.com/listenupapp/listenup-server/internal/backup/import"
+	"github.com/listenupapp/listenup-server/internal/backup/manifest"
 	"github.com/listenupapp/listenup-server/internal/backup/stream"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
@@ -98,8 +99,8 @@ func (s *RestoreService) Validate(ctx context.Context, path string) (*Validation
 		return result, nil
 	}
 
-	var manifest Manifest
-	if err := json.UnmarshalRead(rc, &manifest); err != nil {
+	var m manifest.Manifest
+	if err := json.UnmarshalRead(rc, &m); err != nil {
 		rc.Close()
 		result.Valid = false
 		result.Errors = append(result.Errors, fmt.Sprintf("invalid manifest: %v", err))
@@ -107,14 +108,14 @@ func (s *RestoreService) Validate(ctx context.Context, path string) (*Validation
 	}
 	rc.Close()
 
-	result.Manifest = &manifest
-	result.ExpectedCounts = manifest.Counts
+	result.Manifest = &m
+	result.ExpectedCounts = m.Counts
 
 	// Check version
-	if manifest.Version != FormatVersion {
+	if m.Version != manifest.FormatVersion {
 		result.Valid = false
 		result.Errors = append(result.Errors,
-			fmt.Sprintf("unsupported version %s (want %s)", manifest.Version, FormatVersion))
+			fmt.Sprintf("unsupported version %s (want %s)", m.Version, manifest.FormatVersion))
 	}
 
 	// Check required files exist

@@ -12,11 +12,9 @@ import (
 
 	"encoding/json/v2"
 
+	"github.com/listenupapp/listenup-server/internal/backup/manifest"
 	"github.com/listenupapp/listenup-server/internal/store"
 )
-
-// FormatVersion is the backup format version.
-const FormatVersion = "1.0"
 
 // Options configures backup creation.
 type Options struct {
@@ -29,40 +27,9 @@ type Options struct {
 type Result struct {
 	Path     string
 	Size     int64
-	Counts   EntityCounts
+	Counts   manifest.EntityCounts
 	Duration time.Duration
 	Checksum string
-}
-
-// Manifest describes backup contents and metadata.
-type Manifest struct {
-	Version          string       `json:"version"`
-	CreatedAt        time.Time    `json:"created_at"`
-	ServerID         string       `json:"server_id"`
-	ServerName       string       `json:"server_name"`
-	ListenUpVersion  string       `json:"listenup_version"`
-	Counts           EntityCounts `json:"counts"`
-	IncludesImages   bool         `json:"includes_images"`
-	IncludesEvents   bool         `json:"includes_events"`
-	IncludesSettings bool         `json:"includes_settings"`
-}
-
-// EntityCounts tracks entity counts for validation and progress reporting.
-type EntityCounts struct {
-	Users            int `json:"users"`
-	Libraries        int `json:"libraries"`
-	Books            int `json:"books"`
-	Contributors     int `json:"contributors"`
-	Series           int `json:"series"`
-	Genres           int `json:"genres"`
-	Tags             int `json:"tags"`
-	Collections      int `json:"collections"`
-	CollectionShares int `json:"collection_shares"`
-	Shelves          int `json:"shelves"`
-	Activities       int `json:"activities"`
-	ListeningEvents  int `json:"listening_events"`
-	ReadingSessions  int `json:"reading_sessions"`
-	Images           int `json:"images,omitempty"`
 }
 
 // Exporter creates backup archives.
@@ -98,8 +65,8 @@ func (e *Exporter) Export(ctx context.Context, opts Options) (*Result, error) {
 	zw := zip.NewWriter(mw)
 
 	// Build manifest as we export
-	manifest := &Manifest{
-		Version:          FormatVersion,
+	m := &manifest.Manifest{
+		Version:          manifest.FormatVersion,
 		CreatedAt:        time.Now(),
 		ListenUpVersion:  e.version,
 		IncludesImages:   opts.IncludeImages,
@@ -108,12 +75,12 @@ func (e *Exporter) Export(ctx context.Context, opts Options) (*Result, error) {
 	}
 
 	// Export server identity + settings
-	if err := exportServer(ctx, e.store, zw, manifest); err != nil {
+	if err := exportServer(ctx, e.store, zw, m); err != nil {
 		return nil, fmt.Errorf("export server: %w", err)
 	}
 
 	// Export entities in dependency order
-	counts := &manifest.Counts
+	counts := &m.Counts
 
 	exportSteps := []struct {
 		name string
@@ -173,7 +140,7 @@ func (e *Exporter) Export(ctx context.Context, opts Options) (*Result, error) {
 	}
 
 	// Write manifest last (has final counts)
-	if err := e.writeManifest(zw, manifest); err != nil {
+	if err := e.writeManifest(zw, m); err != nil {
 		return nil, fmt.Errorf("write manifest: %w", err)
 	}
 
@@ -201,7 +168,7 @@ func (e *Exporter) Export(ctx context.Context, opts Options) (*Result, error) {
 	}, nil
 }
 
-func (e *Exporter) writeManifest(zw *zip.Writer, m *Manifest) error {
+func (e *Exporter) writeManifest(zw *zip.Writer, m *manifest.Manifest) error {
 	w, err := zw.Create("manifest.json")
 	if err != nil {
 		return err

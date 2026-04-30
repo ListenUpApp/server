@@ -77,30 +77,10 @@ func (s *BackupService) Create(ctx context.Context, opts BackupOptions) (*Backup
 	return &BackupResult{
 		Path:     result.Path,
 		Size:     result.Size,
-		Counts:   convertCounts(result.Counts),
+		Counts:   result.Counts,
 		Duration: result.Duration,
 		Checksum: result.Checksum,
 	}, nil
-}
-
-// convertCounts converts export.EntityCounts to backup.EntityCounts.
-func convertCounts(c export.EntityCounts) EntityCounts {
-	return EntityCounts{
-		Users:            c.Users,
-		Libraries:        c.Libraries,
-		Books:            c.Books,
-		Contributors:     c.Contributors,
-		Series:           c.Series,
-		Genres:           c.Genres,
-		Tags:             c.Tags,
-		Collections:      c.Collections,
-		CollectionShares: c.CollectionShares,
-		Shelves:          c.Shelves,
-		Activities:       c.Activities,
-		ListeningEvents:  c.ListeningEvents,
-		ReadingSessions:  c.ReadingSessions,
-		Images:           c.Images,
-	}
 }
 
 // List returns all available backups.

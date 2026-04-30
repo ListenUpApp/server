@@ -7,6 +7,7 @@ import (
 
 	"encoding/json/v2"
 
+	"github.com/listenupapp/listenup-server/internal/backup/manifest"
 	"github.com/listenupapp/listenup-server/internal/backup/stream"
 	"github.com/listenupapp/listenup-server/internal/domain"
 	"github.com/listenupapp/listenup-server/internal/store"
@@ -309,7 +310,7 @@ func exportReadingSessions(ctx context.Context, s store.Store, zw *zip.Writer) (
 	return w.Count(), nil
 }
 
-func exportServer(ctx context.Context, s store.Store, zw *zip.Writer, m *Manifest) error {
+func exportServer(ctx context.Context, s store.Store, zw *zip.Writer, m *manifest.Manifest) error {
 	instance, err := s.GetInstance(ctx)
 	if err != nil {
 		return err
