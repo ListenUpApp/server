@@ -11,6 +11,7 @@ const (
 	TranscodeStatusRunning   TranscodeStatus = "running"
 	TranscodeStatusCompleted TranscodeStatus = "completed"
 	TranscodeStatusFailed    TranscodeStatus = "failed"
+	TranscodeStatusCancelled TranscodeStatus = "cancelled"
 )
 
 // TranscodeVariant identifies the output format variant.
@@ -118,4 +119,17 @@ func (j *TranscodeJob) BumpPriority() {
 	if j.Priority < 10 {
 		j.Priority = 10
 	}
+}
+
+// MarkCancelled transitions the job to cancelled state.
+func (j *TranscodeJob) MarkCancelled() {
+	j.Status = TranscodeStatusCancelled
+	now := time.Now()
+	j.CompletedAt = &now
+}
+
+// IsActive returns true if the job is in a state that can be cancelled
+// (pending or running).
+func (j *TranscodeJob) IsActive() bool {
+	return j.Status == TranscodeStatusPending || j.Status == TranscodeStatusRunning
 }

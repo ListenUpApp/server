@@ -44,6 +44,10 @@ type TranscodeService struct {
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
 	jobNotify chan struct{} // Signal that new jobs are available
+
+	// activeJobCancels maps jobID → per-job cancel func for running FFmpeg processes.
+	// Populated when a worker starts a job; cleared when the job finishes or is cancelled.
+	activeJobCancels sync.Map
 }
 
 // NewTranscodeService creates a new transcode service.
@@ -260,6 +264,36 @@ func (s *TranscodeService) BumpPriority(ctx context.Context, jobID string) error
 	return nil
 }
 
+// CancelJob marks a transcode job as cancelled and stops the FFmpeg process if running.
+// Returns store.ErrNotFound if the job does not exist, is already completed, or is already cancelled
+// (idempotent: a second cancel attempt returns 404 rather than succeeding silently).
+func (s *TranscodeService) CancelJob(ctx context.Context, jobID string) error {
+	job, err := s.store.GetTranscodeJob(ctx, jobID)
+	if err != nil {
+		return fmt.Errorf("get transcode job: %w", err)
+	}
+
+	if !job.IsActive() {
+		// Already completed, failed, or cancelled — treat as not found per contract.
+		return store.ErrNotFound
+	}
+
+	// Persist cancellation before signalling the worker, so the worker's deferred
+	// goroutine sees the cancelled status and skips the failure path.
+	job.MarkCancelled()
+	if err := s.store.UpdateTranscodeJob(ctx, job); err != nil {
+		return fmt.Errorf("mark job cancelled: %w", err)
+	}
+
+	// Signal the FFmpeg process to exit if it is currently running.
+	if cancelFn, ok := s.activeJobCancels.Load(jobID); ok {
+		cancelFn.(context.CancelFunc)()
+	}
+
+	s.logger.Info("transcode job cancelled", slog.String("job_id", jobID))
+	return nil
+}
+
 // GetTranscodePath returns the path to the HLS directory if transcoding is complete.
 func (s *TranscodeService) GetTranscodePath(ctx context.Context, audioFileID string) (string, bool) {
 	job, err := s.store.GetTranscodeJobByAudioFile(ctx, audioFileID)
@@ -425,9 +459,26 @@ func (s *TranscodeService) processNextJob(workerID int) {
 		slog.String("source", job.SourcePath),
 	)
 
+	// Create a per-job context so CancelJob can stop FFmpeg without killing the
+	// entire service.  Store the cancel func before starting; remove it when done.
+	jobCtx, jobCancel := context.WithCancel(ctx)
+	s.activeJobCancels.Store(job.ID, jobCancel)
+	defer func() {
+		jobCancel()
+		s.activeJobCancels.Delete(job.ID)
+	}()
+
 	// Execute transcode
-	outputPath, err := s.executeTranscode(ctx, job)
+	outputPath, err := s.executeTranscode(jobCtx, job)
 	if err != nil {
+		// If the job was cancelled, mark it cancelled rather than failed.
+		if jobCtx.Err() != nil {
+			job, storeErr := s.store.GetTranscodeJob(ctx, job.ID)
+			if storeErr == nil && job.Status == domain.TranscodeStatusCancelled {
+				// Already marked by CancelJob; nothing more to do.
+				return
+			}
+		}
 		s.handleTranscodeError(ctx, job, err)
 		return
 	}
