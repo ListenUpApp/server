@@ -224,6 +224,7 @@ func (s *Server) registerRoutes() {
 	s.registerSocialRoutes()
 	s.registerProfileRoutes()
 	s.registerPlaybackRoutes()
+	s.registerTranscodeRoutes()
 	s.registerSettingsRoutes()
 	s.registerGenreRoutes()
 	s.registerTagRoutes()
