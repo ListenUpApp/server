@@ -393,9 +393,9 @@ func (s *CollectionService) AdminDeleteCollection(ctx context.Context, collectio
 
 // AddBookToCollectionResult carries per-book outcome for admin batch-add.
 type AddBookToCollectionResult struct {
-	BookID       string
+	BookID         string
 	WasUncollected bool // true if the book was public before this operation
-	Added        bool   // false if the store returned an error
+	Added          bool // false if the store returned an error
 }
 
 // AdminAddBooksToCollectionResult is the output of AdminAddBooksToCollection.

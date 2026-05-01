@@ -82,10 +82,10 @@ func (s *LibraryService) GetLibraryStatus(ctx context.Context, userID string) (*
 
 // SetupLibraryInput is the input for setting up a library.
 type SetupLibraryInput struct {
-	AdminID    string
-	Name       string
-	ScanPaths  []string // At least one path required.
-	SkipInbox  *bool
+	AdminID   string
+	Name      string
+	ScanPaths []string // At least one path required.
+	SkipInbox *bool
 }
 
 // SetupLibrary creates the initial library if none exists.
