@@ -56,4 +56,3 @@ func TestBatchWriter_EmptyFlushNoError(t *testing.T) {
 		t.Fatalf("Flush: %v", err)
 	}
 }
-

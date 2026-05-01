@@ -12,12 +12,12 @@ import (
 // noopSearchIndexer is a no-op implementation of store.SearchIndexer for tests.
 type noopSearchIndexer struct{}
 
-func (noopSearchIndexer) IndexBook(_ context.Context, _ *domain.Book) error              { return nil }
-func (noopSearchIndexer) DeleteBook(_ context.Context, _ string) error                   { return nil }
+func (noopSearchIndexer) IndexBook(_ context.Context, _ *domain.Book) error               { return nil }
+func (noopSearchIndexer) DeleteBook(_ context.Context, _ string) error                    { return nil }
 func (noopSearchIndexer) IndexContributor(_ context.Context, _ *domain.Contributor) error { return nil }
-func (noopSearchIndexer) DeleteContributor(_ context.Context, _ string) error            { return nil }
-func (noopSearchIndexer) IndexSeries(_ context.Context, _ *domain.Series) error          { return nil }
-func (noopSearchIndexer) DeleteSeries(_ context.Context, _ string) error                 { return nil }
+func (noopSearchIndexer) DeleteContributor(_ context.Context, _ string) error             { return nil }
+func (noopSearchIndexer) IndexSeries(_ context.Context, _ *domain.Series) error           { return nil }
+func (noopSearchIndexer) DeleteSeries(_ context.Context, _ string) error                  { return nil }
 
 func TestIndexer_LastTickAdvances(t *testing.T) {
 	t.Parallel()

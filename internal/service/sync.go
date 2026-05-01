@@ -465,9 +465,9 @@ func (s *SyncService) GetSeriesForSync(ctx context.Context, userID string, param
 // Used as the return type for GetActiveSessionsForUser and GetReadingSessionsForUser
 // so callers do not need to perform secondary lookups against the store.
 type SessionWithUser struct {
-	Session  *domain.BookReadingSession
-	User     *domain.User
-	Profile  *domain.UserProfile
+	Session *domain.BookReadingSession
+	User    *domain.User
+	Profile *domain.UserProfile
 }
 
 // GetActiveSessionsForUser returns all currently active reading sessions for books

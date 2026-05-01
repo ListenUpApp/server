@@ -43,10 +43,10 @@ type Server struct {
 	onInstanceUpdated         func(*domain.Instance)
 
 	// Workers and indexer for /health derived component checks.
-	indexer      *asyncindexer.Indexer
-	fileWatcher  lastTicker
-	sessionJob   lastTicker
-	eventLogJob  lastTicker
+	indexer     *asyncindexer.Indexer
+	fileWatcher lastTicker
+	sessionJob  lastTicker
+	eventLogJob lastTicker
 }
 
 // SetOnInstanceUpdated registers a callback invoked when instance settings change.

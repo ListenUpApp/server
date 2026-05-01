@@ -80,11 +80,11 @@ func (s MergeStrategy) Valid() bool {
 
 // BackupResult contains the outcome of a backup operation.
 type BackupResult struct {
-	Path     string                 `json:"path"`
-	Size     int64                  `json:"size"`
-	Counts   manifest.EntityCounts  `json:"counts"`
-	Duration time.Duration          `json:"duration"`
-	Checksum string                 `json:"checksum"`
+	Path     string                `json:"path"`
+	Size     int64                 `json:"size"`
+	Counts   manifest.EntityCounts `json:"counts"`
+	Duration time.Duration         `json:"duration"`
+	Checksum string                `json:"checksum"`
 }
 
 // BackupInfo describes an existing backup.
